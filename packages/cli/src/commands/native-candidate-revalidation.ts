@@ -9,6 +9,19 @@ import { nativeHostMatchesStableTarget } from './managed-host-observation.js'
 import type { SetupEnv } from './setupEnvironment.js'
 import { resolveStableTagTarget, type StableReleaseTarget } from './stable-release.js'
 
+export function observeNativeStableTarget(
+  env: SetupEnv,
+  host: NativePipelineHost,
+  target: StableReleaseTarget,
+  failureLabel: string,
+): boolean {
+  try {
+    return nativeHostMatchesStableTarget(env, host, target)
+  } catch (error) {
+    throw new Error(`${failureLabel}：${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 /**
  * Fresh, read-only proof that a persisted candidate still belongs to the exact stable host
  * registration. Journal inventory is recovery input only; it is never activation authority.

@@ -9,13 +9,31 @@ export interface RuntimeReleaseSource {
   readonly pluginVersion: string
 }
 
-export interface RuntimeReleaseManifest {
+export interface RuntimeStableReleaseTarget {
+  readonly version: string
+  readonly tag: string
+  readonly commit: string
+}
+
+export interface RuntimeReleaseManifestV1 {
   readonly version: 1
   readonly releaseId: string
   readonly payloadDigest: string
   readonly createdAt: string
   readonly source: RuntimeReleaseSource
 }
+
+export interface RuntimeReleaseManifestV2 {
+  readonly version: 2
+  readonly releaseId: string
+  readonly payloadDigest: string
+  readonly createdAt: string
+  readonly source: RuntimeReleaseSource
+  /** Immutable native provenance; absent only for low-level/manual/adapter activations. */
+  readonly stableTarget?: RuntimeStableReleaseTarget
+}
+
+export type RuntimeReleaseManifest = RuntimeReleaseManifestV1 | RuntimeReleaseManifestV2
 
 export interface RuntimeSelection {
   readonly version: 1

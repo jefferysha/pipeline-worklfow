@@ -80,8 +80,15 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
         expectedVersion: '1.0.2',
         host: 'codex' as const,
         hostPluginVersion: '1.0.1',
+        hostPluginRoot: '/native/tenon',
+        stableTargetTag: 'v1.0.2',
+        stableTargetCommit: 'a'.repeat(40),
+        hostTargetExact: false,
+        hostPayloadDigest: 'b'.repeat(64),
         runtimePluginVersion: '1.0.2',
         runtimeReleaseId: releaseId,
+        runtimePayloadDigest: 'b'.repeat(64),
+        payloadDigestExact: true,
         dashboardServerVersion: '1.0.2',
         dashboardReleaseId: releaseId,
       }),
@@ -93,6 +100,36 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(identity.status).toBe('red')
     expect(identity.detail).toContain('host=1.0.1')
     expect(identity.detail).toContain('expected=1.0.2')
+  })
+
+  test('版本字符串相等但 stable tag/commit 或 payload digest 漂移时 identity:release red', async () => {
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const deps = makeDeps({ doctor: {
+      productIdentity: async () => ({
+        state: 'native' as const,
+        expectedVersion: '1.0.2',
+        host: 'codex' as const,
+        hostPluginVersion: '1.0.2',
+        hostPluginRoot: '/native/tenon',
+        stableTargetTag: 'v1.0.2',
+        stableTargetCommit: 'a'.repeat(40),
+        hostTargetExact: false,
+        hostPayloadDigest: 'c'.repeat(64),
+        runtimePluginVersion: '1.0.2',
+        runtimeReleaseId: releaseId,
+        runtimePayloadDigest: 'b'.repeat(64),
+        payloadDigestExact: false,
+        dashboardServerVersion: '1.0.2',
+        dashboardReleaseId: releaseId,
+      }),
+    } })
+
+    const { code, payload } = await runJson(deps)
+    expect(code).toBe(1)
+    const identity = byId(payload, 'identity:release')
+    expect(identity.status).toBe('red')
+    expect(identity.detail).toContain('target=v1.0.2@aaaaaaaaaaaa:drift')
+    expect(identity.detail).toContain('payload=cccccccccccc/bbbbbbbbbbbb:drift')
   })
 
   test('Codex runtime 未登录 → auth:codex yellow 且一次给全两类账号登录路径', async () => {

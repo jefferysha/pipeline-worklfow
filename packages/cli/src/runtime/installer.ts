@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { withLock } from '@tenon/kernel'
 import {
   captureStableLaunchers,
+  expectedLegacyStableLaunchersV101,
   expectedStableLaunchers,
   restoreStableLaunchers,
   writeStableLaunchers,
@@ -16,6 +17,7 @@ import type {
   RuntimeLauncherSnapshot,
   RuntimePaths,
   RuntimeReleaseSource,
+  RuntimeStableReleaseTarget,
   RuntimeSelection,
 } from './types.js'
 import { createManagedReleaseJournal } from './managed-release-journal.js'
@@ -33,6 +35,7 @@ export interface ManagedRuntimeTransaction {
     candidateRoot: string,
     host: RuntimeReleaseSource['host'],
     expectedPluginVersion?: string,
+    stableTarget?: RuntimeStableReleaseTarget,
   ): Promise<RuntimeActivation>
   recoverActivation(
     checkpoint: RuntimeActivationCheckpoint,
@@ -72,11 +75,7 @@ export interface ManagedDashboardJournalRecord extends ManagedDashboardIdentity 
   readonly owner: 'transaction' | 'preexisting'
 }
 
-export interface ManagedStableReleaseTarget {
-  readonly version: string
-  readonly tag: string
-  readonly commit: string
-}
+export type ManagedStableReleaseTarget = RuntimeStableReleaseTarget
 
 export type ManagedReleaseOperation = 'setup' | 'update' | 'adapter'
 export type ManagedReleaseJournalPhase =
@@ -116,6 +115,8 @@ export interface ManagedReleaseJournalRecord {
   readonly dashboardBefore?: ManagedDashboardIdentity
   /** Durable proof that the pre-activation Dashboard probe observed an empty port. */
   readonly dashboardBeforeAbsent?: true
+  /** Durable permission to retire only the exact frozen wrong-version Dashboard before retry. */
+  readonly dashboardBeforeRetiring?: true
   readonly dashboard?: ManagedDashboardJournalRecord
   /** Bounded failure detail carried through crash-safe compensation. */
   readonly compensationReason?: string
@@ -148,6 +149,8 @@ export interface RuntimeInstallerScope {
 }
 
 export interface RuntimeInstaller {
+  /** Read-only WAL probe used before network resolution; it must not create runtime roots. */
+  peekManagedJournal?(scope: RuntimeInstallerScope): Promise<ManagedReleaseJournalRecord | null>
   withManagedTransaction<T>(
     scope: RuntimeInstallerScope,
     operation: (transaction: ManagedRuntimeTransaction) => Promise<T>,
@@ -196,6 +199,7 @@ async function activateWithinTransaction(
   candidateRoot: string,
   host: RuntimeReleaseSource['host'],
   expectedPluginVersion?: string,
+  stableTarget?: RuntimeStableReleaseTarget,
 ): Promise<RuntimeActivation> {
   const store = new RuntimeReleaseStore({
     paths,
@@ -203,7 +207,7 @@ async function activateWithinTransaction(
   })
   const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
   const launcherCommitted = expectedStableLaunchers(paths, homeDir)
-  const activation = await store.stageAndActivate(candidateRoot, host, expectedPluginVersion)
+  const activation = await store.stageAndActivate(candidateRoot, host, expectedPluginVersion, stableTarget)
   try {
     await writeStableLaunchers(paths, homeDir)
     return { ...activation, launcherSnapshot, launcherCommitted }
@@ -299,10 +303,9 @@ async function proveActivationWithinTransaction(
   const inspection = await transactionStore(paths, trustedBashPath).inspect()
   if (
     !inspection.activeValid
-    || inspection.selection.revision !== activation.selection.revision
-    || inspection.selection.activeRelease !== activation.release.releaseId
-    || inspection.active?.releaseId !== activation.release.releaseId
-    || inspection.active.payloadDigest !== activation.release.payloadDigest
+    || !sameJson(inspection.selection, activation.selection)
+    || !sameJson(inspection.active, activation.release)
+    || activation.releaseRoot !== join(paths.releasesRoot, activation.release.releaseId)
   ) return false
   if (activation.launcherCommitted === undefined) return true
   const currentLaunchers = await captureStableLaunchers(paths, homeDir)
@@ -342,15 +345,30 @@ async function recoverActivationWithinTransaction(
   const expectedPrevious = checkpoint.selection.activeRelease === active?.releaseId
     ? checkpoint.selection.previousRelease
     : checkpoint.selection.activeRelease
-  if (
+  const activationCoordinatesMatch = (
     active !== null
     && inspection.activeValid
     && active.source.host === host
     && inspection.selection.revision === checkpoint.selection.revision + 1
     && inspection.selection.activeRelease === active.releaseId
     && inspection.selection.previousRelease === expectedPrevious
-    && sameJson(launchers, expectedStableLaunchers(paths, homeDir))
-  ) {
+  )
+  let committedLaunchers = launchers
+  if (activationCoordinatesMatch
+    && active.version === 1
+    && active.source.pluginVersion === '1.0.1'
+    && sameJson(launchers, expectedLegacyStableLaunchersV101(paths, homeDir))) {
+    try {
+      await writeStableLaunchers(paths, homeDir)
+      committedLaunchers = await captureStableLaunchers(paths, homeDir)
+    } catch (error) {
+      throw new ManagedRuntimeIndeterminateError(
+        `已证明 v1.0.1 activation，但安全 launcher 升级失败：${String(error)}`,
+      )
+    }
+  }
+  if (activationCoordinatesMatch
+    && sameJson(committedLaunchers, expectedStableLaunchers(paths, homeDir))) {
     return {
       state: 'activated',
       activation: {
@@ -358,7 +376,7 @@ async function recoverActivationWithinTransaction(
         release: active,
         releaseRoot: join(paths.releasesRoot, active.releaseId),
         launcherSnapshot: checkpoint.launchers,
-        launcherCommitted: launchers,
+        launcherCommitted: committedLaunchers,
       },
     }
   }
@@ -409,7 +427,7 @@ async function withExclusiveRuntimeTransaction<T>(
   return withLock(paths.managedTransactionRoot, () => operation({
     checkpointActivation: () =>
       checkpointActivationWithinTransaction(paths, scope.homeDir, scope.trustedBashPath),
-    activate: (candidateRoot, host, expectedPluginVersion) =>
+    activate: (candidateRoot, host, expectedPluginVersion, stableTarget) =>
       activateWithinTransaction(
         paths,
         scope.homeDir,
@@ -417,6 +435,7 @@ async function withExclusiveRuntimeTransaction<T>(
         candidateRoot,
         host,
         expectedPluginVersion,
+        stableTarget,
       ),
     recoverActivation: (checkpoint, host) =>
       recoverActivationWithinTransaction(
@@ -435,6 +454,9 @@ async function withExclusiveRuntimeTransaction<T>(
 }
 
 export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
+  peekManagedJournal(scope) {
+    return createManagedReleaseJournal(pathsFor(scope)).read()
+  },
   async withManagedTransaction(scope, operation) {
     return withExclusiveRuntimeTransaction(scope, operation)
   },

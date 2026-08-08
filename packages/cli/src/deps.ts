@@ -50,8 +50,15 @@ export type DoctorProductIdentity =
       readonly expectedVersion: string
       readonly host: 'codex' | 'claude'
       readonly hostPluginVersion: string | null
+      readonly hostPluginRoot: string | null
+      readonly stableTargetTag: string
+      readonly stableTargetCommit: string
+      readonly hostTargetExact: boolean
+      readonly hostPayloadDigest: string | null
       readonly runtimePluginVersion: string
       readonly runtimeReleaseId: string
+      readonly runtimePayloadDigest: string
+      readonly payloadDigestExact: boolean
       readonly dashboardServerVersion: string | null
       readonly dashboardReleaseId: string | null
     }

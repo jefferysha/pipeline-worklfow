@@ -18,7 +18,7 @@
 - 当前会话不会热加载新插件；卸载或重装期间必须保留可恢复 launcher/runtime，并提示新开会话。
 - v1.0.1 的旧 `main`/local marketplace updater 无法由尚未执行的候选代码安全追溯增强；迁移文档若仍承诺单次旧 updater 收敛，会制造不可实现契约。
 - `candidate-resolved` 后宿主或候选可能被外部修改；仅复用 journal 路径/evidence 会把同版本第三 payload 激活。
-- v1.0.1 journal 的 Dashboard identity 没有 `serverVersion`；新解码器必须接受旧形状，但恢复时仍重新探测并证明版本，不能补造证据。
+- v1.0.1 native `setup/update` journal 没有 `serverVersion`、`stableTarget` 或 `dashboardPort`；新解码器必须接受精确旧形状，但恢复时仍重新探测并证明版本，不能补造证据。
 - PATH 中空项、相对项或当前目录可劫持裸 `node`/`bash`；安装器和稳定 launcher 必须冻结并执行可信绝对路径。
 - 自动打开浏览器在 CI、远程主机或无图形环境中可能失败或造成干扰。
 - 发布/Tag 是外部状态；必须在完整验证和用户授权范围内执行，并保留失败恢复路径。
@@ -29,7 +29,7 @@
 - Codex CLI 独占 marketplace/plugin 写入；Tenon WAL 冻结 desired-state 并验证 inventory，不直接编辑宿主 cache。
 - managed runtime coordinator 独占候选发布、selection、Dashboard ownership/readiness、ready evidence 与补偿。
 - candidate journal 只保存恢复输入，不是永久证明；每次从 `candidate-resolved` 恢复以及 activation 前都重新验证候选资产、冻结标签和宿主 marketplace/plugin identity。
-- journal codec 向后读取 v1.0.1 Dashboard identity；缺失的 `serverVersion` 只能触发重新探测，不能直接满足 readiness 或完成证据。
+- journal codec 向后读取 v1.0.1 `setup/update` WAL 与 Dashboard identity；缺失字段只能触发 successor 证明和重新探测，任何 successor 证明前的 WAL 改写都被禁止。
 - 安装器在 mutation 前冻结可信 `node`、`bash`、`git` 与宿主 CLI 的绝对路径；生成 launcher 使用绝对 Node 路径与系统绝对 shell，不再依赖运行时 PATH 搜索。
 - release workflows 独占 tag/Release 创建；`main` 是候选资格，不是发行通道。
 

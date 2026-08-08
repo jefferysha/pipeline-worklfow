@@ -358,24 +358,26 @@ exit 96
 `)
     await chmod(join(fixture, 'curl'), 0o755)
     await writeFile(installer, '#!/bin/bash\nexit 0\n')
-    const readme = await readFile(join(root, 'README.md'), 'utf8')
-    const documented = readme.split(/\r?\n/u).find((line) =>
-      line.includes('/v1.0.2/install.sh') && line.includes('--codex'))
-    assert.equal(typeof documented, 'string')
-    assert.match(documented, /^\/usr\/bin\/curl .*\| \/bin\/bash -s -- --codex$/u)
-    const command = documented.replace(
-      'https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh',
-      `file://${installer}`,
-    )
+    for (const document of ['README.md', 'README.en.md']) {
+      const readme = await readFile(join(root, document), 'utf8')
+      const documented = readme.split(/\r?\n/u).find((line) =>
+        line.includes('/v1.0.2/install.sh') && line.includes('--codex'))
+      assert.equal(typeof documented, 'string', document)
+      assert.match(documented, /^\/usr\/bin\/curl .*\| \/bin\/bash -s -- --codex$/u, document)
+      const command = documented.replace(
+        'https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh',
+        `file://${installer}`,
+      )
 
-    await exec('/bin/sh', ['-c', command], {
-      cwd: fixture,
-      env: {
-        ...process.env,
-        PATH: '.:/usr/bin:/bin',
-        TENON_TEST_MALICIOUS_RUNTIME_LOG: maliciousLog,
-      },
-    })
+      await exec('/bin/sh', ['-c', command], {
+        cwd: fixture,
+        env: {
+          ...process.env,
+          PATH: '.:/usr/bin:/bin',
+          TENON_TEST_MALICIOUS_RUNTIME_LOG: maliciousLog,
+        },
+      })
+    }
     await assert.rejects(readFile(maliciousLog, 'utf8'), /ENOENT/)
   } finally {
     await rm(fixture, { recursive: true, force: true })

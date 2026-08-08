@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { machineStateScopeId } from '@tenon/kernel'
 import type { DoctorCheck } from './doctor-check.js'
 import { green, red } from './doctor-check.js'
@@ -9,7 +10,62 @@ import { resolveCommandOnPath } from './commandExists.js'
 import { probeHealthyDashboard } from './dashboard-health.js'
 import { parseDashboardPort } from './dashboard-launch-options.js'
 import { DEFAULT_DASHBOARD_PORT } from './dashboard.js'
-import { parseHostPluginInventory, TENON_RELEASE_VERSION } from './plugin-host.js'
+import { TENON_RELEASE_VERSION } from './plugin-host.js'
+import { nativeHostMatchesStableTarget } from './managed-host-observation.js'
+import { decodeNativeHostObservation, observeNativeHost } from './managed-host-state.js'
+import type { SetupEnv } from './setupEnvironment.js'
+import { inspectCandidatePayload } from '../runtime/release-store.js'
+import { resolveStableTagTarget } from './stable-release.js'
+
+interface DoctorProductIdentityProbeRuntime {
+  resolveCommand(command: 'bash' | 'git' | 'codex' | 'claude', scope: RuntimeScopeSnapshot): string | undefined
+  readText(path: string): string | undefined
+  run(file: string, args: readonly string[]): { readonly code: number; readonly stdout: string; readonly stderr: string }
+  inspectCandidate: typeof inspectCandidatePayload
+  probeDashboard: typeof probeHealthyDashboard
+}
+
+const REAL_PRODUCT_IDENTITY_RUNTIME: DoctorProductIdentityProbeRuntime = {
+  resolveCommand(command, scope) {
+    return resolveCommandOnPath(command, {
+      pathValue: scope.env.PATH,
+      platform: process.platform,
+      requireAbsolutePathEntries: true,
+    })
+  },
+  readText(path) {
+    try {
+      return readFileSync(path, 'utf8')
+    } catch {
+      return undefined
+    }
+  },
+  run(file, args) {
+    const asText = (value: unknown): string => Buffer.isBuffer(value)
+      ? value.toString('utf8')
+      : typeof value === 'string' ? value : ''
+    try {
+      return {
+        code: 0,
+        stdout: execFileSync(file, [...args], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 5_000,
+        }),
+        stderr: '',
+      }
+    } catch (error) {
+      const failed = error as { status?: unknown; stdout?: unknown; stderr?: unknown }
+      return {
+        code: typeof failed.status === 'number' ? failed.status : 1,
+        stdout: asText(failed.stdout),
+        stderr: asText(failed.stderr),
+      }
+    }
+  },
+  inspectCandidate: inspectCandidatePayload,
+  probeDashboard: probeHealthyDashboard,
+}
 
 export async function checkProductIdentity(p: DoctorProbes): Promise<DoctorCheck> {
   const identity = await p.productIdentity()
@@ -24,9 +80,14 @@ export async function checkProductIdentity(p: DoctorProbes): Promise<DoctorCheck
     && identity.runtimePluginVersion === identity.expectedVersion
     && identity.dashboardServerVersion === identity.expectedVersion
     && identity.dashboardReleaseId === identity.runtimeReleaseId
+    && identity.hostTargetExact
+    && identity.payloadDigestExact
   const detail = [
     `expected=${identity.expectedVersion}`,
     `host=${identity.hostPluginVersion ?? 'missing'}`,
+    `root=${identity.hostPluginRoot ?? 'missing'}`,
+    `target=${identity.stableTargetTag}@${identity.stableTargetCommit.slice(0, 12)}:${identity.hostTargetExact ? 'exact' : 'drift'}`,
+    `payload=${identity.hostPayloadDigest?.slice(0, 12) ?? 'missing'}/${identity.runtimePayloadDigest.slice(0, 12)}:${identity.payloadDigestExact ? 'exact' : 'drift'}`,
     `runtime=${identity.runtimePluginVersion}`,
     `dashboard=${identity.dashboardServerVersion ?? 'missing'}`,
     `release=${identity.dashboardReleaseId ?? 'missing'}/${identity.runtimeReleaseId}`,
@@ -43,15 +104,12 @@ export async function checkProductIdentity(p: DoctorProbes): Promise<DoctorCheck
 export function createDoctorProductIdentityProbe(
   runtimeScope: () => RuntimeScopeSnapshot,
   installer: RuntimeInstaller,
+  runtime: DoctorProductIdentityProbeRuntime = REAL_PRODUCT_IDENTITY_RUNTIME,
 ): () => Promise<DoctorProductIdentity> {
   return async () => {
     const scope = runtimeScope()
     try {
-      const trustedBashPath = resolveCommandOnPath('bash', {
-        pathValue: scope.env.PATH,
-        platform: process.platform,
-        requireAbsolutePathEntries: true,
-      })
+      const trustedBashPath = runtime.resolveCommand('bash', scope)
       if (trustedBashPath === undefined) {
         return { state: 'unavailable', detail: '可信 Bash 不可执行' }
       }
@@ -65,24 +123,52 @@ export function createDoctorProductIdentityProbe(
       if (active === null || (host !== 'codex' && host !== 'claude')) {
         return { state: 'unavailable', detail: '没有可验证的 native managed runtime' }
       }
-      const executable = resolveCommandOnPath(host, {
-        pathValue: scope.env.PATH,
-        platform: process.platform,
-        requireAbsolutePathEntries: true,
-      })
+      if (active.version !== 2 || active.stableTarget === undefined) {
+        return { state: 'unavailable', detail: 'active runtime manifest 缺少持久化 stable tag/commit 证明' }
+      }
+      const executable = runtime.resolveCommand(host, scope)
       if (executable === undefined) {
         return { state: 'unavailable', detail: `${host} 宿主不可执行` }
       }
-      const inventory = parseHostPluginInventory(host, execFileSync(executable, ['plugin', 'list', '--json'], {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-        timeout: 5_000,
-      }))
-      if (inventory === null) {
-        return { state: 'unavailable', detail: '宿主返回畸形插件清单' }
+      const gitExecutable = runtime.resolveCommand('git', scope)
+      if (gitExecutable === undefined) {
+        return { state: 'unavailable', detail: '可信 Git 不可执行' }
       }
+      const diagnosticEnv = {
+        homeDir: () => scope.homeDir,
+        runtimeEnv: () => scope.env,
+        readText: (path: string) => runtime.readText(path),
+        runCommand: (command: string, args: string[]) => {
+          const file = command === host ? executable : command === 'git' ? gitExecutable : undefined
+          if (file === undefined) return { code: 127, stdout: '', stderr: 'untrusted command' }
+          return runtime.run(file, args)
+        },
+      } as SetupEnv
+      const observation = decodeNativeHostObservation(observeNativeHost(diagnosticEnv, host))
+      const hostTargetExactBeforePayload = nativeHostMatchesStableTarget(
+        diagnosticEnv,
+        host,
+        active.stableTarget,
+      )
+      const candidate = observation.plugin === null
+        ? null
+        : await runtime.inspectCandidate(observation.plugin.root, { bashPath: trustedBashPath })
+      const hostTargetExactAfterPayload = nativeHostMatchesStableTarget(
+        diagnosticEnv,
+        host,
+        active.stableTarget,
+      )
+      const provenTarget = resolveStableTagTarget(diagnosticEnv, active.stableTarget.version)
+      const remoteTargetExact = provenTarget.tag === active.stableTarget.tag
+        && provenTarget.commit === active.stableTarget.commit
+      const hostTargetExact = hostTargetExactBeforePayload
+        && hostTargetExactAfterPayload
+        && remoteTargetExact
+      const payloadDigestExact = candidate !== null
+        && candidate.pluginVersion === active.stableTarget.version
+        && candidate.payloadDigest === active.payloadDigest
       const port = parseDashboardPort(scope.env.TENON_DASHBOARD_PORT) ?? DEFAULT_DASHBOARD_PORT
-      const dashboard = await probeHealthyDashboard(
+      const dashboard = await runtime.probeDashboard(
         port,
         active.releaseId,
         machineStateScopeId(scope.paths.stateRoot),
@@ -92,9 +178,16 @@ export function createDoctorProductIdentityProbe(
         state: 'native',
         expectedVersion: TENON_RELEASE_VERSION,
         host,
-        hostPluginVersion: inventory.tenonVersion,
+        hostPluginVersion: observation.plugin?.version ?? null,
+        hostPluginRoot: observation.plugin?.root ?? null,
+        stableTargetTag: active.stableTarget.tag,
+        stableTargetCommit: active.stableTarget.commit,
+        hostTargetExact,
+        hostPayloadDigest: candidate?.payloadDigest ?? null,
         runtimePluginVersion: active.source.pluginVersion,
         runtimeReleaseId: active.releaseId,
+        runtimePayloadDigest: active.payloadDigest,
+        payloadDigestExact,
         dashboardServerVersion: dashboard?.serverVersion ?? null,
         dashboardReleaseId: dashboard?.releaseId ?? null,
       }

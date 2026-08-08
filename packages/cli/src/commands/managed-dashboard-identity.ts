@@ -1,4 +1,7 @@
-import type { ManagedDashboardIdentity } from '../runtime/installer.js'
+import {
+  ManagedRuntimeIndeterminateError,
+  type ManagedDashboardIdentity,
+} from '../runtime/installer.js'
 
 export function sameManagedDashboardIdentity(
   left: ManagedDashboardIdentity | undefined,
@@ -28,4 +31,16 @@ export function sameManagedDashboardCoordinates(
     && left.releaseId === right.releaseId
     && left.stateScopeId === right.stateScopeId
     && left.transactionId === right.transactionId
+}
+
+export function assertManagedDashboardPort(
+  identity: ManagedDashboardIdentity,
+  expectedPort: number,
+  label: string,
+): void {
+  if (identity.port !== expectedPort) {
+    throw new ManagedRuntimeIndeterminateError(
+      `${label} port=${identity.port} 与 frozen dashboardPort=${expectedPort} 不一致`,
+    )
+  }
 }

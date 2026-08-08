@@ -14,6 +14,10 @@ import { spawnSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 
 const RELEASE_ID = /^sha256-[a-f0-9]{64}$/
+const PAYLOAD_DIGEST = /^[a-f0-9]{64}$/
+const STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
+const GIT_COMMIT = /^[a-f0-9]{40}$/
+const RELEASE_HOSTS = new Set(['codex', 'claude', 'adapter', 'manual'])
 
 function safeRoot(value) {
   return typeof value === 'string' && value.trim() !== '' && isAbsolute(value.trim()) ? resolve(value.trim()) : null
@@ -174,30 +178,100 @@ async function normalFile(path) {
   }
 }
 
+function exactKeys(value, expected) {
+  return Object.keys(value).sort().join(',') === [...expected].sort().join(',')
+}
+
+function releaseSource(value) {
+  if (!isRecord(value) || !exactKeys(value, ['host', 'pluginVersion'])
+    || !RELEASE_HOSTS.has(value.host)
+    || typeof value.pluginVersion !== 'string' || value.pluginVersion.trim() === '') return null
+  return { host: value.host, pluginVersion: value.pluginVersion }
+}
+
+function stableReleaseTarget(value) {
+  if (!isRecord(value) || !exactKeys(value, ['commit', 'tag', 'version'])
+    || typeof value.version !== 'string' || !STABLE_VERSION.test(value.version)
+    || value.tag !== `v${value.version}`
+    || typeof value.commit !== 'string' || !GIT_COMMIT.test(value.commit)) return null
+  return { version: value.version, tag: value.tag, commit: value.commit }
+}
+
+function hashFrame(hash, value) {
+  const bytes = typeof value === 'string' ? Buffer.from(value, 'utf8') : value
+  hash.update(`${bytes.byteLength}:`, 'utf8')
+  hash.update(bytes)
+}
+
+function runtimeReleaseIdV2(payloadDigest, source, stableTarget) {
+  const hash = createHash('sha256')
+  for (const field of [
+    'tenon-runtime-release-v2',
+    payloadDigest,
+    source.host,
+    source.pluginVersion,
+    stableTarget === undefined ? 'no-stable-target' : 'stable-target',
+    stableTarget?.version ?? '',
+    stableTarget?.tag ?? '',
+    stableTarget?.commit ?? '',
+  ]) hashFrame(hash, field)
+  return `sha256-${hash.digest('hex')}`
+}
+
+function releaseManifest(value, releaseId) {
+  if (!isRecord(value) || value.releaseId !== releaseId || !RELEASE_ID.test(releaseId)
+    || typeof value.payloadDigest !== 'string' || !PAYLOAD_DIGEST.test(value.payloadDigest)
+    || typeof value.createdAt !== 'string' || value.createdAt.trim() === '') return null
+  const source = releaseSource(value.source)
+  if (source === null) return null
+  if (value.version === 1) {
+    if (!exactKeys(value, ['version', 'releaseId', 'payloadDigest', 'createdAt', 'source'])
+      || releaseId !== `sha256-${value.payloadDigest}`) return null
+    return { version: 1, releaseId, payloadDigest: value.payloadDigest, source }
+  }
+  if (value.version !== 2) return null
+  const expectedKeys = value.stableTarget === undefined
+    ? ['version', 'releaseId', 'payloadDigest', 'createdAt', 'source']
+    : ['version', 'releaseId', 'payloadDigest', 'createdAt', 'source', 'stableTarget']
+  if (!exactKeys(value, expectedKeys)) return null
+  const stableTarget = value.stableTarget === undefined ? undefined : stableReleaseTarget(value.stableTarget)
+  if (stableTarget === null
+    || (stableTarget !== undefined && stableTarget.version !== source.pluginVersion)
+    || releaseId !== runtimeReleaseIdV2(value.payloadDigest, source, stableTarget)) return null
+  return {
+    version: 2,
+    releaseId,
+    payloadDigest: value.payloadDigest,
+    source,
+    ...(stableTarget === undefined ? {} : { stableTarget }),
+  }
+}
+
 async function releasePayload(paths, releaseId) {
   if (!RELEASE_ID.test(releaseId)) return null
   const releaseRoot = join(paths.releasesRoot, releaseId)
   const manifestPath = join(releaseRoot, 'release.json')
   try {
-    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-    if (!isRecord(manifest) || manifest.version !== 1 || manifest.releaseId !== releaseId
-      || typeof manifest.payloadDigest !== 'string' || !/^[a-f0-9]{64}$/.test(manifest.payloadDigest)
-      || !isRecord(manifest.source)
-      || !['codex', 'claude', 'adapter', 'manual'].includes(manifest.source.host)) return null
+    const manifest = releaseManifest(JSON.parse(await readFile(manifestPath, 'utf8')), releaseId)
+    if (manifest === null) return null
     const payload = join(releaseRoot, 'payload')
     const cli = join(payload, 'packages', 'cli', 'dist', 'tenon.mjs')
     const bootstrap = join(payload, 'runtime', 'tenon-bootstrap.mjs')
     if (!await normalFile(cli) || !await normalFile(bootstrap)) return null
     // Selection and manifest shape are not integrity proof. Recompute the immutable tree before
     // every execution boundary so a locally forged active payload enters recovery-only mode.
-    if (await hashPayload(payload) !== manifest.payloadDigest) return null
+    if (await hashPayload(payload, manifest.version) !== manifest.payloadDigest) return null
     return { releaseRoot, payload, releaseId, host: manifest.source.host }
   } catch {
     return null
   }
 }
 
-async function hashPayload(root) {
+function compareUtf8Names(left, right) {
+  return Buffer.compare(Buffer.from(left.name, 'utf8'), Buffer.from(right.name, 'utf8'))
+}
+
+async function hashLegacyPayload(root) {
   const hash = createHash('sha256')
   async function visit(dir, rel) {
     const entries = await readdir(dir, { withFileTypes: true })
@@ -220,6 +294,40 @@ async function hashPayload(root) {
   }
   await visit(root, '')
   return hash.digest('hex')
+}
+
+async function hashPayloadV2(root) {
+  const hash = createHash('sha256')
+  hashFrame(hash, 'tenon-release-payload-v2')
+  async function visit(dir, rel) {
+    const entries = await readdir(dir, { withFileTypes: true })
+    entries.sort(compareUtf8Names)
+    for (const entry of entries) {
+      const child = join(dir, entry.name)
+      const childRel = rel === '' ? entry.name : `${rel}/${entry.name}`
+      const item = await lstat(child)
+      if (item.isSymbolicLink()) throw new Error(`payload contains symbolic link: ${childRel}`)
+      if (item.isDirectory()) {
+        hashFrame(hash, 'directory')
+        hashFrame(hash, childRel)
+        hashFrame(hash, (item.mode & 0o777).toString(8))
+        await visit(child, childRel)
+      } else if (item.isFile()) {
+        hashFrame(hash, 'file')
+        hashFrame(hash, childRel)
+        hashFrame(hash, (item.mode & 0o777).toString(8))
+        hashFrame(hash, await readFile(child))
+      } else {
+        throw new Error(`payload contains unsupported entry: ${childRel}`)
+      }
+    }
+  }
+  await visit(root, '')
+  return hash.digest('hex')
+}
+
+async function hashPayload(root, manifestVersion) {
+  return manifestVersion === 1 ? hashLegacyPayload(root) : hashPayloadV2(root)
 }
 
 function now() {
@@ -350,7 +458,8 @@ async function rollback(paths) {
   const previous = await releasePayload(paths, selection.previousRelease)
   if (previous === null) throw new Error('previous release integrity check failed; reinstall the selected host package')
   const manifest = JSON.parse(await readFile(join(previous.releaseRoot, 'release.json'), 'utf8'))
-  if (!isRecord(manifest) || await hashPayload(previous.payload) !== manifest.payloadDigest) {
+  if (!isRecord(manifest) || (manifest.version !== 1 && manifest.version !== 2)
+    || await hashPayload(previous.payload, manifest.version) !== manifest.payloadDigest) {
     throw new Error('previous release digest check failed; reinstall the selected host package')
   }
   await mkdir(paths.stateRoot, { recursive: true })
@@ -510,7 +619,7 @@ async function runHook(paths, hookId) {
     process.stderr.write(`[tenon] active runtime hook is missing: ${hookId}\n`)
     return hookId === 'gate' ? 2 : 0
   }
-  const result = spawnSync('bash', [hook], {
+  const result = spawnSync('/bin/bash', [hook], {
     cwd: process.cwd(),
     env: await childEnv(active, paths),
     input,

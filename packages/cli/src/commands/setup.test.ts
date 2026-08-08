@@ -291,16 +291,17 @@ function fakeRuntimeInstaller(
           hook: { path: '/home/test/.local/bin/tenon-hook', state: { kind: 'missing' } },
         },
       }),
-      activate: async (candidateRoot, host, expectedPluginVersion) => {
+      activate: async (candidateRoot, host, expectedPluginVersion, stableTarget) => {
         calls.activations.push([candidateRoot, host, scope.homeDir])
         if (fail) throw new Error('candidate rejected')
         currentActivation = {
           release: {
-            version: 1,
+            version: stableTarget === undefined ? 1 : 2,
             releaseId,
             payloadDigest: 'a'.repeat(64),
             createdAt: '2026-07-24T00:00:00Z',
             source: { host, pluginVersion: expectedPluginVersion ?? '1.0.0' },
+            ...(stableTarget === undefined ? {} : { stableTarget }),
           },
           selection: {
             version: 1,
@@ -615,15 +616,21 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     ]])
   })
 
-  test.each([
-    'preparing-host',
-    'candidate-resolved',
-    'activating-runtime',
-    'runtime-activated',
-    'starting-dashboard',
-    'dashboard-ready',
-    'evidence-committed',
-  ] as const)('single setup retires a real-shape v1.0.1 %s WAL before publishing v1.0.2', async (phase) => {
+  test.each(
+    (['setup', 'update'] as const).flatMap((operation) => (
+      [
+        'preparing-host',
+        'candidate-resolved',
+        'activating-runtime',
+        'runtime-activated',
+        'starting-dashboard',
+        'dashboard-ready',
+        'evidence-committed',
+      ] as const
+    ).map((phase) => [operation, phase] as const)),
+  )(
+    'single setup retires a real-shape v1.0.1 %s/%s WAL before publishing v1.0.2',
+    async (operation, phase) => {
     const deps = makeDeps()
     const legacyReleaseId = `sha256-${'c'.repeat(64)}`
     const legacyTransactionId = 'legacy-v101-transaction'
@@ -678,13 +685,18 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     const legacyJournal = {
       version: 1 as const,
       transactionId: legacyTransactionId,
-      operation: 'setup' as const,
+      operation,
       source: 'codex' as const,
       phase,
       startedAt: '2026-07-23T00:00:00Z',
       updatedAt: '2026-07-24T00:00:00Z',
       ...(phase === 'preparing-host'
-        ? { hostSteps: [{ id: 'legacy-install', state: 'completed' as const }] }
+        ? {
+            hostSteps: [{
+              id: operation === 'update' ? 'marketplace-refresh' : 'legacy-install',
+              state: 'completed' as const,
+            }],
+          }
         : { candidateRoot: '/legacy/v101' }),
       ...(phase === 'activating-runtime' || hasActivation ? { activationCheckpoint: checkpoint } : {}),
       ...(phase === 'runtime-activated'
@@ -746,7 +758,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(await cmdSetupHost(deps, 'codex', { codex: true }, env, runtime.installer, dashboard)).toBe(0)
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(starts).toEqual([`/runtime/releases/sha256-${'a'.repeat(64)}/payload`])
-    expect(deps.outLines.join('\n')).toContain(`v1.0.1 ${phase} WAL 原子转换`)
+    expect(deps.outLines.join('\n')).toContain(`v1.0.1 ${operation}/${phase} WAL 原子转换`)
     const convertedIndex = runtime.calls.journalWrites.findIndex((record) =>
       record.transactionId === legacyTransactionId
       && record.phase === 'preparing-host'
@@ -756,6 +768,38 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       && record.activation?.release.source.pluginVersion === '1.0.2')
     expect(convertedIndex).toBeGreaterThanOrEqual(0)
     expect(activatedIndex).toBeGreaterThan(convertedIndex)
+    },
+  )
+
+  test('single setup converts an empty v1.0.1 update WAL before the first legacy host step', async () => {
+    const deps = makeDeps()
+    const journal = {
+      version: 1 as const,
+      transactionId: 'legacy-v101-empty-update',
+      operation: 'update' as const,
+      source: 'codex' as const,
+      phase: 'preparing-host' as const,
+      startedAt: '2026-07-23T00:00:00Z',
+      updatedAt: '2026-07-23T00:00:00Z',
+    }
+    const { env } = spyEnv({ pathExists: setupPathExists, readText: setupReadText }, codexInstallExec)
+    const runtime = fakeRuntimeInstaller(false, null, null, journal)
+
+    expect(await cmdSetupHost(
+      deps,
+      'codex',
+      { codex: true },
+      env,
+      runtime.installer,
+      fakeDashboardStarter().starter,
+    ), deps.errLines.join('\n')).toBe(0)
+    expect(runtime.calls.journalWrites).toContainEqual(expect.objectContaining({
+      transactionId: journal.transactionId,
+      operation: 'setup',
+      phase: 'preparing-host',
+      stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) },
+    }))
+    expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
   })
 
   test('v1.0.1 starting-dashboard 的迟到进程由同一 successor transaction 精确停止', async () => {
@@ -803,7 +847,6 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       candidateRoot: '/legacy/v101',
       activationCheckpoint: checkpoint,
       activation,
-      dashboardPort: 18_765,
     }
     const lateIdentity = {
       version: 1 as const,
@@ -866,7 +909,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(converted?.transactionId).toBe(transactionId)
   })
 
-  test('legacy WAL 的 successor tag 无法证明时保留旧 Dashboard 和原 WAL', async () => {
+  test('legacy update WAL 的 successor tag 无法证明时保留旧 Dashboard 和原 WAL', async () => {
     const deps = makeDeps()
     const legacyReleaseId = `sha256-${'c'.repeat(64)}`
     const transactionId = 'legacy-resolver-failure'
@@ -890,14 +933,26 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     const journal = {
       version: 1 as const,
       transactionId,
-      operation: 'setup' as const,
+      operation: 'update' as const,
       source: 'codex' as const,
       phase: 'runtime-activated' as const,
       startedAt: '2026-07-23T00:00:00Z',
       updatedAt: '2026-07-24T00:00:00Z',
       candidateRoot: '/legacy/v101',
+      activationCheckpoint: {
+        selection: {
+          version: 1 as const,
+          revision: 0,
+          activeRelease: null,
+          previousRelease: null,
+          updatedAt: '2026-07-23T00:00:00Z',
+        },
+        launchers: {
+          tenon: { path: '/home/test/.local/bin/tenon', state: { kind: 'missing' as const } },
+          hook: { path: '/home/test/.local/bin/tenon-hook', state: { kind: 'missing' as const } },
+        },
+      },
       activation,
-      dashboardPort: 18_765,
     }
     let dashboardInspections = 0
     let dashboardStops = 0
@@ -1233,6 +1288,110 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       stableTarget: { version: '1.0.2', tag: 'v1.0.2' },
     })
   })
+
+  test.each([
+    ['the same transaction and release', 'current-transaction', true],
+    ['a previous transaction for the same release', 'completed-transaction', true],
+    ['the same transaction but a different release', 'current-transaction', false],
+  ] as const)(
+    'completed receipt handling remains fail-closed for %s',
+    (_label, completedTransactionId, shouldReopen) => {
+      const deps = makeDeps()
+      const releaseId = `sha256-${'a'.repeat(64)}`
+      const completedReleaseId = shouldReopen ? releaseId : `sha256-${'b'.repeat(64)}`
+      const paths = resolveRuntimePaths({ homeDir: '/home/test', env: {} })
+      const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
+      const stableTarget = {
+        version: '1.0.2',
+        tag: 'v1.0.2',
+        commit: 'a'.repeat(40),
+      }
+      const completed = JSON.stringify({
+        version: 4,
+        transactionId: completedTransactionId,
+        state: 'completed',
+        host: 'codex',
+        conflictPluginId: 'pipeline-lite@pipeline-lite',
+        conflictScopes: [],
+        releaseId: completedReleaseId,
+        releaseRoot: `/runtime/releases/${completedReleaseId}/payload`,
+        candidateRoot: '/installed/tenon',
+        stableTarget,
+        createdAtEpoch: 1_700_000_000,
+        updatedAt: '2026-08-08T00:00:00Z',
+      })
+      const { env, calls } = spyEnv({
+        pathExists: (path) => path === receiptPath,
+        readText: (path) => path === receiptPath ? completed : setupReadText(path),
+      })
+      const inventory = parseHostPluginInventory('codex', JSON.stringify({
+        installed: [
+          {
+            pluginId: 'tenon@tenon',
+            name: 'tenon',
+            marketplaceName: 'tenon',
+            enabled: true,
+            scope: 'user',
+            version: stableTarget.version,
+            source: { path: '/installed/tenon' },
+          },
+          {
+            pluginId: 'pipeline-lite@pipeline-lite',
+            enabled: true,
+            scope: 'user',
+            source: { path: '/legacy/re-enabled' },
+          },
+        ],
+      }))
+      expect(inventory).not.toBeNull()
+      const activation = {
+        release: {
+          version: 2 as const,
+          releaseId,
+          payloadDigest: 'a'.repeat(64),
+          createdAt: '2026-08-08T00:00:00Z',
+          source: { host: 'codex' as const, pluginVersion: stableTarget.version },
+          stableTarget,
+        },
+        selection: {
+          version: 1 as const,
+          revision: 2,
+          activeRelease: releaseId,
+          previousRelease: null,
+          updatedAt: '2026-08-08T00:00:00Z',
+        },
+        releaseRoot: `/runtime/releases/${releaseId}`,
+      }
+
+      expect(recordPendingHostPluginConflict(
+        deps,
+        env,
+        'codex',
+        inventory!,
+        activation,
+        '/installed/tenon',
+        'current-transaction',
+        stableTarget,
+      )).toBe(shouldReopen)
+
+      const written = calls.writeText
+        .filter(([path]) => path === receiptPath)
+        .map(([, text]) => JSON.parse(text))
+      if (!shouldReopen) {
+        expect(written).toEqual([])
+        expect(deps.errLines.join('\n')).toContain('同一 transaction id')
+        return
+      }
+      expect(written.at(-1)).toMatchObject({
+        version: 4,
+        transactionId: 'current-transaction',
+        state: 'cleanup-pending',
+        conflictScopes: ['user'],
+        releaseId,
+        stableTarget,
+      })
+    },
+  )
 
   test('初始宿主 inventory 命令失败时 fail closed，不继续 marketplace 或 runtime mutation', async () => {
     const deps = makeDeps()
@@ -1871,15 +2030,12 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
       'dashboard-readiness',
       'codex-auth-status',
     ])
-    expect(calls.exec.filter(([cmd]) => cmd === 'codex').slice(0, 6)
-      .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
-      ['codex', 'plugin list --json'],
-      ['codex', 'plugin remove tenon@tenon --json'],
-      ['codex', 'plugin marketplace remove tenon --json'],
-      ['codex', 'plugin marketplace add jefferysha/tenon --ref v1.0.2 --json'],
-      ['codex', 'plugin add tenon@tenon --json'],
-      ['codex', 'plugin list --json'],
-    ])
+    // The fixture already proves the exact versioned host. Update publishes the missing managed
+    // runtime without churning marketplace/plugin registration.
+    expect(calls.exec.filter(([cmd, args]) => cmd === 'codex'
+      && args[0] === 'plugin'
+      && !(args[1] === 'list' || (args[1] === 'marketplace' && args[2] === 'list')))
+      .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([])
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     const runtimeIndex = deps.outLines.findIndex((line) => line.includes('已原子切换至已验证 runtime'))
     const authIndex = deps.outLines.findIndex((line) => line.includes('[Codex 认证] 已登录'))

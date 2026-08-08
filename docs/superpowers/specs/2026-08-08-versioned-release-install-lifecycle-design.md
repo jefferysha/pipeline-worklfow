@@ -73,10 +73,12 @@ tag、宿主 marketplace/plugin identity、候选 manifest 与 payload digest；
 观察。v1.0.1 journal 的 Dashboard identity 若缺少 `serverVersion`，解码器保留其恢复坐标，但只有重新健康
 探测得到的精确版本才能满足 readiness。
 
-v1.0.1 setup WAL 还可能缺少 frozen stable target。版本化 installer 必须先证明 successor tag/commit，再用原
-transaction id 把旧 WAL 原子转换成新的 preparing-host 事务；在此之前不得 stop Dashboard 或清 WAL。
+v1.0.1 native setup/update WAL 还可能缺少 frozen stable target 与 Dashboard port。版本化 installer 必须先
+按旧 schema 解码但保持原始字节不变，证明 successor tag/commit 后再用原 transaction id 把旧 WAL 原子转换成
+新的 setup/preparing-host 事务；在此之前不得写 WAL、stop Dashboard 或清 WAL。
 保留 transaction id 使 `starting-dashboard` 空探针之后迟到的旧进程仍能按 old release identity 被 successor
-事务精确识别。successor target 解析失败时旧 runtime、Dashboard 和 WAL 全部保持不变。
+事务精确识别。successor target 解析失败时旧 runtime、Dashboard 保持不变，旧 WAL 必须字节不变；缺目标的
+补偿 phase 或不可证明 identity 直接失败关闭。
 
 旧 host-convergence v2/v3 receipt 也不提供新版本完成证明。若 installer 已把宿主重绑到更高稳定版本，setup
 先发布并验证新 runtime/Dashboard，再用新 release supersede 旧 receipt；旧 SessionStart proof 不授权提前删除。

@@ -90,13 +90,15 @@ second runtime or installer transaction.
 
 Setup validates the complete package, publishes an immutable managed release,
 creates stable `tenon` and `tenon-hook` launchers, starts the packaged
-Dashboard, and opens it after its health check succeeds.
+Dashboard, and waits for its health check. Piped/CI installation prints the
+verified URL and `tenon dashboard --open` without opening a browser; only an
+interactive first setup may request automatic browser opening.
 
 The published commands are tested at two levels. CI installs a pinned real Codex CLI and
-registers the current checkout as a clean local Marketplace. The read-only release-candidate workflow derives the
-exact checked-out commit, downloads that commit's `install.sh`, and passes the same immutable
-`--ref <commit>` to the Marketplace bootstrap in a separate temporary `HOME`, `CODEX_HOME`,
-`TENON_RUNTIME_HOME`, and Dashboard port. Both paths verify the stable launcher, doctor, managed
+builds an isolated Git mirror from the exact candidate checkout, tags that mirror with the same
+stable release version, and runs the versioned installer against it in a separate temporary
+`HOME`, `CODEX_HOME`, `TENON_RUNTIME_HOME`, and Dashboard port. After the immutable public tag is
+created, the public acceptance downloads only that tag's `install.sh`. Both paths verify the stable launcher, doctor, managed
 runtime, Dashboard API and HTML identity, a new Codex app-server's plugin/Skill/hook discovery,
 and a second identical installation that keeps the same release and listener.
 

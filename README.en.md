@@ -80,13 +80,13 @@ New users do not need to clone the repository. Install the complete Codex
 plugin in one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --codex
 ```
 
 For Claude Code, change only the host flag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --claude
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --claude
 ```
 
 The command installs prebuilt assets from the immutable stable `v1.0.2` release;

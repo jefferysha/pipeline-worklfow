@@ -5,7 +5,11 @@ import type {
   ManagedRuntimeTransaction,
   RuntimeInstaller,
 } from '../runtime/installer.js'
-import type { NativeRuntimeHost, RuntimeActivation } from '../runtime/types.js'
+import type {
+  NativeRuntimeHost,
+  RuntimeActivation,
+  RuntimeStableReleaseTarget,
+} from '../runtime/types.js'
 import { makeDeps } from '../test-support.js'
 import {
   type ReleasedDashboardStarter,
@@ -43,16 +47,22 @@ function readyDashboard(
   }
 }
 
-function activationFor(candidateRoot: string, host: NativeRuntimeHost | 'adapter'): RuntimeActivation {
+function activationFor(
+  candidateRoot: string,
+  host: NativeRuntimeHost | 'adapter',
+  expectedPluginVersion?: string,
+  stableTarget?: RuntimeStableReleaseTarget,
+): RuntimeActivation {
   const suffix = candidateRoot.endsWith('two') ? 'b' : 'a'
   const releaseId = `sha256-${suffix.repeat(64)}`
   return {
     release: {
-      version: 1,
+      version: stableTarget === undefined ? 1 : 2,
       releaseId,
       payloadDigest: suffix.repeat(64),
       createdAt: '2026-07-26T00:00:00Z',
-      source: { host, pluginVersion: '1.0.0' },
+      source: { host, pluginVersion: expectedPluginVersion ?? '1.0.0' },
+      ...(stableTarget === undefined ? {} : { stableTarget }),
     },
     selection: {
       version: 1,
@@ -65,11 +75,43 @@ function activationFor(candidateRoot: string, host: NativeRuntimeHost | 'adapter
   }
 }
 
+const FROZEN_STABLE_TARGET = {
+  version: '1.0.2',
+  tag: 'v1.0.2',
+  commit: 'a'.repeat(40),
+} as const
+
+function recoveredV2Activation(
+  stableTarget: typeof FROZEN_STABLE_TARGET | undefined,
+): RuntimeActivation {
+  const releaseId = `sha256-${'c'.repeat(64)}`
+  return {
+    release: {
+      version: 2,
+      releaseId,
+      payloadDigest: 'd'.repeat(64),
+      createdAt: '2026-08-09T00:00:00Z',
+      source: { host: 'codex', pluginVersion: FROZEN_STABLE_TARGET.version },
+      ...(stableTarget === undefined ? {} : { stableTarget }),
+    },
+    selection: {
+      version: 1,
+      revision: 1,
+      activeRelease: releaseId,
+      previousRelease: null,
+      updatedAt: '2026-08-09T00:00:00Z',
+    },
+    releaseRoot: `/runtime/releases/${releaseId}`,
+  }
+}
+
 function serializedInstaller(
   events: string[],
   activate: (
     candidateRoot: string,
     host: NativeRuntimeHost | 'adapter',
+    expectedPluginVersion?: string,
+    stableTarget?: RuntimeStableReleaseTarget,
   ) => RuntimeActivation = activationFor,
   options: {
     readonly failJournalWritePhaseOnce?: ManagedReleaseJournalRecord['phase']
@@ -109,9 +151,14 @@ function serializedInstaller(
               hook: { path: '/home/test/.local/bin/tenon-hook', state: { kind: 'missing' } },
             },
           }),
-          activate: async (candidateRoot, host) => {
+          activate: async (candidateRoot, host, expectedPluginVersion, stableTarget) => {
             events.push(`activate:${candidateRoot}`)
-            currentActivation = activate(candidateRoot, host)
+            currentActivation = activate(
+              candidateRoot,
+              host,
+              expectedPluginVersion,
+              stableTarget,
+            )
             return currentActivation
           },
           recoverActivation: async () => {
@@ -853,6 +900,88 @@ describe('managed release coordinator', () => {
     expect(events.filter((event) => event === 'activate:/candidate/one')).toHaveLength(1)
     expect(events).toContain('journal:runtime-activated:failed')
   })
+
+  test.each([
+    ['a different frozen commit', {
+      ...FROZEN_STABLE_TARGET,
+      commit: 'b'.repeat(40),
+    }],
+    ['no stable target', undefined],
+  ] as const)(
+    'rejects activating-runtime recovery with %s before Dashboard or ready evidence',
+    async (_label, recoveredTarget) => {
+      const events: string[] = []
+      let dashboardStarts = 0
+      let evidenceCommits = 0
+      const installer = serializedInstaller(events, activationFor, {
+        initialJournal: {
+          version: 1,
+          transactionId: 'transaction-stable-target-recovery',
+          operation: 'update',
+          source: 'codex',
+          phase: 'activating-runtime',
+          startedAt: '2026-08-09T00:00:00Z',
+          updatedAt: '2026-08-09T00:00:00Z',
+          dashboardPort: 18_765,
+          dashboardBeforeAbsent: true,
+          candidateRoot: '/candidate/one',
+          stableTarget: FROZEN_STABLE_TARGET,
+          activationCheckpoint: {
+            selection: {
+              version: 1,
+              revision: 0,
+              activeRelease: null,
+              previousRelease: null,
+              updatedAt: '2026-08-08T00:00:00Z',
+            },
+            launchers: {
+              tenon: { path: '/home/test/.local/bin/tenon', state: { kind: 'missing' } },
+              hook: { path: '/home/test/.local/bin/tenon-hook', state: { kind: 'missing' } },
+            },
+          },
+        },
+        recoverActivation: async () => ({
+          state: 'activated' as const,
+          activation: recoveredV2Activation(recoveredTarget),
+        }),
+      })
+
+      const outcome = await publishManagedRelease(
+        makeDeps(),
+        {
+          ...request('/candidate/ignored'),
+          operation: 'update',
+          requiresStableTarget: true,
+          proveFrozenTarget: async () => undefined,
+          commitReadyEvidence: async () => { evidenceCommits += 1 },
+        },
+        installer,
+        {
+          inspect: async () => null,
+          adopt: async () => null,
+          start: async (_deps, _payloadRoot, opts) => {
+            dashboardStarts += 1
+            const recovered = recoveredV2Activation(recoveredTarget)
+            return {
+              state: 'ready' as const,
+              session: {
+                ownership: {
+                  ...dashboardOwnership(recovered.release.releaseId, opts.transactionId, opts.port),
+                  serverVersion: FROZEN_STABLE_TARGET.version,
+                },
+                stop: async () => ({ state: 'stopped' as const }),
+              },
+            }
+          },
+        },
+      )
+
+      expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+      expect(dashboardStarts).toBe(0)
+      expect(evidenceCommits).toBe(0)
+      expect(events).not.toContain('journal:cleared')
+    },
+  )
 
   test('activated legacy WAL cannot infer missing pre-activation Dashboard evidence or port from retry state', async () => {
     const events: string[] = []
@@ -1610,6 +1739,49 @@ describe('managed release coordinator', () => {
     expect(events).not.toContain('journal:cleared')
   })
 
+  test('dashboard-ready recovery rejects a persisted nonempty server version outside the active release', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const transactionId = 'transaction-dashboard-wrong-durable-version'
+    const wrong = {
+      ...dashboardOwnership(activation.release.releaseId, transactionId),
+      serverVersion: '9.9.9',
+    }
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId,
+        operation: 'setup',
+        source: 'codex',
+        phase: 'dashboard-ready',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        candidateRoot: '/candidate/one',
+        activation,
+        dashboardBeforeAbsent: true,
+        dashboard: { ...wrong, owner: 'transaction' },
+      },
+    })
+    const outcome = await publishManagedRelease(
+      makeDeps(),
+      request('/candidate/one'),
+      installer,
+      {
+        inspect: async () => wrong,
+        adopt: async () => ({
+          ownership: wrong,
+          stop: async () => ({ state: 'stopped' as const }),
+        }),
+        start: async () => readyDashboard(),
+      },
+    )
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('server version')
+    expect(events).not.toContain('journal:cleared')
+  })
+
   test('dashboard-ready recovery rejects an adopted session whose ownership differs from the WAL', async () => {
     const events: string[] = []
     const activation = activationFor('/candidate/one', 'codex')
@@ -1941,16 +2113,7 @@ describe('managed release coordinator', () => {
 
   test('fresh target-only preparation failure clears WAL so a newer latest can be resolved', async () => {
     const events: string[] = []
-    const installer = serializedInstaller(events, (candidateRoot, host) => {
-      const activation = activationFor(candidateRoot, host)
-      return {
-        ...activation,
-        release: {
-          ...activation.release,
-          source: { ...activation.release.source, pluginVersion: '1.0.1' },
-        },
-      }
-    })
+    const installer = serializedInstaller(events)
     const frozen = { version: '1.0.0', tag: 'v1.0.0', commit: 'a'.repeat(40) }
     const newer = { version: '1.0.1', tag: 'v1.0.1', commit: 'b'.repeat(40) }
     let resolverCalls = 0
@@ -2057,6 +2220,37 @@ describe('managed release coordinator', () => {
 
     expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
     expect(outcome.detail).toContain('不等于冻结目标 1.0.2')
+    expect(evidenceCommits).toBe(0)
+    expect(events).not.toContain('journal:dashboard-ready')
+  })
+
+  test('recovered activation from the wrong native host is indeterminate before Dashboard or evidence', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'claude')
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-host-mismatch',
+        operation: 'update',
+        source: 'codex',
+        phase: 'runtime-activated',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        candidateRoot: '/candidate/one',
+        activation,
+      },
+    })
+    let evidenceCommits = 0
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      ...request('/candidate/ignored'),
+      operation: 'update',
+      commitReadyEvidence: () => { evidenceCommits += 1 },
+    }, installer, undefined)
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('不等于 transaction source codex')
     expect(evidenceCommits).toBe(0)
     expect(events).not.toContain('journal:dashboard-ready')
   })

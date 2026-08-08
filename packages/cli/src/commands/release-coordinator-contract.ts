@@ -66,9 +66,11 @@ export interface ManagedReleaseRequest {
    */
   readonly prepareCandidate: (host: ManagedHostPreparationContext) =>
     | { readonly candidateRoot: string; readonly evidence?: string; readonly openBrowser?: boolean }
+    | { readonly candidateRoot: string; readonly evidence?: string; readonly openBrowser?: boolean; readonly currentActivation: RuntimeActivation; readonly currentDashboardExact?: true }
     | { readonly alreadyCurrent: true }
     | Promise<
         | { readonly candidateRoot: string; readonly evidence?: string; readonly openBrowser?: boolean }
+        | { readonly candidateRoot: string; readonly evidence?: string; readonly openBrowser?: boolean; readonly currentActivation: RuntimeActivation; readonly currentDashboardExact?: true }
         | { readonly alreadyCurrent: true }
       >
   /**

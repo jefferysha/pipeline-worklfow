@@ -16,15 +16,76 @@ const LEGACY_ADVANCED_PHASES = new Set<ManagedReleaseJournalRecord['phase']>([
   'evidence-committed',
 ])
 
-function isRetirableLegacySetup(
-  request: ManagedReleaseRequest,
+const LEGACY_PHASES = new Set<ManagedReleaseJournalRecord['phase']>([
+  'preparing-host',
+  'candidate-resolved',
+  'activating-runtime',
+  'runtime-activated',
+  'starting-dashboard',
+  'dashboard-ready',
+  'evidence-committed',
+])
+
+/** Exact decoded envelope written by v1.0.1 before stable targets and frozen Dashboard ports. */
+export function isExactLegacyV101NativeJournal(
+  request: Pick<
+    ManagedReleaseRequest,
+    'operation' | 'source' | 'requiresStableTarget' | 'expectedPluginVersion'
+  >,
   journal: ManagedReleaseJournalRecord,
 ): boolean {
   if (request.requiresStableTarget !== true
     || request.operation !== 'setup'
     || (request.source !== 'codex' && request.source !== 'claude')
-    || journal.stableTarget !== undefined) return false
-  return journal.phase !== 'preparing-host' || (journal.hostSteps?.length ?? 0) > 0
+    || (journal.operation !== 'setup' && journal.operation !== 'update')
+    || journal.source !== request.source
+    || journal.stableTarget !== undefined
+    || journal.dashboardPort !== undefined
+    || journal.candidateOpenBrowser !== undefined
+    || journal.dashboardBeforeAbsent !== undefined
+    || journal.dashboardBeforeRetiring !== undefined
+    || journal.compensationReason !== undefined
+    || journal.dashboardRestored !== undefined
+    || !LEGACY_PHASES.has(journal.phase)
+    || (journal.dashboardBefore !== undefined && journal.dashboardBefore.serverVersion !== '')
+    || (journal.dashboard !== undefined && journal.dashboard.serverVersion !== '')) return false
+
+  if (journal.phase === 'preparing-host') {
+    return journal.candidateRoot === undefined
+      && journal.activationCheckpoint === undefined
+      && journal.activation === undefined
+      && journal.dashboardBefore === undefined
+      && journal.dashboard === undefined
+  }
+  if (journal.phase === 'candidate-resolved') {
+    return journal.activationCheckpoint === undefined
+      && journal.activation === undefined
+      && journal.dashboardBefore === undefined
+      && journal.dashboard === undefined
+  }
+  if (journal.phase === 'activating-runtime') {
+    return journal.activationCheckpoint !== undefined
+      && journal.activation === undefined
+      && journal.dashboardBefore === undefined
+      && journal.dashboard === undefined
+  }
+  const exactActivation = journal.activationCheckpoint !== undefined
+    && journal.activation?.release.version === 1
+    && journal.activation.release.source.host === journal.source
+    && (journal.activation.release.source.pluginVersion === '1.0.1'
+      || (journal.operation === 'update'
+        && request.expectedPluginVersion !== undefined
+        && journal.activation.release.source.pluginVersion === request.expectedPluginVersion))
+  if (!exactActivation) return false
+  if (journal.phase === 'runtime-activated') {
+    return journal.dashboardBefore === undefined && journal.dashboard === undefined
+  }
+  if (journal.phase === 'starting-dashboard') return journal.dashboard === undefined
+  return journal.dashboard !== undefined
+    && journal.dashboard.owner === 'transaction'
+    && journal.dashboard.transactionId === journal.transactionId
+    && journal.dashboard.releaseId === journal.activation.release.releaseId
+    && journal.dashboard.serverVersion === ''
 }
 
 async function proveLegacyActivation(
@@ -75,7 +136,11 @@ async function proveLegacyDashboardBoundary(
     && current.serverVersion !== ''
   const preexistingOwned = sameManagedDashboardCoordinates(current, journal.dashboardBefore)
     && current.serverVersion !== ''
-  if (!candidateOwned && !durableCandidate && !preexistingOwned) {
+  const durableCandidateRequired = journal.phase === 'dashboard-ready'
+    || journal.phase === 'evidence-committed'
+  if (!candidateOwned
+    && !durableCandidate
+    && (durableCandidateRequired || !preexistingOwned)) {
     throw new ManagedRuntimeIndeterminateError(
       `legacy ${journal.phase} WAL 的 Dashboard 端口存在第三方 identity；拒绝转换 WAL`,
     )
@@ -93,7 +158,7 @@ export async function retireLegacyNativeSetupJournal(
   journal: ManagedReleaseJournalRecord,
   dashboardStarter: ReleasedDashboardStarter | undefined,
 ): Promise<ManagedReleaseJournalRecord | null> {
-  if (!isRetirableLegacySetup(request, journal)) return null
+  if (!isExactLegacyV101NativeJournal(request, journal)) return null
   if (journal.phase === 'stopping-candidate'
     || journal.phase === 'reverting-activation'
     || journal.phase === 'restoring-previous'
@@ -129,7 +194,8 @@ export async function retireLegacyNativeSetupJournal(
     }
     await transaction.journal.write(successor)
     deps.io.out(
-      `[setup] 已在不补造旧 frozen commit 的前提下将 v1.0.1 ${journal.phase} WAL `
+      `[setup] 已在不补造旧 frozen commit 的前提下将 v1.0.1 `
+      + `${journal.operation}/${journal.phase} WAL `
       + `原子转换为 ${stableTarget.tag} 版本化事务。`,
     )
     return successor

@@ -51,6 +51,13 @@ async function proveConvergenceIdentity(
   if (active.source.host !== host || active.source.pluginVersion !== target.version) {
     throw new Error('active managed runtime 的 host/version 与 receipt 稳定目标不一致')
   }
+  if (active.version === 2
+    && (active.stableTarget === undefined
+      || active.stableTarget.version !== target.version
+      || active.stableTarget.tag !== target.tag
+      || active.stableTarget.commit !== target.commit)) {
+    throw new Error('active managed runtime stable target 与 convergence receipt 不一致')
+  }
   const proven = resolveStableTagTarget(env, target.version)
   if (proven.tag !== target.tag || proven.commit !== target.commit) {
     throw new Error(`稳定标签 ${target.tag} 已从 ${target.commit} 漂移到 ${proven.commit}`)

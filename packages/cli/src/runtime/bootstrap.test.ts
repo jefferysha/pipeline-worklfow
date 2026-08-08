@@ -5,10 +5,18 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { hashReleasePayload } from './release-payload.js'
+import { runtimeReleaseIdV2 } from './release-store-codecs.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
 const bootstrapSource = join(repoRoot, 'runtime', 'tenon-bootstrap.mjs')
 const roots: string[] = []
+
+interface V2FixtureManifest {
+  releaseId: string
+  source: { host: string; pluginVersion: string }
+  stableTarget: { version: string; tag: string; commit: string }
+}
 
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))))
 
@@ -47,7 +55,9 @@ async function createRelease(runtimeHome: string, marker: string): Promise<strin
   const stagingPayload = join(runtimeHome, 'fixture', marker, 'payload')
   await mkdir(join(stagingPayload, 'packages', 'cli', 'dist'), { recursive: true })
   await mkdir(join(stagingPayload, 'runtime'), { recursive: true })
+  await mkdir(join(stagingPayload, 'hooks'), { recursive: true })
   await writeFile(join(stagingPayload, 'packages', 'cli', 'dist', 'tenon.mjs'), `process.stdout.write(${JSON.stringify(marker)})\n`, 'utf8')
+  await writeFile(join(stagingPayload, 'hooks', 'probe.sh'), '#!/bin/bash\nprintf TRUSTED_HOOK\n', 'utf8')
   await copyFile(bootstrapSource, join(stagingPayload, 'runtime', 'tenon-bootstrap.mjs'))
   await chmod(join(stagingPayload, 'runtime', 'tenon-bootstrap.mjs'), 0o755)
   const digest = await payloadDigest(stagingPayload)
@@ -55,7 +65,9 @@ async function createRelease(runtimeHome: string, marker: string): Promise<strin
   const releaseRoot = join(runtimeHome, 'data', 'releases', releaseId)
   await mkdir(join(releaseRoot, 'payload', 'packages', 'cli', 'dist'), { recursive: true })
   await mkdir(join(releaseRoot, 'payload', 'runtime'), { recursive: true })
+  await mkdir(join(releaseRoot, 'payload', 'hooks'), { recursive: true })
   await copyFile(join(stagingPayload, 'packages', 'cli', 'dist', 'tenon.mjs'), join(releaseRoot, 'payload', 'packages', 'cli', 'dist', 'tenon.mjs'))
+  await copyFile(join(stagingPayload, 'hooks', 'probe.sh'), join(releaseRoot, 'payload', 'hooks', 'probe.sh'))
   await copyFile(join(stagingPayload, 'runtime', 'tenon-bootstrap.mjs'), join(releaseRoot, 'payload', 'runtime', 'tenon-bootstrap.mjs'))
   await chmod(join(releaseRoot, 'payload', 'runtime', 'tenon-bootstrap.mjs'), 0o755)
   await writeFile(join(releaseRoot, 'release.json'), `${JSON.stringify({
@@ -68,6 +80,48 @@ async function createRelease(runtimeHome: string, marker: string): Promise<strin
   return releaseId
 }
 
+async function createV2Release(runtimeHome: string, marker: string): Promise<{
+  releaseId: string
+  manifestPath: string
+}> {
+  const stagingPayload = join(runtimeHome, 'fixture', marker, 'payload')
+  await mkdir(join(stagingPayload, 'packages', 'cli', 'dist'), { recursive: true })
+  await mkdir(join(stagingPayload, 'runtime'), { recursive: true })
+  await writeFile(
+    join(stagingPayload, 'packages', 'cli', 'dist', 'tenon.mjs'),
+    `process.stdout.write(${JSON.stringify(marker)})\n`,
+    'utf8',
+  )
+  await copyFile(bootstrapSource, join(stagingPayload, 'runtime', 'tenon-bootstrap.mjs'))
+  await chmod(join(stagingPayload, 'runtime', 'tenon-bootstrap.mjs'), 0o755)
+  const payloadDigest = await hashReleasePayload(stagingPayload)
+  const source = { host: 'codex' as const, pluginVersion: '1.0.2' }
+  const stableTarget = { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) }
+  const releaseId = runtimeReleaseIdV2(payloadDigest, source, stableTarget)
+  const releaseRoot = join(runtimeHome, 'data', 'releases', releaseId)
+  await mkdir(join(releaseRoot, 'payload', 'packages', 'cli', 'dist'), { recursive: true })
+  await mkdir(join(releaseRoot, 'payload', 'runtime'), { recursive: true })
+  await copyFile(
+    join(stagingPayload, 'packages', 'cli', 'dist', 'tenon.mjs'),
+    join(releaseRoot, 'payload', 'packages', 'cli', 'dist', 'tenon.mjs'),
+  )
+  await copyFile(
+    join(stagingPayload, 'runtime', 'tenon-bootstrap.mjs'),
+    join(releaseRoot, 'payload', 'runtime', 'tenon-bootstrap.mjs'),
+  )
+  await chmod(join(releaseRoot, 'payload', 'runtime', 'tenon-bootstrap.mjs'), 0o755)
+  const manifestPath = join(releaseRoot, 'release.json')
+  await writeFile(manifestPath, `${JSON.stringify({
+    version: 2,
+    releaseId,
+    payloadDigest,
+    createdAt: '2026-07-24T00:00:00Z',
+    source,
+    stableTarget,
+  })}\n`, 'utf8')
+  return { releaseId, manifestPath }
+}
+
 async function installBootstrap(runtimeHome: string): Promise<string> {
   const active = join(runtimeHome, 'data', 'bootstrap', 'active.mjs')
   await mkdir(dirname(active), { recursive: true })
@@ -76,7 +130,13 @@ async function installBootstrap(runtimeHome: string): Promise<string> {
   return active
 }
 
-async function runBootstrap(runtimeHome: string, bootstrap: string, args: string[], input = ''): Promise<{ stdout: string; stderr: string; code: number }> {
+async function runBootstrap(
+  runtimeHome: string,
+  bootstrap: string,
+  args: string[],
+  input = '',
+  extraEnv: NodeJS.ProcessEnv = {},
+): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolveResult) => {
     const child = spawn(process.execPath, [bootstrap, ...args], {
       env: {
@@ -87,6 +147,7 @@ async function runBootstrap(runtimeHome: string, bootstrap: string, args: string
           stateRoot: join(runtimeHome, 'state'),
           configRoot: join(runtimeHome, 'config'),
         }),
+        ...extraEnv,
       },
     })
     let stdout = ''
@@ -102,6 +163,62 @@ async function runBootstrap(runtimeHome: string, bootstrap: string, args: string
 }
 
 describe('stable runtime bootstrap', () => {
+  it('executes managed hooks with the absolute system Bash instead of an attacker-controlled PATH entry', async () => {
+    const root = await freshRoot('trusted-hook-bash')
+    const activeRelease = await createRelease(root, 'active')
+    const bootstrap = await installBootstrap(root)
+    const state = join(root, 'state')
+    const attackerBin = join(root, 'attacker-bin')
+    const attackerMarker = join(root, 'attacker-bash-ran')
+    await mkdir(state, { recursive: true })
+    await mkdir(attackerBin, { recursive: true })
+    await writeFile(join(attackerBin, 'bash'), `#!/bin/sh\nprintf compromised > ${JSON.stringify(attackerMarker)}\n`, 'utf8')
+    await chmod(join(attackerBin, 'bash'), 0o755)
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify({
+      version: 1,
+      revision: 1,
+      activeRelease,
+      previousRelease: null,
+      updatedAt: '2026-07-24T00:00:00Z',
+    })}\n`, 'utf8')
+
+    const result = await runBootstrap(root, bootstrap, ['hook', 'probe'], '', {
+      PATH: `${attackerBin}:${process.env.PATH ?? ''}`,
+    })
+
+    expect(result).toMatchObject({ code: 0, stdout: 'TRUSTED_HOOK' })
+    await expect(readFile(attackerMarker, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it.each([
+    ['source host', (manifest: V2FixtureManifest) => { manifest.source.host = 'claude' }],
+    ['stable target', (manifest: V2FixtureManifest) => { manifest.stableTarget.commit = 'b'.repeat(40) }],
+    ['release id', (manifest: V2FixtureManifest) => { manifest.releaseId = `sha256-${'b'.repeat(64)}` }],
+  ])('rejects a v2 manifest whose %s is not bound to its release id', async (_label, mutate) => {
+    const root = await freshRoot('v2-identity-drift')
+    const release = await createV2Release(root, 'UNVERIFIED_V2_EXECUTED')
+    const bootstrap = await installBootstrap(root)
+    const manifest = JSON.parse(await readFile(release.manifestPath, 'utf8')) as V2FixtureManifest
+    mutate(manifest)
+    await writeFile(release.manifestPath, `${JSON.stringify(manifest)}\n`, 'utf8')
+    const state = join(root, 'state')
+    await mkdir(state, { recursive: true })
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify({
+      version: 1,
+      revision: 1,
+      activeRelease: release.releaseId,
+      previousRelease: null,
+      updatedAt: '2026-07-24T00:00:00Z',
+    })}\n`, 'utf8')
+
+    const status = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'status', '--json'])
+    const delegated = await runBootstrap(root, bootstrap, ['cli', 'probe'])
+
+    expect(JSON.parse(status.stdout)).toMatchObject({ activeValid: false })
+    expect(delegated.code).toBe(1)
+    expect(delegated.stdout).not.toContain('UNVERIFIED_V2_EXECUTED')
+  })
+
   it('can roll back while the active payload is unavailable, after verifying the previous release digest', async () => {
     const root = await freshRoot('rollback')
     const activeRelease = await createRelease(root, 'active')

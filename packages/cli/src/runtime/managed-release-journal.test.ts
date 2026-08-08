@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 import { resolveRuntimePaths } from './paths.js'
 import { createManagedReleaseJournal } from './managed-release-journal.js'
+import { runtimeReleaseIdV2 } from './release-store-codecs.js'
 
 const roots: string[] = []
 
@@ -21,7 +22,87 @@ async function fixture() {
   return { root, paths, journal: createManagedReleaseJournal(paths) }
 }
 
+function legacyV101Activation(
+  paths: ReturnType<typeof resolveRuntimePaths>,
+  host: 'codex' | 'claude',
+) {
+  const payloadDigest = host === 'codex' ? 'c'.repeat(64) : 'd'.repeat(64)
+  const releaseId = `sha256-${payloadDigest}`
+  return {
+    selection: {
+      version: 1 as const,
+      revision: 1,
+      activeRelease: releaseId,
+      previousRelease: null,
+      updatedAt: '2026-07-24T00:00:00Z',
+    },
+    release: {
+      version: 1 as const,
+      releaseId,
+      payloadDigest,
+      createdAt: '2026-07-24T00:00:00Z',
+      source: { host, pluginVersion: '1.0.1' },
+    },
+    releaseRoot: join(paths.releasesRoot, releaseId),
+  }
+}
+
+function legacyV101Checkpoint(paths: ReturnType<typeof resolveRuntimePaths>) {
+  return {
+    selection: {
+      version: 1 as const,
+      revision: 0,
+      activeRelease: null,
+      previousRelease: null,
+      updatedAt: '1970-01-01T00:00:00Z',
+    },
+    launchers: {
+      tenon: {
+        path: join(paths.homeDir, '.local', 'bin', 'tenon'),
+        state: { kind: 'missing' as const },
+      },
+      hook: {
+        path: join(paths.homeDir, '.local', 'bin', 'tenon-hook'),
+        state: { kind: 'missing' as const },
+      },
+    },
+  }
+}
+
 describe('managed release write-ahead journal', () => {
+  test.each(
+    (['codex', 'claude'] as const).flatMap((host) => (
+      ['runtime-activated', 'starting-dashboard', 'dashboard-ready', 'evidence-committed'] as const
+    ).map((phase) => [host, phase] as const)),
+  )('decodes an exact v1.0.1 %s update/%s WAL without a Dashboard port', async (host, phase) => {
+    const { paths, journal } = await fixture()
+    const activation = legacyV101Activation(paths, host)
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    await writeFile(
+      join(paths.managedTransactionRoot, 'release-transaction.json'),
+      JSON.stringify({
+        version: 1,
+        transactionId: `legacy-v101-${host}-${phase}`,
+        operation: 'update',
+        source: host,
+        phase,
+        startedAt: '2026-07-23T00:00:00Z',
+        updatedAt: '2026-07-24T00:00:00Z',
+        candidateRoot: '/v1.0.1/marketplace-cache',
+        activationCheckpoint: legacyV101Checkpoint(paths),
+        activation,
+      }),
+      'utf8',
+    )
+
+    await expect(journal.read()).resolves.toMatchObject({
+      operation: 'update',
+      source: host,
+      phase,
+      activation,
+    })
+  })
+
   test('persists an exact transaction phase across process-like store recreation', async () => {
     const { paths, journal } = await fixture()
     const initial = journal.create('update', 'codex', '2026-07-27T00:00:00Z')
@@ -45,6 +126,92 @@ describe('managed release write-ahead journal', () => {
       evidence: '{"installed":[]}',
     })
   })
+
+  test('round-trips a v2 activation with host and frozen stable target identity', async () => {
+    const { paths, journal } = await fixture()
+    const initial = journal.create('update', 'codex', '2026-07-27T00:00:00Z')
+    const source = { host: 'codex' as const, pluginVersion: '1.0.2' }
+    const stableTarget = {
+      version: '1.0.2',
+      tag: 'v1.0.2',
+      commit: 'a'.repeat(40),
+    }
+    const payloadDigest = 'b'.repeat(64)
+    const releaseId = runtimeReleaseIdV2(payloadDigest, source, stableTarget)
+    const activation = {
+      selection: {
+        version: 1 as const,
+        revision: 2,
+        activeRelease: releaseId,
+        previousRelease: null,
+        updatedAt: '2026-07-27T00:00:01Z',
+      },
+      release: {
+        version: 2 as const,
+        releaseId,
+        payloadDigest,
+        createdAt: '2026-07-27T00:00:01Z',
+        source,
+        stableTarget,
+      },
+      releaseRoot: join(paths.releasesRoot, releaseId),
+    }
+    await journal.write({
+      ...initial,
+      phase: 'candidate-resolved',
+      stableTarget,
+      candidateRoot: '/host/tenon',
+      activation,
+      updatedAt: '2026-07-27T00:00:01Z',
+    })
+
+    await expect(createManagedReleaseJournal(paths).read()).resolves.toMatchObject({
+      stableTarget,
+      activation: { release: { version: 2, releaseId, source, stableTarget } },
+    })
+  })
+
+  test.each(['selection', 'source'] as const)(
+    'rejects an activation whose %s identity contradicts the journal transaction',
+    async (mismatch) => {
+      const { paths, journal } = await fixture()
+      const initial = journal.create('update', 'codex', '2026-07-27T00:00:00Z')
+      const payloadDigest = 'b'.repeat(64)
+      const releaseId = `sha256-${payloadDigest}`
+      await mkdir(paths.managedTransactionRoot, { recursive: true })
+      await writeFile(
+        join(paths.managedTransactionRoot, 'release-transaction.json'),
+        JSON.stringify({
+          ...initial,
+          phase: 'candidate-resolved',
+          candidateRoot: '/host/tenon',
+          activation: {
+            selection: {
+              version: 1,
+              revision: 2,
+              activeRelease: mismatch === 'selection' ? `sha256-${'c'.repeat(64)}` : releaseId,
+              previousRelease: null,
+              updatedAt: '2026-07-27T00:00:01Z',
+            },
+            release: {
+              version: 1,
+              releaseId,
+              payloadDigest,
+              createdAt: '2026-07-27T00:00:01Z',
+              source: {
+                host: mismatch === 'source' ? 'claude' : 'codex',
+                pluginVersion: '1.0.1',
+              },
+            },
+            releaseRoot: join(paths.releasesRoot, releaseId),
+          },
+        }),
+        'utf8',
+      )
+
+      await expect(journal.read()).rejects.toThrow('格式非法')
+    },
+  )
 
   test('rejects an invalid persisted Dashboard port', async () => {
     const { paths, journal } = await fixture()
@@ -84,6 +251,54 @@ describe('managed release write-ahead journal', () => {
     await expect(createManagedReleaseJournal(paths).read()).resolves.toMatchObject({
       dashboardPort: 43_210,
       dashboardBeforeAbsent: true,
+    })
+  })
+
+  test('persists the exact wrong-version Dashboard retirement checkpoint across restart', async () => {
+    const { paths, journal } = await fixture()
+    const initial = journal.create('setup', 'codex', '2026-07-27T00:00:00Z')
+    const payloadDigest = 'a'.repeat(64)
+    const releaseId = `sha256-${payloadDigest}`
+    const dashboardBefore = {
+      version: 1 as const,
+      serverVersion: '9.9.9',
+      port: 18_765,
+      pid: 4242,
+      releaseId,
+      stateScopeId: `sha256-v1-${'1'.repeat(64)}`,
+      transactionId: 'previous-dashboard',
+    }
+    await journal.write({
+      ...initial,
+      phase: 'starting-dashboard',
+      dashboardPort: 18_765,
+      candidateRoot: '/host/tenon',
+      activation: {
+        selection: {
+          version: 1,
+          revision: 1,
+          activeRelease: releaseId,
+          previousRelease: null,
+          updatedAt: '2026-07-27T00:00:01Z',
+        },
+        release: {
+          version: 1,
+          releaseId,
+          payloadDigest,
+          createdAt: '2026-07-27T00:00:01Z',
+          source: { host: 'codex', pluginVersion: '1.0.1' },
+        },
+        releaseRoot: join(paths.releasesRoot, releaseId),
+      },
+      dashboardBefore,
+      dashboardBeforeRetiring: true,
+      updatedAt: '2026-07-27T00:00:01Z',
+    })
+
+    await expect(createManagedReleaseJournal(paths).read()).resolves.toMatchObject({
+      phase: 'starting-dashboard',
+      dashboardBefore,
+      dashboardBeforeRetiring: true,
     })
   })
 

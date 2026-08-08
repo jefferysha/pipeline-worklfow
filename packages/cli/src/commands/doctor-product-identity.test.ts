@@ -1,0 +1,170 @@
+import { describe, expect, test } from 'vitest'
+import type { RuntimeInstaller } from '../runtime/installer.js'
+import { resolveRuntimePaths } from '../runtime/paths.js'
+import { runtimeReleaseIdV2 } from '../runtime/release-store-codecs.js'
+import { createDoctorProductIdentityProbe } from './doctor-product-identity.js'
+
+const target = { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) }
+const source = { host: 'codex' as const, pluginVersion: target.version }
+const runtimePayloadDigest = 'b'.repeat(64)
+const releaseId = runtimeReleaseIdV2(runtimePayloadDigest, source, target)
+
+function probeFixture(options: {
+  readonly head?: string
+  readonly ref?: string
+  readonly candidateDigest?: string
+  readonly driftHeadAfterCandidate?: string
+  readonly remoteCommit?: string
+} = {}) {
+  let head = options.head ?? target.commit
+  const ref = options.ref ?? target.tag
+  const candidateDigest = options.candidateDigest ?? runtimePayloadDigest
+  const homeDir = '/home/doctor-identity-test'
+  const env = { PATH: '/trusted/bin' }
+  const paths = resolveRuntimePaths({ homeDir, env })
+  const installer = {
+    inspect: async () => ({
+      selection: {
+        version: 1 as const,
+        revision: 2,
+        activeRelease: releaseId,
+        previousRelease: null,
+        updatedAt: '2026-08-08T00:00:00Z',
+      },
+      active: {
+        version: 2 as const,
+        releaseId,
+        payloadDigest: runtimePayloadDigest,
+        createdAt: '2026-08-08T00:00:00Z',
+        source,
+        stableTarget: target,
+      },
+      previous: null,
+      activeValid: true,
+      previousValid: false,
+      lastAudit: null,
+    }),
+  } as RuntimeInstaller
+  return createDoctorProductIdentityProbe(
+    () => ({ homeDir, env, paths }),
+    installer,
+    {
+      resolveCommand: (command) => `/trusted/${command}`,
+      readText: (path) => path === '/marketplace/.codex-plugin/plugin.json'
+        || path === '/marketplace/.claude-plugin/plugin.json'
+        ? JSON.stringify({ version: target.version })
+        : undefined,
+      run: (_file, args) => {
+        const text = args.join(' ')
+        if (text === 'plugin marketplace list --json') {
+          return {
+            code: 0,
+            stdout: JSON.stringify({ marketplaces: [{
+              name: 'tenon',
+              root: '/marketplace',
+              ref,
+              marketplaceSource: { sourceType: 'git', source: 'jefferysha/tenon' },
+            }] }),
+            stderr: '',
+          }
+        }
+        if (text === 'plugin list --json') {
+          return {
+            code: 0,
+            stdout: JSON.stringify({ installed: [{
+              pluginId: 'tenon@tenon',
+              enabled: true,
+              version: target.version,
+              source: { path: '/marketplace' },
+            }] }),
+            stderr: '',
+          }
+        }
+        if (text === '-C /marketplace rev-parse HEAD') {
+          return { code: 0, stdout: `${head}\n`, stderr: '' }
+        }
+        if (text === '-C /marketplace remote get-url origin') {
+          return { code: 0, stdout: 'https://github.com/jefferysha/tenon.git\n', stderr: '' }
+        }
+        if (text === `ls-remote https://github.com/jefferysha/tenon.git refs/tags/${target.tag} refs/tags/${target.tag}^{}`) {
+          return {
+            code: 0,
+            stdout: `${options.remoteCommit ?? target.commit}\trefs/tags/${target.tag}\n`,
+            stderr: '',
+          }
+        }
+        if (text === '-C /marketplace diff --quiet HEAD --'
+          || text === '-C /marketplace ls-files --others --exclude-standard') {
+          return { code: 0, stdout: '', stderr: '' }
+        }
+        return { code: 1, stdout: '', stderr: `unexpected: ${text}` }
+      },
+      inspectCandidate: async () => {
+        if (options.driftHeadAfterCandidate !== undefined) head = options.driftHeadAfterCandidate
+        return {
+          pluginVersion: target.version,
+          payloadDigest: candidateDigest,
+        }
+      },
+      probeDashboard: async (port, expectedRelease, stateScopeId) => ({
+        version: 1,
+        serverVersion: target.version,
+        port,
+        pid: 4242,
+        releaseId: expectedRelease ?? releaseId,
+        stateScopeId,
+      }),
+    },
+  )
+}
+
+describe('doctor native immutable product identity probe', () => {
+  test('proves stable tag, commit, canonical host root, payload digest, runtime and Dashboard together', async () => {
+    const identity = await probeFixture()()
+    expect(identity, JSON.stringify(identity)).toMatchObject({
+      state: 'native',
+      stableTargetTag: target.tag,
+      stableTargetCommit: target.commit,
+      hostPluginRoot: '/marketplace',
+      hostTargetExact: true,
+      hostPayloadDigest: runtimePayloadDigest,
+      runtimePayloadDigest,
+      payloadDigestExact: true,
+      dashboardReleaseId: releaseId,
+    })
+  })
+
+  test('reports equal version strings as drift when HEAD and payload differ from the frozen release', async () => {
+    await expect(probeFixture({
+      head: 'c'.repeat(40),
+      candidateDigest: 'd'.repeat(64),
+    })()).resolves.toMatchObject({
+      state: 'native',
+      hostPluginVersion: target.version,
+      runtimePluginVersion: target.version,
+      dashboardServerVersion: target.version,
+      hostTargetExact: false,
+      payloadDigestExact: false,
+    })
+  })
+
+  test('re-observes the immutable host target after hashing the mutable plugin candidate', async () => {
+    await expect(probeFixture({
+      driftHeadAfterCandidate: 'c'.repeat(40),
+    })()).resolves.toMatchObject({
+      state: 'native',
+      hostTargetExact: false,
+      payloadDigestExact: true,
+    })
+  })
+
+  test('reports drift when the public stable tag no longer proves the persisted commit', async () => {
+    await expect(probeFixture({
+      remoteCommit: 'd'.repeat(40),
+    })()).resolves.toMatchObject({
+      state: 'native',
+      hostTargetExact: false,
+      payloadDigestExact: true,
+    })
+  })
+})

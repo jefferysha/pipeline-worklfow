@@ -35,6 +35,25 @@ exec ${shellQuote(process.execPath)} ${shellQuote(bootstrap)} ${mode} "$@"
 `
 }
 
+/** Exact public v1.0.1 launcher bytes; compare-only compatibility, never execute through PATH. */
+function legacyLauncherTextV101(paths: RuntimePaths, mode: 'cli' | 'hook'): string {
+  const bootstrap = join(paths.bootstrapRoot, 'active.mjs')
+  const rootContract = serializeProductRootContract(paths)
+  const missing = mode === 'hook'
+    ? 'exit 0'
+    : 'printf "tenon runtime bootstrap unavailable; run tenon setup --codex or tenon setup --claude\\n" >&2\n  exit 1'
+  return `#!/usr/bin/env bash
+set -eu
+export TENON_RUNTIME_ROOTS=${shellQuote(rootContract)}
+# N-1 bootstrap ABI: previous verified releases read these exact roots during rollback.
+export TENON_RUNTIME_DATA_ROOT=${shellQuote(paths.dataRoot)}
+export TENON_RUNTIME_STATE_ROOT=${shellQuote(paths.stateRoot)}
+export TENON_RUNTIME_CONFIG_ROOT=${shellQuote(paths.configRoot)}
+[ -f ${shellQuote(bootstrap)} ] || { ${missing}; }
+exec node ${shellQuote(bootstrap)} ${mode} "$@"
+`
+}
+
 function launcherPaths(homeDir: string): StableLauncherPaths {
   const binDir = join(homeDir, '.local', 'bin')
   return {
@@ -90,6 +109,23 @@ export function expectedStableLaunchers(
     hook: {
       path: stable.hook,
       state: { kind: 'file', content: launcherText(paths, 'hook'), mode: 0o755 },
+    },
+  }
+}
+
+export function expectedLegacyStableLaunchersV101(
+  paths: RuntimePaths,
+  homeDir = homedir(),
+): RuntimeLauncherSnapshot {
+  const stable = launcherPaths(homeDir)
+  return {
+    tenon: {
+      path: stable.tenon,
+      state: { kind: 'file', content: legacyLauncherTextV101(paths, 'cli'), mode: 0o755 },
+    },
+    hook: {
+      path: stable.hook,
+      state: { kind: 'file', content: legacyLauncherTextV101(paths, 'hook'), mode: 0o755 },
     },
   }
 }

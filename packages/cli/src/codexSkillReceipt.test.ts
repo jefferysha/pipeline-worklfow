@@ -686,6 +686,7 @@ describe('Codex transcript skill receipt', () => {
           releaseId,
           payloadDigest: 'a'.repeat(64),
           createdAt: '2026-07-24T00:00:00Z',
+          source: { host: 'codex', pluginVersion: '1.0.1' },
         })}\n`, 'utf8')
       }
       if (kind === 'direct-development') {

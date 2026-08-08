@@ -92,9 +92,10 @@ design-doc: docs/superpowers/specs/2026-08-08-versioned-release-install-lifecycl
 5. 更新 README/安装文档：v1.0.1 只走一次 `v1.0.2/install.sh` legacy bridge；从 v1.0.2 起每次更新都走
    单条 `tenon update --codex`。禁止把无法追溯修改的旧进程描述成新版自迁移。
 6. 重建 CLI/server/Dashboard 受控资产，运行定向、全量、clean install、跨进程恢复和 release identity 门禁。
-7. 用真实形状 v1.0.1 setup WAL 与 v2/v3 convergence receipt 补充恢复矩阵：successor resolver 失败零清理、
-   `starting-dashboard` 迟到进程、已重绑 v1.0.2 宿主的一次性 runtime bridge、cleanup 前 v4 升级，以及
-   completed receipt 只能在 cleanup 后完整复证之后提交。
+7. 用真实磁盘形状 v1.0.1 native setup/update WAL 与 v2/v3 convergence receipt 补充恢复矩阵：所有旧 phase
+   均先通过向后兼容 decoder；successor resolver 失败时原 WAL 字节不变；证明成功后同一 transaction 原子转换
+   为 setup/preparing-host；并覆盖 `starting-dashboard` 迟到进程、已重绑 v1.0.2 宿主的一次性 runtime bridge、
+   cleanup 前 v4 升级，以及 completed receipt 只能在 cleanup 后完整复证之后提交。
 
 验证：`node --test tools/install-bootstrap.node-test.mjs && npx vitest run packages/cli/src/commands/update.test.ts packages/cli/src/commands/setup.test.ts packages/cli/src/commands/release-coordinator.test.ts packages/cli/src/runtime/managed-release-journal.test.ts packages/cli/src/runtime/launchers.test.ts && npm run build && npm test && npm run test:web && npm run test:clean-install`。
 

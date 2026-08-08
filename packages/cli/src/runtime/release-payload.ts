@@ -44,6 +44,28 @@ async function copyEntry(source: string, target: string): Promise<void> {
   await chmod(target, sourceStat.mode & 0o777)
 }
 
+async function restoreDirectoryModes(sourceRoot: string, targetRoot: string): Promise<void> {
+  async function visit(targetDir: string, rel: string): Promise<void> {
+    const entries = await readdir(targetDir, { withFileTypes: true })
+    entries.sort((left, right) => left.name.localeCompare(right.name))
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const childRel = rel === '' ? entry.name : join(rel, entry.name)
+      const source = join(sourceRoot, childRel)
+      const target = join(targetDir, entry.name)
+      const sourceStat = await lstat(source)
+      if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
+        throw new RuntimeFailure('candidate-invalid', `候选发布目录身份已漂移: ${source}`)
+      }
+      await visit(target, childRel)
+      // mkdir(mode) is filtered by the process umask. Apply the candidate's exact mode only after
+      // descendants have been copied, including synthetic parents of file-only payload entries.
+      await chmod(target, sourceStat.mode & 0o777)
+    }
+  }
+  await visit(targetRoot, '')
+}
+
 export async function copyReleasePayload(candidateRoot: string, payloadRoot: string): Promise<void> {
   for (const entry of PAYLOAD_ENTRIES) {
     const source = candidatePath(candidateRoot, entry)
@@ -54,9 +76,11 @@ export async function copyReleasePayload(candidateRoot: string, payloadRoot: str
       throw new RuntimeFailure('candidate-invalid', `候选发布缺少或无法读取 ${entry}: ${String(error)}`)
     }
   }
+  await restoreDirectoryModes(resolve(candidateRoot), resolve(payloadRoot))
 }
 
-export async function hashReleasePayload(root: string): Promise<string> {
+/** v1 compatibility only: its file bodies were not framed and must never identify a new release. */
+export async function hashLegacyReleasePayload(root: string): Promise<string> {
   const hash = createHash('sha256')
   async function visit(dir: string, rel: string): Promise<void> {
     const entries = await readdir(dir, { withFileTypes: true })
@@ -81,16 +105,82 @@ export async function hashReleasePayload(root: string): Promise<string> {
   return hash.digest('hex')
 }
 
-export function defaultRuntimeCommandRunner(): RuntimeCommandRunner {
+function hashFrame(hash: ReturnType<typeof createHash>, value: string | Buffer): void {
+  const bytes = typeof value === 'string' ? Buffer.from(value, 'utf8') : value
+  hash.update(`${bytes.byteLength}:`, 'utf8')
+  hash.update(bytes)
+}
+
+function compareUtf8Names(left: { readonly name: string }, right: { readonly name: string }): number {
+  return Buffer.compare(Buffer.from(left.name, 'utf8'), Buffer.from(right.name, 'utf8'))
+}
+
+/** Canonical v2 payload identity: every structural field and file body is length-delimited. */
+export async function hashReleasePayload(root: string): Promise<string> {
+  const hash = createHash('sha256')
+  hashFrame(hash, 'tenon-release-payload-v2')
+  async function visit(dir: string, rel: string): Promise<void> {
+    const entries = await readdir(dir, { withFileTypes: true })
+    entries.sort(compareUtf8Names)
+    for (const entry of entries) {
+      const child = join(dir, entry.name)
+      const childRel = rel === '' ? entry.name : `${rel}/${entry.name}`
+      const item = await lstat(child)
+      if (item.isSymbolicLink()) throw new RuntimeFailure('runtime-corrupt', `发布 payload 包含符号链接: ${childRel}`)
+      if (item.isDirectory()) {
+        hashFrame(hash, 'directory')
+        hashFrame(hash, childRel)
+        hashFrame(hash, (item.mode & 0o777).toString(8))
+        await visit(child, childRel)
+      } else if (item.isFile()) {
+        const content = await readFile(child)
+        hashFrame(hash, 'file')
+        hashFrame(hash, childRel)
+        hashFrame(hash, (item.mode & 0o777).toString(8))
+        hashFrame(hash, content)
+      } else {
+        throw new RuntimeFailure('runtime-corrupt', `发布 payload 包含非普通文件: ${childRel}`)
+      }
+    }
+  }
+  await visit(root, '')
+  return hash.digest('hex')
+}
+
+export function defaultRuntimeCommandRunner(timeoutMs = 15_000): RuntimeCommandRunner {
   return {
     run: (file, args, cwd) => new Promise<CommandResult>((resolveResult) => {
-      execFile(file, [...args], { cwd, encoding: 'utf8', maxBuffer: 2 * 1024 * 1024 }, (error, stdout, stderr) => {
-        const code = error === null
+      execFile(file, [...args], {
+        cwd,
+        encoding: 'utf8',
+        maxBuffer: 2 * 1024 * 1024,
+        timeout: timeoutMs,
+        killSignal: 'SIGKILL',
+      }, (error, stdout, stderr) => {
+        const failure = error as (NodeJS.ErrnoException & {
+          readonly code?: unknown
+          readonly killed?: unknown
+          readonly signal?: unknown
+        }) | null
+        const code = failure === null
           ? 0
-          : typeof (error as NodeJS.ErrnoException & { code?: unknown }).code === 'number'
-            ? (error as NodeJS.ErrnoException & { code: number }).code
-            : 1
-        resolveResult({ code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') })
+          : failure.killed === true || failure.code === 'ETIMEDOUT'
+            ? 124
+            : typeof failure.code === 'number' ? failure.code : 1
+        const rawStderr = String(stderr ?? '')
+        const cause = failure === null
+          ? ''
+          : [
+              failure.message,
+              failure.killed === true ? 'killed=true' : '',
+              typeof failure.signal === 'string' ? `signal=${failure.signal}` : '',
+              typeof failure.code === 'string' ? `code=${failure.code}` : '',
+            ].filter((part) => part !== '').join('; ').slice(0, 2_048)
+        resolveResult({
+          code,
+          stdout: String(stdout ?? ''),
+          stderr: rawStderr.trim() === '' ? cause : `${rawStderr.trimEnd()}\n${cause}`.trim(),
+        })
       })
     }),
   }

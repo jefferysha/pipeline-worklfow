@@ -17,6 +17,7 @@ import type {
   RuntimePaths,
   RuntimeReleaseManifest,
   RuntimeReleaseSource,
+  RuntimeStableReleaseTarget,
   RuntimeSelection,
 } from './types.js'
 import { RuntimeFailure } from './types.js'
@@ -26,6 +27,7 @@ import {
   lastAudit,
   readReleaseManifest,
   readSelection,
+  runtimeReleaseIdV2,
   stableJson,
   validReleaseId,
   writeAudit,
@@ -35,6 +37,7 @@ import {
   copyReleasePayload,
   defaultRuntimeCommandRunner,
   hashReleasePayload,
+  hashLegacyReleasePayload,
   inspectCandidatePayload,
   releaseCandidateVersion,
   runChecked,
@@ -79,12 +82,13 @@ export class RuntimeReleaseStore {
     candidateRoot: string,
     host: RuntimeReleaseSource['host'],
     expectedPluginVersion?: string,
+    stableTarget?: RuntimeStableReleaseTarget,
   ): Promise<RuntimeActivation> {
     const absoluteCandidate = resolve(candidateRoot)
     await this.prepareRoots()
     try {
       return await withLock(this.paths.stateRoot, async () =>
-        this.stageAndActivateUnderLock(absoluteCandidate, host, expectedPluginVersion))
+        this.stageAndActivateUnderLock(absoluteCandidate, host, expectedPluginVersion, stableTarget))
     } catch (error) {
       if (error instanceof RuntimeFailure) throw error
       throw new RuntimeFailure('candidate-invalid', `无法安装候选 runtime: ${String(error)}`)
@@ -183,6 +187,7 @@ export class RuntimeReleaseStore {
     candidateRoot: string,
     host: RuntimeReleaseSource['host'],
     expectedPluginVersion?: string,
+    stableTarget?: RuntimeStableReleaseTarget,
   ): Promise<RuntimeActivation> {
     const stageRoot = join(this.paths.stagingRoot, `release-${randomUUID()}`)
     const payloadRoot = join(stageRoot, 'payload')
@@ -192,7 +197,6 @@ export class RuntimeReleaseStore {
       await copyReleasePayload(candidateRoot, payloadRoot)
       await verifyReleasePayload(payloadRoot, this.runner, this.bashPath)
       const payloadDigest = await hashReleasePayload(payloadRoot)
-      releaseId = `sha256-${payloadDigest}`
       const pluginVersion = await releaseCandidateVersion(payloadRoot)
       const currentCandidate = await inspectCandidatePayload(candidateRoot, {
         runner: this.runner,
@@ -212,17 +216,25 @@ export class RuntimeReleaseStore {
         )
       }
       const source: RuntimeReleaseSource = { host, pluginVersion }
+      if (stableTarget !== undefined && stableTarget.version !== pluginVersion) {
+        throw new RuntimeFailure(
+          'candidate-invalid',
+          `候选 plugin version ${pluginVersion} 与 stable target ${stableTarget.version} 不一致`,
+        )
+      }
+      releaseId = runtimeReleaseIdV2(payloadDigest, source, stableTarget)
       const manifest: RuntimeReleaseManifest = {
-        version: 1,
+        version: 2,
         releaseId,
         payloadDigest,
         createdAt: this.now(),
         source,
+        ...(stableTarget === undefined ? {} : { stableTarget }),
       }
       await atomicWriteFile(join(stageRoot, 'release.json'), stableJson(manifest))
 
       const finalRoot = this.releaseRoot(releaseId)
-      let effectiveManifest = manifest
+      let effectiveManifest: RuntimeReleaseManifest = manifest
       try {
         await rename(stageRoot, finalRoot)
       } catch (error) {
@@ -293,7 +305,10 @@ export class RuntimeReleaseStore {
     if (manifest === null || manifest.releaseId !== releaseId) return null
     const payloadRoot = join(root, 'payload')
     try {
-      if ((await hashReleasePayload(payloadRoot)) !== manifest.payloadDigest) return null
+      const digest = manifest.version === 1
+        ? await hashLegacyReleasePayload(payloadRoot)
+        : await hashReleasePayload(payloadRoot)
+      if (digest !== manifest.payloadDigest) return null
       await verifyReleasePayload(payloadRoot, this.runner, this.bashPath)
       return manifest
     } catch {

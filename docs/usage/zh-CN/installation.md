@@ -82,10 +82,10 @@ codex login status
 ChatGPT 方案登录通常无需另配 API Key；Platform API Key 使用独立的按量计费。不要把 Key 直接
 拼进命令参数、日志或 Issue。非 TTY/CI 安装不会因为尚未登录而阻塞。
 
-这些命令有两层真实验收。CI 安装固定版本的真实 Codex CLI，把当前 checkout 作为全新本地
-Marketplace 安装；只读 release-candidate workflow 则提取当前 checkout 的精确 commit，下载该 commit 的 `install.sh`，
-并把同一个不可变 `--ref <commit>` 传给 Marketplace bootstrap，在独立临时 `HOME`、
-`CODEX_HOME`、`TENON_RUNTIME_HOME` 和 Dashboard 端口中执行。两条路径都会检查稳定 launcher、doctor、受管
+这些命令有两层真实验收。CI 安装固定版本的真实 Codex CLI，从精确候选 checkout 构造隔离 Git 镜像，
+为该镜像创建同一个稳定版本 tag，并在独立临时 `HOME`、`CODEX_HOME`、`TENON_RUNTIME_HOME` 和
+Dashboard 端口中运行版本化安装器。不可变公开 tag 创建后，公网验收只下载该 tag 的 `install.sh`。
+两条路径都会检查稳定 launcher、doctor、受管
 runtime、Dashboard API 与 HTML 产品身份、新 Codex app-server 对插件/入口 Skill/hooks 的发现，
 并重复执行相同安装，证明 release 与 listener 均未变化。
 

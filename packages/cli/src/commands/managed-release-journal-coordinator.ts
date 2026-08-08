@@ -7,10 +7,12 @@ import {
 } from '../runtime/installer.js'
 import type { NativeRuntimeHost } from '../runtime/types.js'
 import { DEFAULT_DASHBOARD_PORT } from './dashboard.js'
+import { isExactLegacyV101NativeJournal } from './release-legacy-setup-retirement.js'
 
 interface JournalRequest {
   readonly operation: ManagedReleaseOperation
   readonly source: NativeRuntimeHost | 'adapter'
+  readonly expectedPluginVersion?: string
   readonly dashboardPort?: number
   readonly requiresStableTarget?: boolean
   readonly resolveStableTargetBeforeRecovery?: () =>
@@ -65,7 +67,23 @@ export async function resolveManagedReleaseJournal(
     }
   }
   try {
-    if (pending.operation !== request.operation || pending.source !== request.source) {
+    const potentialLegacyNative = request.operation === 'setup'
+      && (request.source === 'codex' || request.source === 'claude')
+      && request.requiresStableTarget === true
+      && (pending.operation === 'setup' || pending.operation === 'update')
+      && pending.source === request.source
+      && pending.stableTarget === undefined
+    const exactLegacyNative = potentialLegacyNative
+      && isExactLegacyV101NativeJournal(request, pending)
+    if (potentialLegacyNative && !exactLegacyNative) {
+      throw new ManagedRuntimeIndeterminateError(
+        `未完成事务 ${pending.transactionId} 缺少 stable target，但不满足精确 v1.0.1 WAL envelope；`
+        + '拒绝重解释或改写第三态 journal',
+      )
+    }
+    const legacyUpdateBridge = exactLegacyNative && pending.operation === 'update'
+    if ((pending.operation !== request.operation || pending.source !== request.source)
+      && !legacyUpdateBridge) {
       throw new ManagedRuntimeIndeterminateError(
         `存在未完成的 ${pending.operation}/${pending.source} 事务 ${pending.transactionId}，`
         + `拒绝启动 ${request.operation}/${request.source}`,
@@ -76,11 +94,12 @@ export async function resolveManagedReleaseJournal(
     const inferredPort = pending.dashboard?.port ?? pending.dashboardBefore?.port
     const canAdoptRequestedPort = pending.phase === 'preparing-host'
       || pending.phase === 'candidate-resolved'
-    const legacyNativeSetup = pending.operation === 'setup'
-      && (pending.source === 'codex' || pending.source === 'claude')
-      && pending.stableTarget === undefined
-      && request.requiresStableTarget === true
-    if (inferredPort === undefined && !canAdoptRequestedPort && !legacyNativeSetup) {
+    const legacyNativeSuccessor = exactLegacyNative
+    // v1.0.1 native WALs predate both stableTarget and dashboardPort. Do not normalize them here:
+    // the retirement path must first resolve and prove the successor tag, then replace the same
+    // transaction in one write so a resolver failure leaves the legacy bytes untouched.
+    if (legacyNativeSuccessor) return pending
+    if (inferredPort === undefined && !canAdoptRequestedPort) {
       throw new ManagedRuntimeIndeterminateError(
         `未完成事务 ${pending.transactionId} 已进入 ${pending.phase}，但旧 journal 缺少 `
         + 'pre-activation Dashboard port；拒绝从 retry 环境补证',

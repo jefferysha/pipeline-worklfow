@@ -25,13 +25,15 @@ Native setup/update 发布的每个 managed runtime SHALL 记录来自已验证�
 - **AND** coordinator 重新探测 Dashboard health 并只接受与目标 release 精确相等的 server version
 - **AND** 缺失字段本身不构成 readiness 或完成证据
 
-#### Scenario: v1.0.1 setup WAL 缺少 frozen stable target
+#### Scenario: v1.0.1 setup/update WAL 缺少 frozen stable target
 
-- **WHEN** 版本化 installer 发现 v1.0.1 setup WAL 已越过纯空的 preparing-host，但旧 schema 没有 `stableTarget`
-- **THEN** coordinator 在 stop Dashboard、清 WAL 或执行任何新 mutation 前证明 successor `v1.0.2` tag/commit
-- **AND** 使用原 transaction id 将旧 WAL 原子转换为带冻结目标的新 preparing-host 事务
+- **WHEN** 版本化 installer 发现真实 v1.0.1 native `setup` 或 `update` WAL 处于 `preparing-host`、`candidate-resolved`、`activating-runtime`、`runtime-activated`、`starting-dashboard`、`dashboard-ready` 或 `evidence-committed`，且旧 schema 没有 `stableTarget` / `dashboardPort`
+- **THEN** 磁盘 decoder 接受该精确旧形状，并保留原 operation、transaction id 与恢复坐标
+- **AND** coordinator 在写 WAL、stop Dashboard、清 WAL 或执行任何新 mutation 前证明 successor `v1.0.2` tag/commit
+- **AND** 证明成功后使用原 transaction id 将旧 WAL 一次原子转换为 `setup/preparing-host`、冻结目标与端口均完整的新事务
 - **AND** `starting-dashboard` 的旧进程若在空探针之后迟到，只能由同一 successor transaction 按旧 release identity 精确 stop
-- **AND** successor tag 无法证明时保留旧 WAL、旧 active runtime 与旧 Dashboard
+- **AND** 缺目标的补偿 phase、operation/source 冲突或不可证明的 activation/Dashboard identity 均失败关闭，不改写旧 WAL
+- **AND** successor tag 无法证明时旧 WAL 保持字节不变，旧 active runtime 与旧 Dashboard 保持可用
 
 ### Requirement: Dashboard 发布 SHALL 区分启动 readiness 与浏览器打开策略
 

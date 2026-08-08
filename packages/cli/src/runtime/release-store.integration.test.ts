@@ -5,12 +5,19 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build as esbuild } from 'esbuild'
+import { serializeProductRootContract } from '@tenon/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
 import { publishManagedRelease } from '../commands/release-coordinator.js'
 import type { ReleasedDashboardStarter } from '../commands/dashboard.js'
 import { makeDeps } from '../test-support.js'
 import { resolveRuntimePaths } from './paths.js'
 import { REAL_RUNTIME_INSTALLER } from './installer.js'
+import {
+  copyReleasePayload,
+  hashLegacyReleasePayload,
+  hashReleasePayload,
+} from './release-payload.js'
+import { stableJson } from './release-store-codecs.js'
 import { RuntimeReleaseStore } from './release-store.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
@@ -60,8 +67,142 @@ function pathsFor(root: string) {
   return resolveRuntimePaths({ env: { TENON_RUNTIME_HOME: join(root, 'runtime') }, homeDir: root, platform: 'linux' })
 }
 
+function quoteLegacyShell(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`
+}
+
+function legacyV101LauncherText(
+  paths: ReturnType<typeof pathsFor>,
+  mode: 'cli' | 'hook',
+): string {
+  const bootstrap = join(paths.bootstrapRoot, 'active.mjs')
+  const missing = mode === 'hook'
+    ? 'exit 0'
+    : 'printf "tenon runtime bootstrap unavailable; run tenon setup --codex or tenon setup --claude\\n" >&2\n  exit 1'
+  return `#!/usr/bin/env bash
+set -eu
+export TENON_RUNTIME_ROOTS=${quoteLegacyShell(serializeProductRootContract(paths))}
+# N-1 bootstrap ABI: previous verified releases read these exact roots during rollback.
+export TENON_RUNTIME_DATA_ROOT=${quoteLegacyShell(paths.dataRoot)}
+export TENON_RUNTIME_STATE_ROOT=${quoteLegacyShell(paths.stateRoot)}
+export TENON_RUNTIME_CONFIG_ROOT=${quoteLegacyShell(paths.configRoot)}
+[ -f ${quoteLegacyShell(bootstrap)} ] || { ${missing}; }
+exec node ${quoteLegacyShell(bootstrap)} ${mode} "$@"
+`
+}
+
+async function seedLegacyV101Activation(
+  root: string,
+  home: string,
+  candidate: string,
+  host: 'codex' | 'claude',
+  pluginVersion = '1.0.1',
+) {
+  const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+  const stagingPayload = join(root, `legacy-${host}-payload`)
+  await mkdir(stagingPayload, { recursive: true })
+  await copyReleasePayload(candidate, stagingPayload)
+  const payloadDigest = await hashLegacyReleasePayload(stagingPayload)
+  const releaseId = `sha256-${payloadDigest}`
+  const releaseRoot = join(paths.releasesRoot, releaseId)
+  await mkdir(releaseRoot, { recursive: true })
+  await cp(stagingPayload, join(releaseRoot, 'payload'), { recursive: true, preserveTimestamps: false })
+  const release = {
+    version: 1 as const,
+    releaseId,
+    payloadDigest,
+    createdAt: '2026-07-24T00:00:00Z',
+    source: { host, pluginVersion },
+  }
+  const selection = {
+    version: 1 as const,
+    revision: 1,
+    activeRelease: releaseId,
+    previousRelease: null,
+    updatedAt: '2026-07-24T00:00:00Z',
+  }
+  await writeFile(join(releaseRoot, 'release.json'), stableJson(release))
+  await mkdir(paths.stateRoot, { recursive: true })
+  await writeFile(paths.selectionPath, stableJson(selection))
+  const bin = join(home, '.local', 'bin')
+  await mkdir(bin, { recursive: true })
+  for (const mode of ['cli', 'hook'] as const) {
+    const path = join(bin, mode === 'cli' ? 'tenon' : 'tenon-hook')
+    await writeFile(path, legacyV101LauncherText(paths, mode), 'utf8')
+    await chmod(path, 0o755)
+  }
+  return {
+    selection,
+    release,
+    releaseRoot,
+    checkpoint: {
+      selection: {
+        version: 1 as const,
+        revision: 0,
+        activeRelease: null,
+        previousRelease: null,
+        updatedAt: '1970-01-01T00:00:00Z',
+      },
+      launchers: {
+        tenon: { path: join(bin, 'tenon'), state: { kind: 'missing' as const } },
+        hook: { path: join(bin, 'tenon-hook'), state: { kind: 'missing' as const } },
+      },
+    },
+  }
+}
+
 describe('RuntimeReleaseStore', () => {
   const isolatedScope = (homeDir: string) => ({ homeDir, env: {} })
+
+  it('frames payload entries so a file body cannot impersonate the next file record', async () => {
+    const root = await freshRoot('framed-payload-digest')
+    const oneFile = join(root, 'one-file')
+    const twoFiles = join(root, 'two-files')
+    await mkdir(join(oneFile, 'templates'), { recursive: true })
+    await mkdir(join(twoFiles, 'templates'), { recursive: true })
+    const injectedRecord = 'F\u0000templates/collision-b\u0000644\u0000'
+    await writeFile(join(oneFile, 'templates', 'collision-a'), `prefix${injectedRecord}suffix`, 'utf8')
+    await writeFile(join(twoFiles, 'templates', 'collision-a'), 'prefix', 'utf8')
+    await writeFile(join(twoFiles, 'templates', 'collision-b'), 'suffix', 'utf8')
+
+    expect(await hashReleasePayload(oneFile)).not.toBe(await hashReleasePayload(twoFiles))
+  })
+
+  it('includes directory mode in the immutable payload identity', async () => {
+    const root = await freshRoot('directory-mode-digest')
+    const first = join(root, 'first')
+    const second = join(root, 'second')
+    await mkdir(join(first, 'templates'), { recursive: true, mode: 0o700 })
+    await mkdir(join(second, 'templates'), { recursive: true, mode: 0o755 })
+    await chmod(join(first, 'templates'), 0o700)
+    await chmod(join(second, 'templates'), 0o755)
+
+    expect(await hashReleasePayload(first)).not.toBe(await hashReleasePayload(second))
+  })
+
+  it('copies candidate directory modes exactly so the v2 payload identity is independent of umask', async () => {
+    const root = await freshRoot('payload-directory-modes')
+    const candidate = await candidateCopy(root)
+    const restrictive = join(root, 'restrictive-payload')
+    const ordinary = join(root, 'ordinary-payload')
+    await chmod(join(candidate, 'skills'), 0o755)
+    await chmod(join(candidate, '.codex-plugin'), 0o755)
+    const originalUmask = process.umask()
+    try {
+      process.umask(0o077)
+      await mkdir(restrictive, { recursive: true })
+      await copyReleasePayload(candidate, restrictive)
+      process.umask(0o022)
+      await mkdir(ordinary, { recursive: true })
+      await copyReleasePayload(candidate, ordinary)
+    } finally {
+      process.umask(originalUmask)
+    }
+
+    expect((await stat(join(restrictive, 'skills'))).mode & 0o777).toBe(0o755)
+    expect((await stat(join(restrictive, '.codex-plugin'))).mode & 0o777).toBe(0o755)
+    expect(await hashReleasePayload(restrictive)).toBe(await hashReleasePayload(ordinary))
+  })
 
   it('holds one product-scoped transaction lock across the caller-defined managed release lifecycle', async () => {
     const root = await freshRoot('managed-transaction-lock')
@@ -99,6 +240,133 @@ describe('RuntimeReleaseStore', () => {
     expect(activated.selection.activeRelease).toBe(activated.release.releaseId)
     expect(activated.selection.previousRelease).toBeNull()
     expect((await store.inspect()).activeValid).toBe(true)
+  }, 30_000)
+
+  it('executes a newly activated v2 release through the real stable launcher', async () => {
+    const root = await freshRoot('v2-stable-launcher')
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    await writeFile(
+      join(candidate, 'packages', 'cli', 'dist', 'tenon.mjs'),
+      'process.stdout.write(`V2_RUNTIME_CLI:${process.argv.slice(2).join(",")}`)\n',
+      'utf8',
+    )
+    const target = {
+      version: '1.0.2',
+      tag: 'v1.0.2',
+      commit: 'a'.repeat(40),
+    }
+
+    const activation = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      isolatedScope(home),
+      (transaction) => transaction.activate(candidate, 'codex', target.version, target),
+    )
+    const launcher = join(home, '.local', 'bin', 'tenon')
+    const status = await execFileAsync(launcher, ['runtime', 'status', '--json'])
+    const delegated = await execFileAsync(launcher, ['probe', 'v2'])
+
+    expect(activation.release).toMatchObject({ version: 2, stableTarget: target })
+    expect(JSON.parse(status.stdout)).toMatchObject({
+      activeValid: true,
+      selection: { activeRelease: activation.release.releaseId },
+    })
+    expect(delegated.stdout).toBe('V2_RUNTIME_CLI:probe,v2')
+  }, 30_000)
+
+  it('continues to validate an existing v1 manifest with the legacy payload digest', async () => {
+    const root = await freshRoot('legacy-v1-manifest')
+    const candidate = await candidateCopy(root)
+    const paths = pathsFor(root)
+    const stagingPayload = join(root, 'legacy-payload')
+    await mkdir(stagingPayload, { recursive: true })
+    await copyReleasePayload(candidate, stagingPayload)
+    const payloadDigest = await hashLegacyReleasePayload(stagingPayload)
+    const releaseId = `sha256-${payloadDigest}`
+    const releaseRoot = join(paths.releasesRoot, releaseId)
+    await mkdir(releaseRoot, { recursive: true })
+    await cp(stagingPayload, join(releaseRoot, 'payload'), { recursive: true, preserveTimestamps: false })
+    await writeFile(join(releaseRoot, 'release.json'), stableJson({
+      version: 1,
+      releaseId,
+      payloadDigest,
+      createdAt: '2026-07-24T00:00:00Z',
+      source: { host: 'codex', pluginVersion: '1.0.2' },
+    }))
+    await mkdir(paths.stateRoot, { recursive: true })
+    await writeFile(paths.selectionPath, stableJson({
+      version: 1,
+      revision: 1,
+      activeRelease: releaseId,
+      previousRelease: null,
+      updatedAt: '2026-07-24T00:00:00Z',
+    }))
+
+    const inspection = await storeFor(root).inspect()
+
+    expect(inspection.activeValid).toBe(true)
+    expect(inspection.active).toMatchObject({ version: 1, releaseId, payloadDigest })
+  }, 30_000)
+
+  it('recovers a committed v1.0.1 activation from its exact legacy launcher bytes', async () => {
+    const root = await freshRoot('legacy-v101-activation-launchers')
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+    const payloadRoot = join(root, 'legacy-payload')
+    await mkdir(payloadRoot, { recursive: true })
+    await copyReleasePayload(candidate, payloadRoot)
+    const payloadDigest = await hashLegacyReleasePayload(payloadRoot)
+    const releaseId = `sha256-${payloadDigest}`
+    const releaseRoot = join(paths.releasesRoot, releaseId)
+    await mkdir(releaseRoot, { recursive: true })
+    await cp(payloadRoot, join(releaseRoot, 'payload'), { recursive: true, preserveTimestamps: false })
+    await writeFile(join(releaseRoot, 'release.json'), stableJson({
+      version: 1,
+      releaseId,
+      payloadDigest,
+      createdAt: '2026-07-24T00:00:00Z',
+      source: { host: 'codex', pluginVersion: '1.0.1' },
+    }))
+    await mkdir(paths.stateRoot, { recursive: true })
+    await writeFile(paths.selectionPath, stableJson({
+      version: 1,
+      revision: 1,
+      activeRelease: releaseId,
+      previousRelease: null,
+      updatedAt: '2026-07-24T00:00:00Z',
+    }))
+    const bin = join(home, '.local', 'bin')
+    await mkdir(bin, { recursive: true })
+    for (const mode of ['cli', 'hook'] as const) {
+      const path = join(bin, mode === 'cli' ? 'tenon' : 'tenon-hook')
+      await writeFile(path, legacyV101LauncherText(paths, mode), 'utf8')
+      await chmod(path, 0o755)
+    }
+    const checkpoint = {
+      selection: {
+        version: 1 as const,
+        revision: 0,
+        activeRelease: null,
+        previousRelease: null,
+        updatedAt: '1970-01-01T00:00:00Z',
+      },
+      launchers: {
+        tenon: { path: join(bin, 'tenon'), state: { kind: 'missing' as const } },
+        hook: { path: join(bin, 'tenon-hook'), state: { kind: 'missing' as const } },
+      },
+    }
+
+    const recovered = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      isolatedScope(home),
+      (transaction) => transaction.recoverActivation(checkpoint, 'codex'),
+    )
+
+    expect(recovered).toMatchObject({
+      state: 'activated',
+      activation: { release: { version: 1, releaseId } },
+    })
+    expect(await readFile(join(bin, 'tenon'), 'utf8')).toContain(`exec '${process.execPath}'`)
+    expect(await readFile(join(bin, 'tenon'), 'utf8')).not.toContain('exec node ')
   }, 30_000)
 
   it('uses the frozen absolute Bash for both candidate and stored-release verification', async () => {
@@ -152,6 +420,494 @@ describe('RuntimeReleaseStore', () => {
     })
   }, 30_000)
 
+  it.each([
+    ['different-commit', { version: '1.0.2', tag: 'v1.0.2', commit: 'b'.repeat(40) }],
+    ['missing-target', undefined],
+  ] as const)(
+    'fails closed when real activating-runtime recovery returns a %s release identity',
+    async (label, recoveredTarget) => {
+      const root = await freshRoot(`activation-stable-target-${label}`)
+      const home = join(root, 'home')
+      const candidate = await candidateCopy(root)
+      const scope = isolatedScope(home)
+      const frozenTarget = {
+        version: '1.0.2',
+        tag: 'v1.0.2',
+        commit: 'a'.repeat(40),
+      }
+      await REAL_RUNTIME_INSTALLER.withManagedTransaction(scope, async (transaction) => {
+        const checkpoint = await transaction.checkpointActivation()
+        const journal = transaction.journal.create('update', 'codex', '2026-08-09T00:00:00Z')
+        await transaction.journal.write({
+          ...journal,
+          phase: 'activating-runtime',
+          dashboardPort: 18_765,
+          dashboardBeforeAbsent: true,
+          candidateRoot: candidate,
+          stableTarget: frozenTarget,
+          activationCheckpoint: checkpoint,
+        })
+        await transaction.activate(candidate, 'codex', frozenTarget.version, recoveredTarget)
+      })
+      let evidenceCommits = 0
+
+      const outcome = await publishManagedRelease(makeDeps(), {
+        operation: 'update',
+        source: 'codex',
+        runtime: scope,
+        openBrowser: false,
+        requiresStableTarget: true,
+        proveFrozenTarget: async (target) => {
+          expect(target).toEqual(frozenTarget)
+        },
+        prepareCandidate: async () => {
+          throw new Error('persisted activating-runtime candidate must be recovered')
+        },
+        commitReadyEvidence: async () => { evidenceCommits += 1 },
+      }, REAL_RUNTIME_INSTALLER, undefined)
+
+      expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+      expect(evidenceCommits).toBe(0)
+      await expect(REAL_RUNTIME_INSTALLER.peekManagedJournal?.(scope)).resolves.toMatchObject({
+        phase: 'activating-runtime',
+        stableTarget: frozenTarget,
+      })
+    },
+    30_000,
+  )
+
+  it('bridges a persisted v1.0.1 update WAL into one versioned setup with the real release store', async () => {
+    const root = await freshRoot('legacy-update-to-versioned-setup')
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    const scope = isolatedScope(home)
+    const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+    const journalPath = join(paths.managedTransactionRoot, 'release-transaction.json')
+    const target = {
+      version: '1.0.2',
+      tag: 'v1.0.2',
+      commit: 'a'.repeat(40),
+    }
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    await writeFile(journalPath, stableJson({
+      version: 1,
+      transactionId: 'v1.0.1-update-process',
+      operation: 'update',
+      source: 'codex',
+      phase: 'candidate-resolved',
+      startedAt: '2026-08-08T00:00:00Z',
+      updatedAt: '2026-08-08T00:00:01Z',
+      candidateRoot: '/v1.0.1/marketplace-cache',
+      evidence: JSON.stringify({ step: 'marketplace-refresh', version: '1.0.1' }),
+      hostSteps: [{
+        id: 'marketplace-refresh',
+        state: 'completed',
+        result: '',
+      }],
+    }), 'utf8')
+    let preparations = 0
+    let evidenceCommits = 0
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      operation: 'setup',
+      source: 'codex',
+      runtime: scope,
+      openBrowser: false,
+      expectedPluginVersion: target.version,
+      requiresStableTarget: true,
+      resolveStableTargetBeforeRecovery: async () => target,
+      proveFrozenTarget: async (value) => { expect(value).toEqual(target) },
+      prepareCandidate: async () => {
+        preparations += 1
+        return { candidateRoot: candidate }
+      },
+      commitReadyEvidence: async (_activation, _candidate, transactionId, context) => {
+        evidenceCommits += 1
+        expect(transactionId).toBe('v1.0.1-update-process')
+        expect(context.stableTarget).toEqual(target)
+      },
+    }, REAL_RUNTIME_INSTALLER, undefined)
+
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({
+      ok: true,
+      state: 'ready',
+      stableTarget: target,
+      activation: {
+        release: {
+          version: 2,
+          source: { host: 'codex', pluginVersion: target.version },
+          stableTarget: target,
+        },
+      },
+    })
+    expect(preparations).toBe(1)
+    expect(evidenceCommits).toBe(1)
+    await expect(readFile(journalPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  }, 30_000)
+
+  it.each(
+    (['codex', 'claude'] as const).flatMap((host) => (
+      (['setup', 'update'] as const).flatMap((operation) => (
+        [
+          'preparing-host',
+          'candidate-resolved',
+          'activating-runtime',
+          'runtime-activated',
+          'starting-dashboard',
+          'dashboard-ready',
+          'evidence-committed',
+        ] as const
+      ).map((phase) => [host, operation, phase] as const))
+    )),
+  )('single setup bridges a real v1.0.1 %s %s/%s WAL through the release store', async (host, operation, phase) => {
+    const root = await freshRoot(`legacy-${operation}-${host}-${phase}`)
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    const scope = isolatedScope(home)
+    const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+    const journalPath = join(paths.managedTransactionRoot, 'release-transaction.json')
+    const advanced = phase === 'runtime-activated'
+      || phase === 'starting-dashboard'
+      || phase === 'dashboard-ready'
+      || phase === 'evidence-committed'
+    const activation = await seedLegacyV101Activation(
+      root,
+      home,
+      candidate,
+      host,
+      operation === 'update' && advanced ? '1.0.2' : '1.0.1',
+    )
+    const target = {
+      version: '1.0.2',
+      tag: 'v1.0.2',
+      commit: 'a'.repeat(40),
+    }
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    await writeFile(journalPath, stableJson({
+      version: 1,
+      transactionId: `legacy-v101-${host}-${operation}-${phase}`,
+      operation,
+      source: host,
+      phase,
+      startedAt: '2026-07-23T00:00:00Z',
+      updatedAt: '2026-07-24T00:00:00Z',
+      ...(phase === 'preparing-host'
+        ? {
+            hostSteps: [{
+              id: operation === 'update' ? 'marketplace-refresh' : 'legacy-install',
+              state: 'completed',
+              result: '',
+            }],
+          }
+        : { candidateRoot: '/v1.0.1/marketplace-cache' }),
+      ...(phase === 'activating-runtime'
+        || phase === 'runtime-activated'
+        || phase === 'starting-dashboard'
+        || phase === 'dashboard-ready'
+        || phase === 'evidence-committed'
+        ? { activationCheckpoint: activation.checkpoint }
+        : {}),
+      ...(phase === 'runtime-activated'
+        || phase === 'starting-dashboard'
+        || phase === 'dashboard-ready'
+        || phase === 'evidence-committed'
+        ? {
+            activation: {
+              selection: activation.selection,
+              release: activation.release,
+              releaseRoot: activation.releaseRoot,
+            },
+          }
+        : {}),
+      ...((phase === 'dashboard-ready' || phase === 'evidence-committed')
+        ? {
+            dashboard: {
+              version: 1,
+              port: 18_765,
+              pid: 901,
+              releaseId: activation.release.releaseId,
+              stateScopeId: `sha256-v1-${'9'.repeat(64)}`,
+              transactionId: `legacy-v101-${host}-${operation}-${phase}`,
+              owner: 'transaction',
+            },
+          }
+        : {}),
+    }), 'utf8')
+    let preparations = 0
+    let evidenceCommits = 0
+    const dashboard: ReleasedDashboardStarter = {
+      inspect: async () => null,
+      adopt: async () => null,
+      start: async (_deps, payloadRoot, opts) => {
+        const ownership = {
+          version: 1 as const,
+          serverVersion: opts.expectedServerVersion ?? target.version,
+          port: opts.port ?? 18_765,
+          pid: 902,
+          releaseId: basename(dirname(payloadRoot)),
+          stateScopeId: `sha256-v1-${'8'.repeat(64)}`,
+          transactionId: opts.transactionId!,
+          owner: 'transaction' as const,
+        }
+        return {
+          state: 'ready' as const,
+          session: {
+            ownership,
+            stop: async () => ({ state: 'stopped' as const }),
+          },
+        }
+      },
+    }
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      operation: 'setup',
+      source: host,
+      runtime: scope,
+      openBrowser: false,
+      expectedPluginVersion: target.version,
+      requiresStableTarget: true,
+      resolveStableTargetBeforeRecovery: async () => target,
+      proveFrozenTarget: async (value) => { expect(value).toEqual(target) },
+      prepareCandidate: async () => {
+        preparations += 1
+        return { candidateRoot: candidate }
+      },
+      commitReadyEvidence: async (_current, _candidate, transactionId, context) => {
+        evidenceCommits += 1
+        expect(transactionId).toBe(`legacy-v101-${host}-${operation}-${phase}`)
+        expect(context.stableTarget).toEqual(target)
+      },
+    }, REAL_RUNTIME_INSTALLER, dashboard)
+
+    expect(outcome, JSON.stringify(outcome)).toMatchObject({
+      ok: true,
+      state: 'ready',
+      stableTarget: target,
+      activation: {
+        release: {
+          version: 2,
+          source: { host, pluginVersion: target.version },
+          stableTarget: target,
+        },
+      },
+    })
+    expect(preparations).toBe(1)
+    expect(evidenceCommits).toBe(1)
+    await expect(readFile(journalPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  }, 30_000)
+
+  it('leaves a v1.0.1 update WAL byte-identical when successor target resolution fails', async () => {
+    const root = await freshRoot('legacy-update-resolver-failure')
+    const home = join(root, 'home')
+    const scope = isolatedScope(home)
+    const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+    const journalPath = join(paths.managedTransactionRoot, 'release-transaction.json')
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    const original = Buffer.from(`${JSON.stringify({
+      version: 1,
+      transactionId: 'v1.0.1-update-resolution-failure',
+      operation: 'update',
+      source: 'codex',
+      phase: 'candidate-resolved',
+      startedAt: '2026-08-08T00:00:00Z',
+      updatedAt: '2026-08-08T00:00:01Z',
+      candidateRoot: '/v1.0.1/marketplace-cache',
+      evidence: JSON.stringify({ step: 'marketplace-refresh', version: '1.0.1' }),
+    }, null, 2)}\n`)
+    await writeFile(journalPath, original)
+    let preparations = 0
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      operation: 'setup',
+      source: 'codex',
+      runtime: scope,
+      openBrowser: false,
+      requiresStableTarget: true,
+      resolveStableTargetBeforeRecovery: async () => {
+        throw new Error('release unavailable')
+      },
+      prepareCandidate: async () => {
+        preparations += 1
+        throw new Error('must not prepare')
+      },
+      commitReadyEvidence: async () => {
+        throw new Error('must not commit')
+      },
+    }, REAL_RUNTIME_INSTALLER, undefined)
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(preparations).toBe(0)
+    expect(await readFile(journalPath)).toEqual(original)
+  }, 30_000)
+
+  it('rejects a current v2 WAL missing only its top-level stable target without legacy migration', async () => {
+    const root = await freshRoot('v2-journal-missing-top-level-target')
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    const scope = isolatedScope(home)
+    const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+    const journalPath = join(paths.managedTransactionRoot, 'release-transaction.json')
+    const target = {
+      version: '1.0.2',
+      tag: 'v1.0.2',
+      commit: 'a'.repeat(40),
+    }
+    const { checkpoint, activation } = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      scope,
+      async (transaction) => {
+        const checkpoint = await transaction.checkpointActivation()
+        const activation = await transaction.activate(candidate, 'codex', target.version, target)
+        return { checkpoint, activation }
+      },
+    )
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    const original = Buffer.from(stableJson({
+      version: 1,
+      transactionId: 'corrupt-v2-missing-top-level-target',
+      operation: 'update',
+      source: 'codex',
+      phase: 'runtime-activated',
+      startedAt: '2026-08-09T00:00:00Z',
+      updatedAt: '2026-08-09T00:00:01Z',
+      dashboardPort: 18_765,
+      dashboardBeforeAbsent: true,
+      candidateRoot: candidate,
+      activationCheckpoint: checkpoint,
+      activation,
+    }))
+    await writeFile(journalPath, original)
+    let targetResolutions = 0
+    let dashboardInspections = 0
+    let preparations = 0
+    const dashboard: ReleasedDashboardStarter = {
+      inspect: async () => {
+        dashboardInspections += 1
+        return null
+      },
+      adopt: async () => { throw new Error('must not adopt') },
+      start: async () => { throw new Error('must not start') },
+    }
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      operation: 'setup',
+      source: 'codex',
+      runtime: scope,
+      openBrowser: false,
+      expectedPluginVersion: target.version,
+      requiresStableTarget: true,
+      resolveStableTargetBeforeRecovery: async () => {
+        targetResolutions += 1
+        return target
+      },
+      proveFrozenTarget: async (value) => { expect(value).toEqual(target) },
+      prepareCandidate: async () => {
+        preparations += 1
+        throw new Error('must not prepare')
+      },
+    }, REAL_RUNTIME_INSTALLER, dashboard)
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(targetResolutions).toBe(0)
+    expect(dashboardInspections).toBe(0)
+    expect(preparations).toBe(0)
+    expect((await REAL_RUNTIME_INSTALLER.inspect(scope)).selection).toEqual(activation.selection)
+    expect(await readFile(journalPath)).toEqual(original)
+  }, 30_000)
+
+  it.each([
+    ['explicit empty server version', 'dashboard-ready'],
+    ['preexisting dashboard owner', 'dashboard-ready'],
+    ['different dashboard release', 'dashboard-ready'],
+    ['missing durable dashboard', 'evidence-committed'],
+  ] as const)(
+    'keeps a malformed legacy update WAL byte-identical for %s',
+    async (malformation, phase) => {
+      const root = await freshRoot(`legacy-dashboard-${malformation.replaceAll(' ', '-')}`)
+      const home = join(root, 'home')
+      const candidate = await candidateCopy(root)
+      const scope = isolatedScope(home)
+      const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+      const journalPath = join(paths.managedTransactionRoot, 'release-transaction.json')
+      const activation = await seedLegacyV101Activation(root, home, candidate, 'codex', '1.0.2')
+      const transactionId = `legacy-dashboard-${malformation.replaceAll(' ', '-')}`
+      const target = {
+        version: '1.0.2',
+        tag: 'v1.0.2',
+        commit: 'a'.repeat(40),
+      }
+      const durableDashboard = {
+        version: 1 as const,
+        port: 18_765,
+        pid: 901,
+        releaseId: malformation === 'different dashboard release'
+          ? `sha256-${'f'.repeat(64)}`
+          : activation.release.releaseId,
+        stateScopeId: `sha256-v1-${'9'.repeat(64)}`,
+        transactionId,
+        owner: malformation === 'preexisting dashboard owner'
+          ? 'preexisting' as const
+          : 'transaction' as const,
+        ...(malformation === 'explicit empty server version' ? { serverVersion: '' } : {}),
+      }
+      await mkdir(paths.managedTransactionRoot, { recursive: true })
+      const original = Buffer.from(stableJson({
+        version: 1,
+        transactionId,
+        operation: 'update',
+        source: 'codex',
+        phase,
+        startedAt: '2026-07-23T00:00:00Z',
+        updatedAt: '2026-07-24T00:00:00Z',
+        candidateRoot: '/v1.0.1/marketplace-cache',
+        activationCheckpoint: activation.checkpoint,
+        activation: {
+          selection: activation.selection,
+          release: activation.release,
+          releaseRoot: activation.releaseRoot,
+        },
+        ...(malformation === 'missing durable dashboard' ? {} : { dashboard: durableDashboard }),
+      }))
+      await writeFile(journalPath, original)
+      let targetResolutions = 0
+      let dashboardInspections = 0
+      let preparations = 0
+      const dashboard: ReleasedDashboardStarter = {
+        inspect: async () => {
+          dashboardInspections += 1
+          return null
+        },
+        adopt: async () => { throw new Error('must not adopt') },
+        start: async () => { throw new Error('must not start') },
+      }
+
+      const outcome = await publishManagedRelease(makeDeps(), {
+        operation: 'setup',
+        source: 'codex',
+        runtime: scope,
+        openBrowser: false,
+        expectedPluginVersion: target.version,
+        requiresStableTarget: true,
+        resolveStableTargetBeforeRecovery: async () => {
+          targetResolutions += 1
+          return target
+        },
+        proveFrozenTarget: async (value) => { expect(value).toEqual(target) },
+        prepareCandidate: async () => {
+          preparations += 1
+          throw new Error('must not prepare')
+        },
+      }, REAL_RUNTIME_INSTALLER, dashboard)
+
+      expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+      expect(targetResolutions).toBe(0)
+      expect(dashboardInspections).toBe(0)
+      expect(preparations).toBe(0)
+      expect((await REAL_RUNTIME_INSTALLER.inspect(scope)).selection).toEqual(activation.selection)
+      expect(await readFile(journalPath)).toEqual(original)
+    },
+    30_000,
+  )
+
   it('reuses a fully verified content-addressed release when an idempotent publish collides', async () => {
     const root = await freshRoot('idempotent-release')
     const candidate = await candidateCopy(root)
@@ -166,6 +922,38 @@ describe('RuntimeReleaseStore', () => {
     expect(second.selection.activeRelease).toBe(first.release.releaseId)
     expect((await store.inspect()).activeValid).toBe(true)
   }, 30_000)
+
+  it.each([
+    ['codex', 'claude'],
+    ['claude', 'codex'],
+  ] as const)(
+    'keeps identical payload activation provenance distinct for %s then %s',
+    async (firstHost, secondHost) => {
+      const root = await freshRoot(`cross-host-${firstHost}-${secondHost}`)
+      const candidate = await candidateCopy(root)
+      const store = storeFor(root)
+      const target = {
+        version: '1.0.2',
+        tag: 'v1.0.2',
+        commit: 'a'.repeat(40),
+      }
+
+      const first = await store.stageAndActivate(candidate, firstHost, '1.0.2', target)
+      const second = await store.stageAndActivate(candidate, secondHost, '1.0.2', target)
+
+      expect(second.release.releaseId).not.toBe(first.release.releaseId)
+      expect(second.release).toMatchObject({
+        version: 2,
+        source: { host: secondHost, pluginVersion: '1.0.2' },
+        stableTarget: target,
+      })
+      expect((await store.inspect()).active).toMatchObject({
+        releaseId: second.release.releaseId,
+        source: { host: secondHost },
+      })
+    },
+    30_000,
+  )
 
   it('rejects a malformed candidate without replacing the active release', async () => {
     const root = await freshRoot('reject')
@@ -378,6 +1166,27 @@ describe('RuntimeReleaseStore', () => {
     expect((await stat(tenon)).mode & 0o777).toBe(0o750)
     expect((await stat(hook)).mode & 0o777).toBe(0o700)
     expect((await REAL_RUNTIME_INSTALLER.inspect(isolatedScope(home))).selection.activeRelease).toBeNull()
+  }, 30_000)
+
+  it('proves the full activation selection before trusting recovery or compensation coordinates', async () => {
+    const root = await freshRoot('installer-prove-selection')
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    const activation = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      isolatedScope(home),
+      (transaction) => transaction.activate(candidate, 'codex'),
+    )
+
+    await expect(REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      isolatedScope(home),
+      (transaction) => transaction.proveActivation({
+        ...activation,
+        selection: {
+          ...activation.selection,
+          previousRelease: `sha256-${'c'.repeat(64)}`,
+        },
+      }),
+    )).resolves.toBe(false)
   }, 30_000)
 
   it('never restores an old launcher snapshot after selection CAS proves another activation owns the runtime', async () => {

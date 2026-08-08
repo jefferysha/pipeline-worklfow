@@ -4,6 +4,7 @@ import {
   type ManagedReleaseJournalRecord,
   type ManagedRuntimeTransaction,
 } from '../runtime/installer.js'
+import type { RuntimeActivation } from '../runtime/types.js'
 import { createManagedHostStepRunner } from '../runtime/managed-host-reconciliation.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
 import { resolveManagedReleaseJournal } from './managed-release-journal-coordinator.js'
@@ -25,6 +26,8 @@ export interface PreparedManagedReleaseCandidate {
     readonly candidateRoot: string
     readonly evidence?: string
     readonly openBrowser?: boolean
+    readonly currentActivation?: RuntimeActivation
+    readonly currentDashboardExact?: true
   }
 }
 
@@ -170,6 +173,41 @@ export async function prepareManagedReleaseCandidate(
         }
       }
       candidate = prepared
+      let activationCheckpoint
+      let currentActivation: RuntimeActivation | undefined
+      if ('currentActivation' in prepared) {
+        if (await transaction.proveActivation(prepared.currentActivation)) {
+          activationCheckpoint = await transaction.checkpointActivation()
+          const current = prepared.currentActivation.selection
+          const checkpoint = activationCheckpoint.selection
+          if (JSON.stringify(current) !== JSON.stringify(checkpoint)) {
+            throw new ManagedRuntimeIndeterminateError(
+              'Dashboard-only reconciliation 在 checkpoint 前 selection 已漂移',
+            )
+          }
+          const launchersExact = prepared.currentActivation.launcherCommitted === undefined
+            || JSON.stringify(prepared.currentActivation.launcherCommitted)
+              === JSON.stringify(activationCheckpoint.launchers)
+          if (launchersExact) currentActivation = prepared.currentActivation
+          else activationCheckpoint = undefined
+          if (currentActivation !== undefined && prepared.currentDashboardExact === true) {
+            try {
+              await transaction.journal.clear(journal.transactionId)
+            } catch (error) {
+              throw new ManagedRuntimeIndeterminateError(
+                `同版完整 identity 已证明，但 managed journal 清理失败：${String(error)}`,
+              )
+            }
+            return {
+              outcome: {
+                ok: true,
+                state: 'current',
+                ...(journal.stableTarget === undefined ? {} : { stableTarget: journal.stableTarget }),
+              },
+            }
+          }
+        }
+      }
       journal = {
         ...journal,
         phase: 'candidate-resolved',
@@ -178,6 +216,8 @@ export async function prepareManagedReleaseCandidate(
           ? {}
           : { candidateOpenBrowser: candidate.openBrowser }),
         ...(candidate.evidence === undefined ? {} : { evidence: candidate.evidence }),
+        ...(activationCheckpoint === undefined ? {} : { activationCheckpoint }),
+        ...(currentActivation === undefined ? {} : { activation: currentActivation }),
         updatedAt: deps.clock(),
       }
       await transaction.journal.write(journal)

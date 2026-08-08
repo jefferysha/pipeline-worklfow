@@ -15,6 +15,10 @@ import {
   resumeManagedReleaseCompensation,
 } from './release-compensation.js'
 import { prepareManagedReleaseCandidate } from './release-candidate-coordinator.js'
+import {
+  assertManagedActivationIdentity,
+  revalidateResolvedCandidate,
+} from './release-activation-validation.js'
 import type {
   ManagedReleaseOutcome,
   ManagedReleaseRequest,
@@ -77,7 +81,7 @@ async function publishWithinManagedTransaction(
   const { candidate } = prepared
 
   if (journal.phase === 'candidate-resolved') {
-    await revalidateCandidate(request, journal, candidate)
+    await revalidateResolvedCandidate(request, journal, candidate)
   }
 
   if (
@@ -115,7 +119,22 @@ async function publishWithinManagedTransaction(
   }
 
   let activation: RuntimeActivation
-  if (
+  if (journal.phase === 'candidate-resolved' && journal.activation !== undefined) {
+    if (journal.activationCheckpoint === undefined) {
+      throw new ManagedRuntimeIndeterminateError('Dashboard-only reconciliation 缺少 activation checkpoint')
+    }
+    activation = journal.activation
+    if (!await transaction.proveActivation(activation)) {
+      throw new ManagedRuntimeIndeterminateError('Dashboard-only reconciliation 的 current activation 已漂移')
+    }
+    assertManagedActivationIdentity(activation, request, journal)
+    journal = {
+      ...journal,
+      phase: 'runtime-activated',
+      updatedAt: deps.clock(),
+    }
+    await transaction.journal.write(journal)
+  } else if (
     journal.phase === 'runtime-activated'
     || journal.phase === 'starting-dashboard'
     || journal.phase === 'dashboard-ready'
@@ -136,7 +155,7 @@ async function publishWithinManagedTransaction(
         `journal 中的 activation ${activation.release.releaseId} 与当前 selection/launcher 不一致`,
       )
     }
-    assertActivationVersion(activation, request, journal)
+    assertManagedActivationIdentity(activation, request, journal)
   } else {
     let recovered: Awaited<ReturnType<ManagedRuntimeTransaction['recoverActivation']>> = {
       state: 'not-started',
@@ -173,12 +192,13 @@ async function publishWithinManagedTransaction(
     if (recovered.state === 'activated') {
       activation = recovered.activation
     } else {
-      await revalidateCandidate(request, journal, candidate)
+      await revalidateResolvedCandidate(request, journal, candidate)
       try {
         activation = await transaction.activate(
           candidate.candidateRoot,
           request.source,
           request.expectedPluginVersion ?? journal.stableTarget?.version,
+          journal.stableTarget,
         )
       } catch (error) {
         const indeterminate = error instanceof ManagedRuntimeIndeterminateError
@@ -218,7 +238,7 @@ async function publishWithinManagedTransaction(
         }
       }
     }
-    assertActivationVersion(activation, request, journal)
+    assertManagedActivationIdentity(activation, request, journal)
     try {
       journal = {
         ...journal,
@@ -339,40 +359,4 @@ async function publishWithinManagedTransaction(
     dashboardStarter,
     candidateDashboard,
   )
-}
-
-async function revalidateCandidate(
-  request: ManagedReleaseRequest,
-  journal: ManagedReleaseJournalRecord,
-  candidate: { readonly candidateRoot: string; readonly evidence?: string },
-): Promise<void> {
-  if (request.revalidateCandidate === undefined) return
-  try {
-    await request.revalidateCandidate(candidate, {
-      transactionId: journal.transactionId,
-      ...(journal.stableTarget === undefined ? {} : { stableTarget: journal.stableTarget }),
-    })
-  } catch (error) {
-    throw error instanceof ManagedRuntimeIndeterminateError
-      ? error
-      : new ManagedRuntimeIndeterminateError(
-          `candidate-resolved 后的宿主/候选重证失败；拒绝开始 runtime activation：`
-          + `${error instanceof Error ? error.message : String(error)}`,
-        )
-  }
-}
-
-function assertActivationVersion(
-  activation: RuntimeActivation,
-  request: ManagedReleaseRequest,
-  journal: ManagedReleaseJournalRecord,
-): void {
-  const expectedVersion = request.expectedPluginVersion ?? journal.stableTarget?.version
-  if (expectedVersion !== undefined
-    && activation.release.source.pluginVersion !== expectedVersion) {
-    throw new ManagedRuntimeIndeterminateError(
-      `activation ${activation.release.releaseId} 声明版本 `
-        + `${activation.release.source.pluginVersion}，不等于冻结目标 ${expectedVersion}`,
-    )
-  }
 }

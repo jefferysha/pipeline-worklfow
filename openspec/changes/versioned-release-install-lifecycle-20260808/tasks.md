@@ -40,17 +40,26 @@
 - [x] 在中英文 quickstart 固定版本化一键安装且明确不从源码编译，并纳入文档门禁。 (build)
 - [x] fresh native 准备在首个宿主步骤前失败时清除 target-only WAL，允许下次命令重新解析更高稳定版本。 (build)
 - [x] 将冻结的绝对 Bash 贯穿候选、已存 runtime、恢复、回滚与 doctor 复证，禁止任何裸 PATH 回退。 (build)
+- [x] 为新 managed release 引入向后兼容的 manifest/hash v2：无歧义 payload 编码、host/stable target 身份，并保留 v1.0.1 读取与恢复。 (build)
+- [x] 用真实 v1.0.1 launcher/WAL fixture 修复 `activating-runtime` 已提交崩溃窗口的单次迁移。 (build)
+- [x] 修复 cleanup-pending 与 resolver 失败边界：单条 update 要么继续 latest，要么非零说明未完成，解析失败零写入。 (build)
+- [x] 将同版 Dashboard 异常收敛为 Dashboard-only reconciliation，禁止重复 host rebind 或 runtime activation。 (build)
+- [x] 强化 Dashboard recovery 与 doctor：精确校验 server version，并对账 stable tag/commit、host root 与 payload digest。 (build)
+- [x] 统一全部中英文官方安装命令、legacy bridge 与 Dashboard 打开说明，并让门禁覆盖每个正式入口。 (build)
+- [x] 让稳定 runtime bootstrap 严格双读 v1 legacy 与 v2 framed release identity，并用真实稳定 launcher 验证新激活 v2 与旧 v1 rollback。 (build)
+- [x] 按宿主边界、候选准备与完成报告拆分 `update.ts`，保持公开命令契约且所有 CLI 生产文件低于硬性长度上限。 (build)
+- [x] 兼容真实磁盘 v1.0.1 `setup/update` advanced WAL：successor 证明前原字节不变，证明后同 transaction 单次迁移。 (build)
 
 ## 验证
 
 - [ ] 运行定向测试、安装/更新/卸载集成测试、构建、bundle、skills、adapter 与 release 门禁。 (verify)
-- [ ] 从已发布版本执行真实卸载、版本化全新安装、重复安装与一键更新验收。 (verify)
-- [ ] 验证 CLI、Skills/hooks、managed runtime、Dashboard API/页面身份及用户数据保留。 (verify)
+- [ ] 在隔离环境验证 CLI、Skills/hooks、managed runtime、Dashboard API/页面身份及用户数据保留。 (verify)
 
 ## 交付
 
 - [ ] 完成代码评审、CI、非草稿 PR、合并与稳定 SemVer Release 发布。 (ship)
-- [ ] 复核开放 PR 为零、本地 `main` 与远端一致，并用正式版本命令重装当前插件。 (ship)
+- [ ] 从已发布版本执行真实卸载、版本化全新安装、重复安装与一键更新验收。 (ship)
+- [ ] 复核开放 PR 为零、本地 `main` 与远端一致，并验证正式插件、runtime、Dashboard 与项目数据。 (ship)
 
 ## 归档
 

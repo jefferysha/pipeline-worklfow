@@ -36,7 +36,8 @@ async function fixture() {
   await write(root, 'package.json', JSON.stringify({ version: '1.0.2', engines: { node: '>=22' } }))
   await write(root, 'install.sh', 'TENON_RELEASE_VERSION="1.0.2"\n')
   const installUrl = 'https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh'
-  await write(root, 'packages/npm-bootstrap/README.md', `# Bootstrap\n\n${installUrl}\n`)
+  const installCommand = `/usr/bin/curl -fsSL ${installUrl} | /bin/bash -s -- --codex`
+  await write(root, 'packages/npm-bootstrap/README.md', `# Bootstrap\n\n${installCommand}\n`)
   await write(root, 'packages/server/src/port.ts', 'export const DEFAULT_DASHBOARD_PORT = 18765\n')
   await write(
     root,
@@ -91,7 +92,7 @@ async function fixture() {
   await write(
     root,
     'README.md',
-    `# Tenon\n\n${communityLinks}\n\nRequires Node.js 22+. Dashboard: 127.0.0.1:18765.\n\n${installUrl}\n\n\`tenon setup --codex\`\n\n\`tenon dashboard --open\`\n`,
+    `# Tenon\n\n${communityLinks}\n\nRequires Node.js 22+. Dashboard: 127.0.0.1:18765.\n\n${installCommand}\n\n\`tenon setup --codex\`\n\n\`tenon dashboard --open\`\n`,
   )
   await write(
     root,
@@ -102,7 +103,7 @@ async function fixture() {
       '[中文](README.md) · [Usage](docs/usage/README.md) · [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [License](LICENSE)',
       '',
       '需要 Node.js 22+。Dashboard：127.0.0.1:18765。',
-      installUrl,
+      installCommand,
       '',
       '`tenon setup --codex`',
       '',
@@ -123,8 +124,8 @@ async function fixture() {
       `# ${file}\n`,
     )
   }
-  await write(root, 'docs/usage/quickstart.md', `# Quickstart\n\n${installUrl}\n\nUses a prebuilt release; no source compilation.\n`)
-  await write(root, 'docs/usage/zh-CN/quickstart.md', `# 快速开始\n\n${installUrl}\n\n使用预构建发布包，不从源码编译。\n`)
+  await write(root, 'docs/usage/quickstart.md', `# Quickstart\n\n${installCommand}\n\nUses a prebuilt release; no source compilation.\n`)
+  await write(root, 'docs/usage/zh-CN/quickstart.md', `# 快速开始\n\n${installCommand}\n\n使用预构建发布包，不从源码编译。\n`)
   await write(
     root,
     'docs/usage/README.md',
@@ -140,7 +141,7 @@ async function fixture() {
     [
       '# Installation',
       'Requires Node.js 22+.',
-      installUrl,
+      installCommand,
       '`tenon setup --codex`',
       '`tenon update --codex`',
       '`tenon runtime status`',
@@ -186,7 +187,7 @@ async function fixture() {
     [
       '# 安装',
       '需要 Node.js 22+。',
-      installUrl,
+      installCommand,
       '`tenon setup --codex`',
       '`tenon update --codex`',
       '`tenon runtime status`',

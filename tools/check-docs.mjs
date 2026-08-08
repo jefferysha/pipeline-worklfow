@@ -278,6 +278,14 @@ function checkSourceBoundedClaims(root, contents, failures) {
         if (!text.includes(installUrl)) {
           failures.push(`${document}: missing versioned official install URL ${installUrl}`)
         }
+        for (const [index, line] of text.split(/\r?\n/u).entries()) {
+          if (!line.includes(installUrl)) continue
+          if (!/^\/usr\/bin\/curl\s+-fsSL\s+\S+\s+\|\s+\/bin\/bash\s+-s\s+--\s+--(?:codex|claude)(?:\s+--dry-run)?$/u.test(line.trim())) {
+            failures.push(
+              `${document}:${index + 1}: official installer must freeze /usr/bin/curl and /bin/bash`,
+            )
+          }
+        }
         if (/raw\.githubusercontent\.com\/jefferysha\/tenon\/main\/install\.sh/u.test(text)) {
           failures.push(`${document}: public install URL must not use main/install.sh`)
         }

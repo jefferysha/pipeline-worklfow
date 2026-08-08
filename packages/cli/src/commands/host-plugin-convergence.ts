@@ -99,15 +99,15 @@ export function recordPendingHostPluginConflict(
         || (receipt.stableTarget.version === stableTarget.version
           && receipt.stableTarget.tag === stableTarget.tag
           && receipt.stableTarget.commit === stableTarget.commit))
-    if (receipt.transactionId === transactionId) {
-      if (!sameRelease) {
-        deps.io.err('ERROR: 同一 transaction id 的收敛 receipt 与当前 activation 不一致。')
-        return false
-      }
-      if (receipt.stableTarget !== undefined) return true
-      return writeHostPluginConvergenceReceipt(deps, env, { ...receipt, stableTarget })
+    if (receipt.transactionId === transactionId && !sameRelease) {
+      deps.io.err('ERROR: 同一 transaction id 的收敛 receipt 与当前 activation 不一致。')
+      return false
     }
     if (receipt.state === 'cleanup-pending') {
+      if (receipt.transactionId === transactionId) {
+        if (receipt.stableTarget !== undefined) return true
+        return writeHostPluginConvergenceReceipt(deps, env, { ...receipt, stableTarget })
+      }
       const supersedesOlderRelease = receipt.releaseId !== activation.release.releaseId
         && (receipt.stableTarget === undefined
           || compareStableVersions(stableTarget.version, receipt.stableTarget.version) > 0)
@@ -117,9 +117,8 @@ export function recordPendingHostPluginConflict(
       }
       deps.io.out('[setup] 新稳定 runtime 已就绪；将旧版 pending receipt 原子升级到当前 release。')
     }
-    if (sameRelease) {
-      return receipt.stableTarget !== undefined
-        || writeHostPluginConvergenceReceipt(deps, env, { ...receipt, stableTarget })
+    if (receipt.state === 'completed' && sameRelease) {
+      deps.io.out('[setup] 权威 inventory 检测到 legacy plugin 已重新启用；重新创建 cleanup-pending receipt。')
     }
   }
   const conflictScopes = [...(inventory.enabledScopes.get(LEGACY_PLUGIN_IDENTITY) ?? [])]
