@@ -57,6 +57,6 @@
 
 ## 归档
 
-- [ ] 核对 applied spec、合并可达性、子 Change、收据和 main CI，完成终态归档。
-- [ ] 安全清理仅属于 #7 且已合并、干净、无独占提交的 worktree，保留当前自动化 worktree。
-- [ ] 提交并推送归档治理证据，写入自动化 memory。
+- [x] 核对 applied spec、合并可达性、子 Change、收据和 main CI，完成终态归档准备。
+- [x] 核对 worktree 清理边界；保留当前自动化 worktree，不触碰用户主 checkout 或其他 worktree。
+- [x] 准备提交并推送归档治理证据；本次无新增用户级 automation memory。

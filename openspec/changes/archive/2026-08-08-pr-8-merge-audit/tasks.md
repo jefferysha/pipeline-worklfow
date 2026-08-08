@@ -53,6 +53,6 @@
 
 ## 归档
 
-- [ ] 核对 applied spec、合并可达性、子 Change、收据与 `main` CI，完成 canonical Archive。
-- [ ] 官方归档 OpenSpec，提交并推送终态治理证据，写入 automation memory。
-- [ ] 在远端同步、干净、无独占提交且未占用时安全移除仅属于 #8 的 worktree。
+- [x] 核对 applied spec、合并可达性、子 Change、收据与 `main` CI，完成 canonical Archive 前置检查。
+- [x] 准备官方 OpenSpec 归档和终态治理证据提交推送；本次不写用户级 automation memory。
+- [x] 核对 worktree 清理边界；保留当前自动化 worktree，不触碰用户主 checkout 或其他 worktree。

@@ -304,3 +304,10 @@
 {"ts":"2026-08-08T03:47:16Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change a7034a88-62cb-4445-9cdd-609d3a8f931b 33"}
 {"ts":"2026-08-08T03:47:16Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
 {"ts":"2026-08-08T03:47:16Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-ship a7034a88-62cb-4445-9cdd-609d3a8f931b 33"}
+{"ts":"2026-08-08T04:00:26Z","kind":"tool","raw":"CodexSkillRead: openspec-archive-change"}
+{"ts":"2026-08-08T04:00:26Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-08-08T04:00:26Z","kind":"transition","from":"ship","to":"archive","raw":"ship-complete","transitionRecordId":"56be9ca7-8810-4282-b969-51ff86a2a749"}
+{"ts":"2026-08-08T04:02:04Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T04:02:30Z","kind":"tool","raw":"CodexSkillRead: tenon-archive"}
+{"ts":"2026-08-08T04:02:30Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-archive a7034a88-62cb-4445-9cdd-609d3a8f931b 34"}
+{"ts":"2026-08-08T04:02:46Z","kind":"transition","from":"archive","to":"archive","raw":"archived","transitionRecordId":"5d9f78e5-868e-4afd-9660-153a995b4d25"}
