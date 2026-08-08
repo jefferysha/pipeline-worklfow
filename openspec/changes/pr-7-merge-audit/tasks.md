@@ -52,8 +52,8 @@
 ## 交付
 
 - [x] 应用主 spec，更新必要 README/CONTRACT/TEST-REALITY/分发与回滚文档。
-- [ ] 在最终 PR 审计和精确 head CI 通过后合并 #7，等待并确认 main CI 通过。
-- [ ] 登记交付证据并完成 Ship 出口。
+- [x] 在最终 PR 审计和精确 head CI 通过后合并 #7，等待并确认 main CI 通过。
+- [x] 登记交付证据并完成 Ship 出口。
 
 ## 归档
 

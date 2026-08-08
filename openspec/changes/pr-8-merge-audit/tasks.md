@@ -41,15 +41,15 @@
 
 ## 验证
 
-- [ ] 冻结 build SHA，完成 Reviewer、真实 E2E/API/浏览器、Codex 与 Dashboard 视觉/可访问性验证轨。
-- [ ] 映射全部变更路径至 requirement/场景，核对 repo-zero、精确 head CI 与 GitHub review/comment/thread。
-- [ ] 登记完整验证报告；任何失败均回 Build 修复并重新冻结全部验证。
+- [x] 冻结 build SHA，完成 Reviewer、真实 E2E/API/浏览器、Codex 与 Dashboard 视觉/可访问性验证轨。
+- [x] 映射全部变更路径至 requirement/场景，核对 repo-zero、精确 head CI 与 GitHub review/comment/thread。
+- [x] 登记完整验证报告；任何失败均回 Build 修复并重新冻结全部验证。
 
 ## 交付
 
-- [ ] 应用主 spec，更新必要 README/契约/测试现实/发布与回滚文档。
-- [ ] 最终 GitHub 审计与精确 head CI 通过后以普通 merge commit 合并 #8，并确认 `main` CI。
-- [ ] 登记 Ship 证据并完成出口。
+- [x] 应用主 spec，更新必要 README/契约/测试现实/发布与回滚文档。
+- [x] 最终 GitHub 审计与精确 head CI 通过后以普通 merge commit 合并 #8，并确认 `main` CI。
+- [x] 登记 Ship 证据并完成出口。
 
 ## 归档
 
