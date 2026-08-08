@@ -7,6 +7,7 @@ export function sameManagedDashboardIdentity(
   return left !== undefined
     && right !== undefined
     && left.version === right.version
+    && left.serverVersion === right.serverVersion
     && left.port === right.port
     && left.pid === right.pid
     && left.releaseId === right.releaseId

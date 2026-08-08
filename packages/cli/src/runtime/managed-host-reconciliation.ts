@@ -22,6 +22,12 @@ export interface ManagedHostStepExecution {
   isEquivalentDesired?(persistedDesired: string): boolean
   observe(): string | Promise<string>
   isDesired(observation: string): boolean
+  /**
+   * A later step may legitimately supersede a completed step's transient postcondition. Domains
+   * must opt in with a predicate that proves the current state belongs to that same transaction's
+   * frozen target; generic callers remain strict.
+   */
+  isCompletedCompatible?(observation: string): boolean
   execute(): string | Promise<string>
 }
 
@@ -66,9 +72,10 @@ export function createManagedHostStepRunner(context: {
       }
       const observed = await step.observe()
       assertManagedHostObservation(observed, `host step '${id}' completed recovery observation`)
-      if (!step.isDesired(observed)) {
+      const isCompletedCompatible = step.isCompletedCompatible ?? step.isDesired
+      if (!isCompletedCompatible(observed)) {
         throw new ManagedRuntimeIndeterminateError(
-          `host step '${id}' completed checkpoint 后的权威 inventory 已不满足 desired；拒绝继续或重放`,
+          `host step '${id}' completed checkpoint 后的权威 inventory 既不满足 desired，也不是同一冻结目标的后继状态；拒绝继续或重放`,
         )
       }
       return existing.result ?? ''

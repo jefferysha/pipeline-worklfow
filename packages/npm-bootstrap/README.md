@@ -5,13 +5,13 @@ npm 的公共包。
 
 发布自动化必须使用发布者实际拥有的 npm 包名运行 `tools/build-npx-package.mjs`。生成包只包含
 这个薄入口、产品身份、许可证和本说明。入口会下载对应 release tag 的 Marketplace 安装脚本，
-并校验内嵌 SHA-256；脚本随后使用 Tenon 的 `main` 稳定发行通道。因此 Marketplace 与 npx
-会激活同一个已验证候选 digest，又不会把未来宿主更新永久锁在旧 tag。
+并校验内嵌 SHA-256；脚本随后使用对应的不可变稳定版本标签。因此 Marketplace 与 npx
+会激活同一个已验证候选 digest，日常升级再由 `tenon update --codex` 解析最新稳定 Release。
 
 在 publisher scope 与 npm 凭据尚未配置前，请使用已公开的 Marketplace bootstrap：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex
 ```
 
 Codex CLI 缺失时先运行 `npm install -g @openai/codex`，再用 `codex --version` 验证。插件安装后，

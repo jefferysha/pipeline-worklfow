@@ -12,6 +12,19 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 面向用户的解释、影响与操作步骤默认使用中文。
 
+## v1.0.2 · 2026-08-08
+
+### 版本化安装与更新
+
+- 公开一键安装固定使用不可变 `v1.0.2` 预构建资产，不从 `main` 安装，也不编译源码。
+- `tenon update --codex` 解析官方最新稳定 GitHub Release，冻结 tag 与 commit，再通过宿主官方命令重绑定 Codex Marketplace。
+- 宿主、managed runtime 与 Dashboard 精确同版时零 mutation；降级或无法验证 Release 身份时在 mutation 前失败。
+- setup 始终等待 Dashboard readiness；curl/CI 安装和所有更新不自动打开浏览器，并打印已验证 URL 与 `tenon dashboard --open`。
+
+### 升级动作
+
+运行 `tenon update --codex`。新开 Codex 会话加载已发布 Skills/hooks 后，运行 `tenon doctor --json`。
+
 ## v1.0.1 · 2026-07-26
 
 ### 正常对话入口契约

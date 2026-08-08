@@ -20,7 +20,7 @@ export interface NativeHostCommandEnvironment {
   runCommand(
     cmd: string,
     args: string[],
-    options?: { readonly cwd?: string },
+    options?: { readonly cwd?: string; readonly timeoutMs?: number },
   ): { code: number; stdout: string; stderr: string }
   managedHostReconciliation?(
     host: NativePipelineHost,
@@ -31,6 +31,7 @@ export interface NativeHostCommandEnvironment {
     isEquivalentDesired?(persistedDesired: string): boolean
     observe(): string
     isDesired(observation: string): boolean
+    isCompletedCompatible?(observation: string): boolean
   }
 }
 

@@ -48,3 +48,19 @@ test('builds a release-pinned thin package without repository or test payload', 
     await rm(output, { recursive: true, force: true })
   }
 })
+
+test('rejects mutable branch, commit, and prerelease refs', async () => {
+  const output = await mkdtemp(join(tmpdir(), 'tenon-npx-package-ref-'))
+  try {
+    for (const ref of ['main', 'a'.repeat(40), 'v1.0.2-rc.1']) {
+      await assert.rejects(exec(process.execPath, [
+        join(root, 'tools', 'build-npx-package.mjs'),
+        '--package-name', '@example/tenon',
+        '--ref', ref,
+        '--output', output,
+      ], { cwd: root }), /complete stable release tag/)
+    }
+  } finally {
+    await rm(output, { recursive: true, force: true })
+  }
+})

@@ -80,19 +80,24 @@ New users do not need to clone the repository. Install the complete Codex
 plugin in one command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex
 ```
 
 For Claude Code, change only the host flag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --claude
 ```
 
-The bootstrap registers the Tenon Marketplace, installs and verifies the same
+The command installs prebuilt assets from the immutable stable `v1.0.2` release;
+it does not clone or compile the source tree. The bootstrap registers the Tenon Marketplace, installs and verifies the same
 complete release payload, and runs `tenon setup --<host>`. After installation,
 use `tenon setup --codex`, `tenon update --codex`, and
 `tenon runtime status` for lifecycle operations.
+
+Installation starts the Dashboard and waits for readiness. A curl or CI install
+does not open a browser; it prints the verified URL and `tenon dashboard --open`.
+An interactive first setup may open it, while manual and background updates do not.
 
 Enable the opt-in daily release check with:
 

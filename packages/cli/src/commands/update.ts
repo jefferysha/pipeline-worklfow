@@ -6,9 +6,12 @@
  * marketplaces; for them `update` deliberately re-applies the adapter from the already updated
  * package instead of falsely claiming to fetch a release from that host.
  */
-import { isAbsolute, join } from 'node:path'
 import type { CliDeps } from '../deps.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
+import {
+  inspectCandidatePayload,
+  type CandidatePayloadIdentity,
+} from '../runtime/release-store.js'
 import {
   REAL_RELEASED_DASHBOARD_STARTER,
 } from './released-dashboard-starter.js'
@@ -28,13 +31,23 @@ import { bindNativeHostCommand } from './native-host-command-binding.js'
 import { publishManagedRelease } from './release-coordinator.js'
 import { parseDashboardPort } from './dashboard-launch-options.js'
 import { runManagedHostCommand } from './managed-host-command.js'
-import { resolveRuntimePaths } from '../runtime/paths.js'
 import {
   finalizePendingHostPluginConflict,
   readHostPluginConvergenceReceipt,
   recordPendingHostPluginConflict,
 } from './host-plugin-convergence.js'
 import { printCodexAuthGuidance, renderDeferredCodexAuthLine } from '../codexAuth.js'
+import {
+  REAL_STABLE_RELEASE_RESOLVER,
+  compareStableVersions,
+  resolveStableTagTarget,
+  type StableReleaseResolver,
+  type StableReleaseTarget,
+} from './stable-release.js'
+import { nativeHostMatchesStableTarget } from './managed-host-observation.js'
+import { DEFAULT_DASHBOARD_PORT } from './dashboard.js'
+import { reportRegisteredProjects } from './update-project-report.js'
+import { verifyUpdatedRoot } from './update-candidate-verification.js'
 
 export interface UpdateOpts extends PipelineHostFlags {
   dryRun?: boolean
@@ -53,26 +66,6 @@ function renderPlan(deps: CliDeps, host: PipelineHost, plan: readonly HostComman
 /** Hosts differ on whether reinstalling an already-installed plugin is exit 0 or an idempotent error. */
 function isAlreadyInstalledResult(result: { readonly stdout: string; readonly stderr: string }): boolean {
   return /already|exists|installed|duplicate/i.test(`${result.stdout}\n${result.stderr}`)
-}
-
-/**
- * Codex exposes one refresh command for Git marketplaces only.  A configured local marketplace
- * is already reading its source directory, so the correct equivalent is to skip that fetch and
- * let the following `plugin add` rebuild Codex's installed plugin cache.  Do not treat any other
- * marketplace error as a success: auth, network, and malformed-registry failures must still keep
- * the current managed runtime selected.
- */
-function isLocalCodexMarketplaceUpgradeNoop(result: { readonly stdout: string; readonly stderr: string }): boolean {
-  return /not configured as a Git marketplace/i.test(`${result.stdout}\n${result.stderr}`)
-}
-
-function verifyUpdatedRoot(deps: CliDeps, env: SetupEnv, root: string): boolean {
-  // `tenon` is a user-level launcher and its cwd is normally the target project, not the
-  // plugin checkout.  Verify the freshly installed package using its own absolute asset path.
-  const result = env.runCommand('bash', [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root])
-  if (result.code === 0) return true
-  deps.io.err(`ERROR: 新插件资产校验失败，保持原 launcher：${result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`}`)
-  return false
 }
 
 function rejectUpdate(
@@ -119,6 +112,8 @@ export function cmdUpdate(
   env: SetupEnv = REAL_SETUP_ENV,
   installer: RuntimeInstaller = REAL_RUNTIME_INSTALLER,
   dashboardStarter: ReleasedDashboardStarter = REAL_RELEASED_DASHBOARD_STARTER,
+  releaseResolver: StableReleaseResolver = REAL_STABLE_RELEASE_RESOLVER,
+  candidateInspector: (root: string) => Promise<CandidatePayloadIdentity> = inspectCandidatePayload,
 ): number | Promise<number> {
   const selection = selectPipelineHost(opts)
   if (selection.host === null) {
@@ -128,12 +123,17 @@ export function cmdUpdate(
   const host = selection.host
   if (!isNativePipelineHost(host)) {
     deps.io.out(`[update] ${hostFlag(host)} 没有独立 marketplace；从当前已更新的 Tenon 包重新部署 adapter。`)
-    return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env, installer, dashboardStarter, opts.auto !== true)
+    return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env, installer, dashboardStarter, false)
   }
 
-  const plan = nativeUpdatePlan(host)
-  renderPlan(deps, host, plan)
   if (opts.dryRun) {
+    const previewTarget: StableReleaseTarget = {
+      version: '<latest-stable>',
+      tag: '<latest-stable>',
+      commit: '0'.repeat(40),
+    }
+    renderPlan(deps, host, nativeUpdatePlan(host, previewTarget))
+    deps.io.out('[update] 执行时先只读解析并冻结官方 latest stable Release；dry-run 不联网。')
     deps.io.out('[update] --dry-run:未刷新 marketplace、未重装插件、未切换 launcher。')
     return 0
   }
@@ -170,31 +170,99 @@ export function cmdUpdate(
     {
       operation: 'update',
       source: host,
+      requiresStableTarget: true,
+      proveFrozenTarget: (frozen) => {
+        const proven = resolveStableTagTarget(lifecycleEnv, frozen.version)
+        if (proven.tag !== frozen.tag || proven.commit !== frozen.commit) {
+          throw new Error(
+            `稳定标签 ${frozen.tag} 当前证明 ${proven.commit} 与冻结 commit ${frozen.commit} 不一致`,
+          )
+        }
+      },
       runtime: {
         homeDir: lifecycleEnv.homeDir(),
         env: lifecycleEnv.runtimeEnv(),
       },
-      openBrowser: opts.auto !== true,
+      openBrowser: false,
       ...(dashboardPort === null ? {} : { dashboardPort }),
       prepareCandidate: async (transaction) => {
+        const target = await transaction.resolveStableTarget(
+          () => releaseResolver.resolve(lifecycleEnv),
+          (frozen) => {
+            const proven = resolveStableTagTarget(lifecycleEnv, frozen.version)
+            if (proven.tag !== frozen.tag || proven.commit !== frozen.commit) {
+              throw new Error(
+                `稳定标签 ${frozen.tag} 当前证明 ${proven.commit} 与冻结 commit ${frozen.commit} 不一致`,
+              )
+            }
+          },
+        )
+        deps.io.out(`[update] 已冻结稳定目标：${target.tag} @ ${target.commit}`)
+        const beforeInventoryResult = lifecycleEnv.runCommand(host, ['plugin', 'list', '--json'])
+        const beforeInventory = beforeInventoryResult.code === 0
+          ? parseHostPluginInventory(host, beforeInventoryResult.stdout)
+          : null
+        if (beforeInventory === null) {
+          throw new Error(
+            `更新前宿主 plugin inventory 无法验证：`
+            + `${beforeInventoryResult.stderr.trim() || `退出码 ${beforeInventoryResult.code}`}`,
+          )
+        }
+        const runtime = await installer.inspect({
+          homeDir: lifecycleEnv.homeDir(),
+          env: lifecycleEnv.runtimeEnv(),
+        })
+        for (const [label, version] of [
+          ['宿主 plugin', beforeInventory.tenonVersion],
+          ['active managed runtime', runtime.activeValid ? runtime.active?.source.pluginVersion ?? null : null],
+        ] as const) {
+          if (version === null) continue
+          let comparison: number
+          try {
+            comparison = compareStableVersions(version, target.version)
+          } catch (error) {
+            throw new Error(`${label} 版本无法参与稳定版本比较：${error instanceof Error ? error.message : String(error)}`)
+          }
+          if (comparison > 0) throw new Error(`拒绝从${label} ${version} 降级到 ${target.version}`)
+        }
+        const runtimeExact = runtime.activeValid
+          && runtime.active !== null
+          && runtime.selection.activeRelease === runtime.active.releaseId
+          && runtime.active.source.host === host
+          && runtime.active.source.pluginVersion === target.version
+        const hostExact = beforeInventory.tenonRoot !== null
+          && beforeInventory.tenonVersion === target.version
+          && runtimeExact
+          && nativeHostMatchesStableTarget(lifecycleEnv, host, target)
+        if (hostExact && verifyUpdatedRoot(deps, lifecycleEnv, beforeInventory.tenonRoot, target.version)) {
+          const candidateIdentity = await candidateInspector(beforeInventory.tenonRoot)
+          if (candidateIdentity.pluginVersion === target.version
+            && candidateIdentity.payloadDigest === runtime.active?.payloadDigest
+            && nativeHostMatchesStableTarget(lifecycleEnv, host, target)) {
+            const port = dashboardPort ?? DEFAULT_DASHBOARD_PORT
+            const dashboard = await dashboardStarter.inspect(deps, { port, openBrowser: false })
+            if (dashboard?.releaseId === runtime.active?.releaseId
+              && dashboard.serverVersion === target.version) return { alreadyCurrent: true }
+          }
+        }
+        const plan = nativeUpdatePlan(host, target)
+        renderPlan(deps, host, plan)
         let inventory = ''
         for (let index = 0; index < plan.length; index += 1) {
           const item = plan[index]!
-          const stepId = index === 0
-            ? 'marketplace-refresh'
-            : index === 1
-              ? 'plugin-install'
-              : 'inventory-after'
-          const result = await runManagedHostCommand(transaction, stepId, lifecycleEnv, item)
+          const stepId = [
+            'plugin-remove',
+            'marketplace-remove',
+            'marketplace-register',
+            'plugin-install',
+            'inventory-after',
+          ][index]!
+          const result = await runManagedHostCommand(transaction, stepId, lifecycleEnv, item, target)
           if (result.stdout.trim() !== '' && !opts.auto) deps.io.out(result.stdout.trimEnd())
-          if (host === 'codex' && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
-            deps.io.out('[update] Codex 本地 marketplace 不需要 Git fetch；继续刷新 tenon 插件缓存。')
-            continue
-          }
           if (result.code !== 0) {
             // `plugin add` is the host's only cross-version reinstall primitive. Some host releases
             // report an idempotent existing install as non-zero; inventory is the sole proof.
-            if (index === 1 && isAlreadyInstalledResult(result)) {
+            if (stepId === 'plugin-install' && isAlreadyInstalledResult(result)) {
               const inventoryItem = plan[plan.length - 1]!
               const inventoryResult = await runManagedHostCommand(
                 transaction,
@@ -225,8 +293,28 @@ export function cmdUpdate(
           throw new Error(`${hostFlag(host)} 更新后未在宿主插件清单中找到 tenon；未切换 launcher。`)
         }
         hostBoundary = 'committed'
-        if (!verifyUpdatedRoot(deps, lifecycleEnv, root)) {
+        if (parsedInventory.tenonVersion !== target.version) {
+          throw new Error(
+            `${hostFlag(host)} 更新后插件版本 ${parsedInventory.tenonVersion ?? 'unknown'} `
+            + `与目标稳定版本 ${target.version} 不一致；未切换 launcher。`,
+          )
+        }
+        let hostMatchesTarget = false
+        try {
+          hostMatchesTarget = nativeHostMatchesStableTarget(lifecycleEnv, host, target)
+        } catch (error) {
+          throw new Error(
+            `更新后宿主目标 identity 无法验证：${error instanceof Error ? error.message : String(error)}`,
+          )
+        }
+        if (!hostMatchesTarget) {
+          throw new Error('更新后 marketplace/tag commit 与插件 inventory 未收敛到同一冻结稳定版本')
+        }
+        if (!verifyUpdatedRoot(deps, lifecycleEnv, root, target?.version)) {
           throw new Error('宿主刷新后的 tenon 候选未通过打包资产校验')
+        }
+        if (!nativeHostMatchesStableTarget(lifecycleEnv, host, target)) {
+          throw new Error('候选校验后 marketplace/tag commit 发生漂移；拒绝激活')
         }
         return { candidateRoot: root, evidence: inventory }
       },
@@ -254,6 +342,13 @@ export function cmdUpdate(
     reportHostBoundary(deps, host, hostBoundary)
     return await rejectUpdate(installer, lifecycleEnv, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
   }
+  const readyPort = dashboardPort ?? DEFAULT_DASHBOARD_PORT
+  if (outcome.state === 'current') {
+    const tag = outcome.stableTarget?.tag ?? 'latest stable'
+    deps.io.out(`[update] ${tag} 已在宿主、managed runtime 与 Dashboard 精确生效；无需更新。`)
+    deps.io.out(`[dashboard] 已就绪：http://127.0.0.1:${readyPort}/；如需打开：tenon dashboard --open`)
+    return 0
+  }
   const { activation } = outcome
   deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
   if (opts.auto) {
@@ -272,45 +367,7 @@ export function cmdUpdate(
     }
   }
   reportRegisteredProjects(deps, lifecycleEnv, activation.release.source.pluginVersion)
+  deps.io.out(`[dashboard] 已就绪：http://127.0.0.1:${readyPort}/；如需打开：tenon dashboard --open`)
   return 0
   })()
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'"'"'`)}'`
-}
-
-function reportRegisteredProjects(deps: CliDeps, env: SetupEnv, pluginVersion: string): void {
-  let registry: string | undefined
-  try {
-    registry = env.readText(resolveRuntimePaths({
-      homeDir: env.homeDir(),
-      env: env.runtimeEnv(),
-    }).registryPath)
-  } catch {
-    deps.io.err('[update] WARN: 项目注册表无法读取；未修改任何工作区。')
-    return
-  }
-  if (registry === undefined) return
-  let roots: unknown
-  try {
-    roots = JSON.parse(registry)
-  } catch {
-    deps.io.err('[update] WARN: 项目注册表无法解析；未修改任何工作区。')
-    return
-  }
-  if (!Array.isArray(roots)) return
-  const registeredRoots = [...new Set(
-    roots.filter((root): root is string => typeof root === 'string' && isAbsolute(root)),
-  )]
-  const outdated = registeredRoots.filter((root) => {
-    try {
-      return env.readText(join(root, '.pipeline-version'))?.trim() !== pluginVersion
-    } catch {
-      return true
-    }
-  })
-  if (outdated.length === 0) return
-  deps.io.out(`[update] ${outdated.length} 个已登记项目需要显式同步（本次更新未写工作区）：`)
-  for (const root of outdated) deps.io.out(`  cd ${shellQuote(root)} && tenon sync`)
 }

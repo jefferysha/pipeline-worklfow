@@ -156,6 +156,31 @@ describe('RuntimeReleaseStore', () => {
     expect((await store.inspect()).selection.activeRelease).toBe(first.release.releaseId)
   }, 30_000)
 
+  it('rejects a candidate whose manifest version differs from the frozen release target', async () => {
+    const root = await freshRoot('version-mismatch')
+    const candidate = await candidateCopy(root)
+    const store = storeFor(root)
+
+    await expect(store.stageAndActivate(candidate, 'codex', '9.9.9'))
+      .rejects.toThrow(/候选 plugin version .*冻结目标 9\.9\.9/)
+    expect((await store.inspect()).selection.activeRelease).toBeNull()
+  }, 30_000)
+
+  it('rejects a candidate with no manifest version instead of publishing unknown identity', async () => {
+    const root = await freshRoot('missing-version')
+    const candidate = await candidateCopy(root)
+    for (const manifest of ['.codex-plugin/plugin.json', '.claude-plugin/plugin.json']) {
+      const path = join(candidate, manifest)
+      const value = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+      delete value.version
+      await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+    }
+
+    await expect(storeFor(root).stageAndActivate(candidate, 'codex'))
+      .rejects.toThrow(/version|插件资产/i)
+    expect((await storeFor(root).inspect()).selection.activeRelease).toBeNull()
+  }, 30_000)
+
   it('rejects a candidate missing the Claude marketplace manifest without replacing selection', async () => {
     const root = await freshRoot('missing-claude-marketplace')
     const healthy = await candidateCopy(root, '-healthy')
@@ -367,6 +392,7 @@ describe('RuntimeReleaseStore', () => {
     }
     let running: {
       version: 1
+      serverVersion: string
       port: number
       pid: number
       releaseId: string
@@ -383,6 +409,7 @@ describe('RuntimeReleaseStore', () => {
         }
         running = {
           version: 1,
+          serverVersion: opts.expectedServerVersion ?? '1.0.2',
           port: opts.port ?? 18_765,
           pid: 42_424,
           releaseId,
@@ -465,6 +492,7 @@ describe('RuntimeReleaseStore', () => {
 
     let running: {
       version: 1
+      serverVersion: string
       port: number
       pid: number
       releaseId: string
@@ -472,6 +500,7 @@ describe('RuntimeReleaseStore', () => {
       transactionId?: string
     } | null = {
       version: 1,
+      serverVersion: '1.0.2',
       port: 43_210,
       pid: 42_425,
       releaseId: first.activation.release.releaseId,
@@ -497,6 +526,7 @@ describe('RuntimeReleaseStore', () => {
         events.push(`dashboard:start:${releaseId}`)
         running = {
           version: 1,
+          serverVersion: opts.expectedServerVersion ?? '1.0.2',
           port: opts.port ?? 18_765,
           pid: releaseId === first.activation.release.releaseId ? 42_425 : 42_426,
           releaseId,
@@ -600,6 +630,7 @@ describe('RuntimeReleaseStore', () => {
                 session: {
                   ownership: {
                     version: 1,
+                    serverVersion: opts.expectedServerVersion ?? '1.0.2',
                     port: opts.port ?? 18765,
                     pid: process.pid,
                     releaseId,
@@ -707,6 +738,8 @@ describe('RuntimeReleaseStore', () => {
           const readHost = () => JSON.parse(readFileSync(hostPath, 'utf8'))
           const writeHost = (host) => writeFileSync(hostPath, JSON.stringify(host), 'utf8')
           const env = {
+            homeDir: () => root + '/home',
+            runtimeEnv: () => scope.env,
             readText: (path) => path === marketplaceRoot + '/.codex-plugin/plugin.json'
               ? JSON.stringify({ version: '1.0.1' })
               : undefined,
@@ -838,6 +871,277 @@ describe('RuntimeReleaseStore', () => {
     60_000,
   )
 
+  it('recovers every versioned rebind mutation across real process restarts without replay', async () => {
+    const harnessRoot = await freshRoot('versioned-rebind-restart-harness')
+    const helper = join(harnessRoot, 'versioned-rebind-restart-helper.mjs')
+    const coordinatorPath = join(
+      repoRoot,
+      'packages',
+      'cli',
+      'src',
+      'commands',
+      'release-coordinator.ts',
+    )
+    const hostCommandPath = join(
+      repoRoot,
+      'packages',
+      'cli',
+      'src',
+      'commands',
+      'managed-host-command.ts',
+    )
+    const installerPath = join(repoRoot, 'packages', 'cli', 'src', 'runtime', 'installer.ts')
+    await esbuild({
+      stdin: {
+        contents: `
+          import { readFileSync, writeFileSync } from 'node:fs'
+          import { publishManagedRelease } from ${JSON.stringify(coordinatorPath)}
+          import { runManagedHostCommand } from ${JSON.stringify(hostCommandPath)}
+          import { REAL_RUNTIME_INSTALLER } from ${JSON.stringify(installerPath)}
+          const [mode, crashStep, root, candidate] = process.argv.slice(2)
+          const marketplaceRoot = root + '/marketplace'
+          const hostPath = root + '/host.json'
+          const target = { version: '1.0.2', tag: 'v1.0.2', commit: 'b'.repeat(40) }
+          const scope = {
+            homeDir: root + '/home',
+            env: { TENON_RUNTIME_HOME: root + '/runtime' },
+          }
+          const readHost = () => JSON.parse(readFileSync(hostPath, 'utf8'))
+          const writeHost = (host) => writeFileSync(hostPath, JSON.stringify(host), 'utf8')
+          const mutate = (step, update) => {
+            const host = readHost()
+            host.executions[step] += 1
+            update(host)
+            writeHost(host)
+            if (mode === 'crash-started' && crashStep === step) process.exit(91)
+          }
+          const env = {
+            homeDir: () => scope.homeDir,
+            runtimeEnv: () => scope.env,
+            readText: (path) => {
+              const host = readHost()
+              if (path === scope.homeDir + '/.codex/config.toml') {
+                return host.marketplacePresent
+                  ? '[marketplaces.tenon]\\nsource_type = "git"\\nsource = "https://github.com/jefferysha/tenon.git"\\nref = "' + host.ref + '"\\n'
+                  : undefined
+              }
+              if (path === marketplaceRoot + '/.codex-plugin/plugin.json'
+                || path === marketplaceRoot + '/.claude-plugin/plugin.json'
+                || path === marketplaceRoot + '/package.json') {
+                return JSON.stringify({ version: host.marketplaceVersion })
+              }
+              return undefined
+            },
+            runCommand: (cmd, args) => {
+              const command = cmd + ' ' + args.join(' ')
+              const host = readHost()
+              if (command === 'codex plugin marketplace list --json') {
+                return {
+                  code: 0,
+                  stdout: JSON.stringify({
+                    marketplaces: host.marketplacePresent ? [{
+                      name: 'tenon',
+                      root: marketplaceRoot,
+                      marketplaceSource: {
+                        sourceType: 'git',
+                        source: 'https://github.com/jefferysha/tenon.git',
+                      },
+                    }] : [],
+                  }),
+                  stderr: '',
+                }
+              }
+              if (command === 'codex plugin list --json') {
+                return {
+                  code: 0,
+                  stdout: JSON.stringify({
+                    installed: host.pluginPresent ? [{
+                      pluginId: 'tenon@tenon',
+                      version: host.pluginVersion,
+                      enabled: true,
+                      source: { path: marketplaceRoot },
+                    }] : [],
+                  }),
+                  stderr: '',
+                }
+              }
+              if (command === 'git -C ' + marketplaceRoot + ' rev-parse HEAD') {
+                return host.marketplacePresent
+                  ? { code: 0, stdout: host.head + '\\n', stderr: '' }
+                  : { code: 1, stdout: '', stderr: 'absent' }
+              }
+              if (command === 'git -C ' + marketplaceRoot + ' diff --quiet HEAD --') {
+                return { code: 0, stdout: '', stderr: '' }
+              }
+              if (command === 'git -C ' + marketplaceRoot + ' ls-files --others --exclude-standard') {
+                return { code: 0, stdout: '', stderr: '' }
+              }
+              if (command === 'git -C ' + marketplaceRoot + ' remote get-url origin') {
+                return {
+                  code: 0,
+                  stdout: 'https://github.com/jefferysha/tenon.git\\n',
+                  stderr: '',
+                }
+              }
+              if (command === 'codex plugin remove tenon@tenon --json') {
+                mutate('plugin-remove', (value) => { value.pluginPresent = false })
+                return { code: 0, stdout: '', stderr: '' }
+              }
+              if (command === 'codex plugin marketplace remove tenon --json') {
+                mutate('marketplace-remove', (value) => {
+                  value.marketplacePresent = false
+                  value.pluginPresent = false
+                  value.ref = null
+                })
+                return { code: 0, stdout: '', stderr: '' }
+              }
+              if (command === 'codex plugin marketplace add jefferysha/tenon --ref v1.0.2 --json') {
+                mutate('marketplace-register', (value) => {
+                  value.marketplacePresent = true
+                  value.pluginPresent = false
+                  value.head = target.commit
+                  value.ref = target.tag
+                  value.marketplaceVersion = target.version
+                })
+                return { code: 0, stdout: '', stderr: '' }
+              }
+              if (command === 'codex plugin add tenon@tenon --json') {
+                mutate('plugin-install', (value) => {
+                  value.pluginPresent = true
+                  value.pluginVersion = target.version
+                })
+                return { code: 0, stdout: '', stderr: '' }
+              }
+              return { code: 1, stdout: '', stderr: 'unexpected command: ' + command }
+            },
+          }
+          const commands = [
+            ['plugin-remove', ['plugin', 'remove', 'tenon@tenon', '--json']],
+            ['marketplace-remove', ['plugin', 'marketplace', 'remove', 'tenon', '--json']],
+            ['marketplace-register', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'v1.0.2', '--json']],
+            ['plugin-install', ['plugin', 'add', 'tenon@tenon', '--json']],
+          ]
+          const outcome = await publishManagedRelease(
+            { clock: () => new Date().toISOString() },
+            {
+              operation: 'update',
+              source: 'codex',
+              requiresStableTarget: true,
+              proveFrozenTarget: (value) => {
+                if (JSON.stringify(value) !== JSON.stringify(target)) throw new Error('frozen target drift')
+              },
+              runtime: scope,
+              openBrowser: false,
+              prepareCandidate: async (transaction) => {
+                const frozen = await transaction.resolveStableTarget(
+                  async () => {
+                    const host = readHost()
+                    host.resolverCalls += 1
+                    writeHost(host)
+                    return target
+                  },
+                  (value) => {
+                    if (JSON.stringify(value) !== JSON.stringify(target)) throw new Error('frozen target drift')
+                  },
+                )
+                for (const [step, args] of commands) {
+                  await runManagedHostCommand(
+                    transaction,
+                    step,
+                    env,
+                    { cmd: 'codex', args },
+                    frozen,
+                  )
+                  if (mode === 'crash-completed' && crashStep === step) process.exit(92)
+                }
+                return { candidateRoot: candidate }
+              },
+            },
+            REAL_RUNTIME_INSTALLER,
+            undefined,
+          )
+          process.stdout.write(JSON.stringify({ outcome, host: readHost() }) + '\\n')
+        `,
+        sourcefile: 'versioned-rebind-restart-helper.ts',
+        loader: 'ts',
+        resolveDir: repoRoot,
+      },
+      outfile: helper,
+      bundle: true,
+      platform: 'node',
+      format: 'esm',
+      target: 'node22',
+      alias: {
+        '@tenon/kernel': join(repoRoot, 'packages', 'kernel', 'src', 'index.ts'),
+      },
+    })
+
+    const steps = [
+      'plugin-remove',
+      'marketplace-remove',
+      'marketplace-register',
+      'plugin-install',
+    ] as const
+    for (const checkpointState of ['started', 'completed'] as const) {
+      for (const step of steps) {
+        const root = await freshRoot(`versioned-rebind-${checkpointState}-${step}`)
+        const candidate = await candidateCopy(root)
+        const hostPath = join(root, 'host.json')
+        await writeFile(hostPath, JSON.stringify({
+          marketplacePresent: true,
+          pluginPresent: true,
+          head: 'a'.repeat(40),
+          ref: 'main',
+          marketplaceVersion: '1.0.1',
+          pluginVersion: '1.0.1',
+          resolverCalls: 0,
+          executions: {
+            'plugin-remove': 0,
+            'marketplace-remove': 0,
+            'marketplace-register': 0,
+            'plugin-install': 0,
+          },
+        }), 'utf8')
+
+        await expect(execFileAsync(
+          process.execPath,
+          [helper, `crash-${checkpointState}`, step, root, candidate],
+        )).rejects.toMatchObject({ code: checkpointState === 'started' ? 91 : 92 })
+        const journalPath = join(pathsFor(root).managedTransactionRoot, 'release-transaction.json')
+        const crashedJournal = JSON.parse(await readFile(journalPath, 'utf8'))
+        expect(crashedJournal).toMatchObject({
+          phase: 'preparing-host',
+          stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'b'.repeat(40) },
+        })
+        expect(crashedJournal.hostSteps.at(-1)).toMatchObject({ id: step, state: checkpointState })
+
+        const recovered = await execFileAsync(
+          process.execPath,
+          [helper, 'recover', step, root, candidate],
+        )
+        const result = JSON.parse(recovered.stdout)
+        expect(result.outcome, `${checkpointState}/${step}: ${recovered.stdout}`)
+          .toMatchObject({ ok: true, state: 'ready' })
+        expect(result.host).toMatchObject({
+          marketplacePresent: true,
+          pluginPresent: true,
+          head: 'b'.repeat(40),
+          ref: 'v1.0.2',
+          marketplaceVersion: '1.0.2',
+          pluginVersion: '1.0.2',
+          resolverCalls: 1,
+          executions: {
+            'plugin-remove': 1,
+            'marketplace-remove': 1,
+            'marketplace-register': 1,
+            'plugin-install': 1,
+          },
+        })
+        await expect(readFile(journalPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+      }
+    }
+  }, 120_000)
+
   it('resumes every durable compensation phase after a real process crash without duplicate effects', async () => {
     const crashModes = [
       'crash-stopping-candidate',
@@ -911,6 +1215,7 @@ describe('RuntimeReleaseStore', () => {
                 const starts = await incrementCounter(startsPath)
                 const ownership = {
                   version: 1,
+                  serverVersion: opts.expectedServerVersion ?? '1.0.2',
                   port: opts.port ?? 18765,
                   pid: 45000 + starts,
                   releaseId,
@@ -973,6 +1278,7 @@ describe('RuntimeReleaseStore', () => {
               if (!outcome.ok) throw new Error(outcome.detail)
               await writeDashboard({
                 version: 1,
+                serverVersion: '1.0.2',
                 port: 43210,
                 pid: 44000,
                 releaseId: outcome.activation.release.releaseId,

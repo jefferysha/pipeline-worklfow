@@ -2,6 +2,8 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  chmod,
+  cp,
   lstat,
   mkdtemp,
   mkdir,
@@ -9,6 +11,7 @@ import {
   readdir,
   readlink,
   rm,
+  writeFile,
 } from 'node:fs/promises'
 import { createConnection, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -17,7 +20,7 @@ import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
 export function publicInstallUrl(ref) {
-  if (!/^(?:main|v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9.]+)?|[0-9a-f]{40})$/.test(ref)) {
+  if (!/^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/.test(ref)) {
     throw new Error(`invalid public install ref: ${ref}`)
   }
   return `https://raw.githubusercontent.com/jefferysha/tenon/${ref}/install.sh`
@@ -91,10 +94,11 @@ export function requireJsonObject(value, label) {
   return value
 }
 
-export function assertDashboardHealthIdentity(health, activeRelease) {
+export function assertDashboardHealthIdentity(health, activeRelease, expectedVersion) {
   requireJsonObject(health, 'Dashboard health')
   if (health.ok !== true
     || health.releaseId !== activeRelease
+    || health.version !== expectedVersion
     || typeof health.stateScopeId !== 'string'
     || !/^sha256-v1-[a-f0-9]{64}$/.test(health.stateScopeId)
     || typeof health.transactionId !== 'string'
@@ -500,38 +504,78 @@ async function inventory(env, cwd) {
   return parsed
 }
 
-async function installLocal(repoRoot, env, cwd) {
-  const marketplaceInventory = parseJson((await runCommand(
-    'codex',
-    ['plugin', 'marketplace', 'list', '--json'],
-    { cwd, env, timeoutMs: 30_000 },
-  )).stdout, 'codex marketplace list')
-  if (!hasExactLocalTenonMarketplace(marketplaceInventory, repoRoot)) {
-    await runCommand(
-      'codex',
-      ['plugin', 'marketplace', 'add', repoRoot],
-      { cwd, env, timeoutMs: 60_000 },
-    )
+async function installLocal(repoRoot, env, cwd, version) {
+  return runCommand('bash', [join(repoRoot, 'install.sh'), '--codex', '--ref', `v${version}`], {
+    cwd,
+    env,
+    timeoutMs: 180_000,
+  })
+}
+
+const LOCAL_RELEASE_ENTRIES = [
+  '.agents/plugins/marketplace.json',
+  '.claude-plugin/marketplace.json',
+  '.claude-plugin/plugin.json',
+  '.codex-plugin/plugin.json',
+  'adapters',
+  'hooks',
+  'packages/cli/dist/tenon.mjs',
+  'packages/dashboard-app/dist',
+  'packages/server/dist/dashboard.mjs',
+  'runtime/tenon-bootstrap.mjs',
+  'skills',
+  'templates',
+  'tools/verify-skills.sh',
+]
+
+async function createIsolatedReleaseRepository(repoRoot, fixture, env, version) {
+  const releaseWork = join(fixture, 'release-work')
+  const releaseBare = join(fixture, 'release.git')
+  await mkdir(releaseWork)
+  for (const entry of LOCAL_RELEASE_ENTRIES) {
+    await cp(join(repoRoot, entry), join(releaseWork, entry), {
+      recursive: true,
+      preserveTimestamps: false,
+    })
   }
-  const before = parseJson((await runCommand(
-    'codex',
-    ['plugin', 'list', '--json'],
-    { cwd, env, timeoutMs: 30_000 },
-  )).stdout, 'codex plugin list')
-  if (installedTenonRoot(before) === null) {
-    await runCommand(
-      'codex',
-      ['plugin', 'add', 'tenon@tenon', '--json'],
-      { cwd, env, timeoutMs: 60_000 },
-    )
-  }
-  const current = await inventory(env, cwd)
-  const root = installedTenonRoot(current)
-  return runCommand(
-    process.execPath,
-    [join(root, 'packages/cli/dist/tenon.mjs'), 'setup', '--codex', '--yes'],
-    { cwd, env, timeoutMs: 120_000 },
+  const git = (args) => runCommand('git', args, {
+    cwd: releaseWork,
+    env,
+    timeoutMs: 60_000,
+  })
+  await git(['init', '--quiet'])
+  await git(['config', 'user.name', 'Tenon clean-install acceptance'])
+  await git(['config', 'user.email', 'acceptance@invalid.example'])
+  await git(['add', '--all'])
+  await git(['commit', '--quiet', '-m', `fixture v${version}`])
+  await git(['tag', '-a', `v${version}`, '-m', `fixture v${version}`])
+  await git(['clone', '--quiet', '--bare', releaseWork, releaseBare])
+
+  const rewriteKey = `url.file://${releaseBare}.insteadOf`
+  await git(['config', '--global', 'protocol.file.allow', 'always'])
+  await git(['config', '--global', '--add', rewriteKey, 'https://github.com/jefferysha/tenon.git'])
+  await git(['config', '--global', '--add', rewriteKey, 'https://github.com/jefferysha/tenon'])
+
+  const realGit = (await runCommand('which', ['git'], {
+    cwd: releaseWork,
+    env: process.env,
+    timeoutMs: 10_000,
+  })).stdout.trim()
+  if (!isAbsolute(realGit)) throw new Error('acceptance could not resolve the real Git executable')
+  const fixtureBin = join(env.HOME, '.local', 'bin')
+  await mkdir(fixtureBin, { recursive: true })
+  const gitWrapper = join(fixtureBin, 'git')
+  await writeFile(
+    gitWrapper,
+    '#!/bin/sh\n'
+      + 'if [ "$1" = "-C" ] && [ "$3" = "remote" ] && [ "$4" = "get-url" ] && [ "$5" = "origin" ]; then\n'
+      + '  export GIT_CONFIG_GLOBAL=/dev/null\n'
+      + `  exec ${JSON.stringify(realGit)} "$@"\n`
+      + 'fi\n'
+      + `exec ${JSON.stringify(realGit)} "$@"\n`,
+    'utf8',
   )
+  await chmod(gitWrapper, 0o755)
 }
 
 async function installPublic(env, cwd, ref) {
@@ -566,6 +610,18 @@ export async function assertInstalledRuntime(
     || activeRelease !== runtime.selection?.activeRelease) {
     throw new Error('managed runtime is not active and verified')
   }
+  const runtimeHome = env.TENON_RUNTIME_HOME
+  if (typeof runtimeHome !== 'string' || !isAbsolute(runtimeHome)) {
+    throw new Error('isolated TENON_RUNTIME_HOME is required for release identity proof')
+  }
+  const activeManifest = requireJsonObject(parseJson(await readFile(
+    join(runtimeHome, 'data', 'releases', activeRelease, 'release.json'),
+    'utf8',
+  ), 'active runtime release manifest'), 'active runtime release manifest')
+  if (activeManifest.releaseId !== activeRelease
+    || typeof activeManifest.source?.pluginVersion !== 'string') {
+    throw new Error('active runtime release manifest does not prove its release identity')
+  }
   const doctor = requireJsonObject(parseJson((await runCommand(
     launcher,
     ['doctor', '--json'],
@@ -574,7 +630,7 @@ export async function assertInstalledRuntime(
   if (doctor.summary?.red !== 0) throw new Error(`doctor reported ${doctor.summary?.red} red checks`)
 
   const health = await waitForHealth(port)
-  assertDashboardHealthIdentity(health, activeRelease)
+  assertDashboardHealthIdentity(health, activeRelease, activeManifest.source.pluginVersion)
   registerOwnedHealth(health)
   const dashboardUrl = `http://127.0.0.1:${port}/`
   const { response: htmlResponse, body: html } = await fetchWithTimeout(
@@ -828,19 +884,24 @@ export function assertSupportedAcceptancePlatform(platform = process.platform) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
   const modeIndex = argv.indexOf('--mode')
   const mode = modeIndex === -1 ? 'local' : argv[modeIndex + 1]
   if (mode !== 'local' && mode !== 'public') {
     throw new Error('usage: clean-codex-install-acceptance.mjs --mode local|public')
   }
   const publicRefIndex = argv.indexOf('--public-ref')
-  const publicRef = publicRefIndex === -1 ? 'main' : argv[publicRefIndex + 1]
+  const packageVersion = requireJsonObject(
+    JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')),
+    'root package manifest',
+  ).version
+  if (typeof packageVersion !== 'string') throw new Error('root package version is invalid')
+  const publicRef = publicRefIndex === -1 ? `v${packageVersion}` : argv[publicRefIndex + 1]
   if (typeof publicRef !== 'string' || publicRef === '') {
     throw new Error('--public-ref requires a value')
   }
   if (mode === 'public') publicInstallUrl(publicRef)
   assertSupportedAcceptancePlatform()
-  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
   const externalBefore = await snapshotExternalTenonState(process.env)
   let fixture = null
   let port = null
@@ -868,8 +929,11 @@ export async function main(argv = process.argv.slice(2)) {
       LANG: process.env.LANG ?? 'C.UTF-8',
       CI: '1',
     }
+    if (mode === 'local') {
+      await createIsolatedReleaseRepository(repoRoot, fixture, env, packageVersion)
+    }
     const install = mode === 'local'
-      ? () => installLocal(repoRoot, env, work)
+      ? () => installLocal(repoRoot, env, work, packageVersion)
       : () => installPublic(env, work, publicRef)
     installationStarted = true
     const firstInstall = await install()

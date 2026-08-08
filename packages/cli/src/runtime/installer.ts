@@ -29,7 +29,11 @@ import { createManagedReleaseJournal } from './managed-release-journal.js'
  */
 export interface ManagedRuntimeTransaction {
   checkpointActivation(): Promise<RuntimeActivationCheckpoint>
-  activate(candidateRoot: string, host: RuntimeReleaseSource['host']): Promise<RuntimeActivation>
+  activate(
+    candidateRoot: string,
+    host: RuntimeReleaseSource['host'],
+    expectedPluginVersion?: string,
+  ): Promise<RuntimeActivation>
   recoverActivation(
     checkpoint: RuntimeActivationCheckpoint,
     host: RuntimeReleaseSource['host'],
@@ -55,6 +59,7 @@ export interface ManagedHostStepJournalRecord {
 
 export interface ManagedDashboardIdentity {
   readonly version: 1
+  readonly serverVersion: string
   readonly port: number
   readonly pid: number
   readonly releaseId: string
@@ -65,6 +70,12 @@ export interface ManagedDashboardIdentity {
 
 export interface ManagedDashboardJournalRecord extends ManagedDashboardIdentity {
   readonly owner: 'transaction' | 'preexisting'
+}
+
+export interface ManagedStableReleaseTarget {
+  readonly version: string
+  readonly tag: string
+  readonly commit: string
 }
 
 export type ManagedReleaseOperation = 'setup' | 'update' | 'adapter'
@@ -91,7 +102,11 @@ export interface ManagedReleaseJournalRecord {
   readonly updatedAt: string
   /** Concrete port frozen when the transaction is created and reused for every recovery. */
   readonly dashboardPort?: number
+  /** Stable target frozen before the first host mutation and reused by every recovery. */
+  readonly stableTarget?: ManagedStableReleaseTarget
   readonly candidateRoot?: string
+  /** Candidate-specific browser policy persisted for recovery (for example first setup only). */
+  readonly candidateOpenBrowser?: boolean
   /** Host inventory snapshot or another small serializable input for the final receipt. */
   readonly evidence?: string
   readonly hostSteps?: readonly ManagedHostStepJournalRecord[]
@@ -164,11 +179,12 @@ async function activateWithinTransaction(
   homeDir: string,
   candidateRoot: string,
   host: RuntimeReleaseSource['host'],
+  expectedPluginVersion?: string,
 ): Promise<RuntimeActivation> {
   const store = new RuntimeReleaseStore({ paths })
   const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
   const launcherCommitted = expectedStableLaunchers(paths, homeDir)
-  const activation = await store.stageAndActivate(candidateRoot, host)
+  const activation = await store.stageAndActivate(candidateRoot, host, expectedPluginVersion)
   try {
     await writeStableLaunchers(paths, homeDir)
     return { ...activation, launcherSnapshot, launcherCommitted }
@@ -369,8 +385,14 @@ async function withExclusiveRuntimeTransaction<T>(
   return withLock(paths.managedTransactionRoot, () => operation({
     checkpointActivation: () =>
       checkpointActivationWithinTransaction(paths, scope.homeDir),
-    activate: (candidateRoot, host) =>
-      activateWithinTransaction(paths, scope.homeDir, candidateRoot, host),
+    activate: (candidateRoot, host, expectedPluginVersion) =>
+      activateWithinTransaction(
+        paths,
+        scope.homeDir,
+        candidateRoot,
+        host,
+        expectedPluginVersion,
+      ),
     recoverActivation: (checkpoint, host) =>
       recoverActivationWithinTransaction(paths, scope.homeDir, checkpoint, host),
     revertActivation: (activation) =>

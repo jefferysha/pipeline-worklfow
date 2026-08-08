@@ -64,9 +64,28 @@ export interface HostTargetPlanOpts {
 
 const PRODUCT_STEPS = [
   { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+  { id: 'dashboard-readiness', label: 'host-plan.step.dashboard-readiness', command: null },
   { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
   { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
 ] as const satisfies readonly HostTargetPlanStep[]
+
+const SETUP_RELEASE_TARGET_STEP = {
+  id: 'stable-release-target',
+  label: 'host-plan.step.stable-release-target',
+  command: null,
+} as const satisfies HostTargetPlanStep
+
+const UPDATE_RELEASE_RESOLVER_STEP = {
+  id: 'stable-release-resolve',
+  label: 'host-plan.step.stable-release-resolve',
+  command: null,
+} as const satisfies HostTargetPlanStep
+
+const CANDIDATE_VALIDATION_STEP = {
+  id: 'candidate-validation',
+  label: 'host-plan.step.candidate-validation',
+  command: null,
+} as const satisfies HostTargetPlanStep
 
 const CODEX_AUTH_STATUS_STEP = {
   id: 'codex-auth-status',
@@ -78,10 +97,14 @@ const CODEX_AUTH_STATUS_STEP = {
   },
 } as const satisfies HostTargetPlanStep
 
-const NATIVE_STEP_IDS: Readonly<Record<HostTargetOperation, readonly string[]>> = {
-  setup: ['marketplace-register', 'plugin-install', 'plugin-inventory'],
-  update: ['marketplace-refresh', 'plugin-update', 'plugin-inventory'],
-}
+const NATIVE_SETUP_STEP_IDS = ['marketplace-register', 'plugin-install', 'plugin-inventory'] as const
+const VERSIONED_UPDATE_STEP_IDS = [
+  'plugin-remove',
+  'marketplace-remove',
+  'marketplace-register',
+  'plugin-install',
+  'plugin-inventory',
+] as const
 
 function command(executable: string, args: readonly string[]): HostPlanCommand {
   return {
@@ -129,8 +152,11 @@ function nativeSteps(
   operation: HostTargetOperation,
   plan: readonly HostCommandPlanItem[],
 ): readonly HostTargetPlanStep[] {
-  const ids = NATIVE_STEP_IDS[operation]
+  const ids = operation === 'setup'
+    ? NATIVE_SETUP_STEP_IDS
+    : VERSIONED_UPDATE_STEP_IDS
   return [
+    operation === 'setup' ? SETUP_RELEASE_TARGET_STEP : UPDATE_RELEASE_RESOLVER_STEP,
     ...plan.map((item, index) => {
       const id = ids[index] ?? `host-command-${index + 1}`
       return {
@@ -139,9 +165,11 @@ function nativeSteps(
         command: command(item.cmd, item.args),
       }
     }),
+    CANDIDATE_VALIDATION_STEP,
     PRODUCT_STEPS[0],
+    PRODUCT_STEPS[1],
     ...(host === 'codex' ? [CODEX_AUTH_STATUS_STEP] : []),
-    ...(operation === 'setup' ? PRODUCT_STEPS.slice(1) : []),
+    ...(operation === 'setup' ? PRODUCT_STEPS.slice(2) : []),
   ]
 }
 
@@ -152,10 +180,11 @@ function adapterSteps(
   const deploymentSteps: readonly HostTargetPlanStep[] = [
     { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
     PRODUCT_STEPS[0],
+    PRODUCT_STEPS[1],
     { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: manualCommand },
   ]
   return operation === 'setup'
-    ? [...deploymentSteps, ...PRODUCT_STEPS.slice(1)]
+    ? [...deploymentSteps, ...PRODUCT_STEPS.slice(2)]
     : deploymentSteps
 }
 
@@ -172,7 +201,12 @@ export function createHostTargetPlan(
     ? nativeSteps(
         host,
         operation,
-        operation === 'setup' ? nativeInstallPlan(host) : nativeUpdatePlan(host),
+        operation === 'setup'
+          ? nativeInstallPlan(host)
+          : nativeUpdatePlan(
+              host,
+              { version: '<latest-stable>', tag: '<latest-stable>', commit: '0'.repeat(40) },
+            ),
       )
     : adapterSteps(operation, manualCommand)
   return {
@@ -185,6 +219,13 @@ export function createHostTargetPlan(
     notices: [
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
+      'host-plan.notice.dashboard-readiness',
+      ...(operation === 'setup'
+        ? ['host-plan.notice.first-setup-browser']
+        : []),
+      ...(isNativePipelineHost(host) && operation === 'update'
+        ? ['host-plan.notice.update-target-frozen-at-execution']
+        : []),
       ...(host === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
       ...(isNativePipelineHost(host) ? [] : ['host-plan.notice.current-project-target']),
     ],

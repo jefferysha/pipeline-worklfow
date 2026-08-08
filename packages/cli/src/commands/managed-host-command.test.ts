@@ -123,6 +123,8 @@ describe('managed host desired identity recovery', () => {
         mutationExecutions: 0,
       }
       const env = {
+        homeDir: () => '/home/managed-host-command-test',
+        runtimeEnv: () => ({}),
         readText: (path: string) => path === `${marketplaceRoot}/.codex-plugin/plugin.json`
           ? JSON.stringify({ version: '1.0.1' })
           : undefined,

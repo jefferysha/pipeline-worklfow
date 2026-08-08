@@ -40,6 +40,8 @@ const ROOT_DOCUMENTS = [
 
 const TRUTH_SOURCES = [
   'package.json',
+  'install.sh',
+  'packages/npm-bootstrap/README.md',
   'packages/server/src/port.ts',
   'packages/cli/src/program-install.ts',
   'packages/cli/src/commands/runtime.ts',
@@ -248,10 +250,36 @@ function checkSourceBoundedClaims(root, contents, failures) {
   const packageText = contents.get('package.json')
   if (packageText !== undefined) {
     let engine
+    let releaseVersion
     try {
-      engine = JSON.parse(packageText)?.engines?.node
+      const manifest = JSON.parse(packageText)
+      engine = manifest?.engines?.node
+      releaseVersion = manifest?.version
     } catch {
       failures.push('package.json: invalid JSON while reading engines.node')
+    }
+    if (typeof releaseVersion === 'string') {
+      const installUrl = `https://raw.githubusercontent.com/jefferysha/tenon/v${releaseVersion}/install.sh`
+      const installer = contents.get('install.sh')
+      if (installer !== undefined && !installer.includes(`TENON_RELEASE_VERSION="${releaseVersion}"`)) {
+        failures.push(`install.sh: embedded release version must match package.json ${releaseVersion}`)
+      }
+      for (const document of [
+        'README.md',
+        'README.en.md',
+        'docs/usage/installation.md',
+        'docs/usage/zh-CN/installation.md',
+        'packages/npm-bootstrap/README.md',
+      ]) {
+        const text = contents.get(document)
+        if (text === undefined) continue
+        if (!text.includes(installUrl)) {
+          failures.push(`${document}: missing versioned official install URL ${installUrl}`)
+        }
+        if (/raw\.githubusercontent\.com\/jefferysha\/tenon\/main\/install\.sh/u.test(text)) {
+          failures.push(`${document}: public install URL must not use main/install.sh`)
+        }
+      }
     }
     const major = typeof engine === 'string' ? Number(engine.match(/\d+/u)?.[0]) : Number.NaN
     if (!Number.isInteger(major)) {

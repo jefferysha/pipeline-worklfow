@@ -25,7 +25,9 @@ const plugin = JSON.parse(await readFile(join(root, '.codex-plugin', 'plugin.jso
 const identity = JSON.parse(await readFile(join(root, 'product', 'identity.json'), 'utf8'))
 const version = String(plugin.version)
 const releaseRef = valueAfter('--ref') ?? `v${version}`
-if (!/^[A-Za-z0-9._-]+$/u.test(releaseRef)) throw new Error('--ref must be an immutable tag or release identifier')
+if (!/^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(releaseRef)) {
+  throw new Error('--ref must be a complete stable release tag vX.Y.Z')
+}
 const installerDigest = createHash('sha256')
   .update(await readFile(join(root, 'install.sh')))
   .digest('hex')

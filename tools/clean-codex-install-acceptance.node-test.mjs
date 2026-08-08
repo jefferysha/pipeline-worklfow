@@ -51,6 +51,7 @@ test('clean-install auth guidance requires every supported login route and statu
 
 const identity = {
   ok: true,
+  version: '1.0.2',
   releaseId: `sha256-${'a'.repeat(64)}`,
   transactionId: 'transaction-1',
   stateScopeId: `sha256-v1-${'b'.repeat(64)}`,
@@ -100,22 +101,23 @@ test('dashboard identity requires exact release, transaction, state scope, and p
 test('Dashboard health rejects zero, negative, and unsafe PIDs before cleanup can signal them', () => {
   for (const pid of [0, -1, Number.MAX_SAFE_INTEGER + 1]) {
     assert.throws(
-      () => assertDashboardHealthIdentity({ ...identity, pid }, identity.releaseId),
+      () => assertDashboardHealthIdentity({ ...identity, pid }, identity.releaseId, '1.0.2'),
       /does not match the active managed release/,
     )
   }
-  assert.doesNotThrow(() => assertDashboardHealthIdentity(identity, identity.releaseId))
+  assert.doesNotThrow(() => assertDashboardHealthIdentity(identity, identity.releaseId, '1.0.2'))
 })
 
 test('Dashboard health requires canonical nonempty state-scope and transaction identities', () => {
   for (const health of [
+    { ...identity, version: '1.0.1' },
     { ...identity, stateScopeId: '' },
     { ...identity, stateScopeId: `sha256-v1-${'g'.repeat(64)}` },
     { ...identity, transactionId: '' },
     { ...identity, transactionId: 'contains whitespace' },
   ]) {
     assert.throws(
-      () => assertDashboardHealthIdentity(health, identity.releaseId),
+      () => assertDashboardHealthIdentity(health, identity.releaseId, '1.0.2'),
       /does not match the active managed release/,
     )
   }
@@ -123,7 +125,7 @@ test('Dashboard health requires canonical nonempty state-scope and transaction i
 
 test('external JSON object boundaries reject null and arrays with stable errors', () => {
   assert.throws(
-    () => assertDashboardHealthIdentity(null, identity.releaseId),
+    () => assertDashboardHealthIdentity(null, identity.releaseId, '1.0.2'),
     /Dashboard health must be a non-null JSON object/,
   )
   assert.throws(
@@ -383,11 +385,14 @@ test('non-success health responses preserve HTTP status as the timeout cause', a
   }
 })
 
-test('public install URL is pinned to an explicit safe ref', () => {
+test('public install URL accepts only a complete stable release tag', () => {
   assert.equal(
-    publicInstallUrl('0123456789abcdef0123456789abcdef01234567'),
-    'https://raw.githubusercontent.com/jefferysha/tenon/0123456789abcdef0123456789abcdef01234567/install.sh',
+    publicInstallUrl('v1.2.3'),
+    'https://raw.githubusercontent.com/jefferysha/tenon/v1.2.3/install.sh',
   )
+  assert.throws(() => publicInstallUrl('main'), /invalid public install ref/)
+  assert.throws(() => publicInstallUrl('0123456789abcdef0123456789abcdef01234567'), /invalid public install ref/)
+  assert.throws(() => publicInstallUrl('v1.2.3-rc.1'), /invalid public install ref/)
   assert.throws(() => publicInstallUrl('../main'), /invalid public install ref/)
 })
 
@@ -414,9 +419,11 @@ test('positive health timeout preserves the final connection error as cause', as
 test('verified Dashboard ownership is registered before a later HTML identity failure', async () => {
   const root = await mkdtemp(join(tmpdir(), 'tenon-dashboard-registration-'))
   const launcher = join(root, '.local', 'bin', 'tenon')
+  const runtimeHome = join(root, 'runtime')
   const releaseId = `sha256-${'d'.repeat(64)}`
   const health = {
     ok: true,
+    version: '1.0.2',
     releaseId,
     stateScopeId: `sha256-v1-${'e'.repeat(64)}`,
     transactionId: 'transaction-registration',
@@ -439,7 +446,7 @@ test('verified Dashboard ownership is registered before a later HTML identity fa
         + 'if [ "$1" = "runtime" ]; then\n'
         + `  printf '%s\\n' '${JSON.stringify({
           activeValid: true,
-          active: { releaseId },
+          active: { releaseId, source: { pluginVersion: '1.0.2' } },
           selection: { activeRelease: releaseId },
         })}'\n`
         + 'else\n'
@@ -448,6 +455,13 @@ test('verified Dashboard ownership is registered before a later HTML identity fa
       'utf8',
     )
     await chmod(launcher, 0o755)
+    const releaseRoot = join(runtimeHome, 'data', 'releases', releaseId)
+    await mkdir(releaseRoot, { recursive: true })
+    await writeFile(join(releaseRoot, 'release.json'), JSON.stringify({
+      version: 1,
+      releaseId,
+      source: { host: 'codex', pluginVersion: '1.0.2' },
+    }))
     await new Promise((resolve, reject) => {
       server.once('error', reject)
       server.listen(0, '127.0.0.1', resolve)
@@ -458,7 +472,7 @@ test('verified Dashboard ownership is registered before a later HTML identity fa
     let registered = null
     await assert.rejects(
       assertInstalledRuntime(
-        { ...process.env, HOME: root },
+        { ...process.env, HOME: root, TENON_RUNTIME_HOME: runtimeHome },
         root,
         address.port,
         (current) => { registered = current },

@@ -5,6 +5,8 @@ export interface ReleasedDashboardOptions {
   readonly openBrowser?: boolean
   /** Present only when a managed release transaction owns this launch attempt. */
   readonly transactionId?: string
+  /** Stable product version expected from /api/health for managed release publication. */
+  readonly expectedServerVersion?: string
 }
 
 export function parseDashboardPort(raw: string | undefined): number | null {

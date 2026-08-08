@@ -20,26 +20,33 @@ Tenon does not require users to install mandatory Skills one by one.
 New users install the complete Codex plugin without cloning the repository:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex
 ```
 
 For Claude:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --claude
 ```
 
 Preview the complete Codex Marketplace and packaged setup plan without invoking
 the host or writing user/project state:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex --dry-run
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex --dry-run
 ```
 
+The versioned script installs only prebuilt assets from the immutable stable
+`v1.0.2` release. It never clones or compiles the source repository.
 The bootstrap adds the selected native marketplace plugin, resolves the install
 root from the host's own inventory, and invokes the same
 `tenon setup --<host>` operation. Tenon does not guess private host
 cache locations.
+
+Setup always starts the packaged Dashboard and waits for readiness. Piped/CI
+installs do not open a browser; they print the verified local URL and
+`tenon dashboard --open`. An interactive first setup may open the browser.
+Manual and automatic updates keep it closed while preserving readiness.
 
 ### Codex authentication
 

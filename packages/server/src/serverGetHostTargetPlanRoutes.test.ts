@@ -51,60 +51,6 @@ const CATALOG = {
   }),
 } as const
 
-const PLAN = {
-  schema_version: 'host-target-plan/v1',
-  side_effects: 'none',
-  host: CODEX_TARGET,
-  operation: 'update',
-  command: {
-    executable: 'tenon',
-    args: ['update', '--codex'],
-    display: 'tenon update --codex',
-  },
-  steps: [{
-    id: 'marketplace-refresh',
-    label: 'host-plan.step.marketplace-refresh',
-    command: {
-      executable: 'codex',
-      args: ['plugin', 'marketplace', 'upgrade', 'tenon', '--json'],
-      display: 'codex plugin marketplace upgrade tenon --json',
-    },
-  }, {
-    id: 'plugin-update',
-    label: 'host-plan.step.plugin-update',
-    command: {
-      executable: 'codex',
-      args: ['plugin', 'add', 'tenon@tenon', '--json'],
-      display: 'codex plugin add tenon@tenon --json',
-    },
-  }, {
-    id: 'plugin-inventory',
-    label: 'host-plan.step.plugin-inventory',
-    command: {
-      executable: 'codex',
-      args: ['plugin', 'list', '--json'],
-      display: 'codex plugin list --json',
-    },
-  }, {
-    id: 'managed-runtime',
-    label: 'host-plan.step.managed-runtime',
-    command: null,
-  }, {
-    id: 'codex-auth-status',
-    label: 'host-plan.step.codex-auth-status',
-    command: {
-      executable: 'codex',
-      args: ['login', 'status'],
-      display: 'codex login status',
-    },
-  }],
-  notices: [
-    'host-plan.notice.read-only-generation',
-    'host-plan.notice.manual-command-has-effects',
-    'host-plan.notice.codex-auth-guidance',
-  ],
-} as const
-
 type HostId = (typeof HOST_IDS)[number]
 type Operation = 'setup' | 'update'
 
@@ -115,25 +61,33 @@ function planCommand(executable: string, args: readonly string[]) {
 const NATIVE_COMMANDS = {
   codex: {
     setup: [
-      planCommand('codex', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'main']),
+      planCommand('codex', [
+        'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'v1.0.2', '--json',
+      ]),
       planCommand('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
       planCommand('codex', ['plugin', 'list', '--json']),
     ],
     update: [
-      planCommand('codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']),
+      planCommand('codex', ['plugin', 'remove', 'tenon@tenon', '--json']),
+      planCommand('codex', ['plugin', 'marketplace', 'remove', 'tenon', '--json']),
+      planCommand('codex', [
+        'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', '<latest-stable>', '--json',
+      ]),
       planCommand('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
       planCommand('codex', ['plugin', 'list', '--json']),
     ],
   },
   claude: {
     setup: [
-      planCommand('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon']),
+      planCommand('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon@v1.0.2']),
       planCommand('claude', ['plugin', 'install', 'tenon@tenon']),
       planCommand('claude', ['plugin', 'list', '--json']),
     ],
     update: [
-      planCommand('claude', ['plugin', 'marketplace', 'update', 'tenon']),
-      planCommand('claude', ['plugin', 'update', 'tenon@tenon']),
+      planCommand('claude', ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user']),
+      planCommand('claude', ['plugin', 'marketplace', 'remove', 'tenon']),
+      planCommand('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon@<latest-stable>']),
+      planCommand('claude', ['plugin', 'install', 'tenon@tenon']),
       planCommand('claude', ['plugin', 'list', '--json']),
     ],
   },
@@ -149,20 +103,30 @@ function planFor(host: HostId, operation: Operation) {
   )
   const nativeIds = operation === 'setup'
     ? ['marketplace-register', 'plugin-install', 'plugin-inventory']
-    : ['marketplace-refresh', 'plugin-update', 'plugin-inventory']
+    : ['plugin-remove', 'marketplace-remove', 'marketplace-register', 'plugin-install', 'plugin-inventory']
   const steps = native
-    ? NATIVE_COMMANDS[host][operation].map((stepCommand, index) => {
+    ? [
+        {
+          id: operation === 'setup' ? 'stable-release-target' : 'stable-release-resolve',
+          label: `host-plan.step.${operation === 'setup' ? 'stable-release-target' : 'stable-release-resolve'}`,
+          command: null,
+        },
+        ...NATIVE_COMMANDS[host][operation].map((stepCommand, index) => {
         const id = nativeIds[index]
         if (id === undefined) throw new Error('missing native test step id')
         return { id, label: `host-plan.step.${id}`, command: stepCommand }
-      })
+        }),
+      ]
     : [
         { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
         { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+        { id: 'dashboard-readiness', label: 'host-plan.step.dashboard-readiness', command: null },
         { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command },
       ]
   if (native) {
+    steps.push({ id: 'candidate-validation', label: 'host-plan.step.candidate-validation', command: null })
     steps.push({ id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null })
+    steps.push({ id: 'dashboard-readiness', label: 'host-plan.step.dashboard-readiness', command: null })
     if (host === 'codex') {
       steps.push({
         id: 'codex-auth-status',
@@ -187,11 +151,18 @@ function planFor(host: HostId, operation: Operation) {
     notices: [
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
+      'host-plan.notice.dashboard-readiness',
+      ...(operation === 'setup' ? ['host-plan.notice.first-setup-browser'] : []),
+      ...(native && operation === 'update'
+        ? ['host-plan.notice.update-target-frozen-at-execution']
+        : []),
       ...(host === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
       ...(native ? [] : ['host-plan.notice.current-project-target']),
     ],
   }
 }
+
+const PLAN = planFor('codex', 'update')
 
 function jsonResult(value: unknown): { exitCode: number; stdout: string; stderr: string } {
   return { exitCode: 0, stdout: JSON.stringify(value), stderr: '' }

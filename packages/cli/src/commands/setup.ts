@@ -84,7 +84,16 @@ export function cmdSetup(
           })
       }
       const runHost = (): number | Promise<number> => {
-        const hostCode = cmdSetupHost(deps, host, o, lifecycleEnv, installer, dashboardStarter)
+        const openDashboard = lifecycleEnv.isInteractive?.() ?? true
+        const hostCode = cmdSetupHost(
+          deps,
+          host,
+          o,
+          lifecycleEnv,
+          installer,
+          dashboardStarter,
+          openDashboard,
+        )
         return typeof hostCode === 'number'
           ? finish(hostCode)
           : hostCode.then((code) => finish(code))
@@ -112,7 +121,8 @@ export {
   type SetupEnv, type SetupOpts,
 } from './setupEnvironment.js'
 export { commandExistsOnPath } from './commandExists.js'
-export { cmdSetupHost, verifyPackagedAssets } from './setupHost.js'
+export { cmdSetupHost } from './setupHost.js'
+export { verifyPackagedAssets } from './packaged-assets.js'
 export { buildSkillsPlan, type CmdGroup, type PlannedCommand, type SkillsPlan } from './setupSkillsPlan.js'
 export { cmdSetupSkills } from './setupSkills.js'
 export { cmdSetupRuntime, REAL_RUNTIME_ENV, type RuntimeEnv } from './setupRuntime.js'

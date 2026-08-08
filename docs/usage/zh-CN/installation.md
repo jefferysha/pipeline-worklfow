@@ -30,26 +30,30 @@ git --version
 新用户无需 clone、安装 monorepo 依赖或本地 build。安装 Codex：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex
 ```
 
 安装 Claude Code：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --claude
 ```
 
 首次安装前可执行零写入预览。它会列出完整的宿主 Marketplace 命令和包内 setup 计划，但不会调用
 Codex/Claude，也不会写 Tenon、宿主或项目状态：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex --dry-run
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex --dry-run
 ```
 
+版本化脚本只使用不可变稳定版本 `v1.0.2` 的预构建资产，不 clone 仓库、不执行源码编译。
 脚本只负责注册 Tenon Marketplace、安装并验证完整 payload，然后调用包内
 `tenon setup --<host>`。已经安装的用户可以直接再次运行 `tenon setup --codex`
 修复宿主接线；更新时运行 `tenon update --codex`（或 `--claude`）。手动更新和显式启用的
 自动更新复用同一个整包事务，不再拆出第二套 CLI 自更新通道。
+
+setup 始终启动 Dashboard 并等待 readiness。curl/CI 安装不会自动打开浏览器，而会打印已验证 URL 与
+`tenon dashboard --open`；交互式首次 setup 可以自动打开，手动更新和后台更新都不自动打开。
 
 #### Codex 账号认证
 

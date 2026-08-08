@@ -67,24 +67,28 @@ Simple 路由刻意保持严格。API 或公共契约、schema 和 migration、�
 新用户无需 clone 仓库。一次安装完整 Codex 插件：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex
 ```
 
 Claude Code 用户只替换宿主参数：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --claude
 ```
 
 先预览 Codex 的完整 Marketplace 与包内 setup 计划、且不调用宿主或写入用户目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex --dry-run
+curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | bash -s -- --codex --dry-run
 ```
 
+该命令始终从不可变稳定版本 `v1.0.2` 安装预构建发行资产，不 clone 仓库、不运行源码编译。
 Bootstrap 注册 Tenon Marketplace、安装同一个完整插件、校验发行 payload，并执行
 `tenon setup --<host>`。已经安装后的维护入口仍是 `tenon setup --codex`、`tenon update --codex`
 与 `tenon runtime status`。
+
+安装会启动并等待 Dashboard 就绪。curl/CI 安装不会自动打开浏览器，而会打印已验证 URL；需要时运行
+`tenon dashboard --open`。交互式终端中的首次 `tenon setup` 可以自动打开，手动或后台更新不会。
 
 Codex 插件安装与账号认证是两个独立步骤。安装完成后，Tenon 只读运行
 `codex login status`，不会自动登录或读取凭证内容。若尚未登录：

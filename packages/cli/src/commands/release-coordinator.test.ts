@@ -20,6 +20,7 @@ function dashboardOwnership(
 ) {
   return {
     version: 1 as const,
+    serverVersion: '1.0.0',
     port,
     pid: 321,
     releaseId,
@@ -1274,6 +1275,7 @@ describe('managed release coordinator', () => {
     let dashboardTransactionId: string | undefined
     const ownership = {
       version: 1 as const,
+      serverVersion: '1.0.0',
       port: 18765,
       pid: 4242,
       releaseId,
@@ -1776,5 +1778,150 @@ describe('managed release coordinator', () => {
       starter,
     )).toMatchObject({ ok: true })
     expect(inspectedPorts).toEqual([43_210, 43_210])
+  })
+
+  test('recovery reuses and re-proves the stable target frozen before the first host mutation', async () => {
+    const events: string[] = []
+    const installer = serializedInstaller(events, activationFor, {
+      failJournalWritePhaseOnce: 'candidate-resolved',
+    })
+    const frozen = { version: '1.0.0', tag: 'v1.0.0', commit: 'a'.repeat(40) }
+    const newer = { version: '1.0.1', tag: 'v1.0.1', commit: 'b'.repeat(40) }
+    let resolverCalls = 0
+    const proofs: string[] = []
+    const managedRequest = {
+      ...request('/candidate/one'),
+      operation: 'update' as const,
+      requiresStableTarget: true,
+      proveFrozenTarget: (target: typeof frozen) => { proofs.push(`entry:${target.tag}`) },
+      prepareCandidate: async (host: {
+        resolveStableTarget(
+          resolveLatest: () => Promise<typeof frozen>,
+          proveFrozen: (target: typeof frozen) => void,
+        ): Promise<typeof frozen>
+      }) => {
+        const target = await host.resolveStableTarget(
+          async () => {
+            resolverCalls += 1
+            return resolverCalls === 1 ? frozen : newer
+          },
+          (value) => { proofs.push(`prepare:${value.tag}`) },
+        )
+        return { candidateRoot: '/candidate/one', evidence: target.tag }
+      },
+    }
+
+    expect(await publishManagedRelease(makeDeps(), managedRequest, installer, undefined))
+      .toMatchObject({ ok: false })
+    expect(await publishManagedRelease(makeDeps(), managedRequest, installer, undefined))
+      .toMatchObject({ ok: true, stableTarget: frozen })
+    expect(resolverCalls).toBe(1)
+    expect(proofs).toEqual(['entry:v1.0.0', 'prepare:v1.0.0'])
+  })
+
+  test('dashboard-ready recovery completes evidence and clears WAL without re-running same-version preparation', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const ownership = dashboardOwnership(activation.release.releaseId, 'transaction-ready')
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-ready',
+        operation: 'update',
+        source: 'codex',
+        phase: 'dashboard-ready',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        candidateRoot: '/candidate/one',
+        activation,
+        dashboardBeforeAbsent: true,
+        dashboard: { ...ownership, owner: 'transaction' },
+      },
+    })
+    let preparations = 0
+    let evidenceCommits = 0
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      ...request('/candidate/ignored'),
+      operation: 'update',
+      prepareCandidate: () => {
+        preparations += 1
+        return { alreadyCurrent: true as const }
+      },
+      commitReadyEvidence: () => { evidenceCommits += 1 },
+    }, installer, {
+      inspect: async () => ownership,
+      adopt: async () => ({
+        ownership,
+        stop: async () => ({ state: 'stopped' as const }),
+      }),
+      start: async () => readyDashboard(),
+    })
+
+    expect(outcome).toMatchObject({ ok: true, state: 'ready' })
+    expect(preparations).toBe(0)
+    expect(evidenceCommits).toBe(1)
+    expect(events).toContain('journal:cleared')
+  })
+
+  test('recovered activation with the wrong plugin version is indeterminate before Dashboard or evidence', async () => {
+    const events: string[] = []
+    const activation = activationFor('/candidate/one', 'codex')
+    const installer = serializedInstaller(events, activationFor, {
+      initialJournal: {
+        version: 1,
+        transactionId: 'transaction-version-mismatch',
+        operation: 'update',
+        source: 'codex',
+        phase: 'runtime-activated',
+        startedAt: '2026-07-26T00:00:00Z',
+        updatedAt: '2026-07-26T00:00:00Z',
+        dashboardPort: 18_765,
+        candidateRoot: '/candidate/one',
+        activation,
+      },
+    })
+    let evidenceCommits = 0
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      ...request('/candidate/ignored'),
+      operation: 'update',
+      expectedPluginVersion: '1.0.2',
+      commitReadyEvidence: () => { evidenceCommits += 1 },
+    }, installer, undefined)
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('不等于冻结目标 1.0.2')
+    expect(evidenceCommits).toBe(0)
+    expect(events).not.toContain('journal:dashboard-ready')
+  })
+
+  test('Dashboard readiness rejects a healthy process that reports the wrong release version', async () => {
+    const events: string[] = []
+    const installer = serializedInstaller(events)
+    let evidenceCommits = 0
+
+    const outcome = await publishManagedRelease(makeDeps(), {
+      ...request('/candidate/one'),
+      commitReadyEvidence: () => { evidenceCommits += 1 },
+    }, installer, {
+      inspect: async () => null,
+      adopt: async () => null,
+      start: async (_deps, _payloadRoot, opts) => ({
+        state: 'ready',
+        session: {
+          ownership: {
+            ...dashboardOwnership(`sha256-${'a'.repeat(64)}`, opts.transactionId, opts.port),
+            serverVersion: '9.9.9',
+          },
+          stop: async () => ({ state: 'stopped' as const }),
+        },
+      }),
+    })
+
+    expect(outcome).toMatchObject({ ok: false, state: 'indeterminate' })
+    expect(outcome.detail).toContain('错误 ownership')
+    expect(evidenceCommits).toBe(0)
   })
 })

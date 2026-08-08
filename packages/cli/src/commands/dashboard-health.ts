@@ -17,6 +17,7 @@ export interface DashboardHealthProbeOptions {
 
 export interface DashboardHealthIdentity {
   readonly version: 1
+  readonly serverVersion: string
   readonly port: number
   readonly pid: number
   readonly releaseId: string
@@ -55,6 +56,7 @@ function healthyDashboardIdentity(
     && (body.pid as number) > 0)) return null
   return {
     version: 1,
+    serverVersion: body.version as string,
     port,
     pid: body.pid as number,
     releaseId,

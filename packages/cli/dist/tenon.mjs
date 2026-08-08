@@ -3033,9 +3033,9 @@ var require_commander = __commonJS({
 import { execFile as execFile5, execFileSync as execFileSync2 } from "node:child_process";
 import { createHash as createHash43 } from "node:crypto";
 import { accessSync as accessSync5, constants as fsConstants5, readdirSync as readdirSync9, readFileSync as readFileSync28, statSync as statSync11 } from "node:fs";
-import { readFile as readFile40, rm as rm13, stat as stat12, writeFile as writeFile15 } from "node:fs/promises";
+import { readFile as readFile41, rm as rm14, stat as stat12, writeFile as writeFile15 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
-import { dirname as dirname27, join as join93 } from "node:path";
+import { dirname as dirname27, join as join97 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/commander/esm.mjs
@@ -3862,23 +3862,23 @@ function decodeTaskPlanRevisionRecordV1(input) {
   const decoded = decodeTaskPlanRevisionV1(input);
   return decoded.ok ? { ok: true, value: decoded.value } : decoded;
 }
-function taskPlanRecordToDomain(record5) {
+function taskPlanRecordToDomain(record6) {
   return freezeTaskPlanAggregate({
-    schemaVersion: record5.schema_version,
-    planId: record5.plan_id,
-    revisionId: record5.revision_id,
-    revisionNumber: record5.revision_number,
-    status: record5.status,
-    createdAt: record5.created_at,
-    requirements: record5.requirements.map((entry) => ({ ...entry })),
-    acceptanceCriteria: record5.acceptance_criteria.map((entry) => ({ ...entry })),
-    groups: record5.groups.map((group) => ({
+    schemaVersion: record6.schema_version,
+    planId: record6.plan_id,
+    revisionId: record6.revision_id,
+    revisionNumber: record6.revision_number,
+    status: record6.status,
+    createdAt: record6.created_at,
+    requirements: record6.requirements.map((entry) => ({ ...entry })),
+    acceptanceCriteria: record6.acceptance_criteria.map((entry) => ({ ...entry })),
+    groups: record6.groups.map((group) => ({
       id: group.id,
       title: group.title,
       parentId: group.parent_id,
       workItemIds: [...group.work_item_ids]
     })),
-    workItems: record5.work_items.map((item2) => ({
+    workItems: record6.work_items.map((item2) => ({
       id: item2.id,
       title: item2.title,
       ...item2.description === void 0 ? {} : { description: item2.description },
@@ -5285,7 +5285,7 @@ function parseWorkflowGovernanceBinding(raw) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("workflow governance binding \u5FC5\u987B\u662F\u5BF9\u8C61");
   }
-  const record5 = value;
+  const record6 = value;
   const allowed = /* @__PURE__ */ new Set([
     "version",
     "run_id",
@@ -5294,15 +5294,15 @@ function parseWorkflowGovernanceBinding(raw) {
     "workflow_plan_fingerprint"
   ]);
   const digest10 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
-  if (Object.keys(record5).some((key) => !allowed.has(key)) || record5.version !== 1 || typeof record5.run_id !== "string" || record5.run_id === "" || record5.document_profile !== void 0 && record5.document_profile !== "legacy-full" && record5.document_profile !== "document-v1" || record5.document_governance_fingerprint !== void 0 && !digest10(record5.document_governance_fingerprint) || record5.workflow_plan_fingerprint !== void 0 && !digest10(record5.workflow_plan_fingerprint) || record5.document_governance_fingerprint !== void 0 && record5.document_profile === void 0) {
+  if (Object.keys(record6).some((key) => !allowed.has(key)) || record6.version !== 1 || typeof record6.run_id !== "string" || record6.run_id === "" || record6.document_profile !== void 0 && record6.document_profile !== "legacy-full" && record6.document_profile !== "document-v1" || record6.document_governance_fingerprint !== void 0 && !digest10(record6.document_governance_fingerprint) || record6.workflow_plan_fingerprint !== void 0 && !digest10(record6.workflow_plan_fingerprint) || record6.document_governance_fingerprint !== void 0 && record6.document_profile === void 0) {
     throw new Error("workflow governance binding \u5F62\u72B6\u975E\u6CD5");
   }
   return {
     version: 1,
-    run_id: record5.run_id,
-    ...record5.document_profile === void 0 ? {} : { document_profile: record5.document_profile },
-    ...record5.document_governance_fingerprint === void 0 ? {} : { document_governance_fingerprint: record5.document_governance_fingerprint },
-    ...record5.workflow_plan_fingerprint === void 0 ? {} : { workflow_plan_fingerprint: record5.workflow_plan_fingerprint }
+    run_id: record6.run_id,
+    ...record6.document_profile === void 0 ? {} : { document_profile: record6.document_profile },
+    ...record6.document_governance_fingerprint === void 0 ? {} : { document_governance_fingerprint: record6.document_governance_fingerprint },
+    ...record6.workflow_plan_fingerprint === void 0 ? {} : { workflow_plan_fingerprint: record6.workflow_plan_fingerprint }
   };
 }
 async function readWorkflowGovernanceBinding(changeDir2) {
@@ -5633,13 +5633,13 @@ function parseRunRevision(raw, source) {
   } catch (error2) {
     throw new RunStateCorruptError(`${source}: JSON \u635F\u574F\uFF08${String(error2)}\uFF09`);
   }
-  const record5 = ownRecord(value);
-  if (!record5)
+  const record6 = ownRecord(value);
+  if (!record6)
     throw new RunStateCorruptError(`${source}: \u9876\u5C42\u5B57\u6BB5\u95ED\u96C6\u975E\u6CD5`);
-  if (typeof record5.schemaVersion === "number" && Number.isSafeInteger(record5.schemaVersion) && record5.schemaVersion > RUN_STATE_SCHEMA_VERSION) {
-    throw new UnsupportedRunStateVersionError(record5.schemaVersion);
+  if (typeof record6.schemaVersion === "number" && Number.isSafeInteger(record6.schemaVersion) && record6.schemaVersion > RUN_STATE_SCHEMA_VERSION) {
+    throw new UnsupportedRunStateVersionError(record6.schemaVersion);
   }
-  if (Object.keys(record5).some((key) => ![
+  if (Object.keys(record6).some((key) => ![
     "schemaVersion",
     "hookState",
     "revision",
@@ -5650,9 +5650,9 @@ function parseRunRevision(raw, source) {
     "stateDigest"
   ].includes(key)))
     throw new RunStateCorruptError(`${source}: \u9876\u5C42\u5B57\u6BB5\u95ED\u96C6\u975E\u6CD5`);
-  const hook = ownRecord(record5.hookState);
-  const mutation = ownRecord(record5.mutation);
-  if (record5.schemaVersion !== RUN_STATE_SCHEMA_VERSION || typeof record5.revision !== "number" || !Number.isSafeInteger(record5.revision) || record5.revision < 0 || typeof record5.revisionId !== "string" || !SAFE_ID_RE.test(record5.revisionId) || record5.revision === 0 !== (record5.previousRevisionId === void 0) || record5.previousRevisionId !== void 0 && (typeof record5.previousRevisionId !== "string" || !SAFE_ID_RE.test(record5.previousRevisionId)) || typeof record5.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record5.stateDigest) || !hook || Object.keys(hook).sort().join(",") !== "archived,automation,phase,track,workflow" || Object.values(hook).some((item2) => typeof item2 !== "string") || !mutation || Object.keys(mutation).some((key) => ![
+  const hook = ownRecord(record6.hookState);
+  const mutation = ownRecord(record6.mutation);
+  if (record6.schemaVersion !== RUN_STATE_SCHEMA_VERSION || typeof record6.revision !== "number" || !Number.isSafeInteger(record6.revision) || record6.revision < 0 || typeof record6.revisionId !== "string" || !SAFE_ID_RE.test(record6.revisionId) || record6.revision === 0 !== (record6.previousRevisionId === void 0) || record6.previousRevisionId !== void 0 && (typeof record6.previousRevisionId !== "string" || !SAFE_ID_RE.test(record6.previousRevisionId)) || typeof record6.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record6.stateDigest) || !hook || Object.keys(hook).sort().join(",") !== "archived,automation,phase,track,workflow" || Object.values(hook).some((item2) => typeof item2 !== "string") || !mutation || Object.keys(mutation).some((key) => ![
     "kind",
     "observedAt",
     "effects",
@@ -5669,18 +5669,18 @@ function parseRunRevision(raw, source) {
   if (typeof phase !== "string" || typeof workflow !== "string" || typeof track !== "string" || typeof archived !== "string" || typeof automation !== "string") {
     throw new RunStateCorruptError(`${source}: hookState \u5B57\u6BB5\u975E\u6CD5`);
   }
-  const { stateDigest: _rawDigest, ...rawBody } = record5;
+  const { stateDigest: _rawDigest, ...rawBody } = record6;
   const observedDigest = createHash2("sha256").update(JSON.stringify(rawBody)).digest("hex");
-  if (observedDigest !== record5.stateDigest) {
+  if (observedDigest !== record6.stateDigest) {
     throw new RunStateCorruptError(`${source}: digest \u4E0D\u5339\u914D`);
   }
-  const state = canonicalState(record5.state, { allowLegacyFieldOmissions: true });
+  const state = canonicalState(record6.state, { allowLegacyFieldOmissions: true });
   const effects = mutation.effects.map(canonicalEffect);
   const transitionRecordId = typeof mutation.transitionRecordId === "string" ? mutation.transitionRecordId : void 0;
   const transitionRecordDigest = typeof mutation.transitionRecordDigest === "string" ? mutation.transitionRecordDigest : void 0;
   const isTransition = mutation.kind === "transition";
   const isInitial = mutation.kind === "init" || mutation.kind === "migration";
-  if (record5.revision === 0 !== isInitial || record5.revision === 0 && effects.length !== 0) {
+  if (record6.revision === 0 !== isInitial || record6.revision === 0 && effects.length !== 0) {
     throw new RunStateCorruptError(`${source}: revision 0 \u4E0E init/migration \u7A7A effects \u5FC5\u987B\u6210\u5BF9`);
   }
   if (isTransition !== (transitionRecordId !== void 0 && transitionRecordDigest !== void 0)) {
@@ -5692,9 +5692,9 @@ function parseRunRevision(raw, source) {
   const parsed = {
     schemaVersion: 1,
     hookState: { phase, workflow, track, archived, automation },
-    revision: record5.revision,
-    revisionId: record5.revisionId,
-    ...typeof record5.previousRevisionId === "string" ? { previousRevisionId: record5.previousRevisionId } : {},
+    revision: record6.revision,
+    revisionId: record6.revisionId,
+    ...typeof record6.previousRevisionId === "string" ? { previousRevisionId: record6.previousRevisionId } : {},
     state,
     mutation: {
       kind: mutation.kind,
@@ -5703,7 +5703,7 @@ function parseRunRevision(raw, source) {
       ...transitionRecordId === void 0 ? {} : { transitionRecordId },
       ...transitionRecordDigest === void 0 ? {} : { transitionRecordDigest }
     },
-    stateDigest: record5.stateDigest
+    stateDigest: record6.stateDigest
   };
   if (JSON.stringify(parsed.hookState) !== JSON.stringify(hookStateFor(state))) {
     throw new RunStateCorruptError(`${source}: hookState \u4E0E\u5B8C\u6574 state \u4E0D\u4E00\u81F4`);
@@ -5781,12 +5781,12 @@ function recordPath(changeDir2, sequence, recordId) {
   return join3(changeDir2, TRANSITION_RECORDS_DIR, `${seqPart}-${recordId}.json`);
 }
 var FsTransitionRecordStore = class {
-  async write(changeDir2, record5) {
+  async write(changeDir2, record6) {
     const dir = join3(changeDir2, TRANSITION_RECORDS_DIR);
     await mkdir(dir, { recursive: true });
-    const target = recordPath(changeDir2, record5.sequence, record5.id);
+    const target = recordPath(changeDir2, record6.sequence, record6.id);
     try {
-      await atomicLinkPublish(dir, ".tmp", target, JSON.stringify(record5));
+      await atomicLinkPublish(dir, ".tmp", target, JSON.stringify(record6));
     } catch (e) {
       if (e.code === "EEXIST") {
         throw new RecordAlreadyExistsError(target);
@@ -5815,26 +5815,26 @@ var FsTransitionRecordStore = class {
       if (steps >= headSequence)
         break;
       steps++;
-      let record5;
+      let record6;
       try {
-        record5 = await this.read(changeDir2, sequence, id2);
+        record6 = await this.read(changeDir2, sequence, id2);
       } catch (e) {
         if (e instanceof InvalidRecordIdentityError || e instanceof SyntaxError)
           break;
         throw e;
       }
-      if (!record5)
+      if (!record6)
         break;
-      if (record5.id !== id2 || record5.sequence !== sequence)
+      if (record6.id !== id2 || record6.sequence !== sequence)
         break;
-      if (record5.runId !== expectedRunId)
+      if (record6.runId !== expectedRunId)
         break;
-      if (visited.has(record5.id))
+      if (visited.has(record6.id))
         break;
-      visited.add(record5.id);
-      chain.unshift(record5);
-      id2 = record5.previousRecordId;
-      sequence = id2 === void 0 ? void 0 : record5.sequence - 1;
+      visited.add(record6.id);
+      chain.unshift(record6);
+      id2 = record6.previousRecordId;
+      sequence = id2 === void 0 ? void 0 : record6.sequence - 1;
     }
     return chain;
   }
@@ -5887,26 +5887,26 @@ function parseRecord(raw, source) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new RunStateCorruptError(`${source}: pre-Verify companion \u4E0D\u662F\u5BF9\u8C61`);
   }
-  const record5 = value;
-  if (Object.keys(record5).sort().join(",") !== "result,revision,revisionId,schemaVersion,stateDigest" || record5.schemaVersion !== 1 || typeof record5.revision !== "number" || !Number.isSafeInteger(record5.revision) || record5.revision < 0 || typeof record5.revisionId !== "string" || !SAFE_ID_RE2.test(record5.revisionId) || typeof record5.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record5.stateDigest) || typeof record5.result !== "string" || !ALLOWED_RESULTS.has(record5.result)) {
+  const record6 = value;
+  if (Object.keys(record6).sort().join(",") !== "result,revision,revisionId,schemaVersion,stateDigest" || record6.schemaVersion !== 1 || typeof record6.revision !== "number" || !Number.isSafeInteger(record6.revision) || record6.revision < 0 || typeof record6.revisionId !== "string" || !SAFE_ID_RE2.test(record6.revisionId) || typeof record6.stateDigest !== "string" || !/^[0-9a-f]{64}$/.test(record6.stateDigest) || typeof record6.result !== "string" || !ALLOWED_RESULTS.has(record6.result)) {
     throw new RunStateCorruptError(`${source}: pre-Verify companion \u5F62\u72B6\u975E\u6CD5`);
   }
   return {
     schemaVersion: 1,
-    revision: record5.revision,
-    revisionId: record5.revisionId,
-    stateDigest: record5.stateDigest,
-    result: record5.result
+    revision: record6.revision,
+    revisionId: record6.revisionId,
+    stateDigest: record6.stateDigest,
+    result: record6.result
   };
 }
-function attach(revision, record5) {
+function attach(revision, record6) {
   const { state, anchor } = splitPreVerifyReviewAnchor(revision.state);
   const anchorIsCurrent = anchor !== void 0 && anchor.revision === revision.revision && anchor.revisionId === revision.revisionId;
-  const result = anchorIsCurrent && record5 !== void 0 ? record5.result : PRE_VERIFY_REVIEW_DEFAULT;
-  if (record5 !== void 0 && (record5.revision !== revision.revision || record5.revisionId !== revision.revisionId || record5.stateDigest !== revision.stateDigest)) {
+  const result = anchorIsCurrent && record6 !== void 0 ? record6.result : PRE_VERIFY_REVIEW_DEFAULT;
+  if (record6 !== void 0 && (record6.revision !== revision.revision || record6.revisionId !== revision.revisionId || record6.stateDigest !== revision.stateDigest)) {
     throw new RunStateCorruptError("pre-Verify companion \u4E0E canonical revision \u8EAB\u4EFD/\u6458\u8981\u4E0D\u4E00\u81F4");
   }
-  if (anchorIsCurrent && record5 !== void 0 && anchor.payloadDigest !== preVerifyReviewPayloadDigest(record5.revision, record5.revisionId, record5.result)) {
+  if (anchorIsCurrent && record6 !== void 0 && anchor.payloadDigest !== preVerifyReviewPayloadDigest(record6.revision, record6.revisionId, record6.result)) {
     throw new RunStateCorruptError("pre-Verify companion \u5185\u5BB9\u4E0E canonical anchor \u6458\u8981\u4E0D\u4E00\u81F4");
   }
   return {
@@ -6027,11 +6027,11 @@ function validateAnchoredRecord(revision, raw, source) {
     throw new RunStateCorruptError("canonical head TransitionRecord digest \u4E0E anchor \u4E0D\u4E00\u81F4");
   }
   try {
-    const record5 = parseTransitionRecord(JSON.parse(raw), source);
-    if (record5.id !== anchor.recordId || record5.sequence !== anchor.sequence || record5.runId !== anchor.runId) {
+    const record6 = parseTransitionRecord(JSON.parse(raw), source);
+    if (record6.id !== anchor.recordId || record6.sequence !== anchor.sequence || record6.runId !== anchor.runId) {
       throw new RunStateCorruptError("canonical head TransitionRecord \u4E0E anchor \u4E0D\u4E00\u81F4");
     }
-    return record5;
+    return record6;
   } catch (error2) {
     if (error2 instanceof RunStateCorruptError)
       throw error2;
@@ -6137,13 +6137,13 @@ function assertTransitionRevisionLink(current, transition, raw, previous) {
   } catch (error2) {
     throw new RunStateCorruptError(`TransitionRecord schema \u635F\u574F: ${String(error2)}`);
   }
-  const record5 = ownRecord2(parsed);
-  if (record5 === void 0)
+  const record6 = ownRecord2(parsed);
+  if (record6 === void 0)
     throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
   const previousPhase = previous?.state.fields.phase;
   const currentPhase = current.state.fields.phase;
   const workflowId = String(current.state.fields.workflow || "default");
-  if (record5.id !== current.mutation.transitionRecordId || record5.sequence !== metadata.transitionSequence || record5.runId !== metadata.runId || previous !== void 0 && record5.previousRecordId !== previous.state.runMetadata?.transitionHead || previous !== void 0 && record5.from !== previousPhase || record5.to !== currentPhase || record5.workflowId !== workflowId || JSON.stringify(record5.effects) !== JSON.stringify(current.mutation.effects)) {
+  if (record6.id !== current.mutation.transitionRecordId || record6.sequence !== metadata.transitionSequence || record6.runId !== metadata.runId || previous !== void 0 && record6.previousRecordId !== previous.state.runMetadata?.transitionHead || previous !== void 0 && record6.from !== previousPhase || record6.to !== currentPhase || record6.workflowId !== workflowId || JSON.stringify(record6.effects) !== JSON.stringify(current.mutation.effects)) {
     throw new RunStateCorruptError("transition revision \u4E0E TransitionRecord \u4E0D\u4E00\u81F4");
   }
   return parsed;
@@ -6167,8 +6167,8 @@ var SAFE_ID_RE4 = /^[A-Za-z0-9_-]+$/;
 function errnoCode2(error2) {
   if (error2 === null || typeof error2 !== "object")
     return void 0;
-  const record5 = Object.fromEntries(Object.entries(error2));
-  return typeof record5.code === "string" ? record5.code : void 0;
+  const record6 = Object.fromEntries(Object.entries(error2));
+  return typeof record6.code === "string" ? record6.code : void 0;
 }
 function stateStorageSourcePathSync(changeDir2) {
   const current = join6(changeDir2, RUN_STATE_DIR, RUN_CURRENT_FILE);
@@ -6646,14 +6646,14 @@ function createHistoryWriter() {
     }
   };
 }
-function transitionRecordToHistoryEntry(record5) {
+function transitionRecordToHistoryEntry(record6) {
   return {
-    ts: record5.observedAt,
+    ts: record6.observedAt,
     kind: "transition",
-    from: record5.from,
-    to: record5.to,
-    raw: record5.event,
-    transitionRecordId: record5.id
+    from: record6.from,
+    to: record6.to,
+    raw: record6.event,
+    transitionRecordId: record6.id
   };
 }
 
@@ -6717,11 +6717,11 @@ async function readValidatedTransitionHead(changeDir2) {
       const raw = await readRegularTextIfExists2(join8(changeDir2, transitionRelativePath(cursor)));
       if (raw === void 0)
         throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
-      const record5 = validateCommittingRecord(cursor, bound, raw);
-      if (record5.sequence !== metadata.transitionSequence || record5.runId !== metadata.runId) {
+      const record6 = validateCommittingRecord(cursor, bound, raw);
+      if (record6.sequence !== metadata.transitionSequence || record6.runId !== metadata.runId) {
         throw new RunStateCorruptError("canonical transition head \u4E0E\u63D0\u4EA4 revision \u4E0D\u4E00\u81F4");
       }
-      return { current, record: record5 };
+      return { current, record: record6 };
     }
     cursor = bound;
   }
@@ -6758,8 +6758,8 @@ async function currentSpecVisitEnteredViaRequirementsChanged(changeDir2) {
   if (current.state.fields.phase !== "spec" || metadata === void 0 || metadata.transitionSequence < 1 || metadata.transitionHead === void 0) {
     return false;
   }
-  const record5 = validated.record;
-  return record5.id === metadata.transitionHead && record5.sequence === metadata.transitionSequence && record5.runId === metadata.runId && record5.event === "requirements-changed" && (record5.from === "build" || record5.from === "verify") && record5.to === "spec";
+  const record6 = validated.record;
+  return record6.id === metadata.transitionHead && record6.sequence === metadata.transitionSequence && record6.runId === metadata.runId && record6.event === "requirements-changed" && (record6.from === "build" || record6.from === "verify") && record6.to === "spec";
 }
 function requiresRequirementsChangedForSpecAdr(input) {
   return input.policy?.id !== "document-v1" && input.phase === "spec" && input.kind === "adr";
@@ -7431,12 +7431,12 @@ function parseDocumentLedger(raw) {
     throw new DocumentLedgerError("document ledger records \u5FC5\u987B\u662F\u6570\u7EC4");
   if (item2.records.length > MAX_DOCUMENT_LEDGER_RECORDS)
     throw new DocumentLedgerError(`document ledger records \u8D85\u8FC7 ${MAX_DOCUMENT_LEDGER_RECORDS} \u6761\u4E0A\u9650`);
-  const records = item2.records.map((record5, index) => parseRecord2(record5, index));
+  const records = item2.records.map((record6, index) => parseRecord2(record6, index));
   const unique = /* @__PURE__ */ new Set();
-  for (const record5 of records) {
-    const key = `${record5.kind}\0${record5.path}`;
+  for (const record6 of records) {
+    const key = `${record6.kind}\0${record6.path}`;
     if (unique.has(key))
-      throw new DocumentLedgerError(`document ledger \u6709\u91CD\u590D record: ${record5.kind} ${record5.path}`);
+      throw new DocumentLedgerError(`document ledger \u6709\u91CD\u590D record: ${record6.kind} ${record6.path}`);
     unique.add(key);
   }
   return { version: 1, contract: "openspec-v1", createdAt, records };
@@ -7528,14 +7528,14 @@ async function recordDocument(input) {
     throw new DocumentLedgerError(`document ledger \u7F3A\u5931\uFF1B\u5148\u6267\u884C tenon document init`);
   const resolved = await resolveDocument(input.repoRoot, input.path);
   const slot = documentSlot(input.kind, resolved.relativePath, input.changeDir);
-  const oldCandidates = current.records.filter((record5) => {
-    if (record5.kind !== input.kind)
+  const oldCandidates = current.records.filter((record6) => {
+    if (record6.kind !== input.kind)
       return false;
-    if (record5.kind !== "delta-spec")
+    if (record6.kind !== "delta-spec")
       return true;
-    return deltaSpecSlot(record5.path, input.changeDir) === slot;
+    return deltaSpecSlot(record6.path, input.changeDir) === slot;
   });
-  const old = oldCandidates.find((record5) => record5.sha256 === resolved.digest) ?? oldCandidates[0];
+  const old = oldCandidates.find((record6) => record6.sha256 === resolved.digest) ?? oldCandidates[0];
   const policySteps = input.policy?.steps ?? DOCUMENT_CONTRACT_PHASES;
   const ownerIndex = policySteps.indexOf(ownerPhase);
   const currentIndex = policySteps.indexOf(input.phase);
@@ -7584,12 +7584,12 @@ async function recordDocument(input) {
     ...producerInvocation === void 0 ? {} : { producerInvocation },
     reads: old?.sha256 === resolved.digest ? old.reads : []
   };
-  const records = current.records.filter((record5) => {
-    if (record5.kind !== input.kind)
+  const records = current.records.filter((record6) => {
+    if (record6.kind !== input.kind)
       return true;
-    if (record5.kind !== "delta-spec")
+    if (record6.kind !== "delta-spec")
       return false;
-    const recordSlot = deltaSpecSlot(record5.path, input.changeDir);
+    const recordSlot = deltaSpecSlot(record6.path, input.changeDir);
     return recordSlot === void 0 || recordSlot !== slot;
   });
   records.push(replacement);
@@ -7603,8 +7603,8 @@ async function migrateLegacyDeltaDocument(input) {
     throw new DocumentLedgerError("document ledger \u7F3A\u5931\uFF1B\u5148\u6267\u884C tenon document init");
   const canonical = await resolveDocument(input.repoRoot, input.canonicalPath);
   const slot = documentSlot("delta-spec", canonical.relativePath, input.changeDir);
-  const source = current.records.find((record5) => record5.kind === "delta-spec" && record5.path === input.legacyPath && deltaSpecSlot(record5.path, input.changeDir) === void 0);
-  const target = current.records.find((record5) => record5.kind === "delta-spec" && deltaSpecSlot(record5.path, input.changeDir) === slot);
+  const source = current.records.find((record6) => record6.kind === "delta-spec" && record6.path === input.legacyPath && deltaSpecSlot(record6.path, input.changeDir) === void 0);
+  const target = current.records.find((record6) => record6.kind === "delta-spec" && deltaSpecSlot(record6.path, input.changeDir) === slot);
   if (!source) {
     if (target?.path === canonical.relativePath && target.sha256 === canonical.digest)
       return current;
@@ -7631,7 +7631,7 @@ async function migrateLegacyDeltaDocument(input) {
     receipts.set(key, receipt);
   }
   const replacement = target ? { ...target, reads: [...receipts.values()] } : { ...source, path: canonical.relativePath, reads: [...receipts.values()] };
-  const records = current.records.filter((record5) => record5 !== source && record5 !== target);
+  const records = current.records.filter((record6) => record6 !== source && record6 !== target);
   records.push(replacement);
   const next = { ...current, records };
   await writeDocumentLedger(input.changeDir, next);
@@ -7649,29 +7649,29 @@ async function recordDocumentReads(input) {
       throw new DocumentLedgerError(`phase '${input.phase}' \u4E0D\u8981\u6C42\u8BFB\u53D6 document '${kind}'`);
     }
   }
-  const selected = current.records.filter((record5) => kinds.includes(record5.kind));
+  const selected = current.records.filter((record6) => kinds.includes(record6.kind));
   for (const kind of kinds) {
-    if (!selected.some((record5) => record5.kind === kind)) {
+    if (!selected.some((record6) => record6.kind === kind)) {
       throw new DocumentLedgerError(`\u7F3A\u5C11 document '${kind}'\uFF1B\u5148\u767B\u8BB0\u540E\u518D\u8BFB\u53D6`);
     }
   }
-  const legacyDelta = selected.filter((record5) => record5.kind === "delta-spec" && deltaSpecSlot(record5.path, input.changeDir) === void 0);
+  const legacyDelta = selected.filter((record6) => record6.kind === "delta-spec" && deltaSpecSlot(record6.path, input.changeDir) === void 0);
   if (legacyDelta.length > 0) {
-    throw new DocumentLedgerError(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 tenon document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record5) => record5.path).join(", ")}`);
+    throw new DocumentLedgerError(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 tenon document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record6) => record6.path).join(", ")}`);
   }
   const updated = [];
-  for (const record5 of current.records) {
-    if (!kinds.includes(record5.kind)) {
-      updated.push(record5);
+  for (const record6 of current.records) {
+    if (!kinds.includes(record6.kind)) {
+      updated.push(record6);
       continue;
     }
-    const resolved = await resolveDocument(input.repoRoot, record5.path);
-    if (resolved.digest !== record5.sha256) {
-      throw new DocumentLedgerError(`document '${record5.kind}' \u5DF2\u53D8\u66F4: ${record5.path}\uFF1B\u5148\u91CD\u65B0 record \u540E\u518D read`);
+    const resolved = await resolveDocument(input.repoRoot, record6.path);
+    if (resolved.digest !== record6.sha256) {
+      throw new DocumentLedgerError(`document '${record6.kind}' \u5DF2\u53D8\u66F4: ${record6.path}\uFF1B\u5148\u91CD\u65B0 record \u540E\u518D read`);
     }
-    const reads = record5.reads.filter((receipt) => receipt.phase !== input.phase || receipt.visitId !== visitId);
+    const reads = record6.reads.filter((receipt) => receipt.phase !== input.phase || receipt.visitId !== visitId);
     reads.push({ phase: input.phase, sha256: resolved.digest, readAt: input.readAt, visitId });
-    updated.push({ ...record5, reads });
+    updated.push({ ...record6, reads });
   }
   const next = { ...current, records: updated };
   await writeDocumentLedger(input.changeDir, next);
@@ -8225,7 +8225,7 @@ async function verifyDocumentArtifact(changeDir2, intent) {
   if (document === void 0)
     return false;
   const ledger = await readDocumentLedger(changeDir2);
-  return ledger?.records.some((record5) => record5.kind === document.kind && record5.path === intent.artifact.ref && record5.recordedAt === document.recorded_at && `sha256:${record5.sha256}` === intent.artifact.digest) ?? false;
+  return ledger?.records.some((record6) => record6.kind === document.kind && record6.path === intent.artifact.ref && record6.recordedAt === document.recorded_at && `sha256:${record6.sha256}` === intent.artifact.digest) ?? false;
 }
 async function verifyArtifact(changeDir2, intent, binding, options) {
   if (intent.artifact.kind === "document") {
@@ -9929,12 +9929,12 @@ function checkSlotArray(value, key, path9, errors) {
 }
 
 // packages/kernel/dist/loops/ledger-codec.js
-function encodeLedgerRecord(record5) {
-  if (record5.kind !== "run" && record5.kind !== "merge-intent" || record5.verification === void 0) {
-    return JSON.stringify(record5);
+function encodeLedgerRecord(record6) {
+  if (record6.kind !== "run" && record6.kind !== "merge-intent" || record6.verification === void 0) {
+    return JSON.stringify(record6);
   }
-  const sanitizedVerification = sanitizeVerificationResultForEncode(record5.verification);
-  return JSON.stringify({ ...record5, verification: sanitizedVerification });
+  const sanitizedVerification = sanitizeVerificationResultForEncode(record6.verification);
+  return JSON.stringify({ ...record6, verification: sanitizedVerification });
 }
 var BINDING_SOURCES = ["explicit", "longest-prefix"];
 var TOKEN_BASES = ["budget.tokens_per_run", "risk-default"];
@@ -10371,11 +10371,11 @@ function parseProgress(text4, loopIds, now) {
     if (!known.has(loopCol))
       continue;
     const rowText = cols.join("|");
-    const rm14 = rowText.match(RESULT_RE);
+    const rm15 = rowText.match(RESULT_RE);
     const dm = rowText.match(DRY_COUNT_RE);
     required(rowsByLoop.get(loopCol)).push({
       ts: parseTimestamp(required(cols[0]), now),
-      result: rm14 ? rm14[1] : null,
+      result: rm15 ? rm15[1] : null,
       dryCount: dm ? Number(dm[1]) : null
     });
   }
@@ -10751,9 +10751,9 @@ function buildCostReport(repoRoot, onlyLoop, now, fs) {
 // packages/kernel/dist/loops/binding.js
 function latestChangeLoopBinding(records, change) {
   for (let index = records.length - 1; index >= 0; index -= 1) {
-    const record5 = required(records[index]);
-    if (record5.kind === "change-loop-binding" && record5.change === change)
-      return record5;
+    const record6 = required(records[index]);
+    if (record6.kind === "change-loop-binding" && record6.change === change)
+      return record6;
   }
   return void 0;
 }
@@ -10880,16 +10880,16 @@ function indexSkillBundleSnapshots(records) {
 }
 function indexMergeFactsByAttempt(records) {
   const out = /* @__PURE__ */ new Map();
-  for (const record5 of records) {
-    if (record5.kind === "merge-intent") {
-      out.set(record5.attempt_id, {
-        latestIntent: record5,
-        latestLanded: out.get(record5.attempt_id)?.latestLanded
+  for (const record6 of records) {
+    if (record6.kind === "merge-intent") {
+      out.set(record6.attempt_id, {
+        latestIntent: record6,
+        latestLanded: out.get(record6.attempt_id)?.latestLanded
       });
-    } else if (record5.kind === "merge-landed") {
-      out.set(record5.attempt_id, {
-        latestIntent: out.get(record5.attempt_id)?.latestIntent,
-        latestLanded: record5
+    } else if (record6.kind === "merge-landed") {
+      out.set(record6.attempt_id, {
+        latestIntent: out.get(record6.attempt_id)?.latestIntent,
+        latestLanded: record6
       });
     }
   }
@@ -11091,8 +11091,8 @@ function createLoopLedgerStore() {
       }
     });
   }
-  async function writeRecordLine(repoRoot, record5) {
-    const line = encodeLedgerRecord(record5);
+  async function writeRecordLine(repoRoot, record6) {
+    const line = encodeLedgerRecord(record6);
     const back = decodeLedgerLine(line);
     if (!back.ok) {
       throw new Error(`loops ledger append: record \u672A\u901A\u8FC7\u7F16\u89E3\u7801\u5F80\u8FD4\u6821\u9A8C\uFF0C\u62D2\u5199\u4E0D\u53EF\u89E3\u7801\u8BB0\u5F55 \u2014\u2014 ${back.error}`);
@@ -11110,15 +11110,15 @@ function createLoopLedgerStore() {
       await fh.close();
     }
   }
-  async function append2(repoRoot, record5) {
-    if (record5.kind === "run" && record5.reservation_id !== void 0) {
+  async function append2(repoRoot, record6) {
+    if (record6.kind === "run" && record6.reservation_id !== void 0) {
       throw new ReservationAppendError("RunRecord with reservation_id must use closeReservationIfOpen()\uFF08\u5E26 reservation_id \u7684 terminal \u8BB0\u5F55\u7981\u8D70\u666E\u901A append\uFF09");
     }
-    const back = decodeLedgerLine(encodeLedgerRecord(record5));
+    const back = decodeLedgerLine(encodeLedgerRecord(record6));
     if (!back.ok) {
       throw new Error(`loops ledger append: record \u672A\u901A\u8FC7\u7F16\u89E3\u7801\u5F80\u8FD4\u6821\u9A8C\uFF0C\u62D2\u5199\u4E0D\u53EF\u89E3\u7801\u8BB0\u5F55 \u2014\u2014 ${back.error}`);
     }
-    await withLedgerLock(repoRoot, () => writeRecordLine(repoRoot, record5));
+    await withLedgerLock(repoRoot, () => writeRecordLine(repoRoot, record6));
   }
   async function closeReservationIfOpen(repoRoot, reservationId, create) {
     return withLedgerLock(repoRoot, async () => {
@@ -11141,12 +11141,12 @@ function createLoopLedgerStore() {
       if (terminals.length > 1) {
         throw new ReservationCorruptionError(`loops ledger closeReservationIfOpen: reservation\u300C${reservationId}\u300D\u6709 ${terminals.length} \u6761 terminal\uFF08\u8D26\u672C\u635F\u574F\uFF0C\u91CD\u590D\u7ED3\u7B97\u75D5\u8FF9\uFF09`);
       }
-      const record5 = create(reservation);
-      if (record5.kind !== "run" || record5.reservation_id !== reservationId || record5.attempt_id !== reservation.attempt_id || record5.loop_id !== reservation.loop_id || record5.change !== reservation.change || reservation.iteration_id !== void 0 && record5.iteration_id !== reservation.iteration_id) {
+      const record6 = create(reservation);
+      if (record6.kind !== "run" || record6.reservation_id !== reservationId || record6.attempt_id !== reservation.attempt_id || record6.loop_id !== reservation.loop_id || record6.change !== reservation.change || reservation.iteration_id !== void 0 && record6.iteration_id !== reservation.iteration_id) {
         throw new ReservationMismatchError(`loops ledger closeReservationIfOpen: create \u4EA7\u51FA\u7684 RunRecord \u4E0E reservation\u300C${reservationId}\u300D\u5173\u952E\u5B57\u6BB5\u4E0D\u4E00\u81F4\uFF08reservation_id/attempt_id/iteration_id/loop_id/change\uFF09`);
       }
-      await writeRecordLine(repoRoot, record5);
-      return { status: "committed", record: record5 };
+      await writeRecordLine(repoRoot, record6);
+      return { status: "committed", record: record6 };
     });
   }
   async function read(repoRoot) {
@@ -11262,10 +11262,10 @@ async function anchoredStart(changeDir2, reservationId) {
   if (read.rejected.length > 0) {
     throw new AfkSkillInvocationProofError("AFK lifecycle cannot use a degraded loop ledger");
   }
-  const reservations = read.records.filter((record5) => record5.kind === "budget-reservation" && record5.reservation_id === reservationId);
-  const activations = read.records.filter((record5) => record5.kind === "reservation-activated" && record5.reservation_id === reservationId);
-  const snapshots = read.records.filter((record5) => record5.kind === "skill-bundle-snapshot" && record5.reservation_id === reservationId);
-  const terminals = read.records.filter((record5) => record5.kind === "run" && record5.reservation_id === reservationId);
+  const reservations = read.records.filter((record6) => record6.kind === "budget-reservation" && record6.reservation_id === reservationId);
+  const activations = read.records.filter((record6) => record6.kind === "reservation-activated" && record6.reservation_id === reservationId);
+  const snapshots = read.records.filter((record6) => record6.kind === "skill-bundle-snapshot" && record6.reservation_id === reservationId);
+  const terminals = read.records.filter((record6) => record6.kind === "run" && record6.reservation_id === reservationId);
   const reservation = reservations[0];
   const activation = activations[0];
   const snapshot = snapshots[0];
@@ -11371,7 +11371,7 @@ async function finishDurableAfkSkillInvocations(handles) {
   for (const handle of handles) {
     const repoRoot = resolve4(handle.changeDir, "..", "..", "..");
     const read = await createLoopLedgerStore().read(repoRoot);
-    const terminals = read.records.filter((record5) => record5.kind === "run" && record5.reservation_id === handle.attempt.reservation_id);
+    const terminals = read.records.filter((record6) => record6.kind === "run" && record6.reservation_id === handle.attempt.reservation_id);
     const terminal = terminals[0];
     if (read.rejected.length > 0 || terminals.length !== 1 || terminal === void 0 || terminal.attempt_id !== handle.attempt.attempt_id || terminal.change !== handle.change || terminal.loop_id !== handle.loopId || terminal.workflow_run_id !== handle.workflowRunId || terminal.skill_bundle_snapshot_sha256 !== handle.snapshotSha256) {
       throw new AfkSkillInvocationProofError("AFK completion lacks one exact durable terminal RunRecord");
@@ -11700,8 +11700,8 @@ function asArray(value, path9) {
     compileError(path9, `\u5FC5\u987B\u662F\u6570\u7EC4\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
   return value;
 }
-function rejectExtraKeys(record5, allowed, path9) {
-  for (const key of Object.keys(record5)) {
+function rejectExtraKeys(record6, allowed, path9) {
+  for (const key of Object.keys(record6)) {
     if (!allowed.has(key)) {
       compileError(path9, `\u51FA\u73B0\u8BE5\u53D8\u4F53\u4E0D\u63A5\u53D7\u7684\u9644\u52A0\u952E '${key}'\uFF08\u95ED\u96C6\uFF1A${[...allowed].join("/")}\uFF09`);
     }
@@ -11731,27 +11731,27 @@ function scalarField(value, path9) {
 function compileWhen(value, path9) {
   if (value === void 0)
     return void 0;
-  const record5 = asRecord(value, path9);
-  if (record5.kind !== "track-in" && record5.kind !== "track-not-in") {
-    compileError(`${path9}.kind`, `\u5FC5\u987B\u662F 'track-in' | 'track-not-in'\uFF08\u5B9E\u9645 ${JSON.stringify(record5.kind)}\uFF09`);
+  const record6 = asRecord(value, path9);
+  if (record6.kind !== "track-in" && record6.kind !== "track-not-in") {
+    compileError(`${path9}.kind`, `\u5FC5\u987B\u662F 'track-in' | 'track-not-in'\uFF08\u5B9E\u9645 ${JSON.stringify(record6.kind)}\uFF09`);
   }
-  const values = stringArray2(record5.values, `${path9}.values`);
-  rejectExtraKeys(record5, WHEN_ALLOWED_KEYS, path9);
-  return { kind: record5.kind, values };
+  const values = stringArray2(record6.values, `${path9}.values`);
+  rejectExtraKeys(record6, WHEN_ALLOWED_KEYS, path9);
+  return { kind: record6.kind, values };
 }
 function withWhen(config, when) {
   return when === void 0 ? config : { ...config, when };
 }
 function compileGuard(raw, path9, outputs2) {
-  const record5 = asRecord(raw, path9);
-  if (typeof record5.type === "string" && Object.prototype.hasOwnProperty.call(GUARD_DATA_KEYS, record5.type)) {
-    const dataKeys = GUARD_DATA_KEYS[record5.type];
-    rejectExtraKeys(record5, /* @__PURE__ */ new Set(["type", "when", ...dataKeys]), path9);
+  const record6 = asRecord(raw, path9);
+  if (typeof record6.type === "string" && Object.prototype.hasOwnProperty.call(GUARD_DATA_KEYS, record6.type)) {
+    const dataKeys = GUARD_DATA_KEYS[record6.type];
+    rejectExtraKeys(record6, /* @__PURE__ */ new Set(["type", "when", ...dataKeys]), path9);
   }
-  const when = compileWhen(record5.when, `${path9}.when`);
-  switch (record5.type) {
+  const when = compileWhen(record6.when, `${path9}.when`);
+  switch (record6.type) {
     case "tasks-at-least": {
-      const n = record5.n;
+      const n = record6.n;
       if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
         compileError(`${path9}.n`, `\u5FC5\u987B\u662F\u975E\u8D1F\u6574\u6570\uFF08parse.ts \u7684 \\d+ \u53E3\u5F84\uFF1B\u5B9E\u9645 ${JSON.stringify(n)}\uFF09`);
       }
@@ -11762,10 +11762,10 @@ function compileGuard(raw, path9, outputs2) {
     case "field-nonempty":
       return [withWhen({
         type: "field-nonempty",
-        field: scalarField(record5.field, `${path9}.field`)
+        field: scalarField(record6.field, `${path9}.field`)
       }, when)];
     case "file-exists": {
-      const target = asRecord(record5.path, `${path9}.path`);
+      const target = asRecord(record6.path, `${path9}.path`);
       if (target.kind !== "field") {
         compileError(`${path9}.path.kind`, `\u5FC5\u987B\u662F 'field'\uFF08\u5B9E\u9645 ${JSON.stringify(target.kind)}\uFF09`);
       }
@@ -11774,7 +11774,7 @@ function compileGuard(raw, path9, outputs2) {
       return [withWhen({ type: "file-exists", path: { kind: "field", field: field2 } }, when)];
     }
     case "field-equals": {
-      const value = record5.value;
+      const value = record6.value;
       if (typeof value !== "string") {
         compileError(`${path9}.value`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
       }
@@ -11783,31 +11783,31 @@ function compileGuard(raw, path9, outputs2) {
         compileError(`${path9}.value`, unrepresentable);
       return [withWhen({
         type: "field-equals",
-        field: scalarField(record5.field, `${path9}.field`),
+        field: scalarField(record6.field, `${path9}.field`),
         value
       }, when)];
     }
     case "field-in": {
-      const values = stringArray2(record5.values, `${path9}.values`);
+      const values = stringArray2(record6.values, `${path9}.values`);
       if (values.length === 0)
         compileError(`${path9}.values`, "\u4E0D\u5F97\u662F\u7A7A\u6570\u7EC4\uFF08\u81F3\u5C11\u4E00\u4E2A\u5408\u6CD5\u503C\uFF09");
       return [withWhen({
         type: "field-in",
-        field: scalarField(record5.field, `${path9}.field`),
+        field: scalarField(record6.field, `${path9}.field`),
         values
       }, when)];
     }
     case "full-direct-override":
       return [withWhen({ type: "full-direct-override" }, when)];
     case "build-head-unchanged":
-      if (record5.field !== "build_sha") {
-        compileError(`${path9}.field`, `\u5FC5\u987B\u662F 'build_sha'\uFF08barrier \u53EA\u5B9A\u4E49\u5728 build \u51BB\u7ED3 SHA \u4E0A\uFF1B\u5B9E\u9645 ${JSON.stringify(record5.field)}\uFF09`);
+      if (record6.field !== "build_sha") {
+        compileError(`${path9}.field`, `\u5FC5\u987B\u662F 'build_sha'\uFF08barrier \u53EA\u5B9A\u4E49\u5728 build \u51BB\u7ED3 SHA \u4E0A\uFF1B\u5B9E\u9645 ${JSON.stringify(record6.field)}\uFF09`);
       }
       return [withWhen({ type: "build-head-unchanged", field: "build_sha" }, when)];
     case "spec-migration-applied":
       return [withWhen({ type: "spec-migration-applied" }, when)];
     default:
-      compileError(`${path9}.type`, `\u672A\u77E5 guard type ${JSON.stringify(record5.type)}\uFF08\u95ED\u96C6\u89C1 types.ts WorkflowGuardConfig\uFF09`);
+      compileError(`${path9}.type`, `\u672A\u77E5 guard type ${JSON.stringify(record6.type)}\uFF08\u95ED\u96C6\u89C1 types.ts WorkflowGuardConfig\uFF09`);
   }
 }
 function compileGuards(raw, path9, outputs2) {
@@ -11871,9 +11871,9 @@ function ownRecord3(value, path9) {
   }
   return value;
 }
-function rejectUnknownKeys(record5, keys, path9) {
+function rejectUnknownKeys(record6, keys, path9) {
   const allowed = new Set(keys);
-  for (const key of Object.keys(record5)) {
+  for (const key of Object.keys(record6)) {
     if (!allowed.has(key))
       policyError(path9, `\u672A\u77E5\u5B57\u6BB5 '${key}'`);
   }
@@ -11914,8 +11914,8 @@ function closedList(value, allowed, path9) {
 function compileWorkflowDecompositionPolicy(value) {
   if (value === void 0)
     return structuredClone(DEFAULT_WORKFLOW_DECOMPOSITION_POLICY);
-  const record5 = ownRecord3(value, "decomposition");
-  rejectUnknownKeys(record5, [
+  const record6 = ownRecord3(value, "decomposition");
+  rejectUnknownKeys(record6, [
     "version",
     "mode",
     "target",
@@ -11925,31 +11925,31 @@ function compileWorkflowDecompositionPolicy(value) {
     "auto_when",
     "ask_when"
   ], "decomposition");
-  if (record5.version !== "v1") {
-    policyError("decomposition.version", `\u5FC5\u987B\u662F 'v1'\uFF08\u5B9E\u9645 ${JSON.stringify(record5.version)}\uFF09`);
+  if (record6.version !== "v1") {
+    policyError("decomposition.version", `\u5FC5\u987B\u662F 'v1'\uFF08\u5B9E\u9645 ${JSON.stringify(record6.version)}\uFF09`);
   }
   return {
     version: "v1",
-    mode: closedValue(record5.mode, WORKFLOW_DECOMPOSITION_MODES, "decomposition.mode", "off"),
-    target: closedValue(record5.target, WORKFLOW_DECOMPOSITION_TARGETS, "decomposition.target", "work-items"),
-    strategy: closedValue(record5.strategy, WORKFLOW_DECOMPOSITION_STRATEGIES, "decomposition.strategy", "balanced"),
-    max_items: boundedInteger(record5.max_items, 16, 1, 32, "decomposition.max_items"),
-    max_depth: boundedInteger(record5.max_depth, 2, 0, 4, "decomposition.max_depth"),
-    auto_when: closedList(record5.auto_when, WORKFLOW_DECOMPOSITION_AUTO_CONDITIONS, "decomposition.auto_when"),
-    ask_when: closedList(record5.ask_when, WORKFLOW_DECOMPOSITION_ASK_CONDITIONS, "decomposition.ask_when")
+    mode: closedValue(record6.mode, WORKFLOW_DECOMPOSITION_MODES, "decomposition.mode", "off"),
+    target: closedValue(record6.target, WORKFLOW_DECOMPOSITION_TARGETS, "decomposition.target", "work-items"),
+    strategy: closedValue(record6.strategy, WORKFLOW_DECOMPOSITION_STRATEGIES, "decomposition.strategy", "balanced"),
+    max_items: boundedInteger(record6.max_items, 16, 1, 32, "decomposition.max_items"),
+    max_depth: boundedInteger(record6.max_depth, 2, 0, 4, "decomposition.max_depth"),
+    auto_when: closedList(record6.auto_when, WORKFLOW_DECOMPOSITION_AUTO_CONDITIONS, "decomposition.auto_when"),
+    ask_when: closedList(record6.ask_when, WORKFLOW_DECOMPOSITION_ASK_CONDITIONS, "decomposition.ask_when")
   };
 }
 function compileWorkflowInteractionPolicy(value) {
   if (value === void 0)
     return structuredClone(DEFAULT_WORKFLOW_INTERACTION_POLICY);
-  const record5 = ownRecord3(value, "interaction");
-  rejectUnknownKeys(record5, ["version", "mode"], "interaction");
-  if (record5.version !== "v1") {
-    policyError("interaction.version", `\u5FC5\u987B\u662F 'v1'\uFF08\u5B9E\u9645 ${JSON.stringify(record5.version)}\uFF09`);
+  const record6 = ownRecord3(value, "interaction");
+  rejectUnknownKeys(record6, ["version", "mode"], "interaction");
+  if (record6.version !== "v1") {
+    policyError("interaction.version", `\u5FC5\u987B\u662F 'v1'\uFF08\u5B9E\u9645 ${JSON.stringify(record6.version)}\uFF09`);
   }
   return {
     version: "v1",
-    mode: closedValue(record5.mode, WORKFLOW_INTERACTION_MODES, "interaction.mode", "interactive")
+    mode: closedValue(record6.mode, WORKFLOW_INTERACTION_MODES, "interaction.mode", "interactive")
   };
 }
 var WORKFLOW_ACTIONS = Object.freeze([
@@ -13863,11 +13863,11 @@ function parseDocumentLocalePin(raw) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("document locale pin \u5FC5\u987B\u662F\u5BF9\u8C61");
   }
-  const record5 = value;
-  if (Object.keys(record5).some((key) => key !== "version" && key !== "locale") || record5.version !== 1 || record5.locale !== "zh-CN" && record5.locale !== "en") {
+  const record6 = value;
+  if (Object.keys(record6).some((key) => key !== "version" && key !== "locale") || record6.version !== 1 || record6.locale !== "zh-CN" && record6.locale !== "en") {
     throw new Error("document locale pin \u5F62\u72B6\u975E\u6CD5");
   }
-  return { version: 1, locale: record5.locale };
+  return { version: 1, locale: record6.locale };
 }
 async function readDocumentLocalePin(changeDir2) {
   const target = join17(changeDir2, DOCUMENT_LOCALE_FILE);
@@ -13926,8 +13926,8 @@ function ownRecord4(value) {
   return Object.fromEntries(Object.entries(value));
 }
 function isWorkflowIr(value) {
-  const record5 = ownRecord4(value);
-  return record5 !== void 0 && typeof record5.name === "string" && Array.isArray(record5.steps);
+  const record6 = ownRecord4(value);
+  return record6 !== void 0 && typeof record6.name === "string" && Array.isArray(record6.steps);
 }
 function parseWorkflowPlanSnapshot(raw) {
   let value;
@@ -15116,8 +15116,8 @@ function confirmationDigest(...values) {
   });
   return hash.digest("hex");
 }
-function documentApplicationInvocationId(confirmationInvocationId2, record5) {
-  return `invocation-${digest5("document-application", confirmationInvocationId2, record5.kind, record5.path, record5.sha256, record5.recordedAt)}`;
+function documentApplicationInvocationId(confirmationInvocationId2, record6) {
+  return `invocation-${digest5("document-application", confirmationInvocationId2, record6.kind, record6.path, record6.sha256, record6.recordedAt)}`;
 }
 function confirmationInvocationId(confirmation) {
   const values = confirmation.adapter.kind === "codex" && confirmation.adapter.application_ref !== void 0 ? [
@@ -15136,30 +15136,30 @@ function confirmationInvocationId(confirmation) {
   ];
   return `invocation-${confirmationDigest(...values)}`;
 }
-function hasExactDocumentApplication(events, confirmation, record5) {
+function hasExactDocumentApplication(events, confirmation, record6) {
   if (confirmation.invocation_id !== confirmationInvocationId(confirmation))
     return false;
   const allowedInvocationIds = /* @__PURE__ */ new Set([
     confirmation.invocation_id,
-    documentApplicationInvocationId(confirmation.invocation_id, record5)
+    documentApplicationInvocationId(confirmation.invocation_id, record6)
   ]);
   for (const invocationId of allowedInvocationIds) {
     const invocationEvents = events.filter((event) => event.invocation_id === invocationId);
     const started = invocationEvents.find((event) => event.type === "invocation-started");
-    if (started === void 0 || !skillsEquivalent(started.payload.skill.id, record5.producer) || started.subject.step_id !== confirmation.evidence_scope || started.subject.workflow_run_id !== confirmation.step_visit.run_id || started.subject.step_visit.run_id !== confirmation.step_visit.run_id || started.subject.step_visit.transition_sequence !== confirmation.step_visit.transition_sequence || !invocationEvents.some((event) => event.type === "invocation-completed"))
+    if (started === void 0 || !skillsEquivalent(started.payload.skill.id, record6.producer) || started.subject.step_id !== confirmation.evidence_scope || started.subject.workflow_run_id !== confirmation.step_visit.run_id || started.subject.step_visit.run_id !== confirmation.step_visit.run_id || started.subject.step_visit.transition_sequence !== confirmation.step_visit.transition_sequence || !invocationEvents.some((event) => event.type === "invocation-completed"))
       continue;
-    const intent = invocationEvents.find((event) => event.type === "artifact-binding-intent" && event.payload.output_id === "document_record" && event.payload.artifact.kind === "document" && event.payload.artifact.ref === record5.path && event.payload.artifact.digest === `sha256:${record5.sha256}` && event.payload.artifact.document?.kind === record5.kind && event.payload.artifact.document.recorded_at === record5.recordedAt && event.payload.validator_ids.length > 0);
+    const intent = invocationEvents.find((event) => event.type === "artifact-binding-intent" && event.payload.output_id === "document_record" && event.payload.artifact.kind === "document" && event.payload.artifact.ref === record6.path && event.payload.artifact.digest === `sha256:${record6.sha256}` && event.payload.artifact.document?.kind === record6.kind && event.payload.artifact.document.recorded_at === record6.recordedAt && event.payload.validator_ids.length > 0);
     if (intent === void 0)
       continue;
     const bound = invocationEvents.find((event) => event.type === "artifact-bound" && event.payload.binding_id === intent.payload.binding_id);
-    if (bound !== void 0 && bound.payload.artifact_digest === `sha256:${record5.sha256}` && bound.payload.validators.length > 0 && bound.payload.validators.every((validator2) => validator2.status === "pass"))
+    if (bound !== void 0 && bound.payload.artifact_digest === `sha256:${record6.sha256}` && bound.payload.validators.length > 0 && bound.payload.validators.every((validator2) => validator2.status === "pass"))
       return true;
   }
   return false;
 }
-async function currentRecordDigest(repoRoot, record5) {
+async function currentRecordDigest(repoRoot, record6) {
   try {
-    return (await resolveDocument(repoRoot, record5.path)).digest;
+    return (await resolveDocument(repoRoot, record6.path)).digest;
   } catch {
     return void 0;
   }
@@ -15169,13 +15169,13 @@ function item(kind, status, requiredRead, records, phase, currentVisitId) {
     kind,
     status,
     requiredRead,
-    paths: records.map((record5) => record5.path),
-    producers: records.map((record5) => record5.producer),
-    timeline: records.map((record5) => ({
-      producer: record5.producer,
-      recordedAt: record5.recordedAt,
+    paths: records.map((record6) => record6.path),
+    producers: records.map((record6) => record6.producer),
+    timeline: records.map((record6) => ({
+      producer: record6.producer,
+      recordedAt: record6.recordedAt,
       ...status === "recorded" && requiredRead ? (() => {
-        const receipt = record5.reads.find((candidate) => currentVisitId !== void 0 && receiptMatchesVisit(candidate, phase, record5.sha256, currentVisitId));
+        const receipt = record6.reads.find((candidate) => currentVisitId !== void 0 && receiptMatchesVisit(candidate, phase, record6.sha256, currentVisitId));
         return receipt === void 0 ? {} : { readAt: receipt.readAt };
       })() : {}
     }))
@@ -15231,52 +15231,52 @@ async function evaluateDocumentEvidence(repoRoot, changeDir2, phase, scope = {},
     }
   }
   for (const kind of kinds) {
-    const records = ledger.records.filter((record5) => record5.kind === kind);
+    const records = ledger.records.filter((record6) => record6.kind === kind);
     const requiredRead = readRequirements.has(kind);
     if (records.length === 0) {
       blockers.push(`\u7F3A\u5C11 document '${kind}'\uFF1B\u6267\u884C tenon document record <change> ${kind} <path> --producer <skill>`);
       items.push(item(kind, "missing", requiredRead, records, phase, currentVisitId));
       continue;
     }
-    if (records.some((record5) => {
-      return policy2 ? !isRecordedDocumentProducerAllowedThroughPolicyStep(policy2, kind, phase, record5.producer) : !isAcceptedDocumentProducer(kind, record5.producer);
+    if (records.some((record6) => {
+      return policy2 ? !isRecordedDocumentProducerAllowedThroughPolicyStep(policy2, kind, phase, record6.producer) : !isAcceptedDocumentProducer(kind, record6.producer);
     })) {
       blockers.push(`document '${kind}' \u7684 producer \u4E0D\u7B26\u5408\u5F53\u524D document contract`);
       items.push(item(kind, "stale", requiredRead, records, phase, currentVisitId));
       continue;
     }
-    const legacyDelta = kind === "delta-spec" ? records.filter((record5) => deltaSpecSlot(record5.path, changeDir2) === void 0) : [];
+    const legacyDelta = kind === "delta-spec" ? records.filter((record6) => deltaSpecSlot(record6.path, changeDir2) === void 0) : [];
     if (legacyDelta.length > 0) {
-      blockers.push(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 tenon document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record5) => record5.path).join(", ")}`);
+      blockers.push(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 tenon document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record6) => record6.path).join(", ")}`);
       items.push(item(kind, "stale", requiredRead, records, phase, currentVisitId));
       continue;
     }
     const digests = [];
-    for (const record5 of records) {
-      digests.push(await currentRecordDigest(repoRoot, record5));
+    for (const record6 of records) {
+      digests.push(await currentRecordDigest(repoRoot, record6));
     }
-    if (records.some((record5, index) => digests[index] !== record5.sha256)) {
+    if (records.some((record6, index) => digests[index] !== record6.sha256)) {
       blockers.push(`document '${kind}' \u5DF2\u7F3A\u5931\u6216\u5185\u5BB9\u53D8\u5316\uFF1B\u91CD\u65B0\u6267\u884C tenon document record \u540E\u518D\u7EE7\u7EED`);
       items.push(item(kind, "stale", requiredRead, records, phase, currentVisitId));
       continue;
     }
-    const incompleteProducer = records.find((record5) => {
+    const incompleteProducer = records.find((record6) => {
       const applicableConfirmations = confirmations.filter((confirmation) => {
-        if (!skillsEquivalent(confirmation.producer, record5.producer) || Date.parse(confirmation.confirmed_at) > Date.parse(record5.recordedAt))
+        if (!skillsEquivalent(confirmation.producer, record6.producer) || Date.parse(confirmation.confirmed_at) > Date.parse(record6.recordedAt))
           return false;
-        const anchor = record5.producerInvocation;
+        const anchor = record6.producerInvocation;
         return anchor === void 0 || confirmation.invocation_id === anchor.confirmationInvocationId && confirmation.evidence_scope === anchor.evidenceScope && confirmation.step_visit.run_id === anchor.stepVisit.runId && confirmation.step_visit.transition_sequence === anchor.stepVisit.transitionSequence;
       });
-      if (record5.producerInvocation === void 0 && applicableConfirmations.length === 0)
+      if (record6.producerInvocation === void 0 && applicableConfirmations.length === 0)
         return false;
-      return !applicableConfirmations.some((confirmation) => hasExactDocumentApplication(invocationEvents, confirmation, record5));
+      return !applicableConfirmations.some((confirmation) => hasExactDocumentApplication(invocationEvents, confirmation, record6));
     });
     if (incompleteProducer !== void 0) {
       blockers.push(`document '${kind}' \u7684 producer invocation/artifact \u5C1A\u672A\u539F\u5B50\u5B8C\u6210: ${incompleteProducer.path}`);
       items.push(item(kind, "stale", requiredRead, records, phase, currentVisitId));
       continue;
     }
-    if (requiredRead && (currentVisitId === void 0 || records.some((record5) => !record5.reads.some((receipt) => receiptMatchesVisit(receipt, phase, record5.sha256, currentVisitId))))) {
+    if (requiredRead && (currentVisitId === void 0 || records.some((record6) => !record6.reads.some((receipt) => receiptMatchesVisit(receipt, phase, record6.sha256, currentVisitId))))) {
       if (currentVisitId !== void 0) {
         blockers.push(`document '${kind}' \u5C1A\u672A\u7531 ${phase} \u7684\u5F53\u524D step visit \u8BFB\u53D6\uFF1B\u6267\u884C tenon document read <change> ${kind}`);
       }
@@ -16913,7 +16913,7 @@ var FsWorkflowRunRepository = class {
           const sequence = metadata.transitionSequence + 1;
           const recordId = newId();
           const observedAt = clock();
-          const record5 = {
+          const record6 = {
             schemaVersion: 1,
             id: recordId,
             runId: metadata.runId,
@@ -16931,7 +16931,7 @@ var FsWorkflowRunRepository = class {
             actor: draft.actor,
             observedAt
           };
-          await recordStore.write(changeDir2, record5);
+          await recordStore.write(changeDir2, record6);
           const newMetadata = {
             runId: metadata.runId,
             transitionSequence: sequence,
@@ -16950,7 +16950,7 @@ var FsWorkflowRunRepository = class {
             transitionRecordId: recordId
           });
           const newRun = deriveRun(nextFields, newMetadata, authority);
-          return { run: newRun, record: record5, projection: writeResult.projection };
+          return { run: newRun, record: record6, projection: writeResult.projection };
         }
       };
       return fn(tx);
@@ -18644,11 +18644,11 @@ function parseProductRootContract(raw, paths) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("TENON_RUNTIME_ROOTS \u4E0D\u662F\u5408\u6CD5\u5BF9\u8C61");
   }
-  const record5 = value;
-  const dataRoot = usableAbsolute(typeof record5.dataRoot === "string" ? record5.dataRoot : void 0, paths);
-  const stateRoot = usableAbsolute(typeof record5.stateRoot === "string" ? record5.stateRoot : void 0, paths);
-  const configRoot = usableAbsolute(typeof record5.configRoot === "string" ? record5.configRoot : void 0, paths);
-  if (record5.version !== 1 || dataRoot === null || stateRoot === null || configRoot === null) {
+  const record6 = value;
+  const dataRoot = usableAbsolute(typeof record6.dataRoot === "string" ? record6.dataRoot : void 0, paths);
+  const stateRoot = usableAbsolute(typeof record6.stateRoot === "string" ? record6.stateRoot : void 0, paths);
+  const configRoot = usableAbsolute(typeof record6.configRoot === "string" ? record6.configRoot : void 0, paths);
+  if (record6.version !== 1 || dataRoot === null || stateRoot === null || configRoot === null) {
     throw new Error("TENON_RUNTIME_ROOTS \u5FC5\u987B\u662F version=1 \u7684\u7EDD\u5BF9 data/state/config root");
   }
   return { version: 1, dataRoot, stateRoot, configRoot };
@@ -22972,8 +22972,8 @@ function parseRunHistory(text4, loopId) {
       continue;
     if (!HIST_TS_RE.test(required(cols[0])))
       continue;
-    const rm14 = line.match(HIST_RESULT_RE);
-    results.push(rm14 ? rm14[1] : null);
+    const rm15 = line.match(HIST_RESULT_RE);
+    results.push(rm15 ? rm15[1] : null);
   }
   let failStreak = 0;
   for (let i = results.length - 1; i >= 0; i--) {
@@ -23707,13 +23707,13 @@ function ownDataValue(object3, key, path9) {
   return descriptor.value;
 }
 function snapshotRecord(input, allowed, required2, path9) {
-  const record5 = asRecord3(input, path9);
+  const record6 = asRecord3(input, path9);
   const snapshot = /* @__PURE__ */ new Map();
-  for (const key of Reflect.ownKeys(record5)) {
+  for (const key of Reflect.ownKeys(record6)) {
     if (typeof key !== "string" || !allowed.has(key)) {
       throw new Error(`AutomationPolicyTemplate: ${path9} has unknown key '${String(key)}'`);
     }
-    snapshot.set(key, ownDataValue(record5, key, `${path9}.${key}`));
+    snapshot.set(key, ownDataValue(record6, key, `${path9}.${key}`));
   }
   for (const key of required2) {
     if (!snapshot.has(key)) {
@@ -23763,8 +23763,8 @@ function validateTrigger(input) {
   }
   return items.map((item2, index) => {
     const path9 = `trigger[${index}]`;
-    const record5 = snapshotRecord(item2, TRIGGER_KEYS, TRIGGER_KEYS, path9);
-    const kind = record5.get("kind");
+    const record6 = snapshotRecord(item2, TRIGGER_KEYS, TRIGGER_KEYS, path9);
+    const kind = record6.get("kind");
     if (typeof kind !== "string" || !TRIGGER_KINDS.has(kind)) {
       throw new Error(`AutomationPolicyTemplate: ${path9}.kind '${String(kind)}' is not schedule, event, or manual`);
     }
@@ -23816,19 +23816,19 @@ function getAutomationPolicyTemplate(id2, version = AUTOMATION_POLICY_TEMPLATE_V
   return cloneTemplate(template);
 }
 function validateAutomationPolicyTemplate(input) {
-  const record5 = snapshotRecord(input, TEMPLATE_KEYS, TEMPLATE_KEYS, "template");
-  const version = record5.get("version");
+  const record6 = snapshotRecord(input, TEMPLATE_KEYS, TEMPLATE_KEYS, "template");
+  const version = record6.get("version");
   assertVersion(version);
-  const id2 = record5.get("id");
+  const id2 = record6.get("id");
   assertTemplateId(id2);
-  const goal = nonemptyString2(record5.get("goal"), "goal");
-  const trigger = validateTrigger(record5.get("trigger"));
-  const risk = validateRisk(record5.get("risk"));
-  const recommendedWorkflow = record5.get("recommendedWorkflow");
+  const goal = nonemptyString2(record6.get("goal"), "goal");
+  const trigger = validateTrigger(record6.get("trigger"));
+  const risk = validateRisk(record6.get("risk"));
+  const recommendedWorkflow = record6.get("recommendedWorkflow");
   if (recommendedWorkflow !== "default") {
     throw new Error(`AutomationPolicyTemplate: recommendedWorkflow '${String(recommendedWorkflow)}' is not default`);
   }
-  const recommendedSkills = validateRecommendedSkills(record5.get("recommendedSkills"));
+  const recommendedSkills = validateRecommendedSkills(record6.get("recommendedSkills"));
   return cloneTemplate({
     version: AUTOMATION_POLICY_TEMPLATE_VERSION,
     id: id2,
@@ -23841,16 +23841,16 @@ function validateAutomationPolicyTemplate(input) {
 }
 function compileAutomationPolicyTemplate(id2, override = {}, version = AUTOMATION_POLICY_TEMPLATE_VERSION) {
   const base = getAutomationPolicyTemplate(id2, version);
-  const record5 = snapshotRecord(override, OVERRIDE_KEYS, NO_KEYS, "override");
-  const owns = (key) => record5.has(key);
+  const record6 = snapshotRecord(override, OVERRIDE_KEYS, NO_KEYS, "override");
+  const owns = (key) => record6.has(key);
   return validateAutomationPolicyTemplate({
     version: base.version,
     id: base.id,
-    goal: owns("goal") ? record5.get("goal") : base.goal,
-    trigger: owns("trigger") ? record5.get("trigger") : base.trigger,
-    risk: owns("risk") ? record5.get("risk") : base.risk,
-    recommendedWorkflow: owns("recommendedWorkflow") ? record5.get("recommendedWorkflow") : base.recommendedWorkflow,
-    recommendedSkills: owns("recommendedSkills") ? record5.get("recommendedSkills") : base.recommendedSkills
+    goal: owns("goal") ? record6.get("goal") : base.goal,
+    trigger: owns("trigger") ? record6.get("trigger") : base.trigger,
+    risk: owns("risk") ? record6.get("risk") : base.risk,
+    recommendedWorkflow: owns("recommendedWorkflow") ? record6.get("recommendedWorkflow") : base.recommendedWorkflow,
+    recommendedSkills: owns("recommendedSkills") ? record6.get("recommendedSkills") : base.recommendedSkills
   });
 }
 
@@ -23872,8 +23872,8 @@ function canonicalReconciliationJson(value) {
     return JSON.stringify(value);
   if (Array.isArray(value))
     return `[${value.map(canonicalReconciliationJson).join(",")}]`;
-  const record5 = Object.fromEntries(Object.entries(value));
-  return `{${Object.keys(record5).sort().map((key) => `${JSON.stringify(key)}:${canonicalReconciliationJson(record5[key])}`).join(",")}}`;
+  const record6 = Object.fromEntries(Object.entries(value));
+  return `{${Object.keys(record6).sort().map((key) => `${JSON.stringify(key)}:${canonicalReconciliationJson(record6[key])}`).join(",")}}`;
 }
 function reconciliationPayloadDigest(payload) {
   return sha256Hex(canonicalReconciliationJson(payload));
@@ -24920,10 +24920,10 @@ function normalizeAttemptError(input) {
     fingerprint: createHash22("sha256").update(message2).digest("hex")
   };
 }
-function failureFingerprint(record5) {
-  if (!FAILURE_RESULTS.has(record5.result) || record5.detail === void 0 || record5.detail.trim() === "")
+function failureFingerprint(record6) {
+  if (!FAILURE_RESULTS.has(record6.result) || record6.detail === void 0 || record6.detail.trim() === "")
     return null;
-  return normalizeAttemptError(record5.detail).fingerprint;
+  return normalizeAttemptError(record6.detail).fingerprint;
 }
 function detectAttemptStagnation(records, options = {}) {
   const threshold = Math.max(2, Math.floor(options.threshold ?? 3));
@@ -24935,10 +24935,10 @@ function detectAttemptStagnation(records, options = {}) {
     return { stagnant: false, repeatedAttempts: [] };
   const repeated = [];
   for (let i = records.length - 1; i >= 0; i -= 1) {
-    const record5 = required(records[i]);
-    if (failureFingerprint(record5) !== fingerprint)
+    const record6 = required(records[i]);
+    if (failureFingerprint(record6) !== fingerprint)
       break;
-    repeated.unshift(record5.attempt_id);
+    repeated.unshift(record6.attempt_id);
   }
   return {
     stagnant: repeated.length >= threshold,
@@ -24950,13 +24950,13 @@ function assertOneRun(records) {
   const first = records[0];
   if (first === void 0)
     return;
-  if (records.some((record5) => record5.loop_id !== first.loop_id || record5.change !== first.change)) {
+  if (records.some((record6) => record6.loop_id !== first.loop_id || record6.change !== first.change)) {
     throw new Error("attempt context records must share the same loop_id and change");
   }
 }
-function recordLine(record5) {
-  const normalized2 = record5.detail === void 0 ? "" : normalizeAttemptError(record5.detail).message;
-  return `- ${record5.attempt_id} ${record5.recorded_at} ${record5.result}${normalized2 === "" ? "" : `: ${normalized2}`}`;
+function recordLine(record6) {
+  const normalized2 = record6.detail === void 0 ? "" : normalizeAttemptError(record6.detail).message;
+  return `- ${record6.attempt_id} ${record6.recorded_at} ${record6.result}${normalized2 === "" ? "" : `: ${normalized2}`}`;
 }
 function render(loopId, change, records, omitted) {
   const lines = [`# Attempts: ${loopId}/${change}`, ...records.map(recordLine)];
@@ -24991,7 +24991,7 @@ function buildAttemptContext(records, options = {}) {
   let indexes = [...selected].sort((a, b) => a - b);
   const loopId = required(records[0]).loop_id;
   const change = required(records[0]).change;
-  const omittedFor = (kept) => records.filter((_record, index) => !kept.includes(index)).map((record5) => record5.attempt_id);
+  const omittedFor = (kept) => records.filter((_record, index) => !kept.includes(index)).map((record6) => record6.attempt_id);
   let omitted = omittedFor(indexes);
   let rendered = render(loopId, change, indexes.map((index) => required(records[index])), omitted);
   while (rendered.length > maxChars && indexes.length > 1) {
@@ -25219,23 +25219,23 @@ async function compileLedgerContextBundleWithPorts(input) {
       });
     }
     const limits = input.resourceLimits;
-    const requiredRecords = ledger.records.filter((record5) => requiredKinds.includes(record5.kind));
+    const requiredRecords = ledger.records.filter((record6) => requiredKinds.includes(record6.kind));
     if (limits && requiredRecords.length > limits.maxRecords) {
       throw resourceLimitError("records", limits.maxRecords, requiredRecords.length);
     }
     let totalSourceBytes = 0;
     const materializedPaths = /* @__PURE__ */ new Set();
     for (const kind of requiredKinds) {
-      const records = ledger.records.filter((record5) => record5.kind === kind).sort((left, right) => left.path.localeCompare(right.path, "en"));
+      const records = ledger.records.filter((record6) => record6.kind === kind).sort((left, right) => left.path.localeCompare(right.path, "en"));
       if (records.length === 0) {
         throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle missing document '${kind}'; run tenon document record ${input.change} ${kind} <path> --producer <skill>`, {
           kind,
           repairAction: `\u91CD\u65B0\u8FD0\u884C tenon document record ${input.change} ${kind} <path> --producer <skill>\uFF0C\u7136\u540E tenon document read ${input.change} all`
         });
       }
-      for (const record5 of records) {
-        if (!validRelativePath2(record5.path)) {
-          throw invalidRequest(`Context Bundle ledger path \u975E\u6CD5: ${record5.path}`);
+      for (const record6 of records) {
+        if (!validRelativePath2(record6.path)) {
+          throw invalidRequest(`Context Bundle ledger path \u975E\u6CD5: ${record6.path}`);
         }
         let text4;
         let sourceBytes;
@@ -25247,7 +25247,7 @@ async function compileLedgerContextBundleWithPorts(input) {
           actualOffset: remainingTotalBytes < limits.maxSourceBytesPerDocument ? totalSourceBytes : 0
         } : void 0;
         try {
-          const source = await input.sourceReader.read(record5.path, sourceReadLimit);
+          const source = await input.sourceReader.read(record6.path, sourceReadLimit);
           text4 = source.text;
           sourceBytes = source.sourceBytes;
         } catch (error2) {
@@ -25257,7 +25257,7 @@ async function compileLedgerContextBundleWithPorts(input) {
             throw new LedgerContextBundleError(error2.code, error2.message, {
               cause: error2,
               kind,
-              path: error2.path ?? record5.path,
+              path: error2.path ?? record6.path,
               repairAction: error2.repairAction,
               ...error2.requiredBytes === void 0 ? {} : { requiredBytes: error2.requiredBytes },
               ...error2.availableBytes === void 0 ? {} : { availableBytes: error2.availableBytes },
@@ -25267,44 +25267,44 @@ async function compileLedgerContextBundleWithPorts(input) {
               ...error2.actual === void 0 ? {} : { actual: error2.actual }
             });
           }
-          throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle source reader failed for '${kind}': ${record5.path}; ${error2 instanceof Error ? error2.message : String(error2)}`, {
+          throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle source reader failed for '${kind}': ${record6.path}; ${error2 instanceof Error ? error2.message : String(error2)}`, {
             cause: error2,
             kind,
-            path: record5.path,
-            repairAction: `\u6062\u590D root \u5185\u7A33\u5B9A\u7684\u975E symlink \u666E\u901A\u6587\u4EF6 ${record5.path}\uFF0C\u5E76\u91CD\u65B0 record/read`
+            path: record6.path,
+            repairAction: `\u6062\u590D root \u5185\u7A33\u5B9A\u7684\u975E symlink \u666E\u901A\u6587\u4EF6 ${record6.path}\uFF0C\u5E76\u91CD\u65B0 record/read`
           });
         }
         if (text4 === void 0) {
-          throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle missing document '${kind}': ${record5.path}; restore or re-record it`, {
+          throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle missing document '${kind}': ${record6.path}; restore or re-record it`, {
             kind,
-            path: record5.path,
-            repairAction: `\u6062\u590D ${record5.path}\uFF0C\u6216\u91CD\u65B0\u8FD0\u884C tenon document record ${input.change} ${kind} ${record5.path} --producer <skill>`
+            path: record6.path,
+            repairAction: `\u6062\u590D ${record6.path}\uFF0C\u6216\u91CD\u65B0\u8FD0\u884C tenon document record ${input.change} ${kind} ${record6.path} --producer <skill>`
           });
         }
         if (limits && sourceBytes > limits.maxSourceBytesPerDocument) {
-          throw resourceLimitError("sourceBytesPerDocument", limits.maxSourceBytesPerDocument, sourceBytes, { kind, path: record5.path });
+          throw resourceLimitError("sourceBytesPerDocument", limits.maxSourceBytesPerDocument, sourceBytes, { kind, path: record6.path });
         }
         totalSourceBytes += sourceBytes;
         if (limits && totalSourceBytes > limits.maxTotalSourceBytes) {
-          throw resourceLimitError("totalSourceBytes", limits.maxTotalSourceBytes, totalSourceBytes, { kind, path: record5.path });
+          throw resourceLimitError("totalSourceBytes", limits.maxTotalSourceBytes, totalSourceBytes, { kind, path: record6.path });
         }
         const actual = input.primitives.sha256(text4);
-        if (actual !== record5.sha256) {
-          throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_STALE", `Context Bundle stale document '${kind}': ${record5.path}; run tenon document record ${input.change} ${kind} ${record5.path} --producer <skill>, then tenon document read ${input.change} all`, {
+        if (actual !== record6.sha256) {
+          throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_STALE", `Context Bundle stale document '${kind}': ${record6.path}; run tenon document record ${input.change} ${kind} ${record6.path} --producer <skill>, then tenon document read ${input.change} all`, {
             kind,
-            path: record5.path,
-            repairAction: `\u91CD\u65B0\u8FD0\u884C tenon document record ${input.change} ${kind} ${record5.path} --producer <skill>\uFF0C\u7136\u540E tenon document read ${input.change} all`
+            path: record6.path,
+            repairAction: `\u91CD\u65B0\u8FD0\u884C tenon document record ${input.change} ${kind} ${record6.path} --producer <skill>\uFF0C\u7136\u540E tenon document read ${input.change} all`
           });
         }
-        const duplicatePath = materializedPaths.has(record5.path);
+        const duplicatePath = materializedPaths.has(record6.path);
         const mode = duplicatePath ? "reference" : materializationMode(kind);
         if (!duplicatePath)
-          materializedPaths.add(record5.path);
+          materializedPaths.add(record6.path);
         const content = mode === "reference" ? void 0 : mode === "full" ? text4 : renderHandoffSummary(compressDocument(text4), `${input.change}/${kind}`);
-        const digestValue = `sha256:${record5.sha256}`;
+        const digestValue = `sha256:${record6.sha256}`;
         bundleInputs.push({
           kind,
-          path: record5.path,
+          path: record6.path,
           digest: digestValue,
           reason: DOCUMENT_REASONS[kind],
           mode,
@@ -25312,7 +25312,7 @@ async function compileLedgerContextBundleWithPorts(input) {
         });
         summaries.push({
           kind,
-          path: record5.path,
+          path: record6.path,
           digest: digestValue,
           reason: DOCUMENT_REASONS[kind],
           reasonCode: DOCUMENT_REASON_CODES[kind],
@@ -26358,17 +26358,17 @@ function parseSkillSources(text4) {
 function decodeHistoryLine(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return void 0;
-  const record5 = value;
-  if (record5.kind !== void 0 && typeof record5.kind !== "string")
+  const record6 = value;
+  if (record6.kind !== void 0 && typeof record6.kind !== "string")
     return void 0;
-  if (record5.to !== void 0 && typeof record5.to !== "string")
+  if (record6.to !== void 0 && typeof record6.to !== "string")
     return void 0;
-  if (record5.raw !== void 0 && typeof record5.raw !== "string")
+  if (record6.raw !== void 0 && typeof record6.raw !== "string")
     return void 0;
   return {
-    ...typeof record5.kind === "string" ? { kind: record5.kind } : {},
-    ...typeof record5.to === "string" ? { to: record5.to } : {},
-    ...typeof record5.raw === "string" ? { raw: record5.raw } : {}
+    ...typeof record6.kind === "string" ? { kind: record6.kind } : {},
+    ...typeof record6.to === "string" ? { to: record6.to } : {},
+    ...typeof record6.raw === "string" ? { raw: record6.raw } : {}
   };
 }
 function canonicalWorkflowSkillId(skillId) {
@@ -26799,7 +26799,7 @@ function createTransitionApplication(deps) {
         if (prepared.requiresReviewApproval && command2.humanReviewApproved !== true && !reviewGateApprovedFor(tx.state, prepared.from, command2.event)) {
           return { kind: "review-approval-required", phase: prepared.from, event: command2.event };
         }
-        const { record: record5, projection } = await tx.commit({ ...prepared.nextFields, ...clearReviewGatePatch() }, {
+        const { record: record6, projection } = await tx.commit({ ...prepared.nextFields, ...clearReviewGatePatch() }, {
           event: command2.event,
           from: prepared.from,
           to: prepared.to
@@ -26820,12 +26820,12 @@ function createTransitionApplication(deps) {
         }
         if (deps.history) {
           try {
-            await deps.history.append(command2.changeDir, transitionRecordToHistoryEntry(record5));
+            await deps.history.append(command2.changeDir, transitionRecordToHistoryEntry(record6));
           } catch (e) {
             warnings.push({ kind: "projection-write-failed", projection: "history", cause: e });
           }
         }
-        return { kind: "applied", from: prepared.from, to: prepared.to, record: record5, warnings };
+        return { kind: "applied", from: prepared.from, to: prepared.to, record: record6, warnings };
       });
     }
   };
@@ -26925,7 +26925,7 @@ function codexOnlyProcessEnv(...layers) {
   }
   return result;
 }
-var nodeCodexTriageExec = (file, args, options) => new Promise((resolve40) => {
+var nodeCodexTriageExec = (file, args, options) => new Promise((resolve41) => {
   const detached = process.platform !== "win32";
   const child = spawn(file, args, {
     cwd: options.cwd,
@@ -26945,7 +26945,7 @@ var nodeCodexTriageExec = (file, args, options) => new Promise((resolve40) => {
     options.signal.removeEventListener("abort", onAbort);
     if (forceKillTimer !== void 0)
       clearTimeout(forceKillTimer);
-    resolve40(result);
+    resolve41(result);
   };
   const killProcessTree = (signal) => {
     if (detached && child.pid !== void 0) {
@@ -27047,7 +27047,7 @@ function abortReason(signal) {
 function awaitExecWithAbort(execution, signal) {
   if (signal.aborted)
     return Promise.reject(abortReason(signal));
-  return new Promise((resolve40, reject3) => {
+  return new Promise((resolve41, reject3) => {
     let settled = false;
     const finish = (complete) => {
       if (settled)
@@ -27058,7 +27058,7 @@ function awaitExecWithAbort(execution, signal) {
     };
     const onAbort = () => finish(() => reject3(abortReason(signal)));
     signal.addEventListener("abort", onAbort, { once: true });
-    execution.then((result) => finish(() => resolve40(result)), (error2) => finish(() => reject3(error2)));
+    execution.then((result) => finish(() => resolve41(result)), (error2) => finish(() => reject3(error2)));
   });
 }
 function createCodexTriageProvider(options = {}) {
@@ -27183,7 +27183,7 @@ import { createHash as createHash25 } from "node:crypto";
 import { execFile, spawn as spawn2 } from "node:child_process";
 import { createInterface } from "node:readline";
 var mergedEnv = (env) => env ? { ...process.env, ...env } : process.env;
-var spawnStreaming = (file, args, opts) => new Promise((resolve40) => {
+var spawnStreaming = (file, args, opts) => new Promise((resolve41) => {
   const maxTail = opts.maxTailChars ?? MAX_TAIL_CHARS;
   const proc = spawn2(file, args, {
     cwd: opts.cwd,
@@ -27216,19 +27216,19 @@ var spawnStreaming = (file, args, opts) => new Promise((resolve40) => {
   }
   proc.on("error", (err) => {
     stderrTail.push(String(err.message ?? err));
-    resolve40({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
+    resolve41({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: 127 });
   });
   proc.on("close", (code) => {
-    resolve40({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
+    resolve41({ stdout: stdoutTail.toString(), stderr: stderrTail.toString(), exitCode: code ?? 0 });
   });
 });
 var nodeExec = (file, args, opts) => {
   if (opts?.onLine || opts?.input !== void 0)
     return spawnStreaming(file, args, opts);
-  return new Promise((resolve40) => {
+  return new Promise((resolve41) => {
     execFile(file, args, { cwd: opts?.cwd, env: mergedEnv(opts?.env), maxBuffer: 64 * 1024 * 1024, encoding: "utf-8" }, (error2, stdout, stderr) => {
       const code = error2 && typeof error2.code === "number" ? error2.code : error2 ? 1 : 0;
-      resolve40({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
+      resolve41({ stdout: String(stdout), stderr: String(stderr), exitCode: code });
     });
   });
 };
@@ -27602,24 +27602,24 @@ var cursorFrom2 = (checkpoint, action) => {
   return cursor;
 };
 var bodyFor2 = (body) => JSON.stringify(body);
-var observationFor = (sourceId, record5) => ({
+var observationFor = (sourceId, record6) => ({
   schemaVersion: 1,
-  observationId: `loop-run-terminal:${sha2562([1, "loop-run-terminals", sourceId, record5.record_id])}`,
+  observationId: `loop-run-terminal:${sha2562([1, "loop-run-terminals", sourceId, record6.record_id])}`,
   sourceId,
   actionKind: "loop-run-terminals",
-  observedAt: record5.finished_at,
-  title: `Loop run ${record5.result}: ${record5.change}`,
+  observedAt: record6.finished_at,
+  title: `Loop run ${record6.result}: ${record6.change}`,
   body: bodyFor2({
-    sourceKey: record5.record_id,
-    loopId: record5.loop_id,
-    change: record5.change,
-    attemptId: record5.attempt_id,
-    runRecordId: record5.run_record_id,
-    result: record5.result,
-    reason: record5.reason ?? null,
-    level: record5.level,
-    runner: record5.runner,
-    error: record5.error ?? null
+    sourceKey: record6.record_id,
+    loopId: record6.loop_id,
+    change: record6.change,
+    attemptId: record6.attempt_id,
+    runRecordId: record6.run_record_id,
+    result: record6.result,
+    reason: record6.reason ?? null,
+    level: record6.level,
+    runner: record6.runner,
+    error: record6.error ?? null
   })
 });
 function createLoopRunTerminalsConnector(options) {
@@ -27637,24 +27637,24 @@ function createLoopRunTerminalsConnector(options) {
         throw new LoopRunTerminalsSourceError("ledger-degraded", `loop-run-terminals ledger contains ${rejected.length} rejected line(s)`);
       }
       const recordIds = /* @__PURE__ */ new Set();
-      for (const record5 of records) {
-        if (recordIds.has(record5.record_id)) {
-          throw new LoopRunTerminalsSourceError("duplicate-record-id", `loop-run-terminals ledger repeats record_id ${JSON.stringify(record5.record_id)}`);
+      for (const record6 of records) {
+        if (recordIds.has(record6.record_id)) {
+          throw new LoopRunTerminalsSourceError("duplicate-record-id", `loop-run-terminals ledger repeats record_id ${JSON.stringify(record6.record_id)}`);
         }
-        recordIds.add(record5.record_id);
+        recordIds.add(record6.record_id);
       }
       const previousCursor = cursorFrom2(checkpoint, action);
       let resumeIndex = 0;
       if (previousCursor.lastRunRecordId !== null) {
-        const checkpointIndex = records.findIndex((record5) => record5.kind === "run" && record5.record_id === previousCursor.lastRunRecordId);
+        const checkpointIndex = records.findIndex((record6) => record6.kind === "run" && record6.record_id === previousCursor.lastRunRecordId);
         if (checkpointIndex < 0) {
           throw new LoopRunTerminalsSourceError("checkpoint-not-found", `loop-run-terminals checkpoint record '${previousCursor.lastRunRecordId}' is absent`);
         }
         resumeIndex = checkpointIndex + 1;
       }
-      const terminals = records.slice(resumeIndex).filter((record5) => record5.kind === "run" && OBSERVED_RUN_RESULTS.has(record5.result));
+      const terminals = records.slice(resumeIndex).filter((record6) => record6.kind === "run" && OBSERVED_RUN_RESULTS.has(record6.result));
       const selected = terminals.slice(0, Math.min(limit, maxItems));
-      const observations = selected.map((record5) => observationFor(action.sourceId, record5));
+      const observations = selected.map((record6) => observationFor(action.sourceId, record6));
       const lastRunRecordId = selected.at(-1)?.record_id ?? previousCursor.lastRunRecordId;
       const hasMore = terminals.length > selected.length;
       const cursor = {
@@ -27665,7 +27665,7 @@ function createLoopRunTerminalsConnector(options) {
           "loop-run-terminals",
           action.sourceId,
           previousCursor.lastRunRecordId,
-          selected.map((record5) => record5.record_id),
+          selected.map((record6) => record6.record_id),
           hasMore
         ])
       };
@@ -28319,23 +28319,23 @@ function parseDurableRecord(text4, key) {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
     throw new TriageCheckpointStoreError("corrupt", "triage checkpoint file must contain an object");
   }
-  const record5 = input;
-  const keys = Reflect.ownKeys(record5);
+  const record6 = input;
+  const keys = Reflect.ownKeys(record6);
   if (keys.some((field2) => typeof field2 !== "string" || !RECORD_KEYS.has(field2)) || keys.length !== RECORD_KEYS.size) {
     throw new TriageCheckpointStoreError("corrupt", "triage checkpoint file has missing or unknown fields");
   }
-  if (record5.schemaVersion !== 1 || record5.sourceId !== key.sourceId || record5.actionKind !== key.actionKind || typeof record5.revision !== "number" || !Number.isSafeInteger(record5.revision) || record5.revision <= 0) {
+  if (record6.schemaVersion !== 1 || record6.sourceId !== key.sourceId || record6.actionKind !== key.actionKind || typeof record6.revision !== "number" || !Number.isSafeInteger(record6.revision) || record6.revision <= 0) {
     throw new TriageCheckpointStoreError("corrupt", "triage checkpoint file has an invalid version, binding, or revision");
   }
   let checkpoint;
   try {
-    checkpoint = checkpointForKey(record5.checkpoint, key);
+    checkpoint = checkpointForKey(record6.checkpoint, key);
   } catch (error2) {
     throw new TriageCheckpointStoreError("corrupt", `triage checkpoint file contains an invalid checkpoint: ${safeErrorText3(error2)}`, { cause: error2 });
   }
   return Object.freeze({
     key,
-    revision: record5.revision,
+    revision: record6.revision,
     checkpoint
   });
 }
@@ -29010,7 +29010,7 @@ var createSemaphore = (maxParallel) => {
       running++;
       return Promise.resolve();
     }
-    return new Promise((resolve40) => queue.push(resolve40));
+    return new Promise((resolve41) => queue.push(resolve41));
   };
   const release2 = () => {
     if (running <= 0)
@@ -29700,8 +29700,8 @@ function createSchedulerExecution(input) {
       const controller = new AbortController();
       abortControllers.set(name2, controller);
       let resolveShutdownCompletion;
-      const shutdownCompletion = new Promise((resolve40) => {
-        resolveShutdownCompletion = resolve40;
+      const shutdownCompletion = new Promise((resolve41) => {
+        resolveShutdownCompletion = resolve41;
       });
       shutdownCompletions.set(name2, { promise: shutdownCompletion, resolve: () => resolveShutdownCompletion?.() });
       let executedOutcome;
@@ -30298,7 +30298,7 @@ function terminalToResult(automation) {
   }
 }
 function attemptContextFor(records, loopId, change) {
-  const runs = records.filter((record5) => record5.kind === "run" && record5.loop_id === loopId && record5.change === change);
+  const runs = records.filter((record6) => record6.kind === "run" && record6.loop_id === loopId && record6.change === change);
   const built = buildAttemptContext(runs.map((run) => ({
     attempt_id: run.attempt_id,
     loop_id: run.loop_id,
@@ -30394,8 +30394,8 @@ var nonEmpty2 = (value) => typeof value === "string" && value.length > 0;
 function isWorkflowProjectAuthorityIdentityV1(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     return false;
-  const record5 = value;
-  return Object.keys(record5).length === 3 && record5.version === "v1" && nonEmpty2(record5.track_id) && typeof record5.track_registry_revision === "string" && /^[0-9a-f]{16}$/.test(record5.track_registry_revision);
+  const record6 = value;
+  return Object.keys(record6).length === 3 && record6.version === "v1" && nonEmpty2(record6.track_id) && typeof record6.track_registry_revision === "string" && /^[0-9a-f]{16}$/.test(record6.track_registry_revision);
 }
 
 // packages/automation/dist/admission/loop-admission-journal.js
@@ -30424,7 +30424,7 @@ function createAdmissionJournal(deps) {
     }
   };
   const usageAccountingFor = (records, reservation) => {
-    const facts = records.filter((record5) => record5.kind === "usage" && record5.attempt_id === reservation.attempt_id);
+    const facts = records.filter((record6) => record6.kind === "usage" && record6.attempt_id === reservation.attempt_id);
     if (facts.length === 0)
       return void 0;
     if (facts.length !== 1) {
@@ -30443,7 +30443,7 @@ function createAdmissionJournal(deps) {
       if (read.rejected.length > 0) {
         throw new LedgerDegradedError(`recordProviderUsage: \u8D26\u672C\u6709 ${read.rejected.length} \u6761\u574F\u884C`);
       }
-      const reservations = read.records.filter((record5) => record5.kind === "budget-reservation" && record5.reservation_id === ctx.reservation_id);
+      const reservations = read.records.filter((record6) => record6.kind === "budget-reservation" && record6.reservation_id === ctx.reservation_id);
       if (reservations.length !== 1) {
         throw new LedgerDegradedError(`recordProviderUsage: reservation\u300C${ctx.reservation_id}\u300D\u6570\u91CF=${reservations.length}`);
       }
@@ -30454,7 +30454,7 @@ function createAdmissionJournal(deps) {
       if (reservation.attempt_id !== ctx.attempt_id || reservation.iteration_id !== void 0 && ctx.iteration_id !== reservation.iteration_id || reservation.loop_id !== ctx.loop_id || reservation.change !== ctx.change) {
         throw new LedgerDegradedError("recordProviderUsage: context \u4E0E reservation \u4E0D\u4E00\u81F4");
       }
-      const activations = read.records.filter((record5) => record5.kind === "reservation-activated" && record5.reservation_id === ctx.reservation_id);
+      const activations = read.records.filter((record6) => record6.kind === "reservation-activated" && record6.reservation_id === ctx.reservation_id);
       if (activations.length !== 1) {
         throw new LedgerDegradedError(`recordProviderUsage: reservation\u300C${ctx.reservation_id}\u300Dis not uniquely activated\uFF08activation \u6570\u91CF=${activations.length}\uFF09`);
       }
@@ -30462,7 +30462,7 @@ function createAdmissionJournal(deps) {
       if (activation.attempt_id !== ctx.attempt_id || reservation.iteration_id !== void 0 && activation.iteration_id !== reservation.iteration_id || activation.iteration_id !== ctx.iteration_id || activation.loop_id !== ctx.loop_id || activation.change !== ctx.change) {
         throw new LedgerDegradedError("recordProviderUsage: activation owner \u4E0E context \u4E0D\u4E00\u81F4");
       }
-      const existing = read.records.filter((record5) => record5.kind === "usage" && record5.attempt_id === ctx.attempt_id);
+      const existing = read.records.filter((record6) => record6.kind === "usage" && record6.attempt_id === ctx.attempt_id);
       if (existing.length > 1) {
         throw new LedgerDegradedError(`recordProviderUsage: attempt\u300C${ctx.attempt_id}\u300D\u5DF2\u6709\u91CD\u590D usage`);
       }
@@ -30473,7 +30473,7 @@ function createAdmissionJournal(deps) {
           throw new LedgerDegradedError(`recordProviderUsage: attempt\u300C${ctx.attempt_id}\u300Dusage conflict`);
         return fact.usage_id;
       }
-      if (read.records.some((record5) => record5.kind === "run" && record5.reservation_id === ctx.reservation_id)) {
+      if (read.records.some((record6) => record6.kind === "run" && record6.reservation_id === ctx.reservation_id)) {
         throw new LedgerDegradedError(`recordProviderUsage: reservation\u300C${ctx.reservation_id}\u300D\u5DF2 terminal`);
       }
       const now = clock();
@@ -30511,7 +30511,7 @@ function createAdmissionJournal(deps) {
     if (read.rejected.length > 0) {
       throw new LedgerDegradedError(`recordMergeIntent: \u8D26\u672C\u6709 ${read.rejected.length} \u6761\u574F\u884C\uFF0C\u62D2\u7EDD\u5728\u635F\u574F\u8D26\u672C\u4E0A\u5199 merge intent`);
     }
-    const reservations = read.records.filter((record6) => record6.kind === "budget-reservation" && record6.reservation_id === input.context.reservation_id);
+    const reservations = read.records.filter((record7) => record7.kind === "budget-reservation" && record7.reservation_id === input.context.reservation_id);
     if (reservations.length !== 1) {
       throw new LedgerDegradedError(`recordMergeIntent: reservation\u300C${input.context.reservation_id}\u300D\u6570\u91CF=${reservations.length}\uFF0C\u62D2\u7EDD\u5199 intent`);
     }
@@ -30519,10 +30519,10 @@ function createAdmissionJournal(deps) {
     if (reservation.attempt_id !== input.context.attempt_id || reservation.iteration_id !== void 0 && input.context.iteration_id !== reservation.iteration_id || reservation.loop_id !== input.context.loop_id || reservation.change !== input.context.change) {
       throw new LedgerDegradedError("recordMergeIntent: context \u4E0E reservation \u7684 attempt/iteration/loop/change \u4E0D\u4E00\u81F4");
     }
-    if (read.records.some((record6) => record6.kind === "run" && record6.reservation_id === reservation.reservation_id)) {
+    if (read.records.some((record7) => record7.kind === "run" && record7.reservation_id === reservation.reservation_id)) {
       throw new LedgerDegradedError(`recordMergeIntent: reservation\u300C${reservation.reservation_id}\u300D\u5DF2 terminal`);
     }
-    const activation = [...read.records].reverse().find((record6) => record6.kind === "reservation-activated" && record6.reservation_id === reservation.reservation_id);
+    const activation = [...read.records].reverse().find((record7) => record7.kind === "reservation-activated" && record7.reservation_id === reservation.reservation_id);
     if (activation === void 0 || activation.kind !== "reservation-activated") {
       throw new LedgerDegradedError(`recordMergeIntent: reservation\u300C${reservation.reservation_id}\u300D\u5C1A\u672A activated`);
     }
@@ -30539,12 +30539,12 @@ function createAdmissionJournal(deps) {
         throw new LedgerDegradedError("recordMergeIntent: verification subject \u4E0E\u672C\u6B21 attempt/revision \u4E0D\u4E00\u81F4");
       }
     }
-    const existing = [...read.records].reverse().find((record6) => record6.kind === "merge-intent" && record6.attempt_id === input.context.attempt_id && record6.merged_commit_sha === input.mergedCommit && record6.expected_base_sha === input.baseBefore && record6.expected_branch_sha === input.branchTip);
+    const existing = [...read.records].reverse().find((record7) => record7.kind === "merge-intent" && record7.attempt_id === input.context.attempt_id && record7.merged_commit_sha === input.mergedCommit && record7.expected_base_sha === input.baseBefore && record7.expected_branch_sha === input.branchTip);
     if (existing !== void 0)
       return existing.record_id;
     const now = clock();
     const usageAccounting = usageAccountingFor(read.records, reservation);
-    const record5 = {
+    const record6 = {
       ...base(),
       recorded_at: now,
       kind: "merge-intent",
@@ -30585,8 +30585,8 @@ function createAdmissionJournal(deps) {
         charge_source: "provider-structured"
       }
     };
-    await ledger.append(repoRoot, record5);
-    return record5.record_id;
+    await ledger.append(repoRoot, record6);
+    return record6.record_id;
   });
   const recordMergeLanded = async (input) => {
     await ledger.withLedgerLock(repoRoot, async () => {
@@ -30594,7 +30594,7 @@ function createAdmissionJournal(deps) {
       if (read.rejected.length > 0) {
         throw new LedgerDegradedError(`recordMergeLanded: \u8D26\u672C\u6709 ${read.rejected.length} \u6761\u574F\u884C\uFF0C\u62D2\u7EDD\u5199 landed receipt`);
       }
-      const intent = read.records.find((record5) => record5.kind === "merge-intent" && record5.record_id === input.intentRecordId);
+      const intent = read.records.find((record6) => record6.kind === "merge-intent" && record6.record_id === input.intentRecordId);
       if (intent === void 0)
         throw new LedgerDegradedError(`recordMergeLanded: intent\u300C${input.intentRecordId}\u300D\u4E0D\u5B58\u5728`);
       if (intent.attempt_id !== input.context.attempt_id || intent.iteration_id !== input.context.iteration_id || intent.reservation_id !== input.context.reservation_id || intent.loop_id !== input.context.loop_id || intent.change !== input.context.change || intent.base_ref !== input.baseRef || intent.expected_base_sha !== input.baseBefore || intent.expected_branch_sha !== input.branchTip || intent.merged_commit_sha !== input.mergedCommit) {
@@ -30603,7 +30603,7 @@ function createAdmissionJournal(deps) {
       if (input.hostSynced && input.hostSyncError !== void 0) {
         throw new LedgerDegradedError("recordMergeLanded: hostSynced=true \u4E0D\u5F97\u540C\u65F6\u643A\u5E26 hostSyncError");
       }
-      const last = [...read.records].reverse().find((record5) => record5.kind === "merge-landed" && record5.intent_record_id === intent.record_id);
+      const last = [...read.records].reverse().find((record6) => record6.kind === "merge-landed" && record6.intent_record_id === intent.record_id);
       const expectedError = input.hostSyncError === void 0 ? void 0 : { cause: "host-sync-failed", message: input.hostSyncError };
       if (last !== void 0 && last.host_synced === input.hostSynced && JSON.stringify(last.host_sync_error) === JSON.stringify(expectedError))
         return;
@@ -31401,7 +31401,7 @@ function createLoopAdmission(deps) {
     if (read.rejected.length > 0) {
       throw new LedgerDegradedError(`activate: \u8D26\u672C\u6709 ${read.rejected.length} \u6761\u574F\u884C\uFF0C\u62D2\u7EDD\u5728\u635F\u574F\u8D26\u672C\u4E0A\u6FC0\u6D3B reservation\u300C${ctx.reservation_id}\u300D`);
     }
-    const reservations = read.records.filter((record5) => record5.kind === "budget-reservation" && record5.reservation_id === ctx.reservation_id);
+    const reservations = read.records.filter((record6) => record6.kind === "budget-reservation" && record6.reservation_id === ctx.reservation_id);
     if (reservations.length !== 1) {
       throw new LedgerDegradedError(`activate: reservation\u300C${ctx.reservation_id}\u300D\u6570\u91CF=${reservations.length}\uFF0C\u62D2\u7EDD\u6FC0\u6D3B`);
     }
@@ -31413,7 +31413,7 @@ function createLoopAdmission(deps) {
       if (ctx.preparedKind !== "loop-bundle" || ctx.skill_bundle_id == null) {
         throw new LedgerDegradedError("activate: loop admission \u4E0D\u63A5\u53D7 non-loop PreparedExecutionContext");
       }
-      const snapshots = read.records.filter((record5) => record5.kind === "skill-bundle-snapshot" && record5.reservation_id === ctx.reservation_id);
+      const snapshots = read.records.filter((record6) => record6.kind === "skill-bundle-snapshot" && record6.reservation_id === ctx.reservation_id);
       const snapshot = snapshots[0];
       if (snapshots.length !== 1 || snapshot === void 0 || !snapshotMatchesPrepared(snapshot, ctx)) {
         throw new LedgerDegradedError(`activate: reservation\u300C${ctx.reservation_id}\u300D\u7684 skill-bundle-snapshot \u7F3A\u5931\u3001\u91CD\u590D\u6216\u4E0E PreparedExecutionContext \u4E0D\u4E00\u81F4`);
@@ -31875,7 +31875,7 @@ async function withDigestPublishLock(casRoot, digest10, publish) {
       if (Date.now() >= deadline) {
         throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u7B49\u5F85\u8D85\u65F6\uFF08digest ${digest10}\uFF09\uFF0C\u62D2\u7EDD\u8BFB\u53D6\u53EF\u80FD\u672A\u63D0\u4EA4\u7684\u76EE\u6807\u76EE\u5F55`);
       }
-      await new Promise((resolve40) => setTimeout(resolve40, PUBLISH_LOCK_RETRY_MS));
+      await new Promise((resolve41) => setTimeout(resolve41, PUBLISH_LOCK_RETRY_MS));
     }
   }
   try {
@@ -33601,8 +33601,8 @@ async function canonicalSubject(changeDir2) {
     step_visit: { run_id: metadata.runId, transition_sequence: metadata.transitionSequence }
   };
 }
-async function matchingConfirmation(changeDir2, subject2, record5) {
-  const confirmation = await currentDocumentSkillConfirmation(changeDir2, record5.producer, subject2.step_id, record5.recordedAt);
+async function matchingConfirmation(changeDir2, subject2, record6) {
+  const confirmation = await currentDocumentSkillConfirmation(changeDir2, record6.producer, subject2.step_id, record6.recordedAt);
   return confirmation?.step_visit.run_id === subject2.step_visit.run_id && confirmation.step_visit.transition_sequence === subject2.step_visit.transition_sequence ? confirmation : void 0;
 }
 async function recordCanonicalDocumentSkillInvocation(changeDir2, kind, recordedAt, options = {}) {
@@ -33610,30 +33610,30 @@ async function recordCanonicalDocumentSkillInvocation(changeDir2, kind, recorded
   const appendEvent = lock === void 0 ? appendSkillInvocationEvent : (dir, event, appendOptions) => appendSkillInvocationEventUnderLock(dir, lock, event, appendOptions);
   const subject2 = await canonicalSubject(changeDir2);
   const ledger = await readDocumentLedger(changeDir2);
-  const records = ledger?.records.filter((record6) => record6.kind === kind && record6.recordedAt === recordedAt && (options.record === void 0 || record6.path === options.record.path && record6.sha256 === options.record.sha256)) ?? [];
+  const records = ledger?.records.filter((record7) => record7.kind === kind && record7.recordedAt === recordedAt && (options.record === void 0 || record7.path === options.record.path && record7.sha256 === options.record.sha256)) ?? [];
   const confirmed = [];
-  for (const record6 of records) {
-    const confirmation2 = await matchingConfirmation(changeDir2, subject2, record6);
+  for (const record7 of records) {
+    const confirmation2 = await matchingConfirmation(changeDir2, subject2, record7);
     if (confirmation2 !== void 0)
-      confirmed.push({ record: record6, confirmation: confirmation2 });
+      confirmed.push({ record: record7, confirmation: confirmation2 });
   }
   if (confirmed.length === 0)
     return void 0;
   if (confirmed.length !== 1)
     throw new Error("canonical document producer confirmation is ambiguous");
-  const { record: record5, confirmation } = confirmed[0];
+  const { record: record6, confirmation } = confirmed[0];
   let invocationId = confirmation.invocation_id;
   const adapter2 = { kind: confirmation.adapter.kind, proof_ref: confirmation.adapter.proof_ref };
   const allInvocationEvents = await readSkillInvocationEventsForApplication(changeDir2);
   let invocationEvents = allInvocationEvents.filter((event) => event.invocation_id === invocationId);
-  const existingIntent = invocationEvents.find((event) => event.type === "artifact-binding-intent" && event.payload.artifact.ref === record5.path && event.payload.artifact.digest === `sha256:${record5.sha256}`);
+  const existingIntent = invocationEvents.find((event) => event.type === "artifact-binding-intent" && event.payload.artifact.ref === record6.path && event.payload.artifact.digest === `sha256:${record6.sha256}`);
   if (existingIntent !== void 0 && invocationEvents.some((event) => event.type === "artifact-bound" && event.payload.binding_id === existingIntent.payload.binding_id)) {
     return { invocation_id: invocationId };
   }
   if (invocationEvents.some((event) => event.type === "invocation-completed")) {
-    invocationId = `invocation-${digest8("document-application", confirmation.invocation_id, record5.kind, record5.path, record5.sha256, record5.recordedAt)}`;
+    invocationId = `invocation-${digest8("document-application", confirmation.invocation_id, record6.kind, record6.path, record6.sha256, record6.recordedAt)}`;
     invocationEvents = allInvocationEvents.filter((event) => event.invocation_id === invocationId);
-    const childIntent = invocationEvents.find((event) => event.type === "artifact-binding-intent" && event.payload.artifact.ref === record5.path && event.payload.artifact.digest === `sha256:${record5.sha256}`);
+    const childIntent = invocationEvents.find((event) => event.type === "artifact-binding-intent" && event.payload.artifact.ref === record6.path && event.payload.artifact.digest === `sha256:${record6.sha256}`);
     if (childIntent !== void 0 && invocationEvents.some((event) => event.type === "artifact-bound" && event.payload.binding_id === childIntent.payload.binding_id)) {
       return { invocation_id: invocationId };
     }
@@ -33647,19 +33647,19 @@ async function recordCanonicalDocumentSkillInvocation(changeDir2, kind, recorded
       sequence: 1,
       type: "invocation-started",
       subject: subject2,
-      recorded_at: record5.recordedAt,
+      recorded_at: record6.recordedAt,
       payload: {
-        skill: { id: record5.producer, version: "1" },
+        skill: { id: record6.producer, version: "1" },
         adapter: adapter2,
         input: { schema_id: "tenon-document-producer-input/v1", fields: [{
           name: "document_kind",
           classification: "configuration",
-          digest: `sha256:${digest8(record5.kind)}`,
+          digest: `sha256:${digest8(record6.kind)}`,
           validator: { id: "document-kind-contract", status: "pass" }
         }, {
           name: "document_path",
           classification: "project-data",
-          digest: `sha256:${digest8(record5.path)}`,
+          digest: `sha256:${digest8(record6.path)}`,
           validator: { id: "document-path-contract", status: "pass" }
         }] }
       }
@@ -33677,15 +33677,15 @@ async function recordCanonicalDocumentSkillInvocation(changeDir2, kind, recorded
       payload: { adapter: adapter2, output: { schema_id: "tenon-document-producer-output/v1", fields: [{
         name: "document_record",
         classification: "project-data",
-        digest: `sha256:${record5.sha256}`,
+        digest: `sha256:${record6.sha256}`,
         validator: { id: "canonical-document-record", status: "pass" }
       }] } }
     };
     await appendEvent(changeDir2, completed, { verify_completed_adapter: async () => true });
     sequence += 1;
   }
-  const bindingId = `binding-${digest8(invocationId, record5.sha256)}`;
-  const artifactEventRef = digest8(record5.path, record5.sha256);
+  const bindingId = `binding-${digest8(invocationId, record6.sha256)}`;
+  const artifactEventRef = digest8(record6.path, record6.sha256);
   await appendEvent(changeDir2, {
     ...started,
     event_id: `${invocationId}-artifact-intent-${artifactEventRef}`,
@@ -33696,9 +33696,9 @@ async function recordCanonicalDocumentSkillInvocation(changeDir2, kind, recorded
       output_id: "document_record",
       artifact: {
         kind: "document",
-        ref: record5.path,
-        digest: `sha256:${record5.sha256}`,
-        document: { kind: record5.kind, recorded_at: record5.recordedAt }
+        ref: record6.path,
+        digest: `sha256:${record6.sha256}`,
+        document: { kind: record6.kind, recorded_at: record6.recordedAt }
       },
       validator_ids: ["canonical-document-record"]
     }
@@ -33711,7 +33711,7 @@ async function recordCanonicalDocumentSkillInvocation(changeDir2, kind, recorded
     type: "artifact-bound",
     payload: {
       binding_id: bindingId,
-      artifact_digest: `sha256:${record5.sha256}`,
+      artifact_digest: `sha256:${record6.sha256}`,
       validators: [{ id: "canonical-document-record", status: "pass" }]
     }
   }, { verify_artifact: async () => true });
@@ -34114,12 +34114,12 @@ import { readFile as fsReadFile, stat as fsStat } from "node:fs/promises";
 import { resolve as resolve16 } from "node:path";
 var resolveGitMounts = async (gitPath, deps) => {
   const stat13 = deps?.stat ?? ((p) => fsStat(p));
-  const readFile41 = deps?.readFile ?? ((p) => fsReadFile(p, "utf-8"));
+  const readFile42 = deps?.readFile ?? ((p) => fsReadFile(p, "utf-8"));
   const s = await stat13(gitPath);
   if (s.isDirectory()) {
     return [{ hostPath: gitPath, sandboxPath: gitPath }];
   }
-  const content = (await readFile41(gitPath)).trim();
+  const content = (await readFile42(gitPath)).trim();
   const match = content.match(/^gitdir:\s*(.+)$/);
   if (!match) {
     return [{ hostPath: gitPath, sandboxPath: gitPath }];
@@ -34142,7 +34142,7 @@ var AgentIdleTimeoutError = class extends Error {
 };
 var detectsCompletion = (accumulated, signals) => signals.some((sig) => accumulated.includes(sig));
 var armDecision = (completionDetected, idleMs, graceMs) => completionDetected ? { ms: graceMs, onExpiry: "resolve" } : { ms: idleMs, onExpiry: "reject-idle" };
-var invokeWithRace = (runExec, opts) => new Promise((resolve40, reject3) => {
+var invokeWithRace = (runExec, opts) => new Promise((resolve41, reject3) => {
   const { idleMs, graceMs, completionSignals, signal } = opts;
   let settled = false;
   let accumulated = "";
@@ -34164,7 +34164,7 @@ var invokeWithRace = (runExec, opts) => new Promise((resolve40, reject3) => {
       return;
     settled = true;
     cleanup2();
-    resolve40(v);
+    resolve41(v);
   };
   const settleReject = (e) => {
     if (settled)
@@ -35411,7 +35411,7 @@ function filterHeaders(headers, opts = {}) {
   return out;
 }
 function buildRecord(p) {
-  const record5 = {
+  const record6 = {
     timestamp: (/* @__PURE__ */ new Date()).toISOString(),
     request_id: p.reqId,
     turn: p.turn,
@@ -35433,10 +35433,10 @@ function buildRecord(p) {
     }
   };
   if (p.sseEvents && p.sseEvents.length)
-    record5.response.sse_events = redactBodySecrets(p.sseEvents);
+    record6.response.sse_events = redactBodySecrets(p.sseEvents);
   if (p.upstreamBaseUrl)
-    record5.upstream_base_url = p.upstreamBaseUrl;
-  return record5;
+    record6.upstream_base_url = p.upstreamBaseUrl;
+  return record6;
 }
 function safeJson(raw) {
   if (raw == null)
@@ -35667,7 +35667,7 @@ var FileTraceStore = class {
     });
     return { sessionId: id2, recordCount: 0 };
   }
-  appendRecord(id2, record5) {
+  appendRecord(id2, record6) {
     let row = this.loadSessionRow(id2);
     if (!row) {
       this.getOrCreateSession(id2);
@@ -35675,9 +35675,9 @@ var FileTraceStore = class {
       if (!row)
         throw new Error(`failed to create trace session '${id2}'`);
     }
-    appendFileSync(this.recordsFile(id2), JSON.stringify(record5) + "\n", "utf8");
+    appendFileSync(this.recordsFile(id2), JSON.stringify(record6) + "\n", "utf8");
     row.record_count += 1;
-    row.updated_at = typeof record5.timestamp === "string" ? record5.timestamp : (/* @__PURE__ */ new Date()).toISOString();
+    row.updated_at = typeof record6.timestamp === "string" ? record6.timestamp : (/* @__PURE__ */ new Date()).toISOString();
     row.status = "active";
     this.writeSession(row);
   }
@@ -35711,9 +35711,9 @@ var FileTraceStore = class {
       if (line.trim().length === 0)
         continue;
       try {
-        const record5 = decodeTraceRecord(JSON.parse(line));
-        if (record5)
-          records.push(record5);
+        const record6 = decodeTraceRecord(JSON.parse(line));
+        if (record6)
+          records.push(record6);
       } catch {
       }
     }
@@ -35778,13 +35778,13 @@ var FileTraceStore = class {
     for (let index = visibleLines.length - 1; index >= 0; index -= 1) {
       const line = visibleLines[index];
       try {
-        const record5 = decodeTraceRecord(JSON.parse(line));
-        if (record5) {
+        const record6 = decodeTraceRecord(JSON.parse(line));
+        if (record6) {
           if (recordsNewestFirst.length === RECORD_WINDOW_LIMIT) {
             recordLimited = true;
             break;
           }
-          recordsNewestFirst.push(record5);
+          recordsNewestFirst.push(record6);
         } else {
           malformed = true;
           skippedCount += 1;
@@ -36076,13 +36076,13 @@ function serve(opts) {
       }
     }
   });
-  return new Promise((resolve40, reject3) => {
+  return new Promise((resolve41, reject3) => {
     server.once("error", reject3);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "reverse", port: boundPort, client, target: opts.target });
-      resolve40({
+      resolve41({
         port: boundPort,
         host,
         target: opts.target,
@@ -37148,13 +37148,13 @@ function serveForward(opts = {}) {
     upstream.on("close", cleanup2);
     clientSocket.on("close", cleanup2);
   });
-  return new Promise((resolve40, reject3) => {
+  return new Promise((resolve41, reject3) => {
     server.once("error", reject3);
     server.listen(opts.port ?? 0, host, () => {
       server.removeAllListeners("error");
       const boundPort = server.address().port;
       const unregister = registerIntercept({ kind: "forward", port: boundPort, client, tls: !!ca });
-      resolve40({
+      resolve41({
         port: boundPort,
         host,
         client,
@@ -38013,11 +38013,11 @@ async function launchTap(opts) {
 import { execFile as execFile2 } from "node:child_process";
 import { accessSync, constants as fsConstants, statSync as statSync4 } from "node:fs";
 import { join as join52 } from "node:path";
-var nodeExecDocker = (args) => new Promise((resolve40) => {
+var nodeExecDocker = (args) => new Promise((resolve41) => {
   execFile2("docker", [...args], (err, stdout, stderr) => {
     const code = err?.code;
     const exitCode = err === null ? 0 : typeof code === "number" ? code : 1;
-    resolve40({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
+    resolve41({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
   });
 });
 async function execDocker(args, opts) {
@@ -38025,8 +38025,8 @@ async function execDocker(args, opts) {
   const timeoutMs = opts?.timeoutMs ?? 5e3;
   let timer;
   try {
-    const timeout = new Promise((resolve40) => {
-      timer = setTimeout(() => resolve40(null), timeoutMs);
+    const timeout = new Promise((resolve41) => {
+      timer = setTimeout(() => resolve41(null), timeoutMs);
     });
     return await Promise.race([exec(args).catch(() => null), timeout]);
   } finally {
@@ -38693,12 +38693,12 @@ async function probeCodexAuth(exec = REAL_CODEX_AUTH_EXEC) {
   }
 }
 function createCodexAuthExec(options = {}) {
-  return () => new Promise((resolve40) => {
+  return () => new Promise((resolve41) => {
     const platform = options.platform ?? process.platform;
     const env = options.env ?? process.env;
     const plan = options.plan ?? codexStatusSpawnPlan(platform, env);
     if ("unavailableReason" in plan) {
-      resolve40({ kind: "unavailable", reason: plan.unavailableReason });
+      resolve41({ kind: "unavailable", reason: plan.unavailableReason });
       return;
     }
     const spawnProcess = options.spawnProcess ?? spawn3;
@@ -38731,7 +38731,7 @@ function createCodexAuthExec(options = {}) {
         terminationKiller = void 0;
         directKill(killer);
       }
-      resolve40(result);
+      resolve41(result);
     };
     const terminateCurrentProcessTree = () => {
       const target = child;
@@ -39801,15 +39801,15 @@ function invocationFromObjectLiteral(source) {
   try {
     const parsed = JSON.parse(source);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return void 0;
-    const record5 = parsed;
-    if (!isCompleteOutputSafeExecArguments(record5)) return void 0;
-    if (record5.cmd !== void 0 && record5.command !== void 0) return void 0;
-    const command2 = record5.cmd ?? record5.command;
+    const record6 = parsed;
+    if (!isCompleteOutputSafeExecArguments(record6)) return void 0;
+    if (record6.cmd !== void 0 && record6.command !== void 0) return void 0;
+    const command2 = record6.cmd ?? record6.command;
     if (typeof command2 !== "string") return void 0;
-    if (record5.workdir !== void 0 && typeof record5.workdir !== "string") return void 0;
+    if (record6.workdir !== void 0 && typeof record6.workdir !== "string") return void 0;
     return {
       command: command2,
-      ...typeof record5.workdir === "string" ? { workdir: record5.workdir } : {}
+      ...typeof record6.workdir === "string" ? { workdir: record6.workdir } : {}
     };
   } catch {
     return invocationFromSafeObjectLiteral(source);
@@ -41217,7 +41217,7 @@ async function cmdDocumentRecord(deps, name2, kind, path9, producer, backfill = 
         allowBackfill: backfill
       });
       const requestedPath = relative14(resolve25(deps.cwd), resolve25(deps.cwd, path9));
-      const canonicalRecords = ledger.records.filter((record5) => record5.kind === kind && record5.producer === producer && record5.recordedAt === recordedAt && record5.path === requestedPath);
+      const canonicalRecords = ledger.records.filter((record6) => record6.kind === kind && record6.producer === producer && record6.recordedAt === recordedAt && record6.path === requestedPath);
       if (canonicalRecords.length !== 1) {
         throw new Error("canonical document record is missing or ambiguous after registration");
       }
@@ -42179,8 +42179,8 @@ function validateCodexRemotePluginMetadata(path9) {
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
     throw new SkillCacheSchemaError(`skill cache schema \u635F\u574F\uFF1A${path9} \u9876\u5C42\u5FC5\u987B\u662F\u5BF9\u8C61`);
   }
-  const record5 = data;
-  if (record5.schema_version !== 1 || typeof record5.remote_plugin_id !== "string" || record5.remote_plugin_id.trim() === "") {
+  const record6 = data;
+  if (record6.schema_version !== 1 || typeof record6.remote_plugin_id !== "string" || record6.remote_plugin_id.trim() === "") {
     throw new SkillCacheSchemaError(
       `skill cache schema \u635F\u574F\uFF1A${path9} \u5FC5\u987B\u542B schema_version=1 \u4E0E\u975E\u7A7A remote_plugin_id`
     );
@@ -44309,8 +44309,8 @@ function readNewEvents(fs, path9, state) {
   return parseEventsText(lines.join("\n"));
 }
 function defaultSleep(ms) {
-  return new Promise((resolve40) => {
-    const t = setTimeout(resolve40, ms);
+  return new Promise((resolve41) => {
+    const t = setTimeout(resolve41, ms);
     if (typeof t.unref === "function")
       t.unref();
   });
@@ -44530,7 +44530,7 @@ var ShutdownController = class {
   awaitKilled() {
     if (this.killedDone || !this.killedStarted)
       return Promise.resolve();
-    return new Promise((resolve40) => this.killedWaiters.push(resolve40));
+    return new Promise((resolve41) => this.killedWaiters.push(resolve41));
   }
   startKillLadder() {
     const child = this.deps.child();
@@ -44766,12 +44766,12 @@ async function startSupervisor(channelName, workerName, config, deps) {
   log(`[supervisor] starting ${adapter2.provider} ${args.join(" ")}
 `);
   const child = proc.spawn(adapter2.provider, args, { cwd: config.cwd, env: childEnv });
-  const settled = new Promise((resolve40) => {
-    child.onSpawn(() => resolve40(true));
+  const settled = new Promise((resolve41) => {
+    child.onSpawn(() => resolve41(true));
     child.onError((err) => {
       log(`[supervisor] worker error: ${err.message}
 `);
-      resolve40(false);
+      resolve41(false);
     });
   });
   child.onStderr((chunk) => log(chunk));
@@ -45403,13 +45403,13 @@ function decodeSupervisorConfig(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     die("[channel] supervisor config \u5FC5\u987B\u662F JSON object");
   }
-  const record5 = value;
-  if (typeof record5.provider !== "string" || record5.provider.trim() === "") {
+  const record6 = value;
+  if (typeof record6.provider !== "string" || record6.provider.trim() === "") {
     die("[channel] supervisor config.provider \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32");
   }
-  const config = { provider: record5.provider };
+  const config = { provider: record6.provider };
   const copyString = (key) => {
-    const item2 = record5[key];
+    const item2 = record6[key];
     if (item2 === void 0) return;
     if (typeof item2 !== "string") die(`[channel] supervisor config.${key} \u5FC5\u987B\u662F\u5B57\u7B26\u4E32`);
     config[key] = item2;
@@ -45419,25 +45419,25 @@ function decodeSupervisorConfig(value) {
   copyString("model");
   copyString("spawnedBy");
   for (const key of ["timeoutMs", "warnBeforeMs", "idleTimeoutMs"]) {
-    const item2 = record5[key];
+    const item2 = record6[key];
     if (item2 === void 0) continue;
     if (typeof item2 !== "number" || !Number.isFinite(item2) || item2 < 0) {
       die(`[channel] supervisor config.${key} \u5FC5\u987B\u662F\u975E\u8D1F\u6570`);
     }
     config[key] = item2;
   }
-  if (record5.inboxPolicy !== void 0) {
-    if (record5.inboxPolicy !== "explicitOnly" && record5.inboxPolicy !== "broadcastAndExplicit") {
+  if (record6.inboxPolicy !== void 0) {
+    if (record6.inboxPolicy !== "explicitOnly" && record6.inboxPolicy !== "broadcastAndExplicit") {
       die("[channel] supervisor config.inboxPolicy \u975E\u6CD5");
     }
-    config.inboxPolicy = record5.inboxPolicy;
+    config.inboxPolicy = record6.inboxPolicy;
   }
-  if (record5.env !== void 0) {
-    if (typeof record5.env !== "object" || record5.env === null || Array.isArray(record5.env)) {
+  if (record6.env !== void 0) {
+    if (typeof record6.env !== "object" || record6.env === null || Array.isArray(record6.env)) {
       die("[channel] supervisor config.env \u5FC5\u987B\u662F string map");
     }
     const env = {};
-    for (const [key, item2] of Object.entries(record5.env)) {
+    for (const [key, item2] of Object.entries(record6.env)) {
       if (typeof item2 !== "string") die(`[channel] supervisor config.env.${key} \u5FC5\u987B\u662F\u5B57\u7B26\u4E32`);
       env[key] = item2;
     }
@@ -48099,7 +48099,7 @@ function parseTransactionReceipt(raw, specDirectory) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("spec scaffold \u4E8B\u52A1\u63CF\u8FF0\u5FC5\u987B\u662F\u5BF9\u8C61");
   }
-  const record5 = value;
+  const record6 = value;
   const allowedStates = /* @__PURE__ */ new Set([
     "preparing",
     "prepared",
@@ -48107,15 +48107,15 @@ function parseTransactionReceipt(raw, specDirectory) {
     "promoted"
   ]);
   const prefix = basename8(specDirectory);
-  if (Object.keys(record5).some((key) => !["version", "pid", "state", "stageName", "backupName"].includes(key)) || record5.version !== 1 || typeof record5.pid !== "number" || !Number.isSafeInteger(record5.pid) || record5.pid < 1 || typeof record5.state !== "string" || !allowedStates.has(record5.state) || typeof record5.stageName !== "string" || typeof record5.backupName !== "string" || !record5.stageName.startsWith(`${prefix}.pipeline-stage-`) || !record5.backupName.startsWith(`${prefix}.pipeline-backup-`) || basename8(record5.stageName) !== record5.stageName || basename8(record5.backupName) !== record5.backupName) {
+  if (Object.keys(record6).some((key) => !["version", "pid", "state", "stageName", "backupName"].includes(key)) || record6.version !== 1 || typeof record6.pid !== "number" || !Number.isSafeInteger(record6.pid) || record6.pid < 1 || typeof record6.state !== "string" || !allowedStates.has(record6.state) || typeof record6.stageName !== "string" || typeof record6.backupName !== "string" || !record6.stageName.startsWith(`${prefix}.pipeline-stage-`) || !record6.backupName.startsWith(`${prefix}.pipeline-backup-`) || basename8(record6.stageName) !== record6.stageName || basename8(record6.backupName) !== record6.backupName) {
     throw new Error("spec scaffold \u4E8B\u52A1\u63CF\u8FF0\u5F62\u72B6\u975E\u6CD5");
   }
   return {
     version: 1,
-    pid: record5.pid,
-    state: record5.state,
-    stageName: record5.stageName,
-    backupName: record5.backupName
+    pid: record6.pid,
+    state: record6.state,
+    stageName: record6.stageName,
+    backupName: record6.backupName
   };
 }
 function receiptContent(receipt) {
@@ -49166,25 +49166,25 @@ async function cmdTap(deps, sub, args) {
         }
         const merged = {};
         for (const c of result.clients) Object.assign(merged, c.env);
-        const code = await new Promise((resolve40) => {
+        const code = await new Promise((resolve41) => {
           const child = spawn5(executable, command2.slice(1), {
             stdio: "inherit",
             env: { ...process.env, ...merged }
           });
-          child.on("exit", (exitCode, signal) => resolve40(exitCode ?? (signal ? 1 : 0)));
-          child.on("error", () => resolve40(1));
+          child.on("exit", (exitCode, signal) => resolve41(exitCode ?? (signal ? 1 : 0)));
+          child.on("error", () => resolve41(1));
         });
         await result.daemon.stop();
         return code;
       }
-      const termination = new Promise((resolve40, reject3) => {
+      const termination = new Promise((resolve41, reject3) => {
         const cleanup2 = () => {
           process.off("SIGINT", stop);
           process.off("SIGTERM", stop);
         };
         const stop = () => {
           cleanup2();
-          void result.daemon.stop().then(resolve40, reject3);
+          void result.daemon.stop().then(resolve41, reject3);
         };
         process.once("SIGINT", stop);
         process.once("SIGTERM", stop);
@@ -49870,14 +49870,14 @@ async function cmdReview(deps, sub, name2, opts = {}) {
 // packages/cli/src/commands/internalSkillGate.ts
 function decodeHistoryLine2(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  const record5 = value;
-  if (typeof record5.kind !== "string") return null;
-  if (record5.to !== void 0 && typeof record5.to !== "string") return null;
-  if (record5.raw !== void 0 && typeof record5.raw !== "string") return null;
+  const record6 = value;
+  if (typeof record6.kind !== "string") return null;
+  if (record6.to !== void 0 && typeof record6.to !== "string") return null;
+  if (record6.raw !== void 0 && typeof record6.raw !== "string") return null;
   return {
-    kind: record5.kind,
-    ...typeof record5.to === "string" ? { to: record5.to } : {},
-    ...typeof record5.raw === "string" ? { raw: record5.raw } : {}
+    kind: record6.kind,
+    ...typeof record6.to === "string" ? { to: record6.to } : {},
+    ...typeof record6.raw === "string" ? { raw: record6.raw } : {}
   };
 }
 function parseHistoryLines(raw) {
@@ -50569,6 +50569,7 @@ function healthyDashboardIdentity(value, port, expectedReleaseId, expectedStateS
   if (!(body.ok === true && body.scope === "global" && typeof body.version === "string" && body.version !== "" && (expectedReleaseId === void 0 || releaseId === expectedReleaseId) && body.stateScopeId === expectedStateScopeId && (body.transactionId === void 0 || typeof body.transactionId === "string" && /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(body.transactionId)) && (observeAnyTransaction || (expectedTransactionId === void 0 ? body.transactionId === void 0 : body.transactionId === expectedTransactionId)) && Number.isSafeInteger(body.pid) && body.pid > 0)) return null;
   return {
     version: 1,
+    serverVersion: body.version,
     port,
     pid: body.pid,
     releaseId,
@@ -50657,30 +50658,30 @@ async function waitForHealthyServer(port, expectedReleaseId, expectedStateScopeI
   return null;
 }
 function listenerPids(port) {
-  return new Promise((resolve40) => {
+  return new Promise((resolve41) => {
     execFile3("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }, (error2, stdout) => {
       if (error2 === null) {
-        resolve40([...new Set(String(stdout ?? "").split(/\r?\n/).map((line) => Number.parseInt(line.trim(), 10)).filter((pid) => Number.isSafeInteger(pid) && pid > 0))]);
+        resolve41([...new Set(String(stdout ?? "").split(/\r?\n/).map((line) => Number.parseInt(line.trim(), 10)).filter((pid) => Number.isSafeInteger(pid) && pid > 0))]);
         return;
       }
-      resolve40(error2.code === 1 ? [] : null);
+      resolve41(error2.code === 1 ? [] : null);
     });
   });
 }
 function dashboardPortOpen(port) {
-  return new Promise((resolve40) => {
+  return new Promise((resolve41) => {
     const socket = createConnection({ host: "127.0.0.1", port });
     socket.setTimeout(250);
     socket.once("connect", () => {
       socket.destroy();
-      resolve40(true);
+      resolve41(true);
     });
     socket.once("timeout", () => {
       socket.destroy();
-      resolve40(true);
+      resolve41(true);
     });
     socket.once("error", (error2) => {
-      resolve40(error2.code !== "ECONNREFUSED");
+      resolve41(error2.code !== "ECONNREFUSED");
     });
   });
 }
@@ -50875,7 +50876,7 @@ async function startManagedDashboard(deps, payloadRoot, opts, runtime, expectedR
       `\u53D7\u7BA1 server \u5728 http://127.0.0.1:${port}/ \u672A\u901A\u8FC7\u5065\u5EB7\u68C0\u67E5`
     );
   }
-  const identityMatchesSpawn = healthy.version === 1 && healthy.port === port && healthy.pid === child.pid && Number.isSafeInteger(healthy.pid) && healthy.pid > 0 && (expectedReleaseId === void 0 || healthy.releaseId === expectedReleaseId) && healthy.stateScopeId === expectedStateScopeId && healthy.transactionId === opts.transactionId;
+  const identityMatchesSpawn = healthy.version === 1 && healthy.port === port && healthy.pid === child.pid && Number.isSafeInteger(healthy.pid) && healthy.pid > 0 && (expectedReleaseId === void 0 || healthy.releaseId === expectedReleaseId) && (opts.expectedServerVersion === void 0 || healthy.serverVersion === opts.expectedServerVersion) && healthy.stateScopeId === expectedStateScopeId && healthy.transactionId === opts.transactionId;
   if (!identityMatchesSpawn) {
     return stopFailedCandidate(
       deps,
@@ -50951,8 +50952,8 @@ async function cmdDashboard(deps, opts, runtime = REAL_DASHBOARD_RUNTIME) {
 import { homedir as homedir17 } from "node:os";
 
 // packages/cli/src/runtime/installer.ts
-import { mkdir as mkdir28 } from "node:fs/promises";
-import { join as join81 } from "node:path";
+import { mkdir as mkdir29 } from "node:fs/promises";
+import { join as join82 } from "node:path";
 
 // packages/cli/src/runtime/launchers.ts
 import { chmod as chmod2, lstat as lstat35, mkdir as mkdir25, readFile as readFile35, rm as rm10 } from "node:fs/promises";
@@ -51071,20 +51072,17 @@ async function writeStableLaunchers(paths, homeDir = homedir16()) {
 }
 
 // packages/cli/src/runtime/release-store.ts
-import { createHash as createHash41, randomUUID as randomUUID10 } from "node:crypto";
-import { execFile as execFile4 } from "node:child_process";
+import { randomUUID as randomUUID10 } from "node:crypto";
 import {
-  chmod as chmod3,
-  copyFile as copyFile2,
-  lstat as lstat36,
-  mkdir as mkdir26,
-  readFile as readFile37,
-  readdir as readdir12,
+  chmod as chmod4,
+  mkdir as mkdir27,
+  readFile as readFile38,
+  readdir as readdir13,
   rename as rename10,
-  rm as rm12,
+  rm as rm13,
   stat as stat11
 } from "node:fs/promises";
-import { basename as basename10, dirname as dirname18, join as join79, relative as relative19, resolve as resolve34, sep as sep19 } from "node:path";
+import { join as join80, resolve as resolve35 } from "node:path";
 
 // packages/cli/src/runtime/types.ts
 var RuntimeFailure = class extends Error {
@@ -51279,7 +51277,12 @@ async function compensateActivation(input) {
   await atomicWriteFile(input.paths.selectionPath, stableJson(restored));
 }
 
-// packages/cli/src/runtime/release-store.ts
+// packages/cli/src/runtime/release-payload.ts
+import { createHash as createHash41 } from "node:crypto";
+import { execFile as execFile4 } from "node:child_process";
+import { chmod as chmod3, copyFile as copyFile2, lstat as lstat36, mkdir as mkdir26, mkdtemp as mkdtemp2, readFile as readFile37, readdir as readdir12, rm as rm12 } from "node:fs/promises";
+import { tmpdir as tmpdir3 } from "node:os";
+import { basename as basename10, dirname as dirname18, join as join79, relative as relative19, resolve as resolve34, sep as sep19 } from "node:path";
 function isWithin(root, candidate) {
   const rel = relative19(root, candidate);
   return rel === "" || !rel.startsWith(`..${sep19}`) && rel !== ".." && !rel.includes(`${sep19}..${sep19}`);
@@ -51304,7 +51307,7 @@ async function copyEntry(source, target) {
   await copyFile2(source, target);
   await chmod3(target, sourceStat.mode & 511);
 }
-async function copyPayload(candidateRoot, payloadRoot) {
+async function copyReleasePayload(candidateRoot, payloadRoot) {
   for (const entry of PAYLOAD_ENTRIES) {
     const source = candidatePath(candidateRoot, entry);
     try {
@@ -51315,7 +51318,7 @@ async function copyPayload(candidateRoot, payloadRoot) {
     }
   }
 }
-async function hashTree(root) {
+async function hashReleasePayload(root) {
   const hash = createHash41("sha256");
   async function visit(dir, rel) {
     const entries = await readdir12(dir, { withFileTypes: true });
@@ -51339,7 +51342,7 @@ async function hashTree(root) {
   await visit(root, "");
   return hash.digest("hex");
 }
-function commandRunner() {
+function defaultRuntimeCommandRunner() {
   return {
     run: (file, args, cwd) => new Promise((resolveResult) => {
       execFile4(file, [...args], { cwd, encoding: "utf8", maxBuffer: 2 * 1024 * 1024 }, (error2, stdout, stderr) => {
@@ -51409,7 +51412,7 @@ async function runChecked(runner, file, args, cwd, label) {
   const detail = result.stderr.trim() || result.stdout.trim() || `exit ${result.code}`;
   throw new RuntimeFailure("candidate-invalid", `${label} \u5931\u8D25: ${detail}`);
 }
-async function verifyPayload(payloadRoot, runner) {
+async function verifyReleasePayload(payloadRoot, runner) {
   const verifier = join79(payloadRoot, "tools", "verify-skills.sh");
   const cli = join79(payloadRoot, "packages", "cli", "dist", "tenon.mjs");
   const server = join79(payloadRoot, "packages", "server", "dist", "dashboard.mjs");
@@ -51431,7 +51434,7 @@ async function verifyPayload(payloadRoot, runner) {
   }
   await runChecked(runner, process.execPath, [cli, "--help"], payloadRoot, "CLI smoke");
 }
-async function candidateVersion(candidateRoot) {
+async function releaseCandidateVersion(candidateRoot) {
   for (const manifest of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
       const parsed = JSON.parse(await readFile37(join79(candidateRoot, manifest), "utf8"));
@@ -51440,8 +51443,25 @@ async function candidateVersion(candidateRoot) {
     } catch {
     }
   }
-  return "unknown";
+  throw new RuntimeFailure("candidate-invalid", "\u5019\u9009\u53D1\u5E03\u7F3A\u5C11\u53EF\u9A8C\u8BC1\u7684 plugin manifest version");
 }
+async function inspectCandidatePayload(candidateRoot) {
+  const stageRoot = await mkdtemp2(join79(tmpdir3(), "tenon-candidate-inspect-"));
+  const payloadRoot = join79(stageRoot, "payload");
+  try {
+    await mkdir26(payloadRoot, { recursive: true });
+    await copyReleasePayload(resolve34(candidateRoot), payloadRoot);
+    await verifyReleasePayload(payloadRoot, defaultRuntimeCommandRunner());
+    return {
+      payloadDigest: await hashReleasePayload(payloadRoot),
+      pluginVersion: await releaseCandidateVersion(candidateRoot)
+    };
+  } finally {
+    await rm12(stageRoot, { recursive: true, force: true });
+  }
+}
+
+// packages/cli/src/runtime/release-store.ts
 var RuntimeReleaseStore = class {
   paths;
   now;
@@ -51451,15 +51471,15 @@ var RuntimeReleaseStore = class {
   constructor(options) {
     this.paths = options.paths;
     this.now = options.now ?? (() => (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z"));
-    this.runner = options.runner ?? commandRunner();
+    this.runner = options.runner ?? defaultRuntimeCommandRunner();
     this.retainedReleases = Math.max(2, options.retainedReleases ?? 3);
     this.auditWriter = options.auditWriter ?? writeAudit;
   }
-  async stageAndActivate(candidateRoot, host) {
-    const absoluteCandidate = resolve34(candidateRoot);
+  async stageAndActivate(candidateRoot, host, expectedPluginVersion) {
+    const absoluteCandidate = resolve35(candidateRoot);
     await this.prepareRoots();
     try {
-      return await withLock(this.paths.stateRoot, async () => this.stageAndActivateUnderLock(absoluteCandidate, host));
+      return await withLock(this.paths.stateRoot, async () => this.stageAndActivateUnderLock(absoluteCandidate, host, expectedPluginVersion));
     } catch (error2) {
       if (error2 instanceof RuntimeFailure) throw error2;
       throw new RuntimeFailure("candidate-invalid", `\u65E0\u6CD5\u5B89\u88C5\u5019\u9009 runtime: ${String(error2)}`);
@@ -51549,17 +51569,24 @@ var RuntimeReleaseStore = class {
       });
     });
   }
-  async stageAndActivateUnderLock(candidateRoot, host) {
-    const stageRoot = join79(this.paths.stagingRoot, `release-${randomUUID10()}`);
-    const payloadRoot = join79(stageRoot, "payload");
+  async stageAndActivateUnderLock(candidateRoot, host, expectedPluginVersion) {
+    const stageRoot = join80(this.paths.stagingRoot, `release-${randomUUID10()}`);
+    const payloadRoot = join80(stageRoot, "payload");
     let releaseId = null;
     try {
-      await mkdir26(payloadRoot, { recursive: true });
-      await copyPayload(candidateRoot, payloadRoot);
-      await verifyPayload(payloadRoot, this.runner);
-      const payloadDigest = await hashTree(payloadRoot);
+      await mkdir27(payloadRoot, { recursive: true });
+      await copyReleasePayload(candidateRoot, payloadRoot);
+      await verifyReleasePayload(payloadRoot, this.runner);
+      const payloadDigest = await hashReleasePayload(payloadRoot);
       releaseId = `sha256-${payloadDigest}`;
-      const source = { host, pluginVersion: await candidateVersion(candidateRoot) };
+      const pluginVersion = await releaseCandidateVersion(candidateRoot);
+      if (expectedPluginVersion !== void 0 && pluginVersion !== expectedPluginVersion) {
+        throw new RuntimeFailure(
+          "candidate-invalid",
+          `\u5019\u9009 plugin version ${pluginVersion} \u4E0E\u51BB\u7ED3\u76EE\u6807 ${expectedPluginVersion} \u4E0D\u4E00\u81F4`
+        );
+      }
+      const source = { host, pluginVersion };
       const manifest = {
         version: 1,
         releaseId,
@@ -51567,7 +51594,7 @@ var RuntimeReleaseStore = class {
         createdAt: this.now(),
         source
       };
-      await atomicWriteFile(join79(stageRoot, "release.json"), stableJson(manifest));
+      await atomicWriteFile(join80(stageRoot, "release.json"), stableJson(manifest));
       const finalRoot = this.releaseRoot(releaseId);
       let effectiveManifest = manifest;
       try {
@@ -51611,69 +51638,69 @@ var RuntimeReleaseStore = class {
       });
       throw error2;
     } finally {
-      await rm12(stageRoot, { recursive: true, force: true }).catch(() => {
+      await rm13(stageRoot, { recursive: true, force: true }).catch(() => {
       });
     }
   }
   async prepareRoots() {
     await Promise.all([
-      mkdir26(this.paths.dataRoot, { recursive: true }),
-      mkdir26(this.paths.stateRoot, { recursive: true }),
-      mkdir26(this.paths.configRoot, { recursive: true }),
-      mkdir26(this.paths.releasesRoot, { recursive: true }),
-      mkdir26(this.paths.stagingRoot, { recursive: true }),
-      mkdir26(this.paths.bootstrapRoot, { recursive: true })
+      mkdir27(this.paths.dataRoot, { recursive: true }),
+      mkdir27(this.paths.stateRoot, { recursive: true }),
+      mkdir27(this.paths.configRoot, { recursive: true }),
+      mkdir27(this.paths.releasesRoot, { recursive: true }),
+      mkdir27(this.paths.stagingRoot, { recursive: true }),
+      mkdir27(this.paths.bootstrapRoot, { recursive: true })
     ]);
   }
   releaseRoot(releaseId) {
     if (!validReleaseId(releaseId)) throw new RuntimeFailure("runtime-corrupt", `\u975E\u6CD5 runtime release id: ${releaseId}`);
-    return join79(this.paths.releasesRoot, releaseId);
+    return join80(this.paths.releasesRoot, releaseId);
   }
   async validateStoredRelease(releaseId) {
     if (!validReleaseId(releaseId)) return null;
     const root = this.releaseRoot(releaseId);
     const manifest = await readReleaseManifest(root);
     if (manifest === null || manifest.releaseId !== releaseId) return null;
-    const payloadRoot = join79(root, "payload");
+    const payloadRoot = join80(root, "payload");
     try {
-      if (await hashTree(payloadRoot) !== manifest.payloadDigest) return null;
-      await verifyPayload(payloadRoot, this.runner);
+      if (await hashReleasePayload(payloadRoot) !== manifest.payloadDigest) return null;
+      await verifyReleasePayload(payloadRoot, this.runner);
       return manifest;
     } catch {
       return null;
     }
   }
   async installBootstrap(releaseRoot) {
-    const source = join79(releaseRoot, "payload", "runtime", "tenon-bootstrap.mjs");
+    const source = join80(releaseRoot, "payload", "runtime", "tenon-bootstrap.mjs");
     await assertFile(source, "runtime bootstrap");
     await runChecked(this.runner, process.execPath, ["--check", source], releaseRoot, "runtime bootstrap syntax");
-    const active = join79(this.paths.bootstrapRoot, "active.mjs");
-    const previous = join79(this.paths.bootstrapRoot, "previous.mjs");
+    const active = join80(this.paths.bootstrapRoot, "active.mjs");
+    const previous = join80(this.paths.bootstrapRoot, "previous.mjs");
     try {
       await stat11(active);
-      await atomicWriteFile(previous, await readFile37(active, "utf8"));
-      await chmod3(previous, 493);
+      await atomicWriteFile(previous, await readFile38(active, "utf8"));
+      await chmod4(previous, 493);
     } catch (error2) {
       if (error2.code !== "ENOENT") throw error2;
     }
-    await atomicWriteFile(active, await readFile37(source, "utf8"));
-    await chmod3(active, 493);
+    await atomicWriteFile(active, await readFile38(source, "utf8"));
+    await chmod4(active, 493);
   }
   async prune(selection) {
     const protectedIds = new Set([selection.activeRelease, selection.previousRelease].filter((value) => value !== null));
-    const entries = await readdir12(this.paths.releasesRoot, { withFileTypes: true });
+    const entries = await readdir13(this.paths.releasesRoot, { withFileTypes: true });
     const candidates = [];
     for (const entry of entries) {
       if (!entry.isDirectory() || !validReleaseId(entry.name) || protectedIds.has(entry.name)) continue;
       try {
-        candidates.push({ id: entry.name, modifiedAt: (await stat11(join79(this.paths.releasesRoot, entry.name))).mtimeMs });
+        candidates.push({ id: entry.name, modifiedAt: (await stat11(join80(this.paths.releasesRoot, entry.name))).mtimeMs });
       } catch {
       }
     }
     candidates.sort((left, right) => right.modifiedAt - left.modifiedAt);
     const keep = Math.max(0, this.retainedReleases - protectedIds.size);
     for (const candidate of candidates.slice(keep)) {
-      await rm12(this.releaseRoot(candidate.id), { recursive: true, force: true });
+      await rm13(this.releaseRoot(candidate.id), { recursive: true, force: true });
       await this.auditWriter(this.paths, {
         version: 1,
         at: this.now(),
@@ -51687,8 +51714,8 @@ var RuntimeReleaseStore = class {
 
 // packages/cli/src/runtime/managed-release-journal.ts
 import { randomUUID as randomUUID11 } from "node:crypto";
-import { lstat as lstat37, mkdir as mkdir27, readFile as readFile38, unlink as unlink6 } from "node:fs/promises";
-import { dirname as dirname19, isAbsolute as isAbsolute25, join as join80, normalize } from "node:path";
+import { lstat as lstat37, mkdir as mkdir28, readFile as readFile39, unlink as unlink6 } from "node:fs/promises";
+import { dirname as dirname19, isAbsolute as isAbsolute25, join as join81, normalize } from "node:path";
 
 // packages/cli/src/runtime/managed-host-step-codec.ts
 function isRecord19(value) {
@@ -51832,11 +51859,17 @@ function decodeActivationCheckpoint(value) {
 function isOperation(value) {
   return value === "setup" || value === "update" || value === "adapter";
 }
+function decodeStableTarget(value) {
+  if (value === void 0) return void 0;
+  if (!isRecord20(value) || !exactKeys3(value, ["version", "tag", "commit"]) || typeof value.version !== "string" || !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.version) || value.tag !== `v${value.version}` || typeof value.commit !== "string" || !/^[a-f0-9]{40}$/.test(value.commit)) return null;
+  return { version: value.version, tag: value.tag, commit: value.commit };
+}
 function decodeDashboardIdentity(value) {
   if (value === void 0) return void 0;
-  if (!isRecord20(value) || !exactKeys3(value, ["version", "port", "pid", "releaseId", "stateScopeId"], ["transactionId"]) || value.version !== 1 || !Number.isSafeInteger(value.port) || value.port < 1 || value.port > 65535 || !Number.isSafeInteger(value.pid) || value.pid < 1 || !validReleaseId(value.releaseId) || typeof value.stateScopeId !== "string" || !/^sha256-v1-[a-f0-9]{64}$/.test(value.stateScopeId) || value.transactionId !== void 0 && (typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId))) return null;
+  if (!isRecord20(value) || !exactKeys3(value, ["version", "serverVersion", "port", "pid", "releaseId", "stateScopeId"], ["transactionId"]) || value.version !== 1 || typeof value.serverVersion !== "string" || !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.test(value.serverVersion) || !Number.isSafeInteger(value.port) || value.port < 1 || value.port > 65535 || !Number.isSafeInteger(value.pid) || value.pid < 1 || !validReleaseId(value.releaseId) || typeof value.stateScopeId !== "string" || !/^sha256-v1-[a-f0-9]{64}$/.test(value.stateScopeId) || value.transactionId !== void 0 && (typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId))) return null;
   return {
     version: 1,
+    serverVersion: value.serverVersion,
     port: value.port,
     pid: value.pid,
     releaseId: value.releaseId,
@@ -51849,6 +51882,7 @@ function decodeDashboard(value) {
   if (!isRecord20(value) || value.owner !== "transaction" && value.owner !== "preexisting") return null;
   const identity = decodeDashboardIdentity({
     version: value.version,
+    serverVersion: value.serverVersion,
     port: value.port,
     pid: value.pid,
     releaseId: value.releaseId,
@@ -51857,7 +51891,7 @@ function decodeDashboard(value) {
   });
   if (identity === null || identity === void 0 || !exactKeys3(
     value,
-    ["version", "port", "pid", "releaseId", "stateScopeId", "owner"],
+    ["version", "serverVersion", "port", "pid", "releaseId", "stateScopeId", "owner"],
     ["transactionId"]
   )) return null;
   return { ...identity, owner: value.owner };
@@ -51874,7 +51908,9 @@ function decodeJournal(raw, paths) {
     ["version", "transactionId", "operation", "source", "phase", "startedAt", "updatedAt"],
     [
       "dashboardPort",
+      "stableTarget",
       "candidateRoot",
+      "candidateOpenBrowser",
       "evidence",
       "hostSteps",
       "activationCheckpoint",
@@ -51886,17 +51922,18 @@ function decodeJournal(raw, paths) {
       "dashboardRestored"
     ]
   )) return null;
-  if (value.version !== 1 || typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId) || !isOperation(value.operation) || !isSource(value.source) || value.phase !== "preparing-host" && value.phase !== "candidate-resolved" && value.phase !== "activating-runtime" && value.phase !== "runtime-activated" && value.phase !== "starting-dashboard" && value.phase !== "dashboard-ready" && value.phase !== "stopping-candidate" && value.phase !== "reverting-activation" && value.phase !== "restoring-previous" && value.phase !== "previous-restored" && value.phase !== "evidence-committed" || typeof value.startedAt !== "string" || value.startedAt === "" || typeof value.updatedAt !== "string" || value.updatedAt === "" || value.dashboardPort !== void 0 && (!Number.isSafeInteger(value.dashboardPort) || value.dashboardPort < 1 || value.dashboardPort > 65535) || value.candidateRoot !== void 0 && (typeof value.candidateRoot !== "string" || !isAbsolute25(value.candidateRoot) || normalize(value.candidateRoot) !== value.candidateRoot) || value.evidence !== void 0 && (typeof value.evidence !== "string" || value.evidence.length > 1e6) || value.compensationReason !== void 0 && (typeof value.compensationReason !== "string" || value.compensationReason === "" || value.compensationReason.length > 4096) || value.dashboardBeforeAbsent !== void 0 && value.dashboardBeforeAbsent !== true) return null;
+  if (value.version !== 1 || typeof value.transactionId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(value.transactionId) || !isOperation(value.operation) || !isSource(value.source) || value.phase !== "preparing-host" && value.phase !== "candidate-resolved" && value.phase !== "activating-runtime" && value.phase !== "runtime-activated" && value.phase !== "starting-dashboard" && value.phase !== "dashboard-ready" && value.phase !== "stopping-candidate" && value.phase !== "reverting-activation" && value.phase !== "restoring-previous" && value.phase !== "previous-restored" && value.phase !== "evidence-committed" || typeof value.startedAt !== "string" || value.startedAt === "" || typeof value.updatedAt !== "string" || value.updatedAt === "" || value.dashboardPort !== void 0 && (!Number.isSafeInteger(value.dashboardPort) || value.dashboardPort < 1 || value.dashboardPort > 65535) || value.candidateRoot !== void 0 && (typeof value.candidateRoot !== "string" || !isAbsolute25(value.candidateRoot) || normalize(value.candidateRoot) !== value.candidateRoot) || value.candidateOpenBrowser !== void 0 && typeof value.candidateOpenBrowser !== "boolean" || value.evidence !== void 0 && (typeof value.evidence !== "string" || value.evidence.length > 1e6) || value.compensationReason !== void 0 && (typeof value.compensationReason !== "string" || value.compensationReason === "" || value.compensationReason.length > 4096) || value.dashboardBeforeAbsent !== void 0 && value.dashboardBeforeAbsent !== true) return null;
   const activationCheckpoint = value.activationCheckpoint === void 0 ? void 0 : decodeActivationCheckpoint(value.activationCheckpoint);
   const activation = value.activation === void 0 ? void 0 : decodeActivation(value.activation);
   const hostSteps = decodeManagedHostSteps(value.hostSteps);
   const dashboardBefore = decodeDashboardIdentity(value.dashboardBefore);
   const dashboard = decodeDashboard(value.dashboard);
   const dashboardRestored = decodeDashboardIdentity(value.dashboardRestored);
-  if (activationCheckpoint === null || activation === null || hostSteps === null || dashboardBefore === null || dashboard === null || dashboardRestored === null) return null;
+  const stableTarget = decodeStableTarget(value.stableTarget);
+  if (activationCheckpoint === null || activation === null || hostSteps === null || dashboardBefore === null || dashboard === null || dashboardRestored === null || stableTarget === null) return null;
   const expectedLaunchers = expectedStableLaunchers(paths, paths.homeDir);
   const launchersHaveExpectedPaths = (snapshot) => snapshot === void 0 || snapshot.tenon.path === expectedLaunchers.tenon.path && snapshot.hook.path === expectedLaunchers.hook.path;
-  if (!launchersHaveExpectedPaths(activationCheckpoint?.launchers) || !launchersHaveExpectedPaths(activation?.launcherSnapshot) || !launchersHaveExpectedPaths(activation?.launcherCommitted) || activation !== void 0 && activation.releaseRoot !== join80(paths.releasesRoot, activation.release.releaseId)) return null;
+  if (!launchersHaveExpectedPaths(activationCheckpoint?.launchers) || !launchersHaveExpectedPaths(activation?.launcherSnapshot) || !launchersHaveExpectedPaths(activation?.launcherCommitted) || activation !== void 0 && activation.releaseRoot !== join81(paths.releasesRoot, activation.release.releaseId)) return null;
   if (value.phase === "candidate-resolved" && typeof value.candidateRoot !== "string" || value.phase === "activating-runtime" && (typeof value.candidateRoot !== "string" || activationCheckpoint === void 0) || (value.phase === "runtime-activated" || value.phase === "starting-dashboard" || value.phase === "dashboard-ready" || value.phase === "stopping-candidate" || value.phase === "reverting-activation" || value.phase === "restoring-previous" || value.phase === "previous-restored" || value.phase === "evidence-committed") && (typeof value.candidateRoot !== "string" || activation === void 0) || (value.phase === "dashboard-ready" || value.phase === "evidence-committed") && value.dashboard !== void 0 && dashboard === void 0 || dashboard?.owner === "transaction" && dashboard.transactionId !== value.transactionId || (value.phase === "stopping-candidate" || value.phase === "reverting-activation" || value.phase === "restoring-previous" || value.phase === "previous-restored") && (activationCheckpoint === void 0 || typeof value.compensationReason !== "string") || dashboardRestored !== void 0 && dashboardRestored.transactionId !== `${value.transactionId}:restore` || dashboardBefore !== void 0 && value.dashboardBeforeAbsent === true || value.dashboardPort !== void 0 && (dashboardBefore !== void 0 && dashboardBefore.port !== value.dashboardPort || dashboard !== void 0 && dashboard.port !== value.dashboardPort || dashboardRestored !== void 0 && dashboardRestored.port !== value.dashboardPort) || (value.source === "codex" || value.source === "claude") && (value.phase === "runtime-activated" || value.phase === "starting-dashboard" || value.phase === "dashboard-ready" || value.phase === "stopping-candidate" || value.phase === "reverting-activation" || value.phase === "restoring-previous" || value.phase === "previous-restored" || value.phase === "evidence-committed") && value.dashboardPort === void 0) return null;
   return {
     version: 1,
@@ -51907,7 +51944,9 @@ function decodeJournal(raw, paths) {
     startedAt: value.startedAt,
     updatedAt: value.updatedAt,
     ...value.dashboardPort === void 0 ? {} : { dashboardPort: value.dashboardPort },
+    ...stableTarget === void 0 ? {} : { stableTarget },
     ...value.candidateRoot === void 0 ? {} : { candidateRoot: value.candidateRoot },
+    ...value.candidateOpenBrowser === void 0 ? {} : { candidateOpenBrowser: value.candidateOpenBrowser },
     ...value.evidence === void 0 ? {} : { evidence: value.evidence },
     ...hostSteps === void 0 ? {} : { hostSteps },
     ...activationCheckpoint === void 0 ? {} : { activationCheckpoint },
@@ -51925,7 +51964,7 @@ async function readJournal(path9, paths) {
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`managed release journal \u4E0D\u662F\u666E\u901A\u6587\u4EF6\uFF1A${path9}`);
     }
-    const decoded = decodeJournal(await readFile38(path9, "utf8"), paths);
+    const decoded = decodeJournal(await readFile39(path9, "utf8"), paths);
     if (decoded === null) throw new Error(`managed release journal \u683C\u5F0F\u975E\u6CD5\uFF1A${path9}`);
     return decoded;
   } catch (error2) {
@@ -51934,7 +51973,7 @@ async function readJournal(path9, paths) {
   }
 }
 function createManagedReleaseJournal(paths) {
-  const path9 = join80(paths.managedTransactionRoot, JOURNAL_FILE);
+  const path9 = join81(paths.managedTransactionRoot, JOURNAL_FILE);
   return {
     create(operation, source, now) {
       return {
@@ -51948,12 +51987,12 @@ function createManagedReleaseJournal(paths) {
       };
     },
     read: () => readJournal(path9, paths),
-    async write(record5) {
-      if (decodeJournal(JSON.stringify(record5), paths) === null) {
+    async write(record6) {
+      if (decodeJournal(JSON.stringify(record6), paths) === null) {
         throw new Error(`managed release journal \u683C\u5F0F\u975E\u6CD5\uFF1A${path9}`);
       }
-      await mkdir27(dirname19(path9), { recursive: true });
-      await atomicWriteFile(path9, `${JSON.stringify(record5, null, 2)}
+      await mkdir28(dirname19(path9), { recursive: true });
+      await atomicWriteFile(path9, `${JSON.stringify(record6, null, 2)}
 `);
     },
     async clear(expectedTransactionId) {
@@ -51986,11 +52025,11 @@ function pathsFor(scope) {
 function storeFor(scope) {
   return new RuntimeReleaseStore({ paths: pathsFor(scope) });
 }
-async function activateWithinTransaction(paths, homeDir, candidateRoot, host) {
+async function activateWithinTransaction(paths, homeDir, candidateRoot, host, expectedPluginVersion) {
   const store2 = new RuntimeReleaseStore({ paths });
   const launcherSnapshot = await captureStableLaunchers(paths, homeDir);
   const launcherCommitted = expectedStableLaunchers(paths, homeDir);
-  const activation = await store2.stageAndActivate(candidateRoot, host);
+  const activation = await store2.stageAndActivate(candidateRoot, host, expectedPluginVersion);
   try {
     await writeStableLaunchers(paths, homeDir);
     return { ...activation, launcherSnapshot, launcherCommitted };
@@ -52091,7 +52130,7 @@ async function recoverActivationWithinTransaction(paths, homeDir, checkpoint, ho
       activation: {
         selection: inspection.selection,
         release: active,
-        releaseRoot: join81(paths.releasesRoot, active.releaseId),
+        releaseRoot: join82(paths.releasesRoot, active.releaseId),
         launcherSnapshot: checkpoint.launchers,
         launcherCommitted: launchers
       }
@@ -52129,10 +52168,16 @@ async function rollbackWithinTransaction(paths, homeDir) {
 }
 async function withExclusiveRuntimeTransaction(scope, operation) {
   const paths = pathsFor(scope);
-  await mkdir28(paths.managedTransactionRoot, { recursive: true });
+  await mkdir29(paths.managedTransactionRoot, { recursive: true });
   return withLock(paths.managedTransactionRoot, () => operation({
     checkpointActivation: () => checkpointActivationWithinTransaction(paths, scope.homeDir),
-    activate: (candidateRoot, host) => activateWithinTransaction(paths, scope.homeDir, candidateRoot, host),
+    activate: (candidateRoot, host, expectedPluginVersion) => activateWithinTransaction(
+      paths,
+      scope.homeDir,
+      candidateRoot,
+      host,
+      expectedPluginVersion
+    ),
     recoverActivation: (checkpoint, host) => recoverActivationWithinTransaction(paths, scope.homeDir, checkpoint, host),
     revertActivation: (activation) => revertWithinTransaction(paths, scope.homeDir, activation),
     proveActivation: (activation) => proveActivationWithinTransaction(paths, scope.homeDir, activation),
@@ -52148,7 +52193,7 @@ var REAL_RUNTIME_INSTALLER = {
   },
   async rollback(scope) {
     const paths = pathsFor(scope);
-    await mkdir28(paths.managedTransactionRoot, { recursive: true });
+    await mkdir29(paths.managedTransactionRoot, { recursive: true });
     return withLock(
       paths.managedTransactionRoot,
       () => rollbackWithinTransaction(paths, scope.homeDir)
@@ -52228,6 +52273,118 @@ async function cmdRuntime(deps, sub, opts, env = REAL_RUNTIME_COMMAND_ENV, insta
 
 // packages/cli/src/commands/plugin-host.ts
 import { isAbsolute as isAbsolute26, normalize as normalize2 } from "node:path";
+
+// packages/cli/src/commands/stable-release.ts
+var STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
+var GIT_OID = /^[0-9a-f]{40}$/;
+var RELEASE_API = `https://api.github.com/repos/${PRODUCT_IDENTITY.repository}/releases/latest`;
+var RELEASE_REPOSITORY = `${PRODUCT_IDENTITY.repositoryUrl}.git`;
+function record5(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
+}
+function parseVersion(value) {
+  const match = STABLE_VERSION.exec(value);
+  if (match === null) throw new Error(`release version '${value}' is not complete stable SemVer`);
+  const [, major, minor, patch] = match;
+  if (major === void 0 || minor === void 0 || patch === void 0) {
+    throw new Error(`release version '${value}' is not complete stable SemVer`);
+  }
+  return [BigInt(major), BigInt(minor), BigInt(patch)];
+}
+function stableTagForVersion(version) {
+  parseVersion(version);
+  return `v${version}`;
+}
+function compareStableVersions(left, right) {
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  for (let index = 0; index < a.length; index += 1) {
+    const leftPart = a[index] ?? 0n;
+    const rightPart = b[index] ?? 0n;
+    if (leftPart !== rightPart) return leftPart > rightPart ? 1 : -1;
+  }
+  return 0;
+}
+function decodeStableReleaseMetadata(value) {
+  const item2 = record5(value);
+  if (item2 === null || Object.keys(item2).sort().join(",") !== "draft,html_url,prerelease,tag_name" || typeof item2.tag_name !== "string" || typeof item2.draft !== "boolean" || typeof item2.prerelease !== "boolean" || typeof item2.html_url !== "string") {
+    throw new Error("stable Release metadata schema is invalid");
+  }
+  if (item2.draft) throw new Error("latest Release is a draft");
+  if (item2.prerelease) throw new Error("latest Release is a prerelease");
+  if (!item2.tag_name.startsWith("v")) {
+    throw new Error(`release tag '${item2.tag_name}' is not complete stable SemVer`);
+  }
+  const version = item2.tag_name.slice(1);
+  stableTagForVersion(version);
+  const expectedUrl = `${PRODUCT_IDENTITY.repositoryUrl}/releases/tag/${item2.tag_name}`;
+  if (item2.html_url !== expectedUrl) {
+    throw new Error("latest Release does not belong to the official Tenon repository");
+  }
+  return { version, tag: item2.tag_name };
+}
+function tagCommit(env, tag2) {
+  const directRef = `refs/tags/${tag2}`;
+  const peeledRef = `${directRef}^{}`;
+  const result = env.runCommand(
+    "git",
+    ["ls-remote", RELEASE_REPOSITORY, directRef, peeledRef],
+    { timeoutMs: 1e4 }
+  );
+  if (result.code !== 0) {
+    throw new Error(`stable Release tag proof failed: ${result.stderr.trim() || `exit ${result.code}`}`);
+  }
+  const refs = /* @__PURE__ */ new Map();
+  for (const line of result.stdout.trim().split("\n")) {
+    if (line === "") continue;
+    const [oid, ref, ...extra] = line.trim().split(/\s+/);
+    if (extra.length > 0 || oid === void 0 || ref === void 0 || !GIT_OID.test(oid)) {
+      throw new Error("stable Release tag proof is malformed");
+    }
+    if (ref !== directRef && ref !== peeledRef) {
+      throw new Error("stable Release tag proof contains an unexpected ref");
+    }
+    if (refs.has(ref)) throw new Error("stable Release tag proof is ambiguous");
+    refs.set(ref, oid);
+  }
+  const commit = refs.get(peeledRef) ?? refs.get(directRef);
+  if (commit === void 0) throw new Error("stable Release tag proof is missing");
+  return commit;
+}
+function resolveStableTagTarget(env, version) {
+  const tag2 = stableTagForVersion(version);
+  return { version, tag: tag2, commit: tagCommit(env, tag2) };
+}
+async function resolveStableReleaseTarget(env, http = REAL_STABLE_RELEASE_HTTP) {
+  const metadata = decodeStableReleaseMetadata(await http.getJson(RELEASE_API));
+  return resolveStableTagTarget(env, metadata.version);
+}
+var REAL_STABLE_RELEASE_HTTP = {
+  async getJson(url) {
+    const response = await fetch(url, {
+      headers: {
+        accept: "application/vnd.github+json",
+        "user-agent": "tenon-release-resolver",
+        "x-github-api-version": "2022-11-28"
+      },
+      signal: AbortSignal.timeout(1e4)
+    });
+    if (!response.ok) throw new Error(`stable Release request failed: HTTP ${response.status}`);
+    const raw = record5(await response.json());
+    if (raw === null) throw new Error("stable Release response is not an object");
+    return {
+      tag_name: raw.tag_name,
+      draft: raw.draft,
+      prerelease: raw.prerelease,
+      html_url: raw.html_url
+    };
+  }
+};
+var REAL_STABLE_RELEASE_RESOLVER = {
+  resolve: (env) => resolveStableReleaseTarget(env)
+};
+
+// packages/cli/src/commands/plugin-host.ts
 var TENON_HOSTS = [
   "codex",
   "claude",
@@ -52245,6 +52402,7 @@ var TENON_HOSTS = [
 var TENON_MARKETPLACE_SOURCE = "jefferysha/tenon";
 var TENON_MARKETPLACE_NAME = "tenon";
 var TENON_PLUGIN_NAME = "tenon";
+var TENON_RELEASE_VERSION = "1.0.2";
 function parseHostPluginInventory(host, stdout) {
   let parsed;
   try {
@@ -52258,6 +52416,7 @@ function parseHostPluginInventory(host, stdout) {
   const scopes = /* @__PURE__ */ new Map();
   const seenRegistrations = /* @__PURE__ */ new Set();
   let tenonRoot = null;
+  let tenonVersion = null;
   for (const entry of entries) {
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return null;
     const item2 = entry;
@@ -52281,13 +52440,15 @@ function parseHostPluginInventory(host, stdout) {
     if (enabled && host === "codex" && item2.name === TENON_PLUGIN_NAME && item2.marketplaceName === TENON_MARKETPLACE_NAME && typeof item2.source?.path === "string") {
       if (tenonRoot !== null) return null;
       tenonRoot = item2.source.path;
+      tenonVersion = typeof entry.version === "string" ? entry.version : null;
     }
     if (enabled && host === "claude" && id2 === `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}` && typeof item2.installPath === "string") {
       if (tenonRoot !== null) return null;
       tenonRoot = item2.installPath;
+      tenonVersion = typeof entry.version === "string" ? entry.version : null;
     }
   }
-  return { enabledIds: ids2, enabledScopes: scopes, tenonRoot };
+  return { enabledIds: ids2, enabledScopes: scopes, tenonRoot, tenonVersion };
 }
 function enabledHostPluginIds(host, stdout) {
   return parseHostPluginInventory(host, stdout)?.enabledIds ?? null;
@@ -52316,31 +52477,66 @@ function isNativePipelineHost(host) {
 function hostFlag(host) {
   return `--${host}`;
 }
-function nativeInstallPlan(host) {
+function nativeInstallPlan(host, releaseVersion = TENON_RELEASE_VERSION) {
   if (host === "codex") {
+    const releaseTag2 = stableTagForVersion(releaseVersion);
     return [
-      { cmd: "codex", args: ["plugin", "marketplace", "add", TENON_MARKETPLACE_SOURCE, "--ref", "main"] },
+      {
+        cmd: "codex",
+        args: [
+          "plugin",
+          "marketplace",
+          "add",
+          TENON_MARKETPLACE_SOURCE,
+          "--ref",
+          releaseTag2,
+          "--json"
+        ]
+      },
       { cmd: "codex", args: ["plugin", "add", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, "--json"] },
       { cmd: "codex", args: ["plugin", "list", "--json"] }
     ];
   }
+  const releaseTag = stableTagForVersion(releaseVersion);
   return [
-    { cmd: "claude", args: ["plugin", "marketplace", "add", TENON_MARKETPLACE_SOURCE] },
+    { cmd: "claude", args: ["plugin", "marketplace", "add", `${TENON_MARKETPLACE_SOURCE}@${releaseTag}`] },
     { cmd: "claude", args: ["plugin", "install", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
     { cmd: "claude", args: ["plugin", "list", "--json"] }
   ];
 }
-function nativeUpdatePlan(host) {
+function nativeUpdatePlan(host, target) {
+  if (target === void 0) throw new Error(`${host} update plan requires a frozen stable Release target`);
   if (host === "codex") {
     return [
-      { cmd: "codex", args: ["plugin", "marketplace", "upgrade", TENON_MARKETPLACE_NAME, "--json"] },
+      { cmd: "codex", args: ["plugin", "remove", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, "--json"] },
+      { cmd: "codex", args: ["plugin", "marketplace", "remove", TENON_MARKETPLACE_NAME, "--json"] },
+      {
+        cmd: "codex",
+        args: [
+          "plugin",
+          "marketplace",
+          "add",
+          TENON_MARKETPLACE_SOURCE,
+          "--ref",
+          target.tag,
+          "--json"
+        ]
+      },
       { cmd: "codex", args: ["plugin", "add", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, "--json"] },
       { cmd: "codex", args: ["plugin", "list", "--json"] }
     ];
   }
   return [
-    { cmd: "claude", args: ["plugin", "marketplace", "update", TENON_MARKETPLACE_NAME] },
-    { cmd: "claude", args: ["plugin", "update", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
+    {
+      cmd: "claude",
+      args: ["plugin", "uninstall", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, "--scope", "user"]
+    },
+    { cmd: "claude", args: ["plugin", "marketplace", "remove", TENON_MARKETPLACE_NAME] },
+    {
+      cmd: "claude",
+      args: ["plugin", "marketplace", "add", `${TENON_MARKETPLACE_SOURCE}@${target.tag}`]
+    },
+    { cmd: "claude", args: ["plugin", "install", `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
     { cmd: "claude", args: ["plugin", "list", "--json"] }
   ];
 }
@@ -52349,9 +52545,25 @@ function nativeUpdatePlan(host) {
 var HOST_TARGET_PLAN_SCHEMA_VERSION = "host-target-plan/v1";
 var PRODUCT_STEPS = [
   { id: "managed-runtime", label: "host-plan.step.managed-runtime", command: null },
+  { id: "dashboard-readiness", label: "host-plan.step.dashboard-readiness", command: null },
   { id: "bundled-skills", label: "host-plan.step.bundled-skills", command: null },
   { id: "runtime-readiness", label: "host-plan.step.runtime-readiness", command: null }
 ];
+var SETUP_RELEASE_TARGET_STEP = {
+  id: "stable-release-target",
+  label: "host-plan.step.stable-release-target",
+  command: null
+};
+var UPDATE_RELEASE_RESOLVER_STEP = {
+  id: "stable-release-resolve",
+  label: "host-plan.step.stable-release-resolve",
+  command: null
+};
+var CANDIDATE_VALIDATION_STEP = {
+  id: "candidate-validation",
+  label: "host-plan.step.candidate-validation",
+  command: null
+};
 var CODEX_AUTH_STATUS_STEP = {
   id: "codex-auth-status",
   label: "host-plan.step.codex-auth-status",
@@ -52361,10 +52573,14 @@ var CODEX_AUTH_STATUS_STEP = {
     display: "codex login status"
   }
 };
-var NATIVE_STEP_IDS = {
-  setup: ["marketplace-register", "plugin-install", "plugin-inventory"],
-  update: ["marketplace-refresh", "plugin-update", "plugin-inventory"]
-};
+var NATIVE_SETUP_STEP_IDS = ["marketplace-register", "plugin-install", "plugin-inventory"];
+var VERSIONED_UPDATE_STEP_IDS = [
+  "plugin-remove",
+  "marketplace-remove",
+  "marketplace-register",
+  "plugin-install",
+  "plugin-inventory"
+];
 function command(executable, args) {
   return {
     executable,
@@ -52404,8 +52620,9 @@ function createHostTargetCatalog() {
   };
 }
 function nativeSteps(host, operation, plan) {
-  const ids2 = NATIVE_STEP_IDS[operation];
+  const ids2 = operation === "setup" ? NATIVE_SETUP_STEP_IDS : VERSIONED_UPDATE_STEP_IDS;
   return [
+    operation === "setup" ? SETUP_RELEASE_TARGET_STEP : UPDATE_RELEASE_RESOLVER_STEP,
     ...plan.map((item2, index) => {
       const id2 = ids2[index] ?? `host-command-${index + 1}`;
       return {
@@ -52414,18 +52631,21 @@ function nativeSteps(host, operation, plan) {
         command: command(item2.cmd, item2.args)
       };
     }),
+    CANDIDATE_VALIDATION_STEP,
     PRODUCT_STEPS[0],
+    PRODUCT_STEPS[1],
     ...host === "codex" ? [CODEX_AUTH_STATUS_STEP] : [],
-    ...operation === "setup" ? PRODUCT_STEPS.slice(1) : []
+    ...operation === "setup" ? PRODUCT_STEPS.slice(2) : []
   ];
 }
 function adapterSteps(operation, manualCommand) {
   const deploymentSteps = [
     { id: "package-assets", label: "host-plan.step.package-assets", command: null },
     PRODUCT_STEPS[0],
+    PRODUCT_STEPS[1],
     { id: "adapter-deploy", label: "host-plan.step.adapter-deploy", command: manualCommand }
   ];
-  return operation === "setup" ? [...deploymentSteps, ...PRODUCT_STEPS.slice(1)] : deploymentSteps;
+  return operation === "setup" ? [...deploymentSteps, ...PRODUCT_STEPS.slice(2)] : deploymentSteps;
 }
 function createHostTargetPlan(host, operation) {
   const target = targetFor2(host);
@@ -52434,7 +52654,10 @@ function createHostTargetPlan(host, operation) {
   const steps = isNativePipelineHost(host) ? nativeSteps(
     host,
     operation,
-    operation === "setup" ? nativeInstallPlan(host) : nativeUpdatePlan(host)
+    operation === "setup" ? nativeInstallPlan(host) : nativeUpdatePlan(
+      host,
+      { version: "<latest-stable>", tag: "<latest-stable>", commit: "0".repeat(40) }
+    )
   ) : adapterSteps(operation, manualCommand);
   return {
     schema_version: HOST_TARGET_PLAN_SCHEMA_VERSION,
@@ -52446,6 +52669,9 @@ function createHostTargetPlan(host, operation) {
     notices: [
       "host-plan.notice.read-only-generation",
       "host-plan.notice.manual-command-has-effects",
+      "host-plan.notice.dashboard-readiness",
+      ...operation === "setup" ? ["host-plan.notice.first-setup-browser"] : [],
+      ...isNativePipelineHost(host) && operation === "update" ? ["host-plan.notice.update-target-frozen-at-execution"] : [],
       ...host === "codex" ? ["host-plan.notice.codex-auth-guidance"] : [],
       ...isNativePipelineHost(host) ? [] : ["host-plan.notice.current-project-target"]
     ]
@@ -52484,7 +52710,7 @@ function cmdHostTargetPlan(deps, opts) {
 
 // packages/cli/src/commands/managed-dashboard-identity.ts
 function sameManagedDashboardIdentity(left, right) {
-  return left !== void 0 && right !== void 0 && left.version === right.version && left.port === right.port && left.pid === right.pid && left.releaseId === right.releaseId && left.stateScopeId === right.stateScopeId && left.transactionId === right.transactionId;
+  return left !== void 0 && right !== void 0 && left.version === right.version && left.serverVersion === right.serverVersion && left.port === right.port && left.pid === right.pid && left.releaseId === right.releaseId && left.stateScopeId === right.stateScopeId && left.transactionId === right.transactionId;
 }
 
 // packages/cli/src/commands/released-dashboard-starter.ts
@@ -52522,7 +52748,7 @@ function createReleasedDashboardStarter(runtime) {
 var REAL_RELEASED_DASHBOARD_STARTER = createReleasedDashboardStarter(REAL_DASHBOARD_RUNTIME);
 
 // packages/cli/src/commands/setupEnvironment.ts
-import { dirname as dirname20, join as join82, resolve as resolve35 } from "node:path";
+import { dirname as dirname20, join as join83, resolve as resolve36 } from "node:path";
 import { randomUUID as randomUUID12 } from "node:crypto";
 
 // packages/cli/src/commands/native-host-command-binding.ts
@@ -52601,12 +52827,13 @@ import { homedir as homedir18 } from "node:os";
 var REAL_SETUP_ENV = {
   homeDir: () => homedir18(),
   runtimeEnv: () => ({ ...process.env }),
+  isInteractive: () => process.stdin.isTTY === true && process.stdout.isTTY === true && process.env.CI === void 0,
   pluginRoot: () => {
     const r = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT;
     return r !== void 0 && r.trim() !== "" ? r : null;
   },
   selfPath: () => {
-    const candidate = resolve35(process.argv[1] ?? "");
+    const candidate = resolve36(process.argv[1] ?? "");
     try {
       return realpathSync5(candidate);
     } catch {
@@ -52692,7 +52919,8 @@ var REAL_SETUP_ENV = {
       const stdout = execFileSync(cmd, args, {
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
-        ...options?.cwd === void 0 ? {} : { cwd: options.cwd }
+        ...options?.cwd === void 0 ? {} : { cwd: options.cwd },
+        ...options?.timeoutMs === void 0 ? {} : { timeout: options.timeoutMs }
       });
       return { code: 0, stdout, stderr: "" };
     } catch (e) {
@@ -52719,7 +52947,7 @@ var REAL_SETUP_ENV = {
 function resolvePipelineRoot(env) {
   const root = env.pluginRoot();
   if (root !== null) return root;
-  return resolve35(dirname20(env.selfPath()), "..", "..", "..");
+  return resolve36(dirname20(env.selfPath()), "..", "..", "..");
 }
 function printPlanSkeleton(deps, opts, host) {
   deps.io.out(`[setup] ${hostFlag(host)} \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6`);
@@ -52735,7 +52963,7 @@ function printPlanSkeleton(deps, opts, host) {
   if (opts.dryRun) deps.io.out("  \uFF08--dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u4E0D\u53D1\u5E03 runtime\u3001\u4E0D\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
 }
 function autoUpdateConfigPath(env) {
-  return join82(resolveRuntimePaths({
+  return join83(resolveRuntimePaths({
     homeDir: env.homeDir(),
     env: env.runtimeEnv()
   }).configRoot, "auto-update.conf");
@@ -52811,7 +53039,7 @@ function scrubLegacyCodexAdapterHooks(content) {
 `, removed };
 }
 function migrateLegacyCodexHooks(deps, env) {
-  const configPath = join82(env.homeDir(), ".codex", "hooks.json");
+  const configPath = join83(env.homeDir(), ".codex", "hooks.json");
   if (!env.pathExists(configPath)) return 0;
   const current = env.readText(configPath);
   if (current === void 0) {
@@ -52831,142 +53059,10 @@ function migrateLegacyCodexHooks(deps, env) {
 }
 
 // packages/cli/src/commands/setupHost.ts
-import { join as join88 } from "node:path";
-
-// packages/cli/src/runtime/managed-host-reconciliation.ts
-var HOST_OBSERVATION_LIMIT = 1e6;
-var HOST_REPLAY_POLICY = "observe-before-replay-v1";
-function assertManagedHostObservation(value, label) {
-  if (value === "" || value.length > HOST_OBSERVATION_LIMIT) {
-    throw new ManagedRuntimeIndeterminateError(
-      `${label} \u5FC5\u987B\u662F\u975E\u7A7A\u4E14\u4E0D\u8D85\u8FC7 ${HOST_OBSERVATION_LIMIT} \u5B57\u7B26\u7684\u89C4\u8303\u5316\u5BBF\u4E3B observation`
-    );
-  }
-}
-function decideManagedHostRecovery(before, observed, isDesired) {
-  if (isDesired(observed)) return "checkpoint";
-  if (observed === before) return "execute";
-  throw new ManagedRuntimeIndeterminateError(
-    "\u5BBF\u4E3B observation \u65E2\u4E0D\u6EE1\u8DB3 desired\uFF0C\u4E5F\u4E0D\u7CBE\u786E\u7B49\u4E8E before\uFF1B\u62D2\u7EDD\u731C\u6D4B\u6216\u91CD\u653E mutation"
-  );
-}
-function createManagedHostStepRunner(context) {
-  return async (id2, step) => {
-    if (!/^[a-zA-Z0-9_-]+$/.test(id2)) throw new Error(`host step id \u975E\u6CD5\uFF1A${id2}`);
-    assertManagedHostObservation(step.desired, `host step '${id2}' desired`);
-    let journal = context.journal();
-    const existing = journal.hostSteps?.find((item2) => item2.id === id2);
-    const desiredMatches = (persistedDesired) => persistedDesired === step.desired || step.isEquivalentDesired?.(persistedDesired) === true;
-    if (existing?.state === "completed") {
-      if (existing.desired === void 0 || !desiredMatches(existing.desired) || existing.replayPolicy !== HOST_REPLAY_POLICY || existing.observedAfter === void 0 || !step.isDesired(existing.observedAfter)) {
-        throw new ManagedRuntimeIndeterminateError(
-          `host step '${id2}' completed checkpoint \u7F3A\u5C11\u6216\u4E0D\u5339\u914D desired-state proof`
-        );
-      }
-      const observed = await step.observe();
-      assertManagedHostObservation(observed, `host step '${id2}' completed recovery observation`);
-      if (!step.isDesired(observed)) {
-        throw new ManagedRuntimeIndeterminateError(
-          `host step '${id2}' completed checkpoint \u540E\u7684\u6743\u5A01 inventory \u5DF2\u4E0D\u6EE1\u8DB3 desired\uFF1B\u62D2\u7EDD\u7EE7\u7EED\u6216\u91CD\u653E`
-        );
-      }
-      return existing.result ?? "";
-    }
-    let decision = "execute";
-    if (existing === void 0) {
-      const before = await step.observe();
-      assertManagedHostObservation(before, `host step '${id2}' before`);
-      journal = {
-        ...journal,
-        hostSteps: [...journal.hostSteps ?? [], {
-          id: id2,
-          state: "started",
-          before,
-          desired: step.desired,
-          replayPolicy: HOST_REPLAY_POLICY
-        }],
-        updatedAt: context.now()
-      };
-      await context.commit(journal);
-      decision = step.isDesired(before) ? "checkpoint" : "execute";
-    } else {
-      if (existing.before === void 0 || existing.desired === void 0 || existing.replayPolicy !== HOST_REPLAY_POLICY) {
-        throw new ManagedRuntimeIndeterminateError(
-          `host step '${id2}' \u662F\u7F3A\u5C11 before/desired/replayPolicy \u7684\u65E7 pending WAL\uFF1B\u62D2\u7EDD\u81EA\u52A8\u91CD\u653E`
-        );
-      }
-      if (!desiredMatches(existing.desired)) {
-        throw new ManagedRuntimeIndeterminateError(
-          `host step '${id2}' \u5F53\u524D desired \u4E0E WAL \u4E0D\u4E00\u81F4\uFF1B\u62D2\u7EDD\u91CD\u89E3\u91CA pending mutation`
-        );
-      }
-      const observed = await step.observe();
-      assertManagedHostObservation(observed, `host step '${id2}' recovery observation`);
-      decision = decideManagedHostRecovery(existing.before, observed, step.isDesired);
-    }
-    const result = decision === "execute" ? await step.execute() : "";
-    if (result.length > HOST_OBSERVATION_LIMIT) {
-      throw new Error(`host step '${id2}' \u7ED3\u679C\u8D85\u8FC7 journal \u4E0A\u9650`);
-    }
-    const observedAfter = await step.observe();
-    assertManagedHostObservation(observedAfter, `host step '${id2}' observed-after`);
-    if (!step.isDesired(observedAfter)) {
-      throw new ManagedRuntimeIndeterminateError(
-        `host step '${id2}' \u6267\u884C\u540E\u672A\u8BC1\u660E desired postcondition`
-      );
-    }
-    journal = {
-      ...journal,
-      hostSteps: (journal.hostSteps ?? []).map((item2) => item2.id === id2 ? { ...item2, state: "completed", observedAfter, result } : item2),
-      updatedAt: context.now()
-    };
-    await context.commit(journal);
-    return result;
-  };
-}
-
-// packages/cli/src/commands/managed-release-journal-coordinator.ts
-async function resolveManagedReleaseJournal(deps, request, transaction) {
-  try {
-    const pending = await transaction.journal.read();
-    if (pending === null) {
-      const created = {
-        ...transaction.journal.create(request.operation, request.source, deps.clock()),
-        dashboardPort: request.dashboardPort ?? DEFAULT_DASHBOARD_PORT
-      };
-      await transaction.journal.write(created);
-      return created;
-    }
-    if (pending.operation !== request.operation || pending.source !== request.source) {
-      throw new ManagedRuntimeIndeterminateError(
-        `\u5B58\u5728\u672A\u5B8C\u6210\u7684 ${pending.operation}/${pending.source} \u4E8B\u52A1 ${pending.transactionId}\uFF0C\u62D2\u7EDD\u542F\u52A8 ${request.operation}/${request.source}`
-      );
-    }
-    if (pending.dashboardPort !== void 0) return pending;
-    const inferredPort = pending.dashboard?.port ?? pending.dashboardBefore?.port;
-    const canAdoptRequestedPort = pending.phase === "preparing-host" || pending.phase === "candidate-resolved";
-    if (inferredPort === void 0 && !canAdoptRequestedPort) {
-      throw new ManagedRuntimeIndeterminateError(
-        `\u672A\u5B8C\u6210\u4E8B\u52A1 ${pending.transactionId} \u5DF2\u8FDB\u5165 ${pending.phase}\uFF0C\u4F46\u65E7 journal \u7F3A\u5C11 pre-activation Dashboard port\uFF1B\u62D2\u7EDD\u4ECE retry \u73AF\u5883\u8865\u8BC1`
-      );
-    }
-    const migrated = {
-      ...pending,
-      dashboardPort: inferredPort ?? request.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
-      updatedAt: deps.clock()
-    };
-    await transaction.journal.write(migrated);
-    return migrated;
-  } catch (error2) {
-    throw error2 instanceof ManagedRuntimeIndeterminateError ? error2 : new ManagedRuntimeIndeterminateError(
-      `\u65E0\u6CD5\u8BFB\u53D6\u6216\u521B\u5EFA write-ahead journal\uFF1A${String(error2)}`,
-      { cause: error2 }
-    );
-  }
-}
+import { join as join91 } from "node:path";
 
 // packages/cli/src/commands/release-dashboard-coordinator.ts
-import { join as join83 } from "node:path";
+import { join as join84 } from "node:path";
 async function coordinateReleaseDashboard(deps, transaction, initialJournal, activation, openBrowser2, dashboardPort, starter) {
   let journal = initialJournal;
   if (journal.dashboardPort !== void 0 && journal.dashboardPort !== dashboardPort) {
@@ -52999,7 +53095,8 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
   try {
     const inspectOptions = {
       openBrowser: false,
-      port: dashboardPort
+      port: dashboardPort,
+      expectedServerVersion: activation.release.source.pluginVersion
     };
     if (journal.phase === "dashboard-ready" || journal.phase === "evidence-committed") {
       if (journal.dashboard === void 0) {
@@ -53088,8 +53185,8 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
       }
       current = null;
     }
-    const currentOwned = current !== null && current.transactionId === journal.transactionId && current.releaseId === activation.release.releaseId && current.port === dashboardPort;
-    if (current !== null && current.port === dashboardPort && current.transactionId !== void 0 && current.transactionId !== journal.transactionId && current.releaseId === activation.release.releaseId && journal.dashboardBefore !== void 0 && sameManagedDashboardIdentity(current, journal.dashboardBefore)) {
+    const currentOwned = current !== null && current.transactionId === journal.transactionId && current.releaseId === activation.release.releaseId && current.serverVersion === activation.release.source.pluginVersion && current.port === dashboardPort;
+    if (current !== null && current.port === dashboardPort && current.transactionId !== void 0 && current.transactionId !== journal.transactionId && current.releaseId === activation.release.releaseId && current.serverVersion === activation.release.source.pluginVersion && journal.dashboardBefore !== void 0 && sameManagedDashboardIdentity(current, journal.dashboardBefore)) {
       journal = {
         ...journal,
         phase: "dashboard-ready",
@@ -53122,11 +53219,12 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
       startedNewDashboard = true;
       dashboardOutcome = await starter.start(
         deps,
-        join83(activation.releaseRoot, "payload"),
+        join84(activation.releaseRoot, "payload"),
         {
           openBrowser: openBrowser2,
           port: dashboardPort,
-          transactionId: journal.transactionId
+          transactionId: journal.transactionId,
+          expectedServerVersion: activation.release.source.pluginVersion
         }
       );
     }
@@ -53145,7 +53243,7 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
       };
     }
     const readyIdentity = dashboardOutcome.session.ownership;
-    const readyIdentityValid = readyIdentity.version === 1 && readyIdentity.releaseId === activation.release.releaseId && readyIdentity.port === dashboardPort && readyIdentity.transactionId === journal.transactionId && Number.isSafeInteger(readyIdentity.pid) && readyIdentity.pid > 0 && /^sha256-v1-[a-f0-9]{64}$/.test(readyIdentity.stateScopeId);
+    const readyIdentityValid = readyIdentity.version === 1 && readyIdentity.releaseId === activation.release.releaseId && readyIdentity.serverVersion === activation.release.source.pluginVersion && readyIdentity.port === dashboardPort && readyIdentity.transactionId === journal.transactionId && Number.isSafeInteger(readyIdentity.pid) && readyIdentity.pid > 0 && /^sha256-v1-[a-f0-9]{64}$/.test(readyIdentity.stateScopeId);
     if (!readyIdentityValid) {
       throw new ManagedRuntimeIndeterminateError(
         startedNewDashboard ? "starter \u8FD4\u56DE\u9519\u8BEF ownership\uFF1B\u8BE5 session \u4E0D\u6784\u6210\u4FE1\u53F7\u6743\u9650\uFF0C\u4FDD\u7559 journal" : "\u6536\u517B\u7684 Dashboard session \u672A\u56DE\u663E\u7CBE\u786E inspected identity"
@@ -53184,11 +53282,11 @@ function assertDashboardPort(identity, expectedPort, label) {
 }
 
 // packages/cli/src/commands/dashboard-restore.ts
-import { dirname as dirname21, join as join84 } from "node:path";
+import { dirname as dirname21, join as join85 } from "node:path";
 async function restorePreviousReleasedDashboard(deps, activation, starter, dashboardPort, restoreTransactionId) {
   const previousRelease = activation.selection.previousRelease;
   if (previousRelease === null) return { state: "not-required" };
-  const payloadRoot = join84(dirname21(activation.releaseRoot), previousRelease, "payload");
+  const payloadRoot = join85(dirname21(activation.releaseRoot), previousRelease, "payload");
   const outcome = await starter.start(deps, payloadRoot, {
     openBrowser: false,
     port: dashboardPort,
@@ -53354,6 +53452,260 @@ async function resumeManagedReleaseCompensation(deps, source, transaction, initi
   }
 }
 
+// packages/cli/src/runtime/managed-host-reconciliation.ts
+var HOST_OBSERVATION_LIMIT = 1e6;
+var HOST_REPLAY_POLICY = "observe-before-replay-v1";
+function assertManagedHostObservation(value, label) {
+  if (value === "" || value.length > HOST_OBSERVATION_LIMIT) {
+    throw new ManagedRuntimeIndeterminateError(
+      `${label} \u5FC5\u987B\u662F\u975E\u7A7A\u4E14\u4E0D\u8D85\u8FC7 ${HOST_OBSERVATION_LIMIT} \u5B57\u7B26\u7684\u89C4\u8303\u5316\u5BBF\u4E3B observation`
+    );
+  }
+}
+function decideManagedHostRecovery(before, observed, isDesired) {
+  if (isDesired(observed)) return "checkpoint";
+  if (observed === before) return "execute";
+  throw new ManagedRuntimeIndeterminateError(
+    "\u5BBF\u4E3B observation \u65E2\u4E0D\u6EE1\u8DB3 desired\uFF0C\u4E5F\u4E0D\u7CBE\u786E\u7B49\u4E8E before\uFF1B\u62D2\u7EDD\u731C\u6D4B\u6216\u91CD\u653E mutation"
+  );
+}
+function createManagedHostStepRunner(context) {
+  return async (id2, step) => {
+    if (!/^[a-zA-Z0-9_-]+$/.test(id2)) throw new Error(`host step id \u975E\u6CD5\uFF1A${id2}`);
+    assertManagedHostObservation(step.desired, `host step '${id2}' desired`);
+    let journal = context.journal();
+    const existing = journal.hostSteps?.find((item2) => item2.id === id2);
+    const desiredMatches = (persistedDesired) => persistedDesired === step.desired || step.isEquivalentDesired?.(persistedDesired) === true;
+    if (existing?.state === "completed") {
+      if (existing.desired === void 0 || !desiredMatches(existing.desired) || existing.replayPolicy !== HOST_REPLAY_POLICY || existing.observedAfter === void 0 || !step.isDesired(existing.observedAfter)) {
+        throw new ManagedRuntimeIndeterminateError(
+          `host step '${id2}' completed checkpoint \u7F3A\u5C11\u6216\u4E0D\u5339\u914D desired-state proof`
+        );
+      }
+      const observed = await step.observe();
+      assertManagedHostObservation(observed, `host step '${id2}' completed recovery observation`);
+      const isCompletedCompatible = step.isCompletedCompatible ?? step.isDesired;
+      if (!isCompletedCompatible(observed)) {
+        throw new ManagedRuntimeIndeterminateError(
+          `host step '${id2}' completed checkpoint \u540E\u7684\u6743\u5A01 inventory \u65E2\u4E0D\u6EE1\u8DB3 desired\uFF0C\u4E5F\u4E0D\u662F\u540C\u4E00\u51BB\u7ED3\u76EE\u6807\u7684\u540E\u7EE7\u72B6\u6001\uFF1B\u62D2\u7EDD\u7EE7\u7EED\u6216\u91CD\u653E`
+        );
+      }
+      return existing.result ?? "";
+    }
+    let decision = "execute";
+    if (existing === void 0) {
+      const before = await step.observe();
+      assertManagedHostObservation(before, `host step '${id2}' before`);
+      journal = {
+        ...journal,
+        hostSteps: [...journal.hostSteps ?? [], {
+          id: id2,
+          state: "started",
+          before,
+          desired: step.desired,
+          replayPolicy: HOST_REPLAY_POLICY
+        }],
+        updatedAt: context.now()
+      };
+      await context.commit(journal);
+      decision = step.isDesired(before) ? "checkpoint" : "execute";
+    } else {
+      if (existing.before === void 0 || existing.desired === void 0 || existing.replayPolicy !== HOST_REPLAY_POLICY) {
+        throw new ManagedRuntimeIndeterminateError(
+          `host step '${id2}' \u662F\u7F3A\u5C11 before/desired/replayPolicy \u7684\u65E7 pending WAL\uFF1B\u62D2\u7EDD\u81EA\u52A8\u91CD\u653E`
+        );
+      }
+      if (!desiredMatches(existing.desired)) {
+        throw new ManagedRuntimeIndeterminateError(
+          `host step '${id2}' \u5F53\u524D desired \u4E0E WAL \u4E0D\u4E00\u81F4\uFF1B\u62D2\u7EDD\u91CD\u89E3\u91CA pending mutation`
+        );
+      }
+      const observed = await step.observe();
+      assertManagedHostObservation(observed, `host step '${id2}' recovery observation`);
+      decision = decideManagedHostRecovery(existing.before, observed, step.isDesired);
+    }
+    const result = decision === "execute" ? await step.execute() : "";
+    if (result.length > HOST_OBSERVATION_LIMIT) {
+      throw new Error(`host step '${id2}' \u7ED3\u679C\u8D85\u8FC7 journal \u4E0A\u9650`);
+    }
+    const observedAfter = await step.observe();
+    assertManagedHostObservation(observedAfter, `host step '${id2}' observed-after`);
+    if (!step.isDesired(observedAfter)) {
+      throw new ManagedRuntimeIndeterminateError(
+        `host step '${id2}' \u6267\u884C\u540E\u672A\u8BC1\u660E desired postcondition`
+      );
+    }
+    journal = {
+      ...journal,
+      hostSteps: (journal.hostSteps ?? []).map((item2) => item2.id === id2 ? { ...item2, state: "completed", observedAfter, result } : item2),
+      updatedAt: context.now()
+    };
+    await context.commit(journal);
+    return result;
+  };
+}
+
+// packages/cli/src/commands/managed-release-journal-coordinator.ts
+async function resolveManagedReleaseJournal(deps, request, transaction) {
+  try {
+    const pending = await transaction.journal.read();
+    if (pending === null) {
+      const created = {
+        ...transaction.journal.create(request.operation, request.source, deps.clock()),
+        dashboardPort: request.dashboardPort ?? DEFAULT_DASHBOARD_PORT
+      };
+      await transaction.journal.write(created);
+      return created;
+    }
+    if (pending.operation !== request.operation || pending.source !== request.source) {
+      throw new ManagedRuntimeIndeterminateError(
+        `\u5B58\u5728\u672A\u5B8C\u6210\u7684 ${pending.operation}/${pending.source} \u4E8B\u52A1 ${pending.transactionId}\uFF0C\u62D2\u7EDD\u542F\u52A8 ${request.operation}/${request.source}`
+      );
+    }
+    if (pending.dashboardPort !== void 0) return pending;
+    const inferredPort = pending.dashboard?.port ?? pending.dashboardBefore?.port;
+    const canAdoptRequestedPort = pending.phase === "preparing-host" || pending.phase === "candidate-resolved";
+    if (inferredPort === void 0 && !canAdoptRequestedPort) {
+      throw new ManagedRuntimeIndeterminateError(
+        `\u672A\u5B8C\u6210\u4E8B\u52A1 ${pending.transactionId} \u5DF2\u8FDB\u5165 ${pending.phase}\uFF0C\u4F46\u65E7 journal \u7F3A\u5C11 pre-activation Dashboard port\uFF1B\u62D2\u7EDD\u4ECE retry \u73AF\u5883\u8865\u8BC1`
+      );
+    }
+    const migrated = {
+      ...pending,
+      dashboardPort: inferredPort ?? request.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
+      updatedAt: deps.clock()
+    };
+    await transaction.journal.write(migrated);
+    return migrated;
+  } catch (error2) {
+    throw error2 instanceof ManagedRuntimeIndeterminateError ? error2 : new ManagedRuntimeIndeterminateError(
+      `\u65E0\u6CD5\u8BFB\u53D6\u6216\u521B\u5EFA write-ahead journal\uFF1A${String(error2)}`,
+      { cause: error2 }
+    );
+  }
+}
+
+// packages/cli/src/commands/release-candidate-coordinator.ts
+async function prepareManagedReleaseCandidate(deps, request, transaction, dashboardStarter) {
+  let journal = await resolveManagedReleaseJournal(deps, request, transaction);
+  if (request.requiresStableTarget === true && journal.stableTarget === void 0 && (journal.phase !== "preparing-host" || (journal.hostSteps?.length ?? 0) > 0)) {
+    throw new ManagedRuntimeIndeterminateError(
+      `update journal \u5DF2\u8FDB\u5165 ${journal.phase}\uFF0C\u4F46\u7F3A\u5C11 mutation \u524D\u51BB\u7ED3\u7684 stable target`
+    );
+  }
+  if (journal.stableTarget !== void 0 && request.proveFrozenTarget !== void 0) {
+    try {
+      await request.proveFrozenTarget(journal.stableTarget);
+    } catch (error2) {
+      throw new ManagedRuntimeIndeterminateError(
+        `journal stable target \u5DF2\u6F02\u79FB\u6216\u65E0\u6CD5\u91CD\u65B0\u8BC1\u660E\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`
+      );
+    }
+  }
+  if (isCompensationPhase(journal.phase)) {
+    return {
+      outcome: await resumeManagedReleaseCompensation(
+        deps,
+        request.source,
+        transaction,
+        journal,
+        dashboardStarter
+      )
+    };
+  }
+  if (dashboardStarter !== void 0 && (journal.phase === "activating-runtime" || journal.phase === "runtime-activated" || journal.phase === "starting-dashboard" || journal.phase === "dashboard-ready" || journal.phase === "evidence-committed") && journal.dashboardBefore === void 0 && journal.dashboardBeforeAbsent !== true) {
+    throw new ManagedRuntimeIndeterminateError(
+      `\u65E7 journal \u5DF2\u8FDB\u5165 ${journal.phase}\uFF0C\u4F46\u7F3A\u5C11 pre-activation Dashboard identity/empty proof\uFF1B\u62D2\u7EDD\u4ECE activation \u540E\u7684 retry \u73AF\u5883\u8865\u8BC1`
+    );
+  }
+  let candidate;
+  if (journal.phase === "candidate-resolved" || journal.phase === "activating-runtime" || journal.phase === "runtime-activated" || journal.phase === "starting-dashboard" || journal.phase === "dashboard-ready" || journal.phase === "evidence-committed") {
+    if (journal.candidateRoot === void 0) {
+      throw new ManagedRuntimeIndeterminateError("write-ahead journal \u7F3A\u5C11 candidateRoot");
+    }
+    candidate = {
+      candidateRoot: journal.candidateRoot,
+      ...journal.evidence === void 0 ? {} : { evidence: journal.evidence },
+      ...journal.candidateOpenBrowser === void 0 ? {} : { openBrowser: journal.candidateOpenBrowser }
+    };
+  } else {
+    try {
+      const runStep = createManagedHostStepRunner({
+        journal: () => journal,
+        commit: async (record6) => {
+          await transaction.journal.write(record6);
+          journal = record6;
+        },
+        now: deps.clock
+      });
+      const resolveStableTarget = async (resolveLatest, proveFrozen) => {
+        if (journal.stableTarget !== void 0) {
+          await proveFrozen(journal.stableTarget);
+          return journal.stableTarget;
+        }
+        const stableTarget = await resolveLatest();
+        journal = { ...journal, stableTarget, updatedAt: deps.clock() };
+        await transaction.journal.write(journal);
+        return stableTarget;
+      };
+      const prepared = await request.prepareCandidate({
+        transactionId: journal.transactionId,
+        resolveStableTarget,
+        runStep
+      });
+      if ("alreadyCurrent" in prepared) {
+        try {
+          await transaction.journal.clear(journal.transactionId);
+        } catch (error2) {
+          throw new ManagedRuntimeIndeterminateError(
+            `\u540C\u7248 identity \u5DF2\u8BC1\u660E\uFF0C\u4F46 managed journal \u6E05\u7406\u5931\u8D25\uFF1A${String(error2)}`
+          );
+        }
+        return {
+          outcome: {
+            ok: true,
+            state: "current",
+            ...journal.stableTarget === void 0 ? {} : { stableTarget: journal.stableTarget }
+          }
+        };
+      }
+      candidate = prepared;
+      journal = {
+        ...journal,
+        phase: "candidate-resolved",
+        candidateRoot: candidate.candidateRoot,
+        ...candidate.openBrowser === void 0 ? {} : { candidateOpenBrowser: candidate.openBrowser },
+        ...candidate.evidence === void 0 ? {} : { evidence: candidate.evidence },
+        updatedAt: deps.clock()
+      };
+      await transaction.journal.write(journal);
+    } catch (error2) {
+      const freshPreparation = journal.phase === "preparing-host" && journal.stableTarget === void 0 && (journal.hostSteps?.length ?? 0) === 0;
+      if (freshPreparation) {
+        try {
+          await transaction.journal.clear(journal.transactionId);
+        } catch (journalError) {
+          return {
+            outcome: {
+              ok: false,
+              state: "indeterminate",
+              detail: `\u5BBF\u4E3B\u5019\u9009\u51C6\u5907\u5728\u4EFB\u4F55 mutation \u524D\u5931\u8D25\uFF0C\u4F46\u7A7A journal \u6E05\u7406\u5931\u8D25\uFF1A${journalError instanceof Error ? journalError.message : String(journalError)}`
+            }
+          };
+        }
+      }
+      return {
+        outcome: {
+          ok: false,
+          state: error2 instanceof ManagedRuntimeIndeterminateError ? "indeterminate" : "unchanged",
+          detail: `\u5BBF\u4E3B\u5019\u9009\u51C6\u5907\u5931\u8D25\uFF1Bmanaged runtime \u4FDD\u6301\u4E0D\u53D8\uFF0C${freshPreparation ? "\u7A7A journal \u5DF2\u6E05\u7406" : "journal \u5DF2\u4FDD\u7559\u4F9B\u5E42\u7B49\u6062\u590D"}\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`
+        }
+      };
+    }
+  }
+  return { journal, candidate };
+}
+
 // packages/cli/src/commands/release-coordinator.ts
 async function publishManagedRelease(deps, request, installer, dashboardStarter) {
   try {
@@ -53376,60 +53728,15 @@ async function publishManagedRelease(deps, request, installer, dashboardStarter)
   }
 }
 async function publishWithinManagedTransaction(deps, request, transaction, dashboardStarter) {
-  let journal = await resolveManagedReleaseJournal(deps, request, transaction);
-  if (isCompensationPhase(journal.phase)) {
-    return resumeManagedReleaseCompensation(
-      deps,
-      request.source,
-      transaction,
-      journal,
-      dashboardStarter
-    );
-  }
-  if (dashboardStarter !== void 0 && (journal.phase === "activating-runtime" || journal.phase === "runtime-activated" || journal.phase === "starting-dashboard" || journal.phase === "dashboard-ready" || journal.phase === "evidence-committed") && journal.dashboardBefore === void 0 && journal.dashboardBeforeAbsent !== true) {
-    throw new ManagedRuntimeIndeterminateError(
-      `\u65E7 journal \u5DF2\u8FDB\u5165 ${journal.phase}\uFF0C\u4F46\u7F3A\u5C11 pre-activation Dashboard identity/empty proof\uFF1B\u62D2\u7EDD\u4ECE activation \u540E\u7684 retry \u73AF\u5883\u8865\u8BC1`
-    );
-  }
-  let candidate;
-  if (journal.phase === "candidate-resolved" || journal.phase === "activating-runtime" || journal.phase === "runtime-activated" || journal.phase === "starting-dashboard" || journal.phase === "dashboard-ready" || journal.phase === "evidence-committed") {
-    if (journal.candidateRoot === void 0) {
-      throw new ManagedRuntimeIndeterminateError("write-ahead journal \u7F3A\u5C11 candidateRoot");
-    }
-    candidate = {
-      candidateRoot: journal.candidateRoot,
-      ...journal.evidence === void 0 ? {} : { evidence: journal.evidence }
-    };
-  } else {
-    try {
-      const runStep = createManagedHostStepRunner({
-        journal: () => journal,
-        commit: async (record5) => {
-          await transaction.journal.write(record5);
-          journal = record5;
-        },
-        now: deps.clock
-      });
-      candidate = await request.prepareCandidate({
-        transactionId: journal.transactionId,
-        runStep
-      });
-      journal = {
-        ...journal,
-        phase: "candidate-resolved",
-        candidateRoot: candidate.candidateRoot,
-        ...candidate.evidence === void 0 ? {} : { evidence: candidate.evidence },
-        updatedAt: deps.clock()
-      };
-      await transaction.journal.write(journal);
-    } catch (error2) {
-      return {
-        ok: false,
-        state: error2 instanceof ManagedRuntimeIndeterminateError ? "indeterminate" : "unchanged",
-        detail: `\u5BBF\u4E3B\u5019\u9009\u51C6\u5907\u5931\u8D25\uFF1Bmanaged runtime \u4FDD\u6301\u4E0D\u53D8\uFF0Cjournal \u5DF2\u4FDD\u7559\u4F9B\u5E42\u7B49\u6062\u590D\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`
-      };
-    }
-  }
+  const prepared = await prepareManagedReleaseCandidate(
+    deps,
+    request,
+    transaction,
+    dashboardStarter
+  );
+  if ("outcome" in prepared) return prepared.outcome;
+  let { journal } = prepared;
+  const { candidate } = prepared;
   if (journal.phase === "candidate-resolved" && dashboardStarter !== void 0 && journal.dashboardBefore === void 0) {
     try {
       const dashboardBefore = await dashboardStarter.inspect(deps, {
@@ -53475,6 +53782,7 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
         `journal \u4E2D\u7684 activation ${activation.release.releaseId} \u4E0E\u5F53\u524D selection/launcher \u4E0D\u4E00\u81F4`
       );
     }
+    assertActivationVersion(activation, request, journal);
   } else {
     let recovered = {
       state: "not-started"
@@ -53510,7 +53818,11 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
       activation = recovered.activation;
     } else {
       try {
-        activation = await transaction.activate(candidate.candidateRoot, request.source);
+        activation = await transaction.activate(
+          candidate.candidateRoot,
+          request.source,
+          request.expectedPluginVersion ?? journal.stableTarget?.version
+        );
       } catch (error2) {
         const indeterminate = error2 instanceof ManagedRuntimeIndeterminateError;
         if (!indeterminate) {
@@ -53524,6 +53836,7 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
               startedAt: journal.startedAt,
               updatedAt: deps.clock(),
               ...journal.dashboardPort === void 0 ? {} : { dashboardPort: journal.dashboardPort },
+              ...journal.stableTarget === void 0 ? {} : { stableTarget: journal.stableTarget },
               ...journal.hostSteps === void 0 ? {} : { hostSteps: journal.hostSteps }
             };
             await transaction.journal.write(retryable);
@@ -53542,6 +53855,7 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
         };
       }
     }
+    assertActivationVersion(activation, request, journal);
     try {
       journal = {
         ...journal,
@@ -53563,7 +53877,7 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
     transaction,
     journal,
     activation,
-    request.openBrowser,
+    candidate.openBrowser ?? request.openBrowser,
     journal.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
     dashboardStarter
   );
@@ -53577,7 +53891,12 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
     if (journal.phase === "evidence-committed") {
       try {
         await transaction.journal.clear(journal.transactionId);
-        return { ok: true, state: "ready", activation };
+        return {
+          ok: true,
+          state: "ready",
+          activation,
+          ...journal.stableTarget === void 0 ? {} : { stableTarget: journal.stableTarget }
+        };
       } catch (error2) {
         return {
           ok: false,
@@ -53601,7 +53920,12 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
         };
         await transaction.journal.write(journal);
         await transaction.journal.clear(journal.transactionId);
-        return { ok: true, state: "ready", activation };
+        return {
+          ok: true,
+          state: "ready",
+          activation,
+          ...journal.stableTarget === void 0 ? {} : { stableTarget: journal.stableTarget }
+        };
       } catch (error2) {
         return {
           ok: false,
@@ -53643,6 +53967,14 @@ async function publishWithinManagedTransaction(deps, request, transaction, dashb
     candidateDashboard
   );
 }
+function assertActivationVersion(activation, request, journal) {
+  const expectedVersion = request.expectedPluginVersion ?? journal.stableTarget?.version;
+  if (expectedVersion !== void 0 && activation.release.source.pluginVersion !== expectedVersion) {
+    throw new ManagedRuntimeIndeterminateError(
+      `activation ${activation.release.releaseId} \u58F0\u660E\u7248\u672C ${activation.release.source.pluginVersion}\uFF0C\u4E0D\u7B49\u4E8E\u51BB\u7ED3\u76EE\u6807 ${expectedVersion}`
+    );
+  }
+}
 
 // packages/cli/src/commands/setup-managed-runtime.ts
 async function publishSetupManagedRuntime(deps, env, installer, prepareCandidate, host, dashboardStarter, openDashboard, afterReady) {
@@ -53653,6 +53985,7 @@ async function publishSetupManagedRuntime(deps, env, installer, prepareCandidate
     {
       operation: isNativePipelineHost(host) ? "setup" : "adapter",
       source,
+      ...isNativePipelineHost(host) ? { expectedPluginVersion: deps.pluginVersion ?? TENON_RELEASE_VERSION } : {},
       runtime: {
         homeDir: env.homeDir(),
         env: env.runtimeEnv()
@@ -53680,14 +54013,22 @@ async function publishSetupManagedRuntime(deps, env, installer, prepareCandidate
     }
     return 1;
   }
+  if (outcome.state === "current") {
+    deps.io.out("[setup] \u5BBF\u4E3B\u3001managed runtime \u4E0E Dashboard \u5DF2\u7CBE\u786E\u5C31\u7EEA\uFF1B\u672A\u91CD\u590D\u53D1\u5E03\u3002");
+    return 0;
+  }
   const { activation } = outcome;
   deps.io.out(`[setup] \u5DF2\u53D1\u5E03\u5DF2\u9A8C\u8BC1 runtime: ${activation.release.releaseId}\uFF08revision ${activation.selection.revision}\uFF09\u3002`);
   deps.io.out("[setup] \u7A33\u5B9A\u5165\u53E3\u5DF2\u5C31\u7EEA\uFF1A~/.local/bin/tenon \u4E0E ~/.local/bin/tenon-hook \u4E0D\u518D\u76F4\u8FDE marketplace checkout\u3002");
+  if (!openDashboard) {
+    const port = dashboardPort ?? DEFAULT_DASHBOARD_PORT;
+    deps.io.out(`[dashboard] \u5DF2\u5C31\u7EEA\uFF1Ahttp://127.0.0.1:${port}/\uFF1B\u5982\u9700\u6253\u5F00\uFF1Atenon dashboard --open`);
+  }
   return 0;
 }
 
 // packages/cli/src/commands/managed-host-observation.ts
-import { isAbsolute as isAbsolute27, join as join85, normalize as normalize3 } from "node:path";
+import { join as join87 } from "node:path";
 
 // packages/cli/src/commands/managed-host-desired-identity.ts
 function isRecord21(value) {
@@ -53696,22 +54037,24 @@ function isRecord21(value) {
 function hasExactKeys(value, keys) {
   return Object.keys(value).sort().join(",") === [...keys].sort().join(",");
 }
-var GIT_OID = /^[0-9a-f]{40}$/;
+var GIT_OID2 = /^[0-9a-f]{40}$/;
 function isGitOid(value) {
-  return typeof value === "string" && GIT_OID.test(value);
+  return typeof value === "string" && GIT_OID2.test(value);
 }
 function decodeMarketplaceIdentity(value) {
-  if (!isRecord21(value) || !hasExactKeys(value, ["head", "root", "source", "sourceType"])) {
+  if (!isRecord21(value) || !hasExactKeys(value, ["clean", "head", "ref", "root", "source", "sourceType"])) {
     return null;
   }
-  if (typeof value.root !== "string" || typeof value.source !== "string" || typeof value.sourceType !== "string" || value.head !== null && !isGitOid(value.head)) {
+  if (typeof value.root !== "string" || typeof value.source !== "string" || typeof value.sourceType !== "string" || value.head !== null && !isGitOid(value.head) || value.ref !== null && typeof value.ref !== "string" || typeof value.clean !== "boolean") {
     return null;
   }
   return {
     root: value.root,
     source: value.source,
     sourceType: value.sourceType,
-    head: value.head
+    head: value.head,
+    ref: value.ref,
+    clean: value.clean
   };
 }
 function decodeDesiredIdentity(text4) {
@@ -53722,8 +54065,16 @@ function decodeDesiredIdentity(text4) {
     return null;
   }
   if (!isRecord21(value) || value.version !== 1 || typeof value.kind !== "string") return null;
+  if (value.kind === "plugin-absent" || value.kind === "marketplace-absent") {
+    return hasExactKeys(value, ["kind", "targetCommit", "targetVersion", "version"]) && typeof value.targetVersion === "string" && value.targetVersion !== "" && isGitOid(value.targetCommit) ? {
+      version: 1,
+      kind: value.kind,
+      targetVersion: value.targetVersion,
+      targetCommit: value.targetCommit
+    } : null;
+  }
   if (value.kind === "marketplace-present") {
-    if (!hasExactKeys(value, ["head", "kind", "root", "source", "sourceType", "version"]) || typeof value.source !== "string" || value.root !== null && typeof value.root !== "string" || typeof value.sourceType !== "string" || typeof value.head !== "string") {
+    if (!hasExactKeys(value, ["head", "kind", "ref", "root", "source", "sourceType", "version"]) || typeof value.source !== "string" || value.root !== null && typeof value.root !== "string" || typeof value.sourceType !== "string" || !isGitOid(value.head) || typeof value.ref !== "string") {
       return null;
     }
     return {
@@ -53732,7 +54083,8 @@ function decodeDesiredIdentity(text4) {
       source: value.source,
       root: value.root,
       sourceType: value.sourceType,
-      head: value.head
+      head: value.head,
+      ref: value.ref
     };
   }
   if (value.kind === "marketplace-head") {
@@ -53763,23 +54115,101 @@ function decodeDesiredIdentity(text4) {
   return null;
 }
 function sameMarketplaceIdentity(left, right) {
-  return left.root === right.root && left.source === right.source && left.sourceType === right.sourceType;
+  return left.root === right.root && left.source === right.source && left.sourceType === right.sourceType && left.ref === right.ref && left.clean === right.clean;
 }
 function equivalentNativeHostDesired(persistedSerialized, currentSerialized) {
   const persisted = decodeDesiredIdentity(persistedSerialized);
   const current = decodeDesiredIdentity(currentSerialized);
   if (persisted === null || current === null || persisted.kind !== current.kind) return false;
+  if (current.kind === "plugin-absent" || current.kind === "marketplace-absent") {
+    return persisted.kind === current.kind && persisted.targetVersion === current.targetVersion && persisted.targetCommit === current.targetCommit;
+  }
   if (current.kind === "marketplace-present") {
-    return persisted.kind === current.kind && persisted.source === current.source && persisted.root === current.root && persisted.sourceType === current.sourceType && persisted.head === current.head;
+    return persisted.kind === current.kind && persisted.source === current.source && (persisted.root === null || persisted.root === current.root) && persisted.sourceType === current.sourceType && persisted.head === current.head && persisted.ref === current.ref;
   }
   if (current.kind === "marketplace-head") {
     return persisted.kind === current.kind && sameMarketplaceIdentity(persisted.marketplace, current.marketplace) && persisted.head === current.head;
   }
+  if (current.kind !== "plugin-version" || persisted.kind !== "plugin-version") return false;
   return persisted.kind === current.kind && sameMarketplaceIdentity(persisted.marketplace, current.marketplace) && persisted.pluginRoot === current.pluginRoot && persisted.pluginVersion === current.pluginVersion;
 }
 
-// packages/cli/src/commands/managed-host-observation.ts
-function parseJson3(text4, label) {
+// packages/cli/src/commands/managed-host-state.ts
+import { isAbsolute as isAbsolute27, join as join86, normalize as normalize3 } from "node:path";
+var SAFE_MARKETPLACE_REF = /^[^\u0000-\u001f\u007f"'\\]+$/u;
+function explicitCodexMarketplaceRef(item2, sourceRecord) {
+  const candidates = [];
+  for (const [record6, key] of [
+    [item2, "ref"],
+    [sourceRecord, "ref"]
+  ]) {
+    if (record6 !== null && Object.prototype.hasOwnProperty.call(record6, key)) {
+      candidates.push(record6[key]);
+    }
+  }
+  if (candidates.length === 0) return void 0;
+  if (candidates.length !== 1) {
+    throw new ManagedRuntimeIndeterminateError("codex marketplace inventory ref \u91CD\u590D");
+  }
+  const value = candidates[0];
+  if (value === null) return null;
+  if (typeof value !== "string" || value === "" || !SAFE_MARKETPLACE_REF.test(value)) {
+    throw new ManagedRuntimeIndeterminateError("codex marketplace inventory ref \u975E\u6CD5");
+  }
+  return value;
+}
+function parseCodexMarketplaceConfigRef(text4) {
+  let inTenonSection = false;
+  let sectionCount = 0;
+  let ref = null;
+  let refSeen = false;
+  for (const line of text4.split(/\r?\n/u)) {
+    const section2 = /^\s*\[([^\]]+)\]\s*(?:#.*)?$/u.exec(line);
+    if (section2 !== null) {
+      inTenonSection = section2[1]?.trim() === "marketplaces.tenon";
+      if (inTenonSection) {
+        sectionCount += 1;
+        if (sectionCount > 1) {
+          throw new ManagedRuntimeIndeterminateError("Codex config \u4E2D marketplaces.tenon \u91CD\u590D");
+        }
+      }
+      continue;
+    }
+    if (!inTenonSection || /^\s*(?:#.*)?$/u.test(line)) continue;
+    if (!/^\s*ref\s*=/u.test(line)) continue;
+    if (refSeen) {
+      throw new ManagedRuntimeIndeterminateError("Codex config \u4E2D Tenon marketplace ref \u91CD\u590D");
+    }
+    refSeen = true;
+    const assignment = /^\s*ref\s*=\s*(?:"([^"\\\r\n]+)"|'([^'\r\n]+)')\s*(?:#.*)?$/u.exec(line);
+    const value = assignment?.[1] ?? assignment?.[2];
+    if (value === void 0 || !SAFE_MARKETPLACE_REF.test(value)) {
+      throw new ManagedRuntimeIndeterminateError("Codex config \u4E2D Tenon marketplace ref \u975E\u6CD5");
+    }
+    ref = value;
+  }
+  return ref;
+}
+function codexConfiguredMarketplaceRef(env, item2, sourceRecord, root) {
+  const explicit = explicitCodexMarketplaceRef(item2, sourceRecord);
+  if (explicit !== void 0) return explicit;
+  const runtimeEnv = env.runtimeEnv();
+  const configuredHome = runtimeEnv.CODEX_HOME?.trim();
+  const codexHome = configuredHome === void 0 || configuredHome === "" ? join86(env.homeDir(), ".codex") : configuredHome;
+  const config = env.readText(join86(codexHome, "config.toml"));
+  if (config !== void 0) {
+    const ref = parseCodexMarketplaceConfigRef(config);
+    if (ref !== null) return ref;
+  }
+  const installMetadata = env.readText(join86(root, ".codex-marketplace-install.json"));
+  if (installMetadata === void 0) return null;
+  const metadata = parseManagedHostJson(installMetadata, "codex marketplace install metadata");
+  if (typeof metadata !== "object" || metadata === null || Array.isArray(metadata) || metadata.ref_name !== null && (typeof metadata.ref_name !== "string" || metadata.ref_name === "" || !SAFE_MARKETPLACE_REF.test(metadata.ref_name))) {
+    throw new ManagedRuntimeIndeterminateError("codex marketplace ref metadata \u975E\u6CD5");
+  }
+  return metadata.ref_name;
+}
+function parseManagedHostJson(text4, label) {
   try {
     return JSON.parse(text4);
   } catch {
@@ -53793,7 +54223,7 @@ function commandJson(env, cmd, args, label) {
       `${label} \u8BFB\u53D6\u5931\u8D25\uFF1A${result.stderr.trim() || `\u9000\u51FA\u7801 ${result.code}`}`
     );
   }
-  return parseJson3(result.stdout, label);
+  return parseManagedHostJson(result.stdout, label);
 }
 function marketplaceState(env, host, value) {
   const entries = host === "codex" ? typeof value === "object" && value !== null && !Array.isArray(value) && Array.isArray(value.marketplaces) ? value.marketplaces : null : Array.isArray(value) ? value : null;
@@ -53816,7 +54246,23 @@ function marketplaceState(env, host, value) {
     }
     const headResult = env.runCommand("git", ["-C", root, "rev-parse", "HEAD"]);
     const head = headResult.code === 0 && /^[a-f0-9]{40}$/.test(headResult.stdout.trim()) ? headResult.stdout.trim() : null;
-    matches.push({ root, source, sourceType, head });
+    let ref = null;
+    if (host === "codex") {
+      ref = codexConfiguredMarketplaceRef(env, item2, sourceRecord, root);
+    } else {
+      const symbolic = env.runCommand("git", ["-C", root, "symbolic-ref", "--quiet", "--short", "HEAD"]);
+      if (symbolic.code === 0 && symbolic.stdout.trim() !== "") {
+        ref = symbolic.stdout.trim();
+      } else {
+        const exactTag = env.runCommand("git", ["-C", root, "describe", "--tags", "--exact-match", "HEAD"]);
+        if (exactTag.code === 0 && exactTag.stdout.trim() !== "") ref = exactTag.stdout.trim();
+      }
+    }
+    const tracked = env.runCommand("git", ["-C", root, "diff", "--quiet", "HEAD", "--"]);
+    const untracked = env.runCommand("git", ["-C", root, "ls-files", "--others", "--exclude-standard"]);
+    const unexpectedUntracked = untracked.code === 0 ? untracked.stdout.split(/\r?\n/).filter((path9) => path9 !== "" && path9 !== ".codex-marketplace-install.json") : ["unreadable"];
+    const clean = tracked.code === 0 && unexpectedUntracked.length === 0;
+    matches.push({ root, source, sourceType, head, ref, clean });
   }
   if (matches.length > 1) {
     throw new ManagedRuntimeIndeterminateError(`${host} tenon marketplace identity \u91CD\u590D`);
@@ -53864,23 +54310,25 @@ function observeNativeHost(env, host) {
   );
   return JSON.stringify({ version: 1, host, marketplace, plugin });
 }
-function decodeObservation(value) {
-  const parsed = parseJson3(value, "managed host observation");
+function decodeNativeHostObservation(value) {
+  const parsed = parseManagedHostJson(value, "managed host observation");
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new ManagedRuntimeIndeterminateError("managed host observation schema \u975E\u6CD5");
   }
   return parsed;
 }
+
+// packages/cli/src/commands/managed-host-observation.ts
 function pluginVersionAtMarketplace(env, marketplace) {
   const candidates = [
-    join85(marketplace.root, ".codex-plugin", "plugin.json"),
-    join85(marketplace.root, ".claude-plugin", "plugin.json"),
-    join85(marketplace.root, "package.json")
+    join87(marketplace.root, ".codex-plugin", "plugin.json"),
+    join87(marketplace.root, ".claude-plugin", "plugin.json"),
+    join87(marketplace.root, "package.json")
   ];
   for (const path9 of candidates) {
     const text4 = env.readText(path9);
     if (text4 === void 0) continue;
-    const value = parseJson3(text4, path9);
+    const value = parseManagedHostJson(text4, path9);
     if (typeof value === "object" && value !== null && !Array.isArray(value) && typeof value.version === "string") {
       return value.version;
     }
@@ -53908,20 +54356,63 @@ function isCanonicalRemoteMarketplace(env, host, marketplace) {
   const result = env.runCommand("git", ["-C", marketplace.root, "remote", "get-url", "origin"]);
   return result.code === 0 && isCanonicalMarketplaceSource(result.stdout.trim());
 }
+function pluginPayloadMatchesMarketplace(env, marketplaceRoot, pluginRoot2) {
+  if (marketplaceRoot === pluginRoot2) return true;
+  return PAYLOAD_ENTRIES.every((entry) => {
+    const result = env.runCommand("git", [
+      "diff",
+      "--no-index",
+      "--quiet",
+      "--",
+      join87(marketplaceRoot, entry),
+      join87(pluginRoot2, entry)
+    ]);
+    return result.code === 0;
+  });
+}
+function nativeHostMatchesStableTarget(env, host, target) {
+  const current = decodeNativeHostObservation(observeNativeHost(env, host));
+  return current.marketplace !== null && current.plugin !== null && current.marketplace.head === target.commit && current.marketplace.ref === target.tag && current.marketplace.clean && current.plugin.version === target.version && pluginVersionAtMarketplace(env, {
+    ...current.marketplace,
+    root: current.plugin.root
+  }) === target.version && pluginPayloadMatchesMarketplace(env, current.marketplace.root, current.plugin.root) && isCanonicalRemoteMarketplace(env, host, current.marketplace);
+}
 function hasMarketplaceIdentity(current, expected) {
   return current !== null && current.root === expected.root && current.source === expected.source && current.sourceType === expected.sourceType;
 }
-function desiredNativeHostPostcondition(env, host, stepId) {
-  const before = decodeObservation(observeNativeHost(env, host));
+function desiredNativeHostPostcondition(env, host, stepId, target) {
+  const before = decodeNativeHostObservation(observeNativeHost(env, host));
   let desired;
-  if (stepId === "marketplace-register") {
+  if (stepId === "plugin-remove") {
+    if (target === void 0) {
+      throw new ManagedRuntimeIndeterminateError("plugin remove \u7F3A\u5C11\u51BB\u7ED3\u7A33\u5B9A\u7248\u672C\u76EE\u6807");
+    }
+    desired = {
+      version: 1,
+      kind: "plugin-absent",
+      targetVersion: target.version,
+      targetCommit: target.commit
+    };
+  } else if (stepId === "marketplace-remove") {
+    if (target === void 0) {
+      throw new ManagedRuntimeIndeterminateError("marketplace remove \u7F3A\u5C11\u51BB\u7ED3\u7A33\u5B9A\u7248\u672C\u76EE\u6807");
+    }
+    desired = {
+      version: 1,
+      kind: "marketplace-absent",
+      targetVersion: target.version,
+      targetCommit: target.commit
+    };
+  } else if (stepId === "marketplace-register") {
+    const stableTarget = target ?? resolveStableTagTarget(env, TENON_RELEASE_VERSION);
     desired = {
       version: 1,
       kind: "marketplace-present",
       source: TENON_MARKETPLACE_SOURCE,
       root: before.marketplace?.root ?? null,
       sourceType: host === "codex" ? "git" : "github",
-      head: remoteMainHead(env)
+      head: stableTarget.commit,
+      ref: stableTarget.tag
     };
   } else if (stepId === "marketplace-refresh") {
     if (before.marketplace === null) {
@@ -53951,25 +54442,40 @@ function desiredNativeHostPostcondition(env, host, stepId) {
       kind: "plugin-version",
       marketplace: before.marketplace,
       pluginRoot: before.plugin?.root ?? (host === "codex" ? before.marketplace.root : null),
-      pluginVersion: pluginVersionAtMarketplace(env, before.marketplace)
+      pluginVersion: target?.version ?? pluginVersionAtMarketplace(env, before.marketplace)
     };
   }
   const serialized = JSON.stringify(desired);
+  const matchesFrozenMarketplace = (current, frozen) => current.marketplace !== null && current.marketplace.head === frozen.targetCommit && current.marketplace.ref === `v${frozen.targetVersion}` && current.marketplace.clean && isCanonicalMarketplaceSource(current.marketplace.source) && isCanonicalRemoteMarketplace(env, host, current.marketplace);
   return {
     serialized,
     isEquivalentDesired(persistedDesired) {
       return equivalentNativeHostDesired(persistedDesired, serialized);
     },
     isDesired(observation) {
-      const current = decodeObservation(observation);
+      const current = decodeNativeHostObservation(observation);
+      if (desired.kind === "plugin-absent") return current.plugin === null;
+      if (desired.kind === "marketplace-absent") {
+        return current.marketplace === null && current.plugin === null;
+      }
       if (desired.kind === "marketplace-present") {
-        return current.marketplace !== null && isCanonicalMarketplaceSource(current.marketplace.source) && isCanonicalRemoteMarketplace(env, host, current.marketplace) && current.marketplace.head === desired.head && (desired.root === null || current.marketplace.root === desired.root) && current.marketplace.sourceType === desired.sourceType;
+        return current.marketplace !== null && isCanonicalMarketplaceSource(current.marketplace.source) && isCanonicalRemoteMarketplace(env, host, current.marketplace) && current.marketplace.head === desired.head && current.marketplace.ref === desired.ref && current.marketplace.clean && (desired.root === null || current.marketplace.root === desired.root) && current.marketplace.sourceType === desired.sourceType;
       }
       if (desired.kind === "marketplace-head") {
         if (!hasMarketplaceIdentity(current.marketplace, desired.marketplace)) return false;
         return desired.head === "local-marketplace" ? current.marketplace.head === desired.marketplace.head : current.marketplace.head === desired.head;
       }
-      return hasMarketplaceIdentity(current.marketplace, desired.marketplace) && (desired.pluginRoot === null || current.plugin?.root === desired.pluginRoot) && current.plugin?.version === desired.pluginVersion;
+      if (desired.kind !== "plugin-version") return false;
+      return hasMarketplaceIdentity(current.marketplace, desired.marketplace) && current.marketplace.head === desired.marketplace.head && current.marketplace.ref === desired.marketplace.ref && current.marketplace.clean === desired.marketplace.clean && (desired.pluginRoot === null || current.plugin?.root === desired.pluginRoot) && current.plugin?.version === desired.pluginVersion;
+    },
+    ...desired.kind !== "plugin-absent" && desired.kind !== "marketplace-absent" ? {} : {
+      isCompletedCompatible(observation) {
+        const current = decodeNativeHostObservation(observation);
+        if (desired.kind === "plugin-absent") {
+          return current.plugin === null || matchesFrozenMarketplace(current, desired) && current.plugin.version === desired.targetVersion;
+        }
+        return current.marketplace === null && current.plugin === null || matchesFrozenMarketplace(current, desired) && (current.plugin === null || current.plugin.version === desired.targetVersion);
+      }
     }
   };
 }
@@ -53985,17 +54491,17 @@ function decodeResult(raw, stepId) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`host step '${stepId}' \u7684\u6301\u4E45\u5316\u547D\u4EE4\u7ED3\u679C\u4E0D\u662F\u5BF9\u8C61`);
   }
-  const record5 = value;
-  if (Object.keys(record5).sort().join(",") !== "code,stderr,stdout" || !Number.isSafeInteger(record5.code) || typeof record5.stdout !== "string" || typeof record5.stderr !== "string") {
+  const record6 = value;
+  if (Object.keys(record6).sort().join(",") !== "code,stderr,stdout" || !Number.isSafeInteger(record6.code) || typeof record6.stdout !== "string" || typeof record6.stderr !== "string") {
     throw new Error(`host step '${stepId}' \u7684\u6301\u4E45\u5316\u547D\u4EE4\u7ED3\u679C\u7ED3\u6784\u975E\u6CD5`);
   }
   return {
-    code: record5.code,
-    stdout: record5.stdout,
-    stderr: record5.stderr
+    code: record6.code,
+    stdout: record6.stdout,
+    stderr: record6.stderr
   };
 }
-async function runManagedHostCommand(transaction, stepId, env, command2) {
+async function runManagedHostCommand(transaction, stepId, env, command2, target) {
   if (stepId.startsWith("inventory-")) {
     return env.runCommand(command2.cmd, [...command2.args]);
   }
@@ -54004,16 +54510,18 @@ async function runManagedHostCommand(transaction, stepId, env, command2) {
   }
   const host = command2.cmd;
   const injected = env.managedHostReconciliation?.(host, stepId, command2);
-  const desired = injected === void 0 ? desiredNativeHostPostcondition(env, host, stepId) : {
+  const desired = injected === void 0 ? desiredNativeHostPostcondition(env, host, stepId, target) : {
     serialized: injected.desired,
     isDesired: injected.isDesired,
-    isEquivalentDesired: injected.isEquivalentDesired
+    isEquivalentDesired: injected.isEquivalentDesired,
+    isCompletedCompatible: injected.isCompletedCompatible
   };
   const raw = await transaction.runStep(stepId, {
     desired: desired.serialized,
     isEquivalentDesired: desired.isEquivalentDesired,
     observe: injected?.observe ?? (() => observeNativeHost(env, host)),
     isDesired: desired.isDesired,
+    ...desired.isCompletedCompatible === void 0 ? {} : { isCompletedCompatible: desired.isCompletedCompatible },
     execute: () => JSON.stringify(env.runCommand(command2.cmd, [...command2.args]))
   });
   if (raw === "") return { code: 0, stdout: "", stderr: "" };
@@ -54023,8 +54531,8 @@ async function runManagedHostCommand(transaction, stepId, env, command2) {
 
 // packages/cli/src/migration/legacy-project-registry.ts
 import { statSync as statSync9 } from "node:fs";
-import { mkdir as mkdir29, readFile as readFile39 } from "node:fs/promises";
-import { isAbsolute as isAbsolute28, join as join86, posix as posix7, resolve as resolve36, win32 as win325 } from "node:path";
+import { mkdir as mkdir30, readFile as readFile40 } from "node:fs/promises";
+import { isAbsolute as isAbsolute28, join as join88, posix as posix7, resolve as resolve37, win32 as win325 } from "node:path";
 var MAX_LEGACY_REGISTRY_BYTES = 1048576;
 var MIGRATION_ID = "host-project-registry-v1";
 function resolveHostProjectRegistryCandidates(input) {
@@ -54041,7 +54549,7 @@ function nonNegativeInteger(value) {
 async function readMigrationReceipt(path9) {
   let text4;
   try {
-    text4 = await readFile39(path9, "utf8");
+    text4 = await readFile40(path9, "utf8");
   } catch (error2) {
     if (error2.code === "ENOENT") return null;
     throw error2;
@@ -54055,25 +54563,25 @@ async function readMigrationReceipt(path9) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`host project registry migration receipt \u975E\u6CD5\uFF1A${path9}`);
   }
-  const record5 = value;
-  const ensured = record5.ensured === void 0 ? record5.discovered : record5.ensured;
-  if (record5.version !== 1 || record5.migration !== MIGRATION_ID || typeof record5.completedAt !== "string" || record5.completedAt === "" || !nonNegativeInteger(record5.discovered) || !nonNegativeInteger(record5.imported) || !nonNegativeInteger(ensured) || record5.imported > ensured || ensured > record5.discovered || !nonNegativeInteger(record5.rejected)) {
+  const record6 = value;
+  const ensured = record6.ensured === void 0 ? record6.discovered : record6.ensured;
+  if (record6.version !== 1 || record6.migration !== MIGRATION_ID || typeof record6.completedAt !== "string" || record6.completedAt === "" || !nonNegativeInteger(record6.discovered) || !nonNegativeInteger(record6.imported) || !nonNegativeInteger(ensured) || record6.imported > ensured || ensured > record6.discovered || !nonNegativeInteger(record6.rejected)) {
     throw new Error(`host project registry migration receipt \u975E\u6CD5\uFF1A${path9}`);
   }
   return {
     version: 1,
     migration: MIGRATION_ID,
-    completedAt: record5.completedAt,
-    discovered: record5.discovered,
-    imported: record5.imported,
+    completedAt: record6.completedAt,
+    discovered: record6.discovered,
+    imported: record6.imported,
     ensured,
-    rejected: record5.rejected
+    rejected: record6.rejected
   };
 }
 async function readPendingMigration(path9) {
   let text4;
   try {
-    text4 = await readFile39(path9, "utf8");
+    text4 = await readFile40(path9, "utf8");
   } catch (error2) {
     if (error2.code === "ENOENT") return null;
     throw error2;
@@ -54087,15 +54595,15 @@ async function readPendingMigration(path9) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error(`host project registry migration pending snapshot \u975E\u6CD5\uFF1A${path9}`);
   }
-  const record5 = value;
-  if (record5.version !== 1 || record5.migration !== MIGRATION_ID || !Array.isArray(record5.roots) || !record5.roots.every((root) => typeof root === "string" && isAbsolute28(root)) || new Set(record5.roots).size !== record5.roots.length || !nonNegativeInteger(record5.rejected)) {
+  const record6 = value;
+  if (record6.version !== 1 || record6.migration !== MIGRATION_ID || !Array.isArray(record6.roots) || !record6.roots.every((root) => typeof root === "string" && isAbsolute28(root)) || new Set(record6.roots).size !== record6.roots.length || !nonNegativeInteger(record6.rejected)) {
     throw new Error(`host project registry migration pending snapshot \u975E\u6CD5\uFF1A${path9}`);
   }
   return {
     version: 1,
     migration: MIGRATION_ID,
-    roots: record5.roots.map((root) => resolve36(root)),
-    rejected: record5.rejected
+    roots: record6.roots.map((root) => resolve37(root)),
+    rejected: record6.rejected
   };
 }
 async function migrateLegacyProjectRegistry(input) {
@@ -54104,10 +54612,10 @@ async function migrateLegacyProjectRegistry(input) {
     ...input.platform === void 0 ? {} : { platform: input.platform },
     env: input.env
   });
-  const migrationRoot = join86(productPaths.migrationsRoot, MIGRATION_ID);
-  const receiptPath = join86(migrationRoot, "receipt.json");
-  const pendingPath = join86(migrationRoot, "pending.json");
-  await mkdir29(migrationRoot, { recursive: true });
+  const migrationRoot = join88(productPaths.migrationsRoot, MIGRATION_ID);
+  const receiptPath = join88(migrationRoot, "receipt.json");
+  const pendingPath = join88(migrationRoot, "pending.json");
+  await mkdir30(migrationRoot, { recursive: true });
   return withLock(migrationRoot, async () => {
     if (await readMigrationReceipt(receiptPath) !== null) {
       return { status: "already-complete", discovered: 0, imported: 0, rejected: 0 };
@@ -54160,7 +54668,7 @@ async function migrateLegacyProjectRegistry(input) {
             rejected += 1;
             continue;
           }
-          discovered.add(resolve36(item2));
+          discovered.add(resolve37(item2));
         }
       }
       pending = {
@@ -54198,12 +54706,12 @@ async function migrateLegacyProjectRegistry(input) {
 }
 
 // packages/cli/src/commands/host-plugin-convergence.ts
-import { dirname as dirname22, isAbsolute as isAbsolute29, join as join87, normalize as normalize4 } from "node:path";
+import { dirname as dirname22, isAbsolute as isAbsolute29, join as join89, normalize as normalize4 } from "node:path";
 function hostPluginConvergencePaths(env, host) {
   const paths = resolveRuntimePaths({ homeDir: env.homeDir(), env: env.runtimeEnv() });
   return {
-    receiptPath: join87(paths.migrationsRoot, "host-plugin-convergence", `${host}.json`),
-    sessionProofPath: join87(paths.stateRoot, "migration", "tenon-session-loaded")
+    receiptPath: join89(paths.migrationsRoot, "host-plugin-convergence", `${host}.json`),
+    sessionProofPath: join89(paths.stateRoot, "migration", "tenon-session-loaded")
   };
 }
 function isReleaseId(value) {
@@ -54283,7 +54791,7 @@ function recordPendingHostPluginConflict(deps, env, host, inventory, activation,
   }
   if (existing.state === "receipt") {
     const receipt2 = existing.receipt;
-    const sameRelease = receipt2.releaseId === activation.release.releaseId && receipt2.releaseRoot === join87(activation.releaseRoot, "payload") && receipt2.candidateRoot === candidateRoot;
+    const sameRelease = receipt2.releaseId === activation.release.releaseId && receipt2.releaseRoot === join89(activation.releaseRoot, "payload") && receipt2.candidateRoot === candidateRoot;
     if (receipt2.transactionId === transactionId) {
       if (!sameRelease) {
         deps.io.err("ERROR: \u540C\u4E00 transaction id \u7684\u6536\u655B receipt \u4E0E\u5F53\u524D activation \u4E0D\u4E00\u81F4\u3002");
@@ -54316,7 +54824,7 @@ function recordPendingHostPluginConflict(deps, env, host, inventory, activation,
     conflictPluginId: LEGACY_PLUGIN_IDENTITY,
     conflictScopes,
     releaseId: activation.release.releaseId,
-    releaseRoot: join87(activation.releaseRoot, "payload"),
+    releaseRoot: join89(activation.releaseRoot, "payload"),
     candidateRoot,
     createdAtEpoch,
     updatedAt
@@ -54431,12 +54939,13 @@ async function finalizePendingHostPluginConflictWithinTransaction(deps, env, ins
   return { state: "completed" };
 }
 
-// packages/cli/src/commands/setupHost.ts
+// packages/cli/src/commands/packaged-assets.ts
+import { join as join90 } from "node:path";
 function verifyPackagedAssets(deps, env, root, dryRun, silent = false) {
-  const command2 = [join88(root, "tools", "verify-skills.sh"), "--quiet", "--root", root];
+  const command2 = [join90(root, "tools", "verify-skills.sh"), "--quiet", "--root", root];
   if (!silent) deps.io.out(`[setup] \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C: bash ${command2.join(" ")}`);
   if (dryRun) return 0;
-  if (!env.pathExists(join88(root, "runtime", "tenon-bootstrap.mjs"))) {
+  if (!env.pathExists(join90(root, "runtime", "tenon-bootstrap.mjs"))) {
     if (!silent) deps.io.err("ERROR: \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF1A\u7F3A\u5C11 runtime/tenon-bootstrap.mjs\uFF08\u8BE5 marketplace release \u4E0D\u662F\u5B8C\u6574\u53EF\u5B89\u88C5\u5305\uFF09");
     return 1;
   }
@@ -54448,6 +54957,8 @@ function verifyPackagedAssets(deps, env, root, dryRun, silent = false) {
   if (!silent) deps.io.err(`ERROR: \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF1A${result.stderr.trim() || result.stdout.trim() || `\u9000\u51FA\u7801 ${result.code}`}`);
   return 1;
 }
+
+// packages/cli/src/commands/setupHost.ts
 function commandText2(cmd, args) {
   return [cmd, ...args].join(" ");
 }
@@ -54458,7 +54969,7 @@ ${result.stderr}`);
 var NativePluginInventoryError = class extends Error {
   name = "NativePluginInventoryError";
 };
-async function verifiedInstalledNativePlugin(deps, env, host, transaction) {
+async function verifiedInstalledNativePlugin(deps, env, host, transaction, stableTarget) {
   const inventoryCommand2 = nativeInstallPlan(host).at(-1);
   if (inventoryCommand2 === void 0) return null;
   deps.io.out(`[setup] $ ${commandText2(inventoryCommand2.cmd, inventoryCommand2.args)}`);
@@ -54477,6 +54988,21 @@ async function verifiedInstalledNativePlugin(deps, env, host, transaction) {
   if (parsed === null) throw new NativePluginInventoryError("\u5BBF\u4E3B plugin inventory \u54CD\u5E94\u7578\u5F62");
   const root = parsed.tenonRoot;
   if (root === null) return null;
+  const target = stableTarget();
+  let exactStableTarget = false;
+  if (parsed.tenonVersion === target.version) {
+    try {
+      exactStableTarget = nativeHostMatchesStableTarget(env, host, target);
+    } catch {
+      exactStableTarget = false;
+    }
+  }
+  if (!exactStableTarget) {
+    deps.io.out(
+      `[setup] ${hostFlag(host)} \u5DF2\u767B\u8BB0\u7684 tenon \u672A\u7ED1\u5B9A ${target.tag}\uFF1B\u5C06\u901A\u8FC7\u5BBF\u4E3B CLI \u91CD\u7ED1\u6B63\u5F0F release\u3002`
+    );
+    return null;
+  }
   if (verifyPackagedAssets(deps, env, root, false, true) !== 0) {
     deps.io.out(`[setup] ${hostFlag(host)} \u5DF2\u767B\u8BB0\u7684 tenon \u4E0D\u5B8C\u6574\u6216\u672A\u901A\u8FC7\u6821\u9A8C\uFF1B\u5C06\u91CD\u65B0\u5B89\u88C5\u6B63\u5F0F release\u3002`);
     return null;
@@ -54485,9 +55011,14 @@ async function verifiedInstalledNativePlugin(deps, env, host, transaction) {
   return { root, verified: true, inventory: parsed, inventoryRaw: inventory.stdout };
 }
 async function installNativePlugin(deps, env, host, transaction) {
+  let frozenTarget;
+  const stableTarget = () => {
+    frozenTarget ??= resolveStableTagTarget(env, TENON_RELEASE_VERSION);
+    return frozenTarget;
+  };
   let existing;
   try {
-    existing = await verifiedInstalledNativePlugin(deps, env, host, transaction);
+    existing = await verifiedInstalledNativePlugin(deps, env, host, transaction, stableTarget);
   } catch (error2) {
     if (error2 instanceof NativePluginInventoryError) {
       deps.io.err(`ERROR: ${error2.message}\uFF1B\u672A\u6267\u884C\u5B89\u88C5\u6216\u6E05\u7406\u3002`);
@@ -54496,24 +55027,31 @@ async function installNativePlugin(deps, env, host, transaction) {
     throw error2;
   }
   if (existing !== null) return existing;
-  const plan = nativeInstallPlan(host);
+  const target = stableTarget();
+  const plan = nativeUpdatePlan(host, target);
   let inventory = "";
   for (let index = 0; index < plan.length; index += 1) {
     const item2 = plan[index];
     if (!item2) continue;
     deps.io.out(`[setup] $ ${commandText2(item2.cmd, item2.args)}`);
-    const stepId = index === 0 ? "marketplace-register" : index === 1 ? "plugin-install" : "inventory-after";
-    const result = await runManagedHostCommand(transaction, stepId, env, item2);
+    const stepId = [
+      "plugin-remove",
+      "marketplace-remove",
+      "marketplace-register",
+      "plugin-install",
+      "inventory-after"
+    ][index];
+    const result = await runManagedHostCommand(transaction, stepId, env, item2, target);
     if (result.stdout.trim() !== "") deps.io.out(result.stdout.trimEnd());
     if (result.code === 0) {
       if (index === plan.length - 1) inventory = result.stdout;
       continue;
     }
-    if (index === 0 && isDuplicateMarketplaceResult(result)) {
+    if (stepId === "marketplace-register" && isDuplicateMarketplaceResult(result)) {
       deps.io.out(`[setup] ${hostFlag(host)} marketplace \u5DF2\u5B58\u5728\uFF0C\u7EE7\u7EED\u9A8C\u8BC1\u63D2\u4EF6\u3002`);
       continue;
     }
-    if (index === 1) {
+    if (stepId === "plugin-install") {
       const inventoryCommand2 = plan.at(-1);
       if (!inventoryCommand2) {
         deps.io.err(`[setup] ${hostFlag(host)} \u5B89\u88C5\u8BA1\u5212\u7F3A\u5C11 inventory \u547D\u4EE4\u3002`);
@@ -54527,13 +55065,9 @@ async function installNativePlugin(deps, env, host, transaction) {
       );
       const parsed2 = inventoryResult.code === 0 ? parseHostPluginInventory(host, inventoryResult.stdout) : null;
       if (parsed2?.tenonRoot !== null && parsed2?.tenonRoot !== void 0) {
-        deps.io.out(`[setup] ${hostFlag(host)} \u5DF2\u6709 tenon\uFF0C\u590D\u7528\u5BBF\u4E3B\u767B\u8BB0\u7684\u5B89\u88C5\u3002`);
-        return {
-          root: parsed2.tenonRoot,
-          verified: false,
-          inventory: parsed2,
-          inventoryRaw: inventoryResult.stdout
-        };
+        deps.io.out(`[setup] ${hostFlag(host)} \u5DF2\u62A5\u544A tenon\uFF1B\u7EE7\u7EED\u9A8C\u8BC1\u7248\u672C\u3001tag \u4E0E payload identity\u3002`);
+        inventory = inventoryResult.stdout;
+        break;
       }
     }
     deps.io.err(
@@ -54548,6 +55082,27 @@ async function installNativePlugin(deps, env, host, transaction) {
   }
   if (parsed.tenonRoot === null) {
     deps.io.err(`ERROR: ${hostFlag(host)} \u63D2\u4EF6\u6E05\u5355\u4E2D\u6CA1\u6709 tenon\uFF1B\u672A\u5207\u6362 launcher\u3002`);
+    return null;
+  }
+  if (parsed.tenonVersion !== target.version) {
+    deps.io.err(
+      `ERROR: ${hostFlag(host)} \u63D2\u4EF6\u7248\u672C ${parsed.tenonVersion ?? "unknown"} \u4E0D\u7B49\u4E8E\u6B63\u5F0F release ${target.version}\uFF1B\u672A\u5207\u6362 launcher\u3002`
+    );
+    return null;
+  }
+  let exactStableTarget = false;
+  try {
+    exactStableTarget = nativeHostMatchesStableTarget(env, host, target);
+  } catch (error2) {
+    deps.io.err(
+      `ERROR: ${hostFlag(host)} \u5B89\u88C5\u540E\u65E0\u6CD5\u8BC1\u660E marketplace/tag identity\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`
+    );
+    return null;
+  }
+  if (!exactStableTarget) {
+    deps.io.err(
+      `ERROR: ${hostFlag(host)} \u5B89\u88C5\u540E\u672A\u7CBE\u786E\u7ED1\u5B9A ${target.tag} @ ${target.commit}\uFF1B\u672A\u5207\u6362 launcher\u3002`
+    );
     return null;
   }
   return {
@@ -54613,7 +55168,8 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
           }
           return {
             candidateRoot: candidate.root,
-            evidence: candidate.inventoryRaw
+            evidence: candidate.inventoryRaw,
+            openBrowser: openDashboard && !candidate.verified
           };
         },
         host,
@@ -54667,7 +55223,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
       openDashboard
     ).then((runtimeCode) => {
       if (runtimeCode !== 0) return runtimeCode;
-      const adapter2 = join88(root, "adapters", "install.sh");
+      const adapter2 = join91(root, "adapters", "install.sh");
       const args = [adapter2, hostFlag(host), "--target", opts.target ?? deps.cwd, "--yes"];
       deps.io.out(`[setup] $ bash ${args.join(" ")}`);
       const result = env.runCommand("bash", args);
@@ -54682,7 +55238,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
 }
 
 // packages/cli/src/commands/setupSkillsPlan.ts
-import { join as join89 } from "node:path";
+import { join as join92 } from "node:path";
 var REGISTERED_MARKETPLACES = /* @__PURE__ */ new Set(["claude-plugins-official"]);
 var TIER_RANK = { mandatory: 3, recommended: 2, conditional: 1, optional: 0 };
 var higherTier = (a, b) => TIER_RANK[a] >= TIER_RANK[b] ? a : b;
@@ -54691,26 +55247,26 @@ function marketplaceRepo(source) {
 }
 function skillInstalled(env, name2) {
   const home = env.homeDir();
-  if (env.pathExists(join89(home, ".codex", "skills", name2))) return true;
-  if (env.pathExists(join89(home, ".claude", "skills", name2))) return true;
-  if (env.pathExists(join89(home, ".agents", "skills", name2))) return true;
-  const cache2 = join89(home, ".claude", "plugins", "cache");
+  if (env.pathExists(join92(home, ".codex", "skills", name2))) return true;
+  if (env.pathExists(join92(home, ".claude", "skills", name2))) return true;
+  if (env.pathExists(join92(home, ".agents", "skills", name2))) return true;
+  const cache2 = join92(home, ".claude", "plugins", "cache");
   for (const marketplace of env.listDir(cache2)) {
-    if (env.pathExists(join89(cache2, marketplace, name2))) return true;
+    if (env.pathExists(join92(cache2, marketplace, name2))) return true;
   }
   return false;
 }
 function pluginInstalled(env, runner, source, id2) {
   const base = runner === "codex" ? ".codex" : ".claude";
-  return env.pathExists(join89(env.homeDir(), base, "plugins", "cache", source, id2));
+  return env.pathExists(join92(env.homeDir(), base, "plugins", "cache", source, id2));
 }
 function marketplaceInstalled(env, runner, source) {
   if (REGISTERED_MARKETPLACES.has(source)) return true;
   const home = env.homeDir();
   if (runner === "codex") {
-    return env.pathExists(join89(home, ".codex", ".tmp", "marketplaces", source)) || env.pathExists(join89(home, ".codex", "plugins", "cache", source));
+    return env.pathExists(join92(home, ".codex", ".tmp", "marketplaces", source)) || env.pathExists(join92(home, ".codex", "plugins", "cache", source));
   }
-  return env.pathExists(join89(home, ".claude", "plugins", "marketplaces", source)) || env.pathExists(join89(home, ".claude", "plugins", "cache", source));
+  return env.pathExists(join92(home, ".claude", "plugins", "marketplaces", source)) || env.pathExists(join92(home, ".claude", "plugins", "cache", source));
 }
 function cmdStr(c) {
   return [c.cmd, ...c.args].join(" ");
@@ -55045,12 +55601,12 @@ function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources, loadSources =
 }
 
 // packages/cli/src/commands/setupRuntime.ts
-import { join as join90 } from "node:path";
+import { join as join93 } from "node:path";
 import { homedir as homedir19 } from "node:os";
 var REAL_RUNTIME_ENV = {
   exec: nodeExecDocker,
   hostEnv: process.env,
-  defaultCodexHome: join90(homedir19(), ".codex"),
+  defaultCodexHome: join93(homedir19(), ".codex"),
   resolveImage: (cwd) => readAutomationJson(cwd).image ?? "sandcastle:local"
 };
 var READY_TAG = "[\u5C31\u7EEA]";
@@ -55141,7 +55697,16 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV, 
         });
       };
       const runHost = () => {
-        const hostCode = cmdSetupHost(deps, host, o, lifecycleEnv, installer, dashboardStarter);
+        const openDashboard = lifecycleEnv.isInteractive?.() ?? true;
+        const hostCode = cmdSetupHost(
+          deps,
+          host,
+          o,
+          lifecycleEnv,
+          installer,
+          dashboardStarter,
+          openDashboard
+        );
         return typeof hostCode === "number" ? finish(hostCode) : hostCode.then((code) => finish(code));
       };
       if (host !== "codex" || o.dryRun) return runHost();
@@ -55162,8 +55727,80 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV, 
   }
 }
 
+// packages/cli/src/commands/update-project-report.ts
+import { isAbsolute as isAbsolute30, join as join94 } from "node:path";
+function shellQuote2(value) {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+function reportRegisteredProjects(deps, env, pluginVersion) {
+  let registry;
+  try {
+    registry = env.readText(resolveRuntimePaths({
+      homeDir: env.homeDir(),
+      env: env.runtimeEnv()
+    }).registryPath);
+  } catch {
+    deps.io.err("[update] WARN: \u9879\u76EE\u6CE8\u518C\u8868\u65E0\u6CD5\u8BFB\u53D6\uFF1B\u672A\u4FEE\u6539\u4EFB\u4F55\u5DE5\u4F5C\u533A\u3002");
+    return;
+  }
+  if (registry === void 0) return;
+  let roots;
+  try {
+    roots = JSON.parse(registry);
+  } catch {
+    deps.io.err("[update] WARN: \u9879\u76EE\u6CE8\u518C\u8868\u65E0\u6CD5\u89E3\u6790\uFF1B\u672A\u4FEE\u6539\u4EFB\u4F55\u5DE5\u4F5C\u533A\u3002");
+    return;
+  }
+  if (!Array.isArray(roots)) return;
+  const registeredRoots = [...new Set(
+    roots.filter((root) => typeof root === "string" && isAbsolute30(root))
+  )];
+  const outdated = registeredRoots.filter((root) => {
+    try {
+      return env.readText(join94(root, ".pipeline-version"))?.trim() !== pluginVersion;
+    } catch {
+      return true;
+    }
+  });
+  if (outdated.length === 0) return;
+  deps.io.out(`[update] ${outdated.length} \u4E2A\u5DF2\u767B\u8BB0\u9879\u76EE\u9700\u8981\u663E\u5F0F\u540C\u6B65\uFF08\u672C\u6B21\u66F4\u65B0\u672A\u5199\u5DE5\u4F5C\u533A\uFF09\uFF1A`);
+  for (const root of outdated) deps.io.out(`  cd ${shellQuote2(root)} && tenon sync`);
+}
+
+// packages/cli/src/commands/update-candidate-verification.ts
+import { join as join95 } from "node:path";
+function candidateVersion(env, root) {
+  for (const path9 of [
+    join95(root, ".codex-plugin", "plugin.json"),
+    join95(root, ".claude-plugin", "plugin.json"),
+    join95(root, "package.json")
+  ]) {
+    const text4 = env.readText(path9);
+    if (text4 === void 0) continue;
+    try {
+      const value = JSON.parse(text4);
+      if (typeof value === "object" && value !== null && !Array.isArray(value) && typeof value.version === "string") {
+        return value.version;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+function verifyUpdatedRoot(deps, env, root, targetVersion) {
+  const result = env.runCommand("bash", [join95(root, "tools", "verify-skills.sh"), "--quiet", "--root", root]);
+  if (result.code === 0) {
+    const version = candidateVersion(env, root);
+    if (version !== null && (targetVersion === void 0 || version === targetVersion)) return true;
+    deps.io.err(`ERROR: \u65B0\u63D2\u4EF6\u7248\u672C ${version ?? "unknown"} \u4E0E\u76EE\u6807\u7A33\u5B9A\u7248\u672C ${targetVersion} \u4E0D\u4E00\u81F4\uFF0C\u4FDD\u6301\u539F launcher\u3002`);
+    return false;
+  }
+  deps.io.err(`ERROR: \u65B0\u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF0C\u4FDD\u6301\u539F launcher\uFF1A${result.stderr.trim() || result.stdout.trim() || `\u9000\u51FA\u7801 ${result.code}`}`);
+  return false;
+}
+
 // packages/cli/src/commands/update.ts
-import { isAbsolute as isAbsolute30, join as join91 } from "node:path";
 function renderPlan2(deps, host, plan) {
   deps.io.out(`[update] ${hostFlag(host)} \u53D1\u5E03\u66F4\u65B0\u8BA1\u5212\uFF08\u53EA\u66F4\u65B0\u6240\u9009\u5BBF\u4E3B\uFF09`);
   for (const item2 of plan) deps.io.out(`  $ ${item2.cmd} ${item2.args.join(" ")}`);
@@ -55172,23 +55809,13 @@ function isAlreadyInstalledResult(result) {
   return /already|exists|installed|duplicate/i.test(`${result.stdout}
 ${result.stderr}`);
 }
-function isLocalCodexMarketplaceUpgradeNoop(result) {
-  return /not configured as a Git marketplace/i.test(`${result.stdout}
-${result.stderr}`);
-}
-function verifyUpdatedRoot(deps, env, root) {
-  const result = env.runCommand("bash", [join91(root, "tools", "verify-skills.sh"), "--quiet", "--root", root]);
-  if (result.code === 0) return true;
-  deps.io.err(`ERROR: \u65B0\u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF0C\u4FDD\u6301\u539F launcher\uFF1A${result.stderr.trim() || result.stdout.trim() || `\u9000\u51FA\u7801 ${result.code}`}`);
-  return false;
-}
 function rejectUpdate(installer, env, detail) {
-  const record5 = installer.recordUpdateFailure?.({
+  const record6 = installer.recordUpdateFailure?.({
     homeDir: env.homeDir(),
     env: env.runtimeEnv()
   }, detail);
-  if (record5 === void 0) return 1;
-  return record5.then(() => 1).catch(() => 1);
+  if (record6 === void 0) return 1;
+  return record6.then(() => 1).catch(() => 1);
 }
 function boundaryDetail(hostState, managedState, detail) {
   return `host=${hostState}; managed=${managedState}; ${detail}`;
@@ -55204,7 +55831,7 @@ function reportHostBoundary(deps, host, state) {
     `[update] ${hostFlag(host)} \u5BBF\u4E3B\u66F4\u65B0\u5728 inventory \u63D0\u4EA4\u786E\u8BA4\u524D\u5931\u8D25\uFF1B\u5BBF\u4E3B\u79C1\u6709\u7F13\u5B58\u72B6\u6001\u7531\u5BBF\u4E3B CLI \u7BA1\u7406\uFF0CTenon \u672A\u76F4\u63A5\u5199\u5165\u6216\u6062\u590D\u8BE5\u7F13\u5B58\u3002`
   );
 }
-function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_INSTALLER, dashboardStarter = REAL_RELEASED_DASHBOARD_STARTER) {
+function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_INSTALLER, dashboardStarter = REAL_RELEASED_DASHBOARD_STARTER, releaseResolver = REAL_STABLE_RELEASE_RESOLVER, candidateInspector = inspectCandidatePayload) {
   const selection = selectPipelineHost(opts);
   if (selection.host === null) {
     deps.io.err(`ERROR: ${selection.error}\u3002\u793A\u4F8B\uFF1Atenon update --codex`);
@@ -55213,11 +55840,16 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
   const host = selection.host;
   if (!isNativePipelineHost(host)) {
     deps.io.out(`[update] ${hostFlag(host)} \u6CA1\u6709\u72EC\u7ACB marketplace\uFF1B\u4ECE\u5F53\u524D\u5DF2\u66F4\u65B0\u7684 Tenon \u5305\u91CD\u65B0\u90E8\u7F72 adapter\u3002`);
-    return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env, installer, dashboardStarter, opts.auto !== true);
+    return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env, installer, dashboardStarter, false);
   }
-  const plan = nativeUpdatePlan(host);
-  renderPlan2(deps, host, plan);
   if (opts.dryRun) {
+    const previewTarget = {
+      version: "<latest-stable>",
+      tag: "<latest-stable>",
+      commit: "0".repeat(40)
+    };
+    renderPlan2(deps, host, nativeUpdatePlan(host, previewTarget));
+    deps.io.out("[update] \u6267\u884C\u65F6\u5148\u53EA\u8BFB\u89E3\u6790\u5E76\u51BB\u7ED3\u5B98\u65B9 latest stable Release\uFF1Bdry-run \u4E0D\u8054\u7F51\u3002");
     deps.io.out("[update] --dry-run:\u672A\u5237\u65B0 marketplace\u3001\u672A\u91CD\u88C5\u63D2\u4EF6\u3001\u672A\u5207\u6362 launcher\u3002");
     return 0;
   }
@@ -55251,25 +55883,84 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
       {
         operation: "update",
         source: host,
+        requiresStableTarget: true,
+        proveFrozenTarget: (frozen) => {
+          const proven = resolveStableTagTarget(lifecycleEnv, frozen.version);
+          if (proven.tag !== frozen.tag || proven.commit !== frozen.commit) {
+            throw new Error(
+              `\u7A33\u5B9A\u6807\u7B7E ${frozen.tag} \u5F53\u524D\u8BC1\u660E ${proven.commit} \u4E0E\u51BB\u7ED3 commit ${frozen.commit} \u4E0D\u4E00\u81F4`
+            );
+          }
+        },
         runtime: {
           homeDir: lifecycleEnv.homeDir(),
           env: lifecycleEnv.runtimeEnv()
         },
-        openBrowser: opts.auto !== true,
+        openBrowser: false,
         ...dashboardPort === null ? {} : { dashboardPort },
         prepareCandidate: async (transaction) => {
+          const target = await transaction.resolveStableTarget(
+            () => releaseResolver.resolve(lifecycleEnv),
+            (frozen) => {
+              const proven = resolveStableTagTarget(lifecycleEnv, frozen.version);
+              if (proven.tag !== frozen.tag || proven.commit !== frozen.commit) {
+                throw new Error(
+                  `\u7A33\u5B9A\u6807\u7B7E ${frozen.tag} \u5F53\u524D\u8BC1\u660E ${proven.commit} \u4E0E\u51BB\u7ED3 commit ${frozen.commit} \u4E0D\u4E00\u81F4`
+                );
+              }
+            }
+          );
+          deps.io.out(`[update] \u5DF2\u51BB\u7ED3\u7A33\u5B9A\u76EE\u6807\uFF1A${target.tag} @ ${target.commit}`);
+          const beforeInventoryResult = lifecycleEnv.runCommand(host, ["plugin", "list", "--json"]);
+          const beforeInventory = beforeInventoryResult.code === 0 ? parseHostPluginInventory(host, beforeInventoryResult.stdout) : null;
+          if (beforeInventory === null) {
+            throw new Error(
+              `\u66F4\u65B0\u524D\u5BBF\u4E3B plugin inventory \u65E0\u6CD5\u9A8C\u8BC1\uFF1A${beforeInventoryResult.stderr.trim() || `\u9000\u51FA\u7801 ${beforeInventoryResult.code}`}`
+            );
+          }
+          const runtime = await installer.inspect({
+            homeDir: lifecycleEnv.homeDir(),
+            env: lifecycleEnv.runtimeEnv()
+          });
+          for (const [label, version] of [
+            ["\u5BBF\u4E3B plugin", beforeInventory.tenonVersion],
+            ["active managed runtime", runtime.activeValid ? runtime.active?.source.pluginVersion ?? null : null]
+          ]) {
+            if (version === null) continue;
+            let comparison;
+            try {
+              comparison = compareStableVersions(version, target.version);
+            } catch (error2) {
+              throw new Error(`${label} \u7248\u672C\u65E0\u6CD5\u53C2\u4E0E\u7A33\u5B9A\u7248\u672C\u6BD4\u8F83\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`);
+            }
+            if (comparison > 0) throw new Error(`\u62D2\u7EDD\u4ECE${label} ${version} \u964D\u7EA7\u5230 ${target.version}`);
+          }
+          const runtimeExact = runtime.activeValid && runtime.active !== null && runtime.selection.activeRelease === runtime.active.releaseId && runtime.active.source.host === host && runtime.active.source.pluginVersion === target.version;
+          const hostExact = beforeInventory.tenonRoot !== null && beforeInventory.tenonVersion === target.version && runtimeExact && nativeHostMatchesStableTarget(lifecycleEnv, host, target);
+          if (hostExact && verifyUpdatedRoot(deps, lifecycleEnv, beforeInventory.tenonRoot, target.version)) {
+            const candidateIdentity = await candidateInspector(beforeInventory.tenonRoot);
+            if (candidateIdentity.pluginVersion === target.version && candidateIdentity.payloadDigest === runtime.active?.payloadDigest && nativeHostMatchesStableTarget(lifecycleEnv, host, target)) {
+              const port = dashboardPort ?? DEFAULT_DASHBOARD_PORT;
+              const dashboard = await dashboardStarter.inspect(deps, { port, openBrowser: false });
+              if (dashboard?.releaseId === runtime.active?.releaseId && dashboard.serverVersion === target.version) return { alreadyCurrent: true };
+            }
+          }
+          const plan = nativeUpdatePlan(host, target);
+          renderPlan2(deps, host, plan);
           let inventory = "";
           for (let index = 0; index < plan.length; index += 1) {
             const item2 = plan[index];
-            const stepId = index === 0 ? "marketplace-refresh" : index === 1 ? "plugin-install" : "inventory-after";
-            const result = await runManagedHostCommand(transaction, stepId, lifecycleEnv, item2);
+            const stepId = [
+              "plugin-remove",
+              "marketplace-remove",
+              "marketplace-register",
+              "plugin-install",
+              "inventory-after"
+            ][index];
+            const result = await runManagedHostCommand(transaction, stepId, lifecycleEnv, item2, target);
             if (result.stdout.trim() !== "" && !opts.auto) deps.io.out(result.stdout.trimEnd());
-            if (host === "codex" && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
-              deps.io.out("[update] Codex \u672C\u5730 marketplace \u4E0D\u9700\u8981 Git fetch\uFF1B\u7EE7\u7EED\u5237\u65B0 tenon \u63D2\u4EF6\u7F13\u5B58\u3002");
-              continue;
-            }
             if (result.code !== 0) {
-              if (index === 1 && isAlreadyInstalledResult(result)) {
+              if (stepId === "plugin-install" && isAlreadyInstalledResult(result)) {
                 const inventoryItem = plan[plan.length - 1];
                 const inventoryResult = await runManagedHostCommand(
                   transaction,
@@ -55298,8 +55989,27 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
             throw new Error(`${hostFlag(host)} \u66F4\u65B0\u540E\u672A\u5728\u5BBF\u4E3B\u63D2\u4EF6\u6E05\u5355\u4E2D\u627E\u5230 tenon\uFF1B\u672A\u5207\u6362 launcher\u3002`);
           }
           hostBoundary = "committed";
-          if (!verifyUpdatedRoot(deps, lifecycleEnv, root)) {
+          if (parsedInventory.tenonVersion !== target.version) {
+            throw new Error(
+              `${hostFlag(host)} \u66F4\u65B0\u540E\u63D2\u4EF6\u7248\u672C ${parsedInventory.tenonVersion ?? "unknown"} \u4E0E\u76EE\u6807\u7A33\u5B9A\u7248\u672C ${target.version} \u4E0D\u4E00\u81F4\uFF1B\u672A\u5207\u6362 launcher\u3002`
+            );
+          }
+          let hostMatchesTarget = false;
+          try {
+            hostMatchesTarget = nativeHostMatchesStableTarget(lifecycleEnv, host, target);
+          } catch (error2) {
+            throw new Error(
+              `\u66F4\u65B0\u540E\u5BBF\u4E3B\u76EE\u6807 identity \u65E0\u6CD5\u9A8C\u8BC1\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`
+            );
+          }
+          if (!hostMatchesTarget) {
+            throw new Error("\u66F4\u65B0\u540E marketplace/tag commit \u4E0E\u63D2\u4EF6 inventory \u672A\u6536\u655B\u5230\u540C\u4E00\u51BB\u7ED3\u7A33\u5B9A\u7248\u672C");
+          }
+          if (!verifyUpdatedRoot(deps, lifecycleEnv, root, target?.version)) {
             throw new Error("\u5BBF\u4E3B\u5237\u65B0\u540E\u7684 tenon \u5019\u9009\u672A\u901A\u8FC7\u6253\u5305\u8D44\u4EA7\u6821\u9A8C");
+          }
+          if (!nativeHostMatchesStableTarget(lifecycleEnv, host, target)) {
+            throw new Error("\u5019\u9009\u6821\u9A8C\u540E marketplace/tag commit \u53D1\u751F\u6F02\u79FB\uFF1B\u62D2\u7EDD\u6FC0\u6D3B");
           }
           return { candidateRoot: root, evidence: inventory };
         },
@@ -55325,6 +56035,13 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
       reportHostBoundary(deps, host, hostBoundary);
       return await rejectUpdate(installer, lifecycleEnv, boundaryDetail(hostBoundary, outcome.state, outcome.detail));
     }
+    const readyPort = dashboardPort ?? DEFAULT_DASHBOARD_PORT;
+    if (outcome.state === "current") {
+      const tag2 = outcome.stableTarget?.tag ?? "latest stable";
+      deps.io.out(`[update] ${tag2} \u5DF2\u5728\u5BBF\u4E3B\u3001managed runtime \u4E0E Dashboard \u7CBE\u786E\u751F\u6548\uFF1B\u65E0\u9700\u66F4\u65B0\u3002`);
+      deps.io.out(`[dashboard] \u5DF2\u5C31\u7EEA\uFF1Ahttp://127.0.0.1:${readyPort}/\uFF1B\u5982\u9700\u6253\u5F00\uFF1Atenon dashboard --open`);
+      return 0;
+    }
     const { activation } = outcome;
     deps.io.out(`[update] \u5DF2\u539F\u5B50\u5207\u6362\u81F3\u5DF2\u9A8C\u8BC1 runtime: ${activation.release.releaseId}\uFF08revision ${activation.selection.revision}\uFF09\u3002`);
     if (opts.auto) {
@@ -55342,45 +56059,9 @@ function cmdUpdate(deps, opts, env = REAL_SETUP_ENV, installer = REAL_RUNTIME_IN
       }
     }
     reportRegisteredProjects(deps, lifecycleEnv, activation.release.source.pluginVersion);
+    deps.io.out(`[dashboard] \u5DF2\u5C31\u7EEA\uFF1Ahttp://127.0.0.1:${readyPort}/\uFF1B\u5982\u9700\u6253\u5F00\uFF1Atenon dashboard --open`);
     return 0;
   })();
-}
-function shellQuote2(value) {
-  return `'${value.replace(/'/g, `'"'"'`)}'`;
-}
-function reportRegisteredProjects(deps, env, pluginVersion) {
-  let registry;
-  try {
-    registry = env.readText(resolveRuntimePaths({
-      homeDir: env.homeDir(),
-      env: env.runtimeEnv()
-    }).registryPath);
-  } catch {
-    deps.io.err("[update] WARN: \u9879\u76EE\u6CE8\u518C\u8868\u65E0\u6CD5\u8BFB\u53D6\uFF1B\u672A\u4FEE\u6539\u4EFB\u4F55\u5DE5\u4F5C\u533A\u3002");
-    return;
-  }
-  if (registry === void 0) return;
-  let roots;
-  try {
-    roots = JSON.parse(registry);
-  } catch {
-    deps.io.err("[update] WARN: \u9879\u76EE\u6CE8\u518C\u8868\u65E0\u6CD5\u89E3\u6790\uFF1B\u672A\u4FEE\u6539\u4EFB\u4F55\u5DE5\u4F5C\u533A\u3002");
-    return;
-  }
-  if (!Array.isArray(roots)) return;
-  const registeredRoots = [...new Set(
-    roots.filter((root) => typeof root === "string" && isAbsolute30(root))
-  )];
-  const outdated = registeredRoots.filter((root) => {
-    try {
-      return env.readText(join91(root, ".pipeline-version"))?.trim() !== pluginVersion;
-    } catch {
-      return true;
-    }
-  });
-  if (outdated.length === 0) return;
-  deps.io.out(`[update] ${outdated.length} \u4E2A\u5DF2\u767B\u8BB0\u9879\u76EE\u9700\u8981\u663E\u5F0F\u540C\u6B65\uFF08\u672C\u6B21\u66F4\u65B0\u672A\u5199\u5DE5\u4F5C\u533A\uFF09\uFF1A`);
-  for (const root of outdated) deps.io.out(`  cd ${shellQuote2(root)} && tenon sync`);
 }
 
 // packages/cli/src/program-install.ts
@@ -56118,8 +56799,8 @@ import {
   realpathSync as realpathSync6,
   statSync as statSync10
 } from "node:fs";
-import { readdir as readdir13 } from "node:fs/promises";
-import { dirname as dirname26, isAbsolute as isAbsolute31, join as join92, relative as relative20, sep as sep20 } from "node:path";
+import { readdir as readdir14 } from "node:fs/promises";
+import { dirname as dirname26, isAbsolute as isAbsolute31, join as join96, relative as relative20, sep as sep20 } from "node:path";
 function sameBoundedFile(left, right) {
   return left.dev === right.dev && left.ino === right.ino && left.size === right.size && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
 }
@@ -56134,7 +56815,7 @@ function boundedAncestors(root, path9) {
   const ancestors = [{ path: root, info: rootInfo, real: rootReal }];
   let candidate = root;
   for (const segment of segments) {
-    candidate = join92(candidate, segment);
+    candidate = join96(candidate, segment);
     const info = lstatSync4(candidate, { bigint: true });
     if (!info.isDirectory() || info.isSymbolicLink()) return void 0;
     ancestors.push({ path: candidate, info, real: realpathSync6(candidate) });
@@ -56195,16 +56876,16 @@ function readBoundedRegularFileSync(path9, maxBytes, root, hooks = {}) {
 async function listChanges(changesRoot2) {
   let entries;
   try {
-    entries = await readdir13(changesRoot2, { withFileTypes: true });
+    entries = await readdir14(changesRoot2, { withFileTypes: true });
   } catch {
     return [];
   }
-  return entries.filter((entry) => entry.isDirectory() && entry.name !== "archive").filter((entry) => stateStorageExistsSync(join92(changesRoot2, entry.name))).map((entry) => entry.name).sort();
+  return entries.filter((entry) => entry.isDirectory() && entry.name !== "archive").filter((entry) => stateStorageExistsSync(join96(changesRoot2, entry.name))).map((entry) => entry.name).sort();
 }
 async function listChangeDirs(changesRoot2) {
   let entries;
   try {
-    entries = await readdir13(changesRoot2, { withFileTypes: true });
+    entries = await readdir14(changesRoot2, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -56212,7 +56893,7 @@ async function listChangeDirs(changesRoot2) {
 }
 function activeCanonicalArchived(cwd, dep) {
   try {
-    const current = readCurrentRunRevisionSync(join92(cwd, "openspec", "changes", dep));
+    const current = readCurrentRunRevisionSync(join96(cwd, "openspec", "changes", dep));
     return current?.state.fields.archived === "true";
   } catch {
     return false;
@@ -56220,13 +56901,13 @@ function activeCanonicalArchived(cwd, dep) {
 }
 function physicallyArchived(cwd, dep) {
   try {
-    return readdirSync8(join92(cwd, "openspec", "changes", "archive"), { withFileTypes: true }).some((entry) => entry.isDirectory() && entry.name.endsWith(`-${dep}`));
+    return readdirSync8(join96(cwd, "openspec", "changes", "archive"), { withFileTypes: true }).some((entry) => entry.isDirectory() && entry.name.endsWith(`-${dep}`));
   } catch {
     return false;
   }
 }
 function makeGuardCtx(cwd) {
-  const abs = (relativePath) => join92(cwd, relativePath);
+  const abs = (relativePath) => join96(cwd, relativePath);
   return (name2) => ({
     changeDirRel: `openspec/changes/${name2}`,
     stateExists: (changeDirRel) => stateStorageExistsSync(abs(changeDirRel)),
@@ -56299,9 +56980,9 @@ function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 function gitHeadSha(cwd) {
-  return new Promise((resolve40) => {
+  return new Promise((resolve41) => {
     execFile5("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => {
-      resolve40((stdout ?? "").trim());
+      resolve41((stdout ?? "").trim());
     });
   });
 }
@@ -56309,19 +56990,19 @@ async function readGateMarkers(cwd) {
   const out = [];
   for (const kind of ["confirm", "review", "interaction"]) {
     try {
-      const p = join93(cwd, `.pipeline-pending-${kind}`);
+      const p = join97(cwd, `.pipeline-pending-${kind}`);
       const st = await stat12(p);
-      out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile40(p, "utf8") });
+      out.push({ kind, ageMs: Date.now() - st.mtimeMs, raw: await readFile41(p, "utf8") });
     } catch {
     }
   }
   return out;
 }
 function pluginRoot() {
-  return join93(dirname27(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join97(dirname27(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join93(pluginRoot(), "templates", "manifest.yaml");
+  return join97(pluginRoot(), "templates", "manifest.yaml");
 }
 function trackValidationContext(repoRoot, manifest) {
   const skillProfiles = /* @__PURE__ */ new Set();
@@ -56351,7 +57032,7 @@ function readPluginVersion() {
     [".claude-plugin", "plugin.json"]
   ]) {
     try {
-      const raw = readFileSync28(join93(pluginRoot(), ...rel), "utf8");
+      const raw = readFileSync28(join97(pluginRoot(), ...rel), "utf8");
       const parsed = JSON.parse(raw);
       const version = typeof parsed === "object" && parsed !== null && "version" in parsed ? parsed.version : void 0;
       if (typeof version === "string" && version.trim() !== "") return version;
@@ -56370,7 +57051,7 @@ function safeReaddirDirs(dir) {
 function readDisabledPluginKeys() {
   const disabled = /* @__PURE__ */ new Set();
   try {
-    const raw = readFileSync28(join93(homedir20(), ".claude", "settings.json"), "utf8");
+    const raw = readFileSync28(join97(homedir20(), ".claude", "settings.json"), "utf8");
     const parsed = JSON.parse(raw);
     const ep = typeof parsed === "object" && parsed !== null && "enabledPlugins" in parsed ? parsed.enabledPlugins : void 0;
     if (ep !== null && typeof ep === "object") {
@@ -56383,26 +57064,26 @@ function readDisabledPluginKeys() {
 function scanInstalledSkillNames() {
   const home = homedir20();
   const names = /* @__PURE__ */ new Set();
-  for (const n of safeReaddirDirs(join93(home, ".claude", "skills"))) names.add(n);
-  for (const n of safeReaddirDirs(join93(home, ".agents", "skills"))) names.add(n);
-  const cache2 = join93(home, ".claude", "plugins", "cache");
+  for (const n of safeReaddirDirs(join97(home, ".claude", "skills"))) names.add(n);
+  for (const n of safeReaddirDirs(join97(home, ".agents", "skills"))) names.add(n);
+  const cache2 = join97(home, ".claude", "plugins", "cache");
   const disabledPlugins = readDisabledPluginKeys();
   for (const marketplace of safeReaddirDirs(cache2)) {
-    const mktDir = join93(cache2, marketplace);
+    const mktDir = join97(cache2, marketplace);
     for (const plugin of safeReaddirDirs(mktDir)) {
       if (disabledPlugins.has(`${plugin}@${marketplace}`)) continue;
       names.add(plugin);
-      for (const skill of safeReaddirDirs(join93(mktDir, plugin, "skills"))) names.add(skill);
+      for (const skill of safeReaddirDirs(join97(mktDir, plugin, "skills"))) names.add(skill);
     }
   }
   return names;
 }
 function scanCodexProjectSkillNames(cwd, root) {
   const names = /* @__PURE__ */ new Set();
-  for (const skillsRoot of [join93(root, "skills"), join93(cwd, ".agents", "skills")]) {
+  for (const skillsRoot of [join97(root, "skills"), join97(cwd, ".agents", "skills")]) {
     for (const name2 of safeReaddirDirs(skillsRoot)) {
       try {
-        if (statSync11(join93(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
+        if (statSync11(join97(skillsRoot, name2, "SKILL.md")).isFile()) names.add(name2);
       } catch {
       }
     }
@@ -56413,7 +57094,7 @@ function scanSkillDigests(skillsRoot) {
   const digests = /* @__PURE__ */ new Map();
   for (const name2 of safeReaddirDirs(skillsRoot)) {
     try {
-      const skillPath = join93(skillsRoot, name2, "SKILL.md");
+      const skillPath = join97(skillsRoot, name2, "SKILL.md");
       if (!statSync11(skillPath).isFile()) continue;
       digests.set(name2, createHash43("sha256").update(readFileSync28(skillPath)).digest("hex"));
     } catch {
@@ -56425,8 +57106,8 @@ function makeDoctorProbes(runtimeScope2) {
   const root = pluginRoot();
   return {
     nodeVersion: () => process.version,
-    gitAvailable: () => new Promise((resolve40) => {
-      execFile5("git", ["--version"], (err) => resolve40(!err));
+    gitAvailable: () => new Promise((resolve41) => {
+      execFile5("git", ["--version"], (err) => resolve41(!err));
     }),
     pluginRoot: root,
     manifestError: () => {
@@ -56463,7 +57144,7 @@ function makeDoctorProbes(runtimeScope2) {
     // 接入判定与 statusline.sh 头注释的接入方式同口径：settings.json 里引用了该脚本即算接入
     statuslineConfigured: () => {
       try {
-        return readFileSync28(join93(homedir20(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
+        return readFileSync28(join97(homedir20(), ".claude", "settings.json"), "utf8").includes("statusline.sh");
       } catch {
         return false;
       }
@@ -56477,15 +57158,15 @@ function makeDoctorProbes(runtimeScope2) {
       return host === "codex" || host === "claude" ? host : null;
     },
     codexAuthStatus: () => probeCodexAuth(),
-    runVerifySkills: () => new Promise((resolve40) => {
+    runVerifySkills: () => new Promise((resolve41) => {
       execFile5(
         "bash",
-        [join93(root, "tools", "verify-skills.sh"), "--quiet"],
+        [join97(root, "tools", "verify-skills.sh"), "--quiet"],
         { timeout: 3e4 },
         (err, stdout, stderr) => {
           const errCode = err?.code;
           const code = err ? typeof errCode === "number" ? errCode : 1 : 0;
-          resolve40({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
+          resolve41({ code, output: `${stdout ?? ""}${stderr ?? ""}` });
         }
       );
     }),
@@ -56525,9 +57206,9 @@ function makeDoctorProbes(runtimeScope2) {
       const native = active === "codex" || active === "claude";
       return {
         ...native ? { selectedRoot: root } : {},
-        projectRoot: join93(process.cwd(), ".agents", "skills"),
-        selected: native ? scanSkillDigests(join93(root, "skills")) : /* @__PURE__ */ new Map(),
-        project: scanSkillDigests(join93(process.cwd(), ".agents", "skills"))
+        projectRoot: join97(process.cwd(), ".agents", "skills"),
+        selected: native ? scanSkillDigests(join97(root, "skills")) : /* @__PURE__ */ new Map(),
+        project: scanSkillDigests(join97(process.cwd(), ".agents", "skills"))
       };
     },
     manifestSkills: () => {
@@ -56548,7 +57229,7 @@ function makeDoctorProbes(runtimeScope2) {
         image: readAutomationJson(process.cwd()).image ?? "sandcastle:local",
         secretsEnv: readSecrets(scope.paths.secretsPath).keys,
         hostEnv: scope.env,
-        defaultCodexHome: join93(scope.homeDir, ".codex")
+        defaultCodexHome: join97(scope.homeDir, ".codex")
       });
     }
   };
@@ -56605,7 +57286,7 @@ async function main() {
     guardCtx: makeGuardCtx(process.cwd()),
     doctor: makeDoctorProbes(runtimeScope2),
     readGateMarkers: () => readGateMarkers(process.cwd()),
-    writeBreadcrumb: (dir, content) => writeFile15(join93(dir, ".breadcrumb"), content, "utf8"),
+    writeBreadcrumb: (dir, content) => writeFile15(join97(dir, ".breadcrumb"), content, "utf8"),
     history: createHistoryWriter(),
     // init 成功后 best-effort 登记项目根到 Tenon config root 的 projects.json
     registerProject: async (repoRoot) => {
@@ -56616,20 +57297,20 @@ async function main() {
     readSecretsEnv: async () => readSecrets(runtimePaths().secretsPath).keys,
     readHistoryRaw: async (dir) => {
       try {
-        return await readFile40(join93(dir, ".pipeline-history.jsonl"), "utf8");
+        return await readFile41(join97(dir, ".pipeline-history.jsonl"), "utf8");
       } catch {
         return "";
       }
     },
     gitHeadSha: () => gitHeadSha(process.cwd()),
     workspaceFingerprint: () => fingerprintWorkspace(process.cwd()),
-    writeReviewMarker: (content) => writeFile15(join93(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
-    clearReviewMarker: () => rm13(join93(process.cwd(), ".pipeline-pending-review"), { force: true }),
+    writeReviewMarker: (content) => writeFile15(join97(process.cwd(), ".pipeline-pending-review"), content, "utf8"),
+    clearReviewMarker: () => rm14(join97(process.cwd(), ".pipeline-pending-review"), { force: true }),
     pluginVersion: readPluginVersion(),
     readInstalledPlugins: async () => {
-      for (const p of [join93(pluginRoot(), "..", "installed_plugins.json"), join93(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
+      for (const p of [join97(pluginRoot(), "..", "installed_plugins.json"), join97(process.env.HOME ?? "", ".claude", "installed_plugins.json")]) {
         try {
-          return await readFile40(p, "utf8");
+          return await readFile41(p, "utf8");
         } catch {
         }
       }

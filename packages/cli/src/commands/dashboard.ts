@@ -293,6 +293,8 @@ async function startManagedDashboard(
     && Number.isSafeInteger(healthy.pid)
     && healthy.pid > 0
     && (expectedReleaseId === undefined || healthy.releaseId === expectedReleaseId)
+    && (opts.expectedServerVersion === undefined
+      || healthy.serverVersion === opts.expectedServerVersion)
     && healthy.stateScopeId === expectedStateScopeId
     && healthy.transactionId === opts.transactionId
   if (!identityMatchesSpawn) {

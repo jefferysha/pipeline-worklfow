@@ -75,6 +75,7 @@ export async function coordinateReleaseDashboard(
     const inspectOptions: ReleasedDashboardOptions = {
       openBrowser: false,
       port: dashboardPort,
+      expectedServerVersion: activation.release.source.pluginVersion,
     }
     if (journal.phase === 'dashboard-ready' || journal.phase === 'evidence-committed') {
       if (journal.dashboard === undefined) {
@@ -180,12 +181,14 @@ export async function coordinateReleaseDashboard(
     const currentOwned = current !== null
       && current.transactionId === journal.transactionId
       && current.releaseId === activation.release.releaseId
+      && current.serverVersion === activation.release.source.pluginVersion
       && current.port === dashboardPort
     if (current !== null
       && current.port === dashboardPort
       && current.transactionId !== undefined
       && current.transactionId !== journal.transactionId
       && current.releaseId === activation.release.releaseId
+      && current.serverVersion === activation.release.source.pluginVersion
       && journal.dashboardBefore !== undefined
       && sameManagedDashboardIdentity(current, journal.dashboardBefore)) {
       journal = {
@@ -228,6 +231,7 @@ export async function coordinateReleaseDashboard(
           openBrowser,
           port: dashboardPort,
           transactionId: journal.transactionId,
+          expectedServerVersion: activation.release.source.pluginVersion,
         },
       )
     }
@@ -249,6 +253,7 @@ export async function coordinateReleaseDashboard(
     const readyIdentity = dashboardOutcome.session.ownership
     const readyIdentityValid = readyIdentity.version === 1
       && readyIdentity.releaseId === activation.release.releaseId
+      && readyIdentity.serverVersion === activation.release.source.pluginVersion
       && readyIdentity.port === dashboardPort
       && readyIdentity.transactionId === journal.transactionId
       && Number.isSafeInteger(readyIdentity.pid)

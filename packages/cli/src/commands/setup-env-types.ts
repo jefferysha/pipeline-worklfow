@@ -9,6 +9,8 @@ import type { NativeHostCommandEnvironment } from './native-host-command-binding
 export interface SetupEnv extends NativeHostCommandEnvironment {
   homeDir(): string
   runtimeEnv(): NonNullable<ProductPathInput['env']>
+  /** Browser policy only; absence preserves compatibility for injected test/adapter environments. */
+  isInteractive?(): boolean
   pluginRoot(): string | null
   selfPath(): string
   pathExists(path: string): boolean

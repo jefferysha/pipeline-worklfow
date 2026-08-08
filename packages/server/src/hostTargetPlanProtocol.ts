@@ -12,6 +12,10 @@ const CAPABILITIES = [
 ] as const
 
 const STEP_IDS = [
+  'stable-release-target',
+  'stable-release-resolve',
+  'plugin-remove',
+  'marketplace-remove',
   'marketplace-register',
   'plugin-install',
   'plugin-inventory',
@@ -19,15 +23,24 @@ const STEP_IDS = [
   'plugin-update',
   'package-assets',
   'adapter-deploy',
+  'candidate-validation',
   'managed-runtime',
+  'dashboard-readiness',
   'codex-auth-status',
   'bundled-skills',
   'runtime-readiness',
 ] as const
 
+/** Release projection validated against package/plugin manifests by the product identity gate. */
+export const HOST_PLAN_RELEASE_TAG = 'v1.0.2'
+const LATEST_STABLE_TAG = '<latest-stable>'
+
 const NOTICE_IDS = [
   'host-plan.notice.read-only-generation',
   'host-plan.notice.manual-command-has-effects',
+  'host-plan.notice.dashboard-readiness',
+  'host-plan.notice.first-setup-browser',
+  'host-plan.notice.update-target-frozen-at-execution',
   'host-plan.notice.codex-auth-guidance',
   'host-plan.notice.current-project-target',
 ] as const
@@ -120,25 +133,33 @@ function nativeCommandTruth(
   if (host === 'codex') {
     return operation === 'setup'
       ? [
-          planCommand('codex', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'main']),
+          planCommand('codex', [
+            'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', HOST_PLAN_RELEASE_TAG, '--json',
+          ]),
           planCommand('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
           planCommand('codex', ['plugin', 'list', '--json']),
         ]
       : [
-          planCommand('codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']),
+          planCommand('codex', ['plugin', 'remove', 'tenon@tenon', '--json']),
+          planCommand('codex', ['plugin', 'marketplace', 'remove', 'tenon', '--json']),
+          planCommand('codex', [
+            'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', LATEST_STABLE_TAG, '--json',
+          ]),
           planCommand('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
           planCommand('codex', ['plugin', 'list', '--json']),
         ]
   }
   return operation === 'setup'
     ? [
-        planCommand('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon']),
+        planCommand('claude', ['plugin', 'marketplace', 'add', `jefferysha/tenon@${HOST_PLAN_RELEASE_TAG}`]),
         planCommand('claude', ['plugin', 'install', 'tenon@tenon']),
         planCommand('claude', ['plugin', 'list', '--json']),
       ]
     : [
-        planCommand('claude', ['plugin', 'marketplace', 'update', 'tenon']),
-        planCommand('claude', ['plugin', 'update', 'tenon@tenon']),
+        planCommand('claude', ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user']),
+        planCommand('claude', ['plugin', 'marketplace', 'remove', 'tenon']),
+        planCommand('claude', ['plugin', 'marketplace', 'add', `jefferysha/tenon@${LATEST_STABLE_TAG}`]),
+        planCommand('claude', ['plugin', 'install', 'tenon@tenon']),
         planCommand('claude', ['plugin', 'list', '--json']),
       ]
 }
@@ -268,41 +289,57 @@ export function decodeHostTargetPlan(
   }
   const expectedStepIds: readonly HostPlanStepId[] = native
     ? [
+        expectedOperation === 'setup' ? 'stable-release-target' : 'stable-release-resolve',
         ...(expectedOperation === 'setup'
           ? ['marketplace-register', 'plugin-install', 'plugin-inventory'] as const
-          : ['marketplace-refresh', 'plugin-update', 'plugin-inventory'] as const),
+          : [
+              'plugin-remove',
+              'marketplace-remove',
+              'marketplace-register',
+              'plugin-install',
+              'plugin-inventory',
+            ] as const),
+        'candidate-validation',
         'managed-runtime',
+        'dashboard-readiness',
         ...(expectedHost === 'codex' ? ['codex-auth-status'] as const : []),
         ...(expectedOperation === 'setup'
           ? ['bundled-skills', 'runtime-readiness'] as const
           : []),
       ]
     : expectedOperation === 'setup'
-      ? ['package-assets', 'managed-runtime', 'adapter-deploy', 'bundled-skills', 'runtime-readiness']
-      : ['package-assets', 'managed-runtime', 'adapter-deploy']
+      ? ['package-assets', 'managed-runtime', 'dashboard-readiness', 'adapter-deploy', 'bundled-skills', 'runtime-readiness']
+      : ['package-assets', 'managed-runtime', 'dashboard-readiness', 'adapter-deploy']
   if (!arraysEqual(steps.map((step) => step.id), expectedStepIds)) return null
   let expectedStepCommands: readonly (HostPlanCommandDto | null)[]
   if (native) {
     if (expectedHost !== 'codex' && expectedHost !== 'claude') return null
     expectedStepCommands = [
+      null,
       ...nativeCommandTruth(expectedHost, expectedOperation),
+      null,
+      null,
       null,
       ...(expectedHost === 'codex' ? [planCommand('codex', ['login', 'status'])] : []),
       ...(expectedOperation === 'setup' ? [null, null] : []),
     ]
   } else {
     expectedStepCommands = expectedOperation === 'setup'
-      ? [null, null, command, null, null]
-      : [null, null, command]
+      ? [null, null, null, command, null, null]
+      : [null, null, null, command]
   }
   for (let index = 0; index < steps.length; index += 1) {
     if (!commandsEqual(steps[index]?.command ?? null, expectedStepCommands[index] ?? null)) return null
   }
-  const expectedNotices = expectedHost === 'codex'
-    ? NOTICE_IDS.slice(0, 3)
-    : native
-      ? NOTICE_IDS.slice(0, 2)
-      : [...NOTICE_IDS.slice(0, 2), NOTICE_IDS[3]]
+  const expectedNotices = [
+    NOTICE_IDS[0],
+    NOTICE_IDS[1],
+    NOTICE_IDS[2],
+    ...(expectedOperation === 'setup' ? [NOTICE_IDS[3]] : []),
+    ...(native && expectedOperation === 'update' ? [NOTICE_IDS[4]] : []),
+    ...(expectedHost === 'codex' ? [NOTICE_IDS[5]] : []),
+    ...(native ? [] : [NOTICE_IDS[6]]),
+  ]
   if (!arraysEqual(value.notices, expectedNotices)) return null
   return {
     schema_version: 'host-target-plan/v1',

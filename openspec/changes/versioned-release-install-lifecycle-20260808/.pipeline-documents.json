@@ -1,0 +1,342 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-08T06:59:22Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-08-08-versioned-release-install-lifecycle-20260808-explore.md",
+      "sha256": "d11d7705bc9e9907e75264c76dfa70368d5366a19f2c326366ff92773612816f",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-08T07:14:42Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-4f3b1a951cd1730ded1ab9738d2adb623eeb94c05f0e3f3f284dc37ae38b3f30",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "d11d7705bc9e9907e75264c76dfa70368d5366a19f2c326366ff92773612816f",
+          "readAt": "2026-08-08T07:19:43Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d11d7705bc9e9907e75264c76dfa70368d5366a19f2c326366ff92773612816f",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/proposal.md",
+      "sha256": "8d2a484f26590c41b79dc41edc8b49df711848f54dd3d2e6754e7428f063f8af",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-08T07:15:19Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-c579a1538ff6aabb2e53e13cdac50cdc8bc417adac9b47035962a05f5af0dfa1",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "8d2a484f26590c41b79dc41edc8b49df711848f54dd3d2e6754e7428f063f8af",
+          "readAt": "2026-08-08T07:15:24Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "8d2a484f26590c41b79dc41edc8b49df711848f54dd3d2e6754e7428f063f8af",
+          "readAt": "2026-08-08T07:19:43Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "8d2a484f26590c41b79dc41edc8b49df711848f54dd3d2e6754e7428f063f8af",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/design.md",
+      "sha256": "a01a7ae5edfa0d1a9b8af1bba5ebbcb6e0ddda7029348ee6da4553a44babd746",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-08T07:15:19Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-b9c3a27fd0138ebacb64a67e7d83e380852fa6ec0f9f6c441e186974be5521c0",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "a01a7ae5edfa0d1a9b8af1bba5ebbcb6e0ddda7029348ee6da4553a44babd746",
+          "readAt": "2026-08-08T07:15:24Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "a01a7ae5edfa0d1a9b8af1bba5ebbcb6e0ddda7029348ee6da4553a44babd746",
+          "readAt": "2026-08-08T07:19:43Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "a01a7ae5edfa0d1a9b8af1bba5ebbcb6e0ddda7029348ee6da4553a44babd746",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/specs/host-target-plan/spec.md",
+      "sha256": "e7269266cfb2284609bdd1553292088e8da8bcd3778a74133fbd262c2db7cce6",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-08T07:19:34Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-59c34e9217b2389646ed1b36fcc99f6f085378bcaa8954569e9cba8b3537f4d5",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "e7269266cfb2284609bdd1553292088e8da8bcd3778a74133fbd262c2db7cce6",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/specs/open-source-documentation-experience/spec.md",
+      "sha256": "60b57ec3300558d980dcd149406a139e4bcc1d9709950515a2e68600ebaeb81a",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-08T07:19:34Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-eb3ab9b8532bb74141ec957649df67f8d9d3060bbb39908142bb074bc4e3d7aa",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "60b57ec3300558d980dcd149406a139e4bcc1d9709950515a2e68600ebaeb81a",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/specs/plugin-distribution/spec.md",
+      "sha256": "dbb159e2d930f75853c1fb8066b142c56f4e6cda9ffdc5a99ab56a35c636e99f",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-08T07:19:34Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-2c136a22bebdcddea08dea6f6e30155f8a31c0d2c360f8e7c43f6d345d7bcb7a",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "dbb159e2d930f75853c1fb8066b142c56f4e6cda9ffdc5a99ab56a35c636e99f",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/specs/plugin-runtime/spec.md",
+      "sha256": "0f745329db323f6a3d504c73e15c766dee3f887666744e59ed688094382fb4ec",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-08T07:19:35Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-7ed4af8d5031184fbb07e72c7bd9576f4e5c4a750bd7c92ff5c4ef6af547f6e6",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "0f745329db323f6a3d504c73e15c766dee3f887666744e59ed688094382fb4ec",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/specs/tenon-product-identity/spec.md",
+      "sha256": "c88b1d3a188283be455abe40a2a899bfb1cccd9110f0bab8831cfe09d06204df",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-08T07:19:35Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-2ee3e2207057a76bea66fded28052383a0e9e4b7940f81662b5ffc1b9b636c0e",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "c88b1d3a188283be455abe40a2a899bfb1cccd9110f0bab8831cfe09d06204df",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/specs/versioned-plugin-release-lifecycle/spec.md",
+      "sha256": "5200b240050700b59b97fd265ede66b33545e80765dc9256b1a7714558e75f17",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-08T07:19:35Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-f1cdaf1fc703d8688096ade36e1d022b6d57d572567795b9d40e342a12f38ffa",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "5200b240050700b59b97fd265ede66b33545e80765dc9256b1a7714558e75f17",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-08-08-versioned-release-install-lifecycle.md",
+      "sha256": "bf089479bf53f986f211fca645f3f9776cd21d238d5c01b96ab272ce2c3bb3e0",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-08T07:19:36Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-07640b12beb22bed913b0a752946f9ccc7623f3ec9f91de56dc2d1dc5de508d3",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "bf089479bf53f986f211fca645f3f9776cd21d238d5c01b96ab272ce2c3bb3e0",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-08-08-versioned-release-install-lifecycle.md",
+      "sha256": "bf089479bf53f986f211fca645f3f9776cd21d238d5c01b96ab272ce2c3bb3e0",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-08T07:19:36Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-4d21eb2ad1e9765bb228058c2fd6cf8af397c220bfc007ec64fa10d91c628120",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "bf089479bf53f986f211fca645f3f9776cd21d238d5c01b96ab272ce2c3bb3e0",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-08-08-versioned-release-install-lifecycle-design.md",
+      "sha256": "85a5cc366b4e5899c7c9899e1a5d658730da82a488a1aab3aad9444edcf0dce2",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-08T07:19:37Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-1bc1fb1922d251196044201acbb73c42c71e5512a7b0c6c0dc286d48b0ad0f72",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "85a5cc366b4e5899c7c9899e1a5d658730da82a488a1aab3aad9444edcf0dce2",
+          "readAt": "2026-08-08T07:19:43Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "85a5cc366b4e5899c7c9899e1a5d658730da82a488a1aab3aad9444edcf0dce2",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/tasks.md",
+      "sha256": "ccd5603124c7c3822b26743785368992a2b76530976cbf290a188da1e63a01a5",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-08T08:05:05Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-d611722e34e1c0c1e3d41618adf6d334b6a051a616d6f7bd6cc2c653829e4c1d",
+        "evidenceScope": "build",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 3
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "ccd5603124c7c3822b26743785368992a2b76530976cbf290a188da1e63a01a5",
+          "readAt": "2026-08-08T08:05:05Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",3]"
+        }
+      ]
+    }
+  ]
+}

@@ -1,8 +1,9 @@
 import type { CliDeps } from '../deps.js'
 import type { RuntimeInstaller } from '../runtime/installer.js'
 import type { RuntimeActivation } from '../runtime/types.js'
+import { TENON_RELEASE_VERSION } from './plugin-host.js'
 import type { SetupEnv } from './setupEnvironment.js'
-import type { ReleasedDashboardStarter } from './dashboard.js'
+import { DEFAULT_DASHBOARD_PORT, type ReleasedDashboardStarter } from './dashboard.js'
 import { parseDashboardPort } from './dashboard-launch-options.js'
 import { hostFlag, isNativePipelineHost, type PipelineHost } from './plugin-host.js'
 import {
@@ -38,6 +39,9 @@ export async function publishSetupManagedRuntime(
     {
       operation: isNativePipelineHost(host) ? 'setup' : 'adapter',
       source,
+      ...(isNativePipelineHost(host)
+        ? { expectedPluginVersion: deps.pluginVersion ?? TENON_RELEASE_VERSION }
+        : {}),
       runtime: {
         homeDir: env.homeDir(),
         env: env.runtimeEnv(),
@@ -73,8 +77,16 @@ export async function publishSetupManagedRuntime(
     }
     return 1
   }
+  if (outcome.state === 'current') {
+    deps.io.out('[setup] 宿主、managed runtime 与 Dashboard 已精确就绪；未重复发布。')
+    return 0
+  }
   const { activation } = outcome
   deps.io.out(`[setup] 已发布已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
   deps.io.out('[setup] 稳定入口已就绪：~/.local/bin/tenon 与 ~/.local/bin/tenon-hook 不再直连 marketplace checkout。')
+  if (!openDashboard) {
+    const port = dashboardPort ?? DEFAULT_DASHBOARD_PORT
+    deps.io.out(`[dashboard] 已就绪：http://127.0.0.1:${port}/；如需打开：tenon dashboard --open`)
+  }
   return 0
 }

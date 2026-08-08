@@ -36,6 +36,9 @@ export type { SetupEnv } from './setup-env-types.js'
 export const REAL_SETUP_ENV: SetupEnv = {
   homeDir: () => homedir(),
   runtimeEnv: () => ({ ...process.env }),
+  isInteractive: () => process.stdin.isTTY === true
+    && process.stdout.isTTY === true
+    && process.env.CI === undefined,
   pluginRoot: () => {
     const r = process.env.PLUGIN_ROOT ?? process.env.CLAUDE_PLUGIN_ROOT
     return r !== undefined && r.trim() !== '' ? r : null
@@ -125,6 +128,7 @@ export const REAL_SETUP_ENV: SetupEnv = {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'pipe'],
         ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
+        ...(options?.timeoutMs === undefined ? {} : { timeout: options.timeoutMs }),
       })
       return { code: 0, stdout, stderr: '' }
     } catch (e) {
