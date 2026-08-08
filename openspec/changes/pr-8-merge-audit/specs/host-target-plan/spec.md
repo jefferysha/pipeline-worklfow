@@ -115,7 +115,7 @@ server SHALL 暴露 `GET /api/host-targets` 与 `GET /api/host-target-plan`。�
 #### Scenario: CLI stdout 或 DTO 无效
 
 - **WHEN** CLI 非零退出、runner 抛错、trim 后的 stdout 不是恰好一个完整 JSON 文档，或 DTO 多字段、缺字段、顺序、命令、host 或 operation 不满足 v1 契约
-- **THEN** 返回稳定的 `502 HOST_TARGET_PLAN_INVALID` 或已声明的 unavailable code
+- **THEN** 返回稳定的 `502 HOST_TARGET_PLAN_INVALID`
 - **AND** 不向客户端透传 stderr、绝对路径、token、env 或原始异常
 
 #### Scenario: Host header 保护
@@ -200,7 +200,7 @@ Dashboard SHALL 提供无需 project context 即可访问的 Host Plan 视图，
 
 ### Requirement: 向后兼容与许可边界
 
-能力 SHALL additive 地保留当前 `setup`、`update`、host flags、host selector、managed runtime/事务、Dashboard、本机 API 与已合并 capability 行为。实现 SHALL 不新增外部运行时依赖，不复制受限上游源码、测试、文案或文件结构，包括 Comet 或受 AGPL-3.0 约束的 Trellis 内容。源码、测试、CLI/server bundle、Dashboard hashed assets、OpenSpec 与用户文档必须来自同一最终源码并原子提交。
+能力 SHALL additive 地保留当前 `setup`、`update`、host flags、host selector、managed runtime/事务、Dashboard、本机 API 与已合并 capability 行为。实现 SHALL 不新增外部运行时依赖，不复制任何外部参考项目或受 AGPL-3.0 约束内容的源码、测试、文案或文件结构。源码、测试、CLI/server bundle、Dashboard hashed assets、OpenSpec 与用户文档必须来自同一最终源码并原子提交。
 
 #### Scenario: 既有命令兼容
 
@@ -224,4 +224,4 @@ Dashboard SHALL 提供无需 project context 即可访问的 Host Plan 视图，
 
 - **WHEN** 审查源码、测试、文案、依赖与历史研究
 - **THEN** 只保留带固定 URL/SHA 的可核验上游引用与独立设计结论
-- **AND** 不引入任何外部参考项目的源码、测试、文案、文件结构或受限许可证依赖，包括 Comet/Trellis 代码或 AGPL 依赖
+- **AND** 不引入任何外部参考项目的源码、测试、文案、文件结构或受限许可证依赖，包括任何 AGPL 依赖

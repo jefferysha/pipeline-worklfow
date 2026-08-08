@@ -22,7 +22,7 @@ PR #7 在旧版 `main` 上实现了 Context Bundle 预算预览，但当前目�
 
 ### Modified Capabilities
 
-- `context-bundle-budget-preview`：完整修改五条已落盘的 requirement，并新增一条 Context Bundle
+- `context-bundle-budget-preview`：完整修改六条已落盘的 requirement，其中包括 Context Bundle
   preview 与 Verify Evidence 共存 requirement；继续保持 `context-bundle/v1`、确定性 bundle/CLI
   与既有 `context-bundle-handoff` 行为兼容。
 

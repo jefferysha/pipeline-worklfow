@@ -19,6 +19,8 @@
 - [x] 第一轮 Verify 回退后补回五项 MODIFIED requirements 的全部 canonical scenarios，并在计划中冻结排队 deadline 的 TDD 修复与完整重验步骤。
 - [x] 对照当前 main 审计全部 `MODIFIED` requirement 的场景集合，补回“用户首次进入 Host Plan”并通过最新版 OpenSpec strict validation。
 - [x] Verify 语义复审回退后，将 5 条 `MODIFIED` requirement 修订为 current main 与既有 delta 的语义并集，保留全部 narrative、场景正文与既有加强项。
+- [x] 最终 Verify 错误映射复审后，恢复 CLI/stdout/DTO 无效场景的确定性 `502 HOST_TARGET_PLAN_INVALID` 语义。
+- [x] 冻结前 CI 风险匹配发现 reference-identity hygiene 门禁后，以不弱化许可边界的中性表述移除外部项目身份。
 
 ## 实现
 

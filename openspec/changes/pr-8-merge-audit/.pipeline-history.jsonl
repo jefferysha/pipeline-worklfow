@@ -192,3 +192,51 @@
 {"ts":"2026-08-08T02:18:43Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build a7034a88-62cb-4445-9cdd-609d3a8f931b 21"}
 {"ts":"2026-08-08T02:24:55Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
 {"ts":"2026-08-08T02:24:56Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-08T02:25:14Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:25:14Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-08T02:25:14Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-08T02:25:14Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-08T02:25:14Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-08T02:25:14Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"cc17a3e2-da02-418e-8923-d85d1ec8852e"}
+{"ts":"2026-08-08T02:40:06Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:40:06Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-08-pr-8-merge-audit-error-mapping-verify-fail.md"}
+{"ts":"2026-08-08T02:40:07Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-08T02:40:07Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion a7034a88-62cb-4445-9cdd-609d3a8f931b 22"}
+{"ts":"2026-08-08T02:40:17Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-08T02:40:17Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-08T02:40:06Z authority_host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:40:17Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-08T02:40:17Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-08T02:40:17Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-08T02:40:17Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-08T02:40:18Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"dfead6ae-cd97-4d30-b3ae-63b96c618454"}
+{"ts":"2026-08-08T02:40:53Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-08T02:40:53Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-08T02:40:53Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-08T02:40:53Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-08T02:40:53Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"2602f2f5-b113-4c64-9d17-c0aeb2c764a2"}
+{"ts":"2026-08-08T02:42:40Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:43:14Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-08T02:43:14Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-propose a7034a88-62cb-4445-9cdd-609d3a8f931b 24"}
+{"ts":"2026-08-08T02:43:15Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-08T02:43:15Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-spec a7034a88-62cb-4445-9cdd-609d3a8f931b 24"}
+{"ts":"2026-08-08T02:43:22Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-08-08T02:43:22Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-08-08T02:42:40Z authority_host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:43:22Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-08T02:43:22Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"7d6bd931-3b7e-455d-b233-8018d6155fd9"}
+{"ts":"2026-08-08T02:47:31Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:47:31Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-08T02:47:31Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-08T02:47:31Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-08T02:47:31Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-08T02:47:31Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"e1008c9c-4eb0-4353-8528-3b07a4343741"}
+{"ts":"2026-08-08T02:47:54Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-08T02:47:54Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-propose a7034a88-62cb-4445-9cdd-609d3a8f931b 26"}
+{"ts":"2026-08-08T02:47:54Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-08T02:47:54Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-spec a7034a88-62cb-4445-9cdd-609d3a8f931b 26"}
+{"ts":"2026-08-08T02:48:03Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-08-08T02:48:03Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-08-08T02:47:31Z authority_host_session=019fdef9-860d-7733-9b89-737ec8930cfc"}
+{"ts":"2026-08-08T02:48:03Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-08T02:48:03Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"87a59c70-9b0f-4a28-ad74-aea8c16c6676"}
+{"ts":"2026-08-08T02:48:56Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-08T02:48:56Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build a7034a88-62cb-4445-9cdd-609d3a8f931b 27"}
+{"ts":"2026-08-08T02:48:57Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
