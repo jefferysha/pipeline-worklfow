@@ -7,11 +7,11 @@
  * 互不碰 integration.test.ts / program.ts（收编点由主会话统一接线新命令）。
  * 注意：文件名 *-harness.ts 不带 .test.，不会被 vitest 当测试收集（无用例）。
  */
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { appendFile, mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   BUILTIN_TRACK_DEFINITIONS,
@@ -46,6 +46,8 @@ import {
   recordNativeDocumentSkillConfirmation,
 } from './test-support.js'
 import { createManifestSkillActionAuthorityResolver } from './skill-action-authority-provider.js'
+import { recordWorkflowPhaseSkill } from './integration-phase-skill-test-support.js'
+export { recordWorkflowPhaseSkill } from './integration-phase-skill-test-support.js'
 
 /** Track Registry 校验上下文（与 main.ts trackValidationContext 同款，harness 镜像生产装配）。 */
 function trackValidationContext(repoRoot: string, manifest: ExtendedManifestData): TrackValidationContext {
@@ -74,60 +76,6 @@ function trackValidationContext(repoRoot: string, manifest: ExtendedManifestData
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 export const MANIFEST = join(REPO_ROOT, 'templates', 'manifest.yaml')
 export const FIXED_CLOCK = '2026-07-07T00:00:00Z'
-
-/**
- * Drive the production PostToolUse hook for a Workflow-owned phase Skill.
- *
- * Transition-centric fixtures used to append a bare compatibility history row directly.  That
- * no longer proves a host actually completed the phase Skill: issue #43 requires the current
- * Workflow visit to carry a real tracker receipt.  Keep this helper in the test harness so every
- * caller goes through the same hook path as Claude/Codex, while the temporary project remains
- * explicitly selected for the duration of the call.
- */
-export async function recordWorkflowPhaseSkill(root: string, changeDir: string): Promise<void> {
-  const state = await createStateStore().read(changeDir)
-  const phase = String(state.fields.phase)
-  const skill = `tenon-${phase}`
-  const pointer = join(root, '.pipeline-active')
-  let previous: string | undefined
-  try {
-    previous = await readFile(pointer, 'utf8')
-  } catch {
-    // A fresh harness normally has no active pointer yet.
-  }
-  await writeFile(pointer, `${basename(changeDir)}\n`, 'utf8')
-  try {
-    const result = spawnSync('bash', [join(REPO_ROOT, 'hooks', 'skill-tracker.sh')], {
-      cwd: root,
-      env: {
-        ...process.env,
-        TENON_PROJECT_ROOT: root,
-      },
-      input: JSON.stringify({
-        cwd: root,
-        tool_name: 'Skill',
-        tool_input: { skill },
-        session_id: `integration-harness-${basename(changeDir)}-${phase}`,
-        tool_use_id: `phase-${phase}-${Date.now()}`,
-      }),
-      encoding: 'utf8',
-    })
-    if (result.error) throw result.error
-    if (result.status !== 0) {
-      throw new Error(`skill-tracker.sh failed for ${skill}: ${result.stderr ?? ''}`)
-    }
-    const history = await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')
-    if (!history.split('\n').some((line) => line.includes(`\"raw\":\"Skill: ${skill}\"`))) {
-      throw new Error(`skill-tracker.sh did not record ${skill} for ${basename(changeDir)}`)
-    }
-  } finally {
-    if (previous === undefined) {
-      await rm(pointer, { force: true })
-    } else {
-      await writeFile(pointer, previous, 'utf8')
-    }
-  }
-}
 
 export interface Harness {
   cwd: string

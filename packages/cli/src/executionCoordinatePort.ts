@@ -87,8 +87,9 @@ function defaultTrackValidationContext(repoRoot: string, manifestRoot?: string):
     }
   }
   return {
+    // validateTrackRegistry treats the packaged default workflow as an intrinsic kernel value;
+    // this adapter only resolves project-defined workflow files for the remaining identifiers.
     workflowExists: (id) => {
-      if (id === 'default') return true
       try { return loadWorkflow(repoRoot, id) !== null } catch { return false }
     },
     // Built-in profile keys cover the no-manifest test harness and normal bundled registry.

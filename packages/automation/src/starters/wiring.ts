@@ -8,6 +8,7 @@ import {
   LOOP_RUNNERS,
   PHASES,
   resolveStep,
+  resolveEffectiveWorkflowPlan,
   validateAutomationPolicyTemplate,
   type AutomationPolicyTemplate,
   type LoopEntry,
@@ -341,37 +342,34 @@ export async function evaluateLoopExecutionWiring(
   }
   const workflowId = loop.workflow_id ?? 'default'
   let skillResolutionInputs: readonly SkillBundleWiringResolutionInput[]
-  if (workflowId === 'default') {
-    const defaultCapability = compileEffectiveWorkflowPlan('default').capabilities.skills
-    skillResolutionInputs = loop.phases.map((stepId) => ({ kind: 'default' as const, stepId, capability: defaultCapability }))
+  let compiledCustom: WorkflowIR | undefined
+  let plan: ReturnType<typeof resolveEffectiveWorkflowPlan>
+  try {
+    plan = resolveEffectiveWorkflowPlan(workflowId, (name) => {
+      const definition = (deps.loadWorkflow ?? loadWorkflow)(deps.repoRoot, name)
+      if (definition === null) return null
+      compiledCustom = (deps.compileWorkflow ?? compileWorkflow)(definition)
+      return compiledCustom
+    })
+  } catch (error) {
+    return {
+      status: 'invalid', loopId: loop.id, dimension: 'workflow',
+      reason: `custom workflow "${workflowId}" 加载/校验/编译失败：${errorMessage(error)}`,
+      starter: null,
+    }
+  }
+  if (plan === null) {
+    return {
+      status: 'invalid', loopId: loop.id, dimension: 'workflow',
+      reason: `custom workflow "${workflowId}" 文件不存在或缺失，无法建立执行 wiring`,
+      starter: null,
+    }
+  }
+  if (plan.executionModel === 'phase-manifest') {
+    const capability = plan.capabilities.skills
+    skillResolutionInputs = loop.phases.map((stepId) => ({ kind: 'default' as const, stepId, capability }))
   } else {
-    let definition: WorkflowDef | null
-    try {
-      definition = (deps.loadWorkflow ?? loadWorkflow)(deps.repoRoot, workflowId)
-    } catch (error) {
-      return {
-        status: 'invalid', loopId: loop.id, dimension: 'workflow',
-        reason: `custom workflow "${workflowId}" 加载/校验/编译失败：${errorMessage(error)}`,
-        starter: null,
-      }
-    }
-    if (definition === null) {
-      return {
-        status: 'invalid', loopId: loop.id, dimension: 'workflow',
-        reason: `custom workflow "${workflowId}" 文件不存在或缺失，无法建立执行 wiring`,
-        starter: null,
-      }
-    }
-    let compiled: WorkflowIR
-    try {
-      compiled = (deps.compileWorkflow ?? compileWorkflow)(definition)
-    } catch (error) {
-      return {
-        status: 'invalid', loopId: loop.id, dimension: 'workflow',
-        reason: `custom workflow "${workflowId}" 编译失败：${errorMessage(error)}`,
-        starter: null,
-      }
-    }
+    const compiled = compiledCustom ?? plan.workflow
     const customInputs: SkillBundleWiringResolutionInput[] = []
     for (const phase of loop.phases) {
       const step = (deps.resolveStep ?? resolveStep)(compiled, phase)

@@ -21941,43 +21941,39 @@ async function evaluateLoopExecutionWiring(loop, loops, deps) {
   }
   const workflowId = loop.workflow_id ?? "default";
   let skillResolutionInputs;
-  if (workflowId === "default") {
-    const defaultCapability = compileEffectiveWorkflowPlan("default").capabilities.skills;
-    skillResolutionInputs = loop.phases.map((stepId) => ({ kind: "default", stepId, capability: defaultCapability }));
+  let compiledCustom;
+  let plan;
+  try {
+    plan = resolveEffectiveWorkflowPlan(workflowId, (name) => {
+      const definition = (deps.loadWorkflow ?? loadWorkflow)(deps.repoRoot, name);
+      if (definition === null)
+        return null;
+      compiledCustom = (deps.compileWorkflow ?? compileWorkflow)(definition);
+      return compiledCustom;
+    });
+  } catch (error2) {
+    return {
+      status: "invalid",
+      loopId: loop.id,
+      dimension: "workflow",
+      reason: `custom workflow "${workflowId}" \u52A0\u8F7D/\u6821\u9A8C/\u7F16\u8BD1\u5931\u8D25\uFF1A${errorMessage2(error2)}`,
+      starter: null
+    };
+  }
+  if (plan === null) {
+    return {
+      status: "invalid",
+      loopId: loop.id,
+      dimension: "workflow",
+      reason: `custom workflow "${workflowId}" \u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u7F3A\u5931\uFF0C\u65E0\u6CD5\u5EFA\u7ACB\u6267\u884C wiring`,
+      starter: null
+    };
+  }
+  if (plan.executionModel === "phase-manifest") {
+    const capability = plan.capabilities.skills;
+    skillResolutionInputs = loop.phases.map((stepId) => ({ kind: "default", stepId, capability }));
   } else {
-    let definition;
-    try {
-      definition = (deps.loadWorkflow ?? loadWorkflow)(deps.repoRoot, workflowId);
-    } catch (error2) {
-      return {
-        status: "invalid",
-        loopId: loop.id,
-        dimension: "workflow",
-        reason: `custom workflow "${workflowId}" \u52A0\u8F7D/\u6821\u9A8C/\u7F16\u8BD1\u5931\u8D25\uFF1A${errorMessage2(error2)}`,
-        starter: null
-      };
-    }
-    if (definition === null) {
-      return {
-        status: "invalid",
-        loopId: loop.id,
-        dimension: "workflow",
-        reason: `custom workflow "${workflowId}" \u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u7F3A\u5931\uFF0C\u65E0\u6CD5\u5EFA\u7ACB\u6267\u884C wiring`,
-        starter: null
-      };
-    }
-    let compiled;
-    try {
-      compiled = (deps.compileWorkflow ?? compileWorkflow)(definition);
-    } catch (error2) {
-      return {
-        status: "invalid",
-        loopId: loop.id,
-        dimension: "workflow",
-        reason: `custom workflow "${workflowId}" \u7F16\u8BD1\u5931\u8D25\uFF1A${errorMessage2(error2)}`,
-        starter: null
-      };
-    }
+    const compiled = compiledCustom ?? plan.workflow;
     const customInputs = [];
     for (const phase of loop.phases) {
       const step = (deps.resolveStep ?? resolveStep)(compiled, phase);
