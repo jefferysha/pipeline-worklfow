@@ -814,6 +814,10 @@ POSIX SHALL 应用 owner 与 group/world-write 约束；Windows SHALL 以 realpa
 identity 复验替代无意义的 POSIX uid/mode 判定。Windows `.cmd`/`.bat` 宿主还 SHALL 同时冻结并在每次
 spawn 前复验其绝对 `ComSpec`/`cmd.exe` 物理身份。正式 CI SHALL 在真实 Windows runner 运行该链路。
 
+当可信 Bash 将冻结的 Node 交给 provenance verifier 时，调用方 MUST 将其建模为同一个复合 spawn binding，并在 Bash spawn 前立即、同步地依次重放 Bash 与 Node 的物理绑定。传给 verifier 的 `--node` MUST 与刚复验的 Node executable 完全相同。两次 proof 与 spawn 之间 MUST NOT 出现 `await`、另一个 child process、host mutation、release activation、Dashboard 启动、ready evidence 或成功状态写入。
+
+package、update-candidate、release-store、standalone/full setup 与 doctor 的所有 provenance spawn MUST 使用这一复合边界。历史 pathname-only seam MAY 继续作为旧数据读取输入，但 MUST NOT 被提升为新的可信执行证据。
+
 #### Scenario: 冻结后 symlink 或 executable 被换位
 
 - **WHEN** 预检后某个工具的 realpath、inode、owner、mode、父目录身份或上述 owner/write 约束发生变化
@@ -831,6 +835,30 @@ spawn 前复验其绝对 `ComSpec`/`cmd.exe` 物理身份。正式 CI SHALL 在�
 - **WHEN** 已冻结的 host shim 仍不变，但其绝对 `cmd.exe` 物理身份在 batch spawn 前变化
 - **THEN** native setup/update/doctor 不执行 shim
 - **AND** 不回退到 PATH、cwd 或只保存 pathname 的 interpreter
+
+#### Scenario: provenance Bash 委托冻结 Node
+
+- **WHEN** verifier 由可信 Bash 启动并接收 `--node <frozen-node>`
+- **THEN** 每次 spawn 的可观察顺序 MUST 为 `bash-proof → node-proof → verifier-spawn`
+- **AND** 每一次 spawn MUST 独立重放两份 proof，且 argv 中的 Node MUST 等于刚复验的 frozen Node executable
+
+#### Scenario: Node 在复合 proof 前漂移
+
+- **WHEN** Bash 保持可信但 frozen Node 在 provenance spawn 前漂移
+- **THEN** Node replay MUST 在 Bash runner 与任何 child process 之前失败
+- **AND** 不得出现 host mutation、selection/launcher 变更、activation、Dashboard/ready evidence 或成功审计
+
+#### Scenario: standalone setup skills 与 doctor 复用完整 verifier
+
+- **WHEN** standalone `setup skills` 或 doctor 执行 provenance 验证
+- **THEN** 它们 MUST 通过冻结 Bash 启动完整 `tools/verify-skills.sh`，并对委托 Node 执行复合 pre-spawn replay
+- **AND** 它们 MUST NOT 直接信任 `process.execPath`、裸 PATH 结果或未绑定的 pathname
+
+#### Scenario: 兼容已发布 provenance 数据
+
+- **WHEN** 系统读取 v1.0.1 或 v1.0.2 provenance/selection/launcher 数据
+- **THEN** 本变更 MUST NOT 重写 registry schema、release manifest、selection、launcher 或审计格式
+- **AND** 已完整通过 provenance 验证的 previous release MUST 继续可作为 rollback 目标
 
 ### Requirement: Release 门禁 SHALL 使用精确公开 N-1 产物
 

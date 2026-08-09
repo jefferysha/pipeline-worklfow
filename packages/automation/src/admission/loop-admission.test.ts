@@ -2124,6 +2124,21 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
     if (!result.ok) expect(result.reason).toBe('skill-bundle-content-invalid')
   })
 
+  it('locator provenance corruption error is mapped to a stable fail-closed preparation reason', async () => {
+    const resolver = fakeResolver({ resolveDefault: () => [{ token: 'x', alternatives: ['x'] }] })
+    const provenanceError = Object.assign(new Error('[content-hash-mismatch] drift'), {
+      _tag: 'SkillProvenanceLocatorError',
+      category: 'content-hash-mismatch',
+    })
+    const preparation = createExecutionPreparation(prepDeps({
+      resolver,
+      locator: { locate: async (): Promise<never> => { throw provenanceError } },
+    }))
+    const result = await preparation.prepare(ctxFor())
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('skill-bundle-content-invalid')
+  })
+
   // 二次任务（queued 卡死回归修复）+ H10 r1 阻断3/D5 返工（任务B1）：ctx.skill_bundle_id 缺席/null
   // （非 loop 的 AFK 直跑）→ createExecutionPreparation 本身也直通，不只是 sdk.ts 缺省实现的责任——
   // 真实解析/物化/coordinates 全不调用（none-bundle 语境没有 workflow 坐标可捕获），产出判别联合的

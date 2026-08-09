@@ -5,7 +5,7 @@ import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
-import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
+import { loadCanonicalSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
 import {
   REAL_RELEASED_DASHBOARD_STARTER,
 } from './released-dashboard-starter.js'
@@ -23,11 +23,12 @@ import {
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 
-import { REAL_SETUP_ENV, type SetupEnv, type SetupOpts } from './setupEnvironment.js'
+import { REAL_SETUP_ENV, resolvePipelineRoot, type SetupEnv, type SetupOpts } from './setupEnvironment.js'
 import {
   buildSkillsPlan, cmdStr, higherTier, renderSkillsPlan, skillInstalled,
   type PlannedCommand, type SkillsPlan,
 } from './setupSkillsPlan.js'
+import { provenanceVerifierBinding } from './native-host-command-binding.js'
 interface ExecOutcome {
   successes: PlannedCommand[]
   failures: Array<{ cmd: PlannedCommand; detail: string }>
@@ -104,23 +105,65 @@ function renderSummary(deps: CliDeps, o: ExecOutcome, plan: SkillsPlan): number 
 }
 
 /**
+ * 真实 bundled CLI 的 setup skills 入口必须先验证 exact plugin root 的完整 provenance。
+ * verifier 通过冻结 Bash 同步执行完整 `tools/verify-skills.sh`；不重新实现 hash，也不读取
+ * cwd 或任何 lower-tier registry。复合 binding 在这一次 spawn 前重放 Bash 与委托 Node。
+ * 显式注入 sources/loader 的单元测试保留原有 seam，不触发真实仓库 IO。
+ */
+function verifyRealPluginRootBeforePlanning(deps: CliDeps, env: SetupEnv): number {
+  const root = env.pluginRoot() ?? resolvePipelineRoot(env)
+  const provenance = provenanceVerifierBinding(env)
+  const nodePath = provenance.nodePath || '<unavailable>'
+  const result = provenance.run([
+    join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root, '--node', nodePath,
+  ], { timeoutMs: 30_000 })
+  const stdout = result.stdout.trim()
+  const stderr = result.stderr.trim()
+  const output = stderr !== '' ? stderr : stdout
+  if (result.code !== 0) {
+    deps.io.err(
+      `ERROR: canonical Skill provenance 校验失败（root=${root}）` +
+        (output === '' ? '' : `\n${output}`),
+    )
+    return 1
+  }
+  return 0
+}
+
+/**
  * 技能安装段（Phase 2 · S2）:读 registry → 计划 → dry-run 只打印零副作用 / 非 dry-run 确认(y/N or --yes) → 逐条容错 → 汇总。
- *   sources 缺省真 registry（readSkillSources);测试注入 SkillSource[] 子集。env 缺省真 fs+exec,测试注入 spy。
+ *   sources 缺省真 canonical v3 registry；测试可注入 SkillSource[] 子集或 loader。env 缺省真 fs+exec，测试注入 spy。
  */
 export function cmdSetupSkills(
   deps: CliDeps,
   opts: SetupOpts,
   env: SetupEnv = REAL_SETUP_ENV,
   sources?: SkillSource[],
-  loadSources: () => SkillSourcesResult = loadSkillSources,
+  loadSources: () => SkillSourcesResult = loadCanonicalSkillSources,
 ): number {
+  const selfPath = resolve(env.selfPath())
+  const isBundledCli = /(?:^|[\\/])packages[\\/]cli[\\/]dist[\\/]tenon\.mjs$/u.test(selfPath)
+  // Full native setup passes a bound lifecycle environment (a shallow copy of REAL_SETUP_ENV)
+  // so the physical proofs survive the first host mutation.  Treat that marker as production
+  // too; checking object identity alone would silently skip the exact-root gate in full setup.
+  const isProductionEnv = env === REAL_SETUP_ENV || env.runTrustedLifecycleCommand !== undefined
+  const productionCanonicalSetup = sources === undefined
+    && loadSources === loadCanonicalSkillSources
+    && isProductionEnv
+    && isBundledCli
+  if (productionCanonicalSetup) {
+    const provenanceCode = verifyRealPluginRootBeforePlanning(deps, env)
+    if (provenanceCode !== 0) return provenanceCode
+  }
   let list: SkillSource[]
   if (sources !== undefined) {
     list = sources // 测试注入的显式子集（含合法空 []，为合法空 registry）
   } else {
     // 装机段区分「读失败/解析失败」与「真空 registry」：坏/缺 registry 不能当空计划走
     // 「无待装 exit 0」假成功（什么都没装 → 破 full-install 前提）→ fail-loud 非零退出。
-    const loaded = loadSources()
+    const loaded = productionCanonicalSetup
+      ? loadCanonicalSkillSources(join(env.pluginRoot() ?? resolvePipelineRoot(env), 'templates', 'skill-sources.yaml'))
+      : loadSources()
     if (!loaded.ok) {
       deps.io.err(
         `ERROR: 技能 registry 未就绪（${loaded.error}）——无法生成安装计划，` +

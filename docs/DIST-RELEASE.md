@@ -29,6 +29,29 @@ Codex 与 Claude 的原生插件都通过 marketplace clone 整仓落地，**装
 若任一产物不随 clone 带上，hooks 会断，或 dashboard 会退化为无法启动/无页面。`tools/verify-skills.sh`
 会把三组资产都作为安装期硬校验项；校验失败不得切换 launcher。
 
+### Skill provenance candidate gate
+
+`templates/skill-sources.yaml` travels with the candidate as its single
+machine-verifiable Skill provenance source. It is schema v3 with
+`hash_algorithm: tree-sha256-v1`; every bundled entry carries a normalized
+`source_ref`, a `sha256:` digest produced by `buildCanonicalManifest()`, and an
+immutable coordinate containing that same identity and digest. Candidate
+verification runs the packaged hidden command
+`internal-skill-provenance verify --root <candidate>` through
+`tools/verify-skills.sh` before changing active/previous selection or launchers.
+Missing/extra/undeclared Skills, content drift, unsupported/legacy registries,
+and a reintroduced `skills-lock.json` are actionable failures and leave the
+active release untouched.
+
+When authoring a release, change Skill bytes first, run
+`npm run sync:skill-provenance`, inspect the registry diff, then run the quiet
+verification command. Runtime verification is read-only; only the explicit
+`internal-skill-provenance sync` operation writes the registry, using a
+same-directory temporary file and atomic rename. A stored N-1 release remains
+a rollback target under its own immutable verifier and payload digest; the
+current v3 verifier is not taught to rewrite or synthesize provenance for an
+older payload.
+
 ## .gitignore 机制（为什么需要显式放行）
 
 `.gitignore` 第 2 行 `dist/` 会忽略任意层级名为 `dist` 的目录。git 的规则是：**父目录被忽略后就不再下探**，因此单独写 `!packages/cli/dist/tenon.mjs` 一行**不生效**（已 `git check-ignore` 实测确认仍被忽略）。要放行目录内某一个文件，须三行缺一不可：

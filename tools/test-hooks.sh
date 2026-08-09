@@ -19,6 +19,8 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+TENON_NODE_PATH="$(command -v node 2>/dev/null || true)"
+export TENON_NODE_PATH
 GATE="$ROOT/hooks/gate.sh"
 BC="$ROOT/hooks/breadcrumb.sh"
 SS="$ROOT/hooks/session-start.sh"
@@ -442,6 +444,34 @@ out="$(bash "$VS" --quiet 2>&1)"
 rc=$?
 assert_exit "verify-skills: --quiet 成功 → exit 0" 0 "$rc"
 assert_empty "verify-skills: --quiet 成功时无输出" "$out"
+
+# Direct/contributor compatibility: without an explicit frozen path, the wrapper may resolve one
+# absolute PATH node candidate; a relative or unusable caller-provided path must still fail closed.
+out="$(env -u TENON_NODE_PATH bash "$VS" --quiet --root "$ROOT" 2>&1)"
+rc=$?
+assert_exit "verify-skills: 无 --node 时解析绝对 Node fallback → exit 0" 0 "$rc"
+assert_empty "verify-skills: 无 --node fallback 成功时无输出" "$out"
+
+# 生产 wrapper 必须使用 caller 冻结的绝对 Node；PATH 中的同名 runner 只能是诱饵。
+FAKE_NODE_DIR="$TMP/fake-node"
+mkdir -p "$FAKE_NODE_DIR"
+FAKE_NODE_MARKER="$TMP/fake-node-used"
+cat > "$FAKE_NODE_DIR/node" <<EOF
+#!/usr/bin/env bash
+touch "$FAKE_NODE_MARKER"
+exit 99
+EOF
+chmod +x "$FAKE_NODE_DIR/node"
+out="$(PATH="$FAKE_NODE_DIR:$PATH" bash "$VS" --quiet --root "$ROOT" --node "$TENON_NODE_PATH" 2>&1)"
+rc=$?
+assert_exit "verify-skills: frozen Node path wins over fake PATH runner" 0 "$rc"
+[ ! -e "$FAKE_NODE_MARKER" ] && ok "verify-skills: fake PATH runner 未被执行" || bad "verify-skills: fake PATH runner 未被执行" "marker 已创建"
+
+# Installer replay: the already-frozen NODE identity must be rechecked immediately before the
+# installer-owned Bash verifier spawn and the absolute path must be passed explicitly.
+install_text="$(sed -n '955,972p' "$ROOT/install.sh")"
+assert_contains "install.sh: verifier 前 replay frozen Node" "$install_text" 'verify_tool NODE ||'
+assert_contains "install.sh: verifier 显式绑定 frozen Node" "$install_text" '--node "$NODE_BIN"'
 
 # 人为埋悬空引用的 sandbox
 SB="$TMP/sandbox"

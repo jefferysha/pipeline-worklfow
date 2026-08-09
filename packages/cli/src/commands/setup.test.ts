@@ -6,6 +6,8 @@
  * dry-run 零执行/失败容错/engine 附加/禁整装)。候选根仅经 managed-runtime 发布边界进入稳定启动器。
  */
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { cp, readFile, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
@@ -21,6 +23,7 @@ import {
   cmdSetupSkills,
   REAL_RUNTIME_ENV,
   scrubLegacyCodexAdapterHooks,
+  verifyPackagedAssets,
   type PlannedCommand,
   type RuntimeEnv,
   type SetupEnv,
@@ -38,6 +41,7 @@ import {
   recordPendingHostPluginConflict,
 } from './host-plugin-convergence.js'
 import { parseHostPluginInventory } from './plugin-host.js'
+import type { TrustedExecutable } from './trusted-executable.js'
 
 // ── spy env:记录全部 fs mutation + exec 调用,断言「零副作用」/「未碰 PATH」/「零执行」──────
 interface SpyCalls {
@@ -46,6 +50,22 @@ interface SpyCalls {
   exec: Array<[string, string[]]>
 }
 type ExecStub = (cmd: string, args: string[]) => { code: number; stdout: string; stderr: string }
+
+function fakeTrustedExecutable(
+  executable: string,
+  verify: () => boolean = () => true,
+): TrustedExecutable {
+  return {
+    executable,
+    requestedPath: executable,
+    proof: {} as TrustedExecutable['proof'],
+    verify,
+    assert: () => {
+      if (!verify()) throw new Error(`trusted executable drifted: ${executable}`)
+    },
+  }
+}
+
 function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true): { env: SetupEnv; calls: SpyCalls } {
   const calls: SpyCalls = { mkdirp: [], writeText: [], exec: [] }
   const mutationBaselines = new Map<string, number>()
@@ -527,7 +547,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(commands.find(([cmd, args]) => cmd === 'codex' && args === 'plugin list --json'))
       .toEqual(['codex', 'plugin list --json'])
     expect(commands).toContainEqual(['codex', 'plugin marketplace list --json'])
-    expect(commands).toContainEqual(['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'])
+    expect(commands).toContainEqual(['bash', `/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon --node ${process.execPath}`])
     expect(commands.some(([cmd, args]) => cmd === 'codex'
       && (args.includes('plugin remove') || args.includes('plugin add')))).toBe(false)
     expect(deps.outLines.join('\n')).toContain('已启用 --codex 自动更新')
@@ -1485,7 +1505,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(calls.exec.some(([cmd, args]) => cmd === 'codex'
       && args.join(' ') === 'plugin remove pipeline-lite@pipeline-lite --json')).toBe(false)
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon')).toBe(true)
+      && args.join(' ') === `/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon --node ${process.execPath}`)).toBe(true)
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     const receiptPath = join(
       resolveRuntimePaths({ homeDir: '/home/test', env: {} }).migrationsRoot,
@@ -2969,5 +2989,193 @@ describe('⑩ registry 就绪门 —— 坏/缺 registry fail-loud（不空计�
     expect(code).toBe(0)
     expect(deps.outLines.join('\n')).toContain('无待装')
     expect(deps.errLines.join('\n')).not.toContain('registry 未就绪')
+  })
+})
+
+describe('caller-level provenance replay', () => {
+  test('verifyPackagedAssets replays frozen Bash and Node before the verifier spawn', () => {
+    const deps = makeDeps()
+    const root = '/plugin'
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return true
+    })
+    const { env, calls } = spyEnv({
+      pathExists: (path) => path === join(root, 'runtime', 'tenon-bootstrap.mjs'),
+    })
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    env.runTrustedLifecycleCommand = (command, args) => {
+      events.push('spawn')
+      expect(command).toBe('bash')
+      expect(args).toEqual([
+        join(root, 'tools', 'verify-skills.sh'),
+        '--quiet',
+        '--root',
+        root,
+        '--node',
+        frozenNode.executable,
+      ])
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(verifyPackagedAssets(deps, env, root, false)).toBe(0)
+    expect(events).toEqual(['bash-proof', 'node-proof', 'spawn'])
+    expect(calls.exec).toEqual([])
+  })
+
+  test('verifyPackagedAssets fails closed on Node drift without starting a runner', () => {
+    const deps = makeDeps()
+    const root = '/plugin'
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return false
+    })
+    const { env, calls } = spyEnv({
+      pathExists: (path) => path === join(root, 'runtime', 'tenon-bootstrap.mjs'),
+    })
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    let runnerCalls = 0
+    env.runTrustedLifecycleCommand = () => {
+      runnerCalls += 1
+      events.push('spawn')
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(verifyPackagedAssets(deps, env, root, false)).toBe(1)
+    expect(events).toEqual(['bash-proof', 'node-proof'])
+    expect(runnerCalls).toBe(0)
+    expect(calls.exec).toEqual([])
+  })
+})
+
+describe('canonical provenance setup gate', () => {
+  test('bundled setup replays frozen Bash and Node before a dry-run plan', () => {
+    const deps = makeDeps()
+    const root = process.cwd()
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return true
+    })
+    const { env, calls } = spyEnv({
+      pluginRoot: () => root,
+      selfPath: () => join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+    })
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    env.runTrustedLifecycleCommand = (command, args) => {
+      events.push('spawn')
+      expect(command).toBe('bash')
+      expect(args).toEqual([
+        join(root, 'tools', 'verify-skills.sh'),
+        '--quiet',
+        '--root',
+        root,
+        '--node',
+        frozenNode.executable,
+      ])
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(cmdSetupSkills(deps, { dryRun: true }, env)).toBe(0)
+    expect(events).toEqual(['bash-proof', 'node-proof', 'spawn'])
+    expect(calls.exec).toEqual([])
+    expect(deps.outLines.join('\n')).toContain('[setup skills] --dry-run')
+  })
+
+  test('bundled setup stops on Node drift before verifier runner or skill plan/install child', () => {
+    const deps = makeDeps()
+    const root = process.cwd()
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return false
+    })
+    const { env, calls } = spyEnv({
+      pluginRoot: () => root,
+      selfPath: () => join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+    })
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    let runnerCalls = 0
+    env.runTrustedLifecycleCommand = () => {
+      runnerCalls += 1
+      events.push('spawn')
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(cmdSetupSkills(deps, { dryRun: true }, env)).toBe(1)
+    expect(events).toEqual(['bash-proof', 'node-proof'])
+    expect(runnerCalls).toBe(0)
+    expect(calls.exec).toEqual([])
+    expect(calls.mkdirp).toEqual([])
+    expect(calls.writeText).toEqual([])
+    expect(deps.outLines.join('\n')).not.toContain('[setup skills] 技能安装计划')
+    expect(deps.errLines.join('\n')).toContain('canonical Skill provenance 校验失败')
+  })
+
+  test('real bundled setup rejects Skill content drift before producing a plan', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tenon-setup-provenance-'))
+    try {
+      await cp(join(process.cwd(), 'templates'), join(root, 'templates'), { recursive: true })
+      await cp(join(process.cwd(), 'skills'), join(root, 'skills'), { recursive: true })
+      for (const rel of ['.claude-plugin', '.codex-plugin', '.agents', 'hooks', 'runtime', 'tools']) {
+        await cp(join(process.cwd(), rel), join(root, rel), { recursive: true })
+      }
+      mkdirSync(join(root, 'packages', 'cli', 'dist'), { recursive: true })
+      await cp(
+        join(process.cwd(), 'packages', 'cli', 'dist', 'tenon.mjs'),
+        join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+      )
+      mkdirSync(join(root, 'packages', 'server', 'dist'), { recursive: true })
+      await cp(
+        join(process.cwd(), 'packages', 'server', 'dist', 'dashboard.mjs'),
+        join(root, 'packages', 'server', 'dist', 'dashboard.mjs'),
+      )
+      mkdirSync(join(root, 'packages', 'dashboard-app', 'dist'), { recursive: true })
+      await cp(
+        join(process.cwd(), 'packages', 'dashboard-app', 'dist'),
+        join(root, 'packages', 'dashboard-app', 'dist'),
+        { recursive: true },
+      )
+      const skillPath = join(root, 'skills', 'tenon', 'SKILL.md')
+      await writeFile(skillPath, `${await readFile(skillPath, 'utf8')}\n# drift\n`, 'utf8')
+
+      let status = 0
+      let output = ''
+      try {
+        execFileSync(process.execPath, [
+          join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+          'setup', 'skills', '--yes',
+        ], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+      } catch (error) {
+        const e = error as { status?: number; stdout?: string; stderr?: string }
+        status = e.status ?? 1
+        output = `${e.stdout ?? ''}${e.stderr ?? ''}`
+      }
+
+      expect(status).not.toBe(0)
+      expect(output).toContain('content-hash-mismatch')
+      expect(output).not.toContain('[setup skills] 技能安装计划')
+      expect(output).not.toContain('无待装技能')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
