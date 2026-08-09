@@ -146,6 +146,17 @@
   review 确认，而不是“刚进入 phase 就暂停”；例如 `verify-fail` 的确认绝不能授权 `verify-pass`。常规确认
   由 `acknowledge` 记录；用户明确的 Change 绑定持续授权只能在真实 review 证据完成后经
   `acknowledge --delegated` 记录来源与授权时间，不能跳过该 receipt 或任何 guard。
+  每个 request 还在 Change 锁内写 `.pipeline-review-gate-binding.json`：它绑定排除上述五个 receipt
+  字段（以及派生 interaction projection）的 canonical decision digest、exact phase/event、requestedAt
+  与 run identity。缺失、损坏或 digest/visit 漂移的 binding 一律 fail-closed，不参与也不读取 interaction
+  projection 做授权判断；pending/approved receipt 可通过 fresh request 撤销旧决定并重新绑定后恢复。
+  Sidecar writer 的 canonical bytes 固定为单行 `JSON.stringify(binding) + "\n"`；authorization reader
+  只接受不超过 16 KiB 的严格 UTF-8 普通文件，并复用 `O_NOFOLLOW | O_NONBLOCK` 的 bounded fd reader，
+  在 proof/read 前后核对 parent realpath、target/fd 的 dev/ino/size/mtimeNs/ctimeNs。字段缺失/未知、
+  duplicate key、字段重排、额外空白/trailing bytes、symlink、目录、超限、替换、同 inode 改写、增长
+  或读取中消失均拒绝，错误不得回显 sidecar 内容。没有可信 binding 的 legacy pending/approved receipt
+  不自动 backfill；必须对相同 exact phase/event 发起 fresh `review request` 产生新的 requestedAt、pending
+  receipt 和 sidecar 后再 acknowledge，interaction projection 不能作为授权 fallback。
 - **不可变 TransitionRecord**（同上）：`openspec/changes/<name>/.pipeline-transitions/
   <sequence 零填充 6 位>-<recordId>.json`，每条记录一个文件，写入用「临时文件 + `link()` +
   `unlink()` 临时文件」而非 rename——`link()` 目标已存在时原子失败（`EEXIST`），存储层强制
@@ -314,7 +325,56 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
   `Accept-Encoding` 协商 gzip，返回 `Vary: Accept-Encoding` 并遵守显式 `gzip;q=0`；
   原始与 gzip 响应字节均由真实 HTTP 测试校验。
 
-### 3.3 Skill Invocation evidence v1
+### 3.3 Interaction observability v1
+
+Issue #46 adds an optional, derived interaction projection for each Change:
+openspec/changes/<name>/.pipeline-interactions.jsonl. Canonical
+RunRevision, exact review receipts, transition effects, and session binding
+remain the source of truth; this JSONL is never read by guards,
+authorization, transition, or resume decisions. An older Change with no file
+keeps its existing canonical behavior.
+
+Each line is a closed tenon-interaction-event/v1 envelope. The wire keys are
+snake_case and include a deterministic event_id, sequence/hash-chain fields,
+Change/run/workflow identity and plan fingerprint, origin and current step
+visits, canonical state-before/state-after digests, actor/surface, execution
+and comparison dimensions, stable event/result semantics, namespaced
+reason/trigger/effect/outcome codes, and duration. Prompt text, token,
+credential, artifact body, URL, session id, and arbitrary metadata are not
+valid fields; the codec rejects unknown keys. Unknown namespaced codes
+round-trip into unclassified_codes and are never inferred as success. Extension
+codes are ASCII namespaced identifiers of at most 128 characters.
+
+Replay performs the terminal-order fence after the common anchor/time continuity
+checks and before unknown-code semantic skipping. A journey becomes terminal on
+rejected acknowledgement, failed effect/operation, or its first valid
+`resume.validated(success)`. After that point every core event must emit both
+global and journey-local `malformed-order` and cannot execute request,
+acknowledgement, effect, or resume success semantics. The only exception is an
+idempotent, fully-known `resume.validated(success)` with the same effect state and
+visit; it preserves the first `validResumeAt`, completion, and scorecard values.
+Unknown namespaced codes remain in `unclassified_codes`, but their core event
+still crosses this fence.
+
+The public writer port is `recordUnderLock`; callers invoke it only while
+holding the existing Change lock. The adapter appends through `appendUnderLock`
+without re-entering the lock. A regular non-symlink reader enforces bounded bytes/lines, sequence starting at
+1, exact UTF-8 previous-line hashes, and trailing newlines. Missing, valid,
+and corrupt projections are distinct. Projection write failures carry the
+stable `interaction-projection-write-failed` warning code after a canonical
+commit, never a rollback. Missing projections remain explicitly unavailable
+(`projection-unavailable`) rather than empty.
+
+Deterministic local benchmark: tenon interaction scorecard <fixture-dir> --json.
+It emits tenon-interaction-scorecard/v1, stable fixture ids, the three fixed
+metrics (zero denominators are null), event completeness, stale/repeat/resume
+guardrails, diagnostic counts, and sorted unclassified_codes. Tracked v1
+matrix, measurement fixtures, and negative controls live under
+tools/fixtures/interaction-events/v1/; negative controls never enter product
+metric denominators. Manifest fixture ids are closed ASCII identifiers of at
+most 64 characters, and a manifest contains at most 256 fixtures.
+
+### 3.4 Skill Invocation evidence v1
 
 - **canonical ledger**：每个 Change 的 `.pipeline-skill-invocations.jsonl` 是
   `skill-invocation-evidence/v1` 唯一真相源；history 只能由 completed event 单向生成兼容行，
@@ -377,3 +437,15 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
    在安装/CI 时证实存在（路径存在 + 脚本可执行 + skill 目录含 SKILL.md），缺失即**硬失败并
    逐条列出**。外部 skill 依赖（如 superpowers 系）必须显式清单化声明 + 安装校验，
    **不允许运行时才发现「skill 找不到」**。老内核靠 manifest 选装外部 skills 曾出现此坑，本仓封死。
+
+8. **Canonical Skill provenance（Issue #44）**：`templates/skill-sources.yaml` 是分发
+   Skill 唯一 tracked provenance source，使用 schema `version: 3` 与
+   `hash_algorithm: tree-sha256-v1`。每个 entry 必须声明 `source_kind: bundled`、规范化的
+   `source_ref: skills/<id>`、由 `buildCanonicalManifest()` 得到的 `sha256:` content hash，
+   以及同时绑定 identity/hash 的 `coordinate: tenon:skills/<id>@sha256:<digest>`。install、
+   verify、doctor、release candidate 与 bundled locator 只能消费这一份 registry，并对缺失、
+   额外、重复、漂移、未知 source 和不安全引用 fail-closed；解析/读取错误不得降级为空清单。
+   `skills-lock.json` 已移除，重新出现必须以 `legacy-provenance-source` 失败。作者只可运行
+   `npm run sync:skill-provenance` 原子刷新 registry，随后用
+   `bash tools/verify-skills.sh --quiet --root "$PWD"` 验证；隐藏的
+   `internal-skill-provenance verify|sync --root <path> [--json]` 是共享实现。

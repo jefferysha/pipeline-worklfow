@@ -222,4 +222,3 @@ pipeline revision/receipt 文件按同一 Change 状态机与后续 `tenon check
 | `templates/workflows/default.yaml` | `openspec/changes/issue-43-phase-skill-enforcement/specs/workflow-skill-enforcement/spec.md` | ✅ phase/overlay/explicit 三投影、snapshot 与兼容语义一致 |
 | `tools/check-docs.mjs` | `openspec/changes/issue-43-phase-skill-enforcement/specs/workflow-skill-enforcement/spec.md` | ✅ source/generated/Skill/双语文档漂移合同一致 |
 | `tools/check-docs.node-test.mjs` | `openspec/changes/issue-43-phase-skill-enforcement/specs/workflow-skill-enforcement/spec.md` | ✅ source/generated/Skill/双语文档漂移合同一致 |
-

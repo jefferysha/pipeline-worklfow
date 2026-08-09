@@ -35,10 +35,15 @@ import {
   TERMINAL_SESSION_PROTOCOL,
   validateChangeName,
   isTerminalSessionId,
+  readCurrentRunRevision,
+  readInteractionProjection,
+  interactionStateHashEquals,
+  INTERACTION_PROJECTION_WRITE_FAILED,
   type PackageDecl,
 } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir } from '../paths.js'
+import { createInteractionCapture } from '../interaction-emitter.js'
 import {
   ACTIVE_POINTER_FILE,
   INTERACTION_AUTHORITY_FILE,
@@ -51,6 +56,15 @@ export { ACTIVE_POINTER_FILE, INTERACTION_AUTHORITY_FILE, INTERACTION_AUTHORITY_
 /** Change-bound hook projection for explicit normal-chat continuous execution. */
 /** 项目根 package 声明文件（老仓 monorepo.py PROJECT_CONFIG_FILE）。 */
 export const PROJECT_CONFIG_FILE = '.pipeline-project.yaml'
+
+/** Keep resume timestamps measurable while closing a wall-clock rollback gap. */
+export function resumeOccurredAt(candidate: string, latestEffectAt: string): string {
+  const candidateMs = Date.parse(candidate)
+  const effectMs = Date.parse(latestEffectAt)
+  if (!Number.isFinite(candidateMs) || !Number.isFinite(effectMs)) return candidate
+  if (candidateMs <= effectMs) return new Date(effectMs + 1).toISOString()
+  return candidate
+}
 
 /**
  * session fs 注入面（默认真 fs；mock 层注入 fake，见 session.test.ts）。
@@ -250,6 +264,35 @@ async function cmdActivate(deps: CliDeps, args: string[], fs: SessionFs): Promis
     // 老仓语义：session_store degraded（context_key 缺/落盘失败）→ 仅 WARN、回退对话上下文、rc=0。
     deps.io.err(`[activate] 活跃指针写入失败 → degraded（回退对话上下文），未落 session 指针: ${errMsg(e)}`)
     return 0
+  }
+  if (deps.interaction !== undefined) {
+    try {
+      const interaction = deps.interaction
+      await deps.store.withLock(changeDir(deps.cwd, name), async () => {
+        const state = await deps.store.read(changeDir(deps.cwd, name))
+        const revision = await readCurrentRunRevision(changeDir(deps.cwd, name))
+        const projection = await readInteractionProjection(changeDir(deps.cwd, name))
+        if (revision === undefined || projection.kind !== 'valid') return
+        const effect = [...projection.events].reverse().find((event) =>
+          event.event === 'review.effect-applied' && event.result === 'success')
+        if (effect === undefined) return
+        const valid = interactionStateHashEquals(revision.stateDigest, effect.stateAfterHash)
+        const capture = createInteractionCapture(interaction, deps.clock)
+        await capture.recordResume({
+          changeDir: changeDir(deps.cwd, name),
+          changeName: name,
+          state,
+          revision,
+          effectRevision: revision,
+          result: valid ? 'success' : 'rejected',
+          journeyId: effect.journeyId,
+          originStepVisit: effect.originStepVisit,
+          clock: resumeOccurredAt(deps.clock(), effect.occurredAt),
+        })
+      })
+    } catch (error) {
+      deps.io.err(`[activate] ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection 写入失败（Change 绑定仍成功）: ${errMsg(error)}`)
+    }
   }
   let terminalSessionBound = false
   if (options.hostSessionId !== undefined) {

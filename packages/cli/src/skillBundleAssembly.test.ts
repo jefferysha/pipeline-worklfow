@@ -14,7 +14,7 @@ import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } fro
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { SkillContentNotFoundError } from '@tenon/automation'
+import { buildCanonicalManifest, SkillContentNotFoundError } from '@tenon/automation'
 import {
   compileEffectiveWorkflowPlan, createEffectiveSkillResolver, loadManifest, parseWorkflow, resolveSkillBundle,
   workflowPlanSnapshot,
@@ -215,6 +215,19 @@ describe('createProductionSkillContentLocator（H10 r1 复审阻断4：唯一生
     return dir
   }
 
+  async function writeBundledRegistry(pluginRoot: string, skill: string, token = skill): Promise<void> {
+    const manifest = await buildCanonicalManifest(skill, join(pluginRoot, 'skills', skill))
+    const digest = `sha256:${manifest.treeSha256}`
+    await mkdir(join(pluginRoot, 'templates'), { recursive: true })
+    await writeFile(join(pluginRoot, 'templates', 'skill-sources.yaml'), [
+      'version: 3',
+      'hash_algorithm: tree-sha256-v1',
+      'skills:',
+      `  ${token}: { tool: bundled, source: tenon, content_skill: ${skill}, tier: mandatory, official: true, source_kind: bundled, source_ref: skills/${skill}, content_hash: ${digest}, coordinate: tenon:skills/${skill}@${digest} }`,
+      '',
+    ].join('\n'), 'utf8')
+  }
+
   it('runner=codex：仅存在于 ~/.claude 的裸 skill 不可用于 readiness，且不读取 Claude registry', async () => {
     const home = join(root, 'home')
     await makeSkillDir(join(home, '.claude', 'skills'), 'claude-only', '# claude only')
@@ -370,6 +383,7 @@ describe('createProductionSkillContentLocator（H10 r1 复审阻断4：唯一生
     const home = join(root, 'home')
     const pluginRoot = join(root, 'plugin')
     const bundled = await makeSkillDir(join(pluginRoot, 'skills'), 'brainstorming', '# bundled')
+    await writeBundledRegistry(pluginRoot, 'brainstorming')
     await makeSkillDir(join(home, '.codex', 'skills'), 'brainstorming', '# divergent global')
     const locator = createProductionSkillContentLocator({
       home,
@@ -383,10 +397,74 @@ describe('createProductionSkillContentLocator（H10 r1 复审阻断4：唯一生
     expect(located.contentDir).toBe(await realpath(bundled))
   })
 
+  it('runner-specific locator 也必须先通过 bundled provenance，drift 不得降级到 Codex tier', async () => {
+    const home = join(root, 'home')
+    const pluginRoot = join(root, 'plugin')
+    await makeSkillDir(join(pluginRoot, 'skills'), 'brainstorming', '# bundled')
+    await writeBundledRegistry(pluginRoot, 'brainstorming')
+    await makeSkillDir(join(home, '.codex', 'skills'), 'brainstorming', '# lower tier')
+    await writeFile(join(pluginRoot, 'skills', 'brainstorming', 'SKILL.md'), '# drift\n', 'utf8')
+    const locator = createProductionSkillContentLocator({
+      home,
+      pluginRoot,
+      runner: 'codex',
+      readdirDirNames: () => [],
+      readInstalledPluginsJson: () => null,
+    })
+
+    await expect(locator.locate('brainstorming')).rejects.toMatchObject({ category: 'content-hash-mismatch' })
+  })
+
+  it('v3 declared bundled root missing rejects before lower-tier fallback', async () => {
+    const home = join(root, 'home')
+    const pluginRoot = join(root, 'plugin')
+    await makeSkillDir(join(pluginRoot, 'skills'), 'brainstorming', '# bundled')
+    await writeBundledRegistry(pluginRoot, 'brainstorming')
+    await rm(join(pluginRoot, 'skills'), { recursive: true, force: true })
+    await makeSkillDir(join(home, '.codex', 'skills'), 'brainstorming', '# lower tier')
+    let lowerTierReads = 0
+    const locator = createProductionSkillContentLocator({
+      home,
+      pluginRoot,
+      runner: 'codex',
+      readdirDirNames: () => {
+        lowerTierReads += 1
+        return []
+      },
+      readInstalledPluginsJson: () => null,
+    })
+
+    await expect(locator.locate('brainstorming')).rejects.toMatchObject({ name: 'SkillProvenanceLocatorError' })
+    expect(lowerTierReads).toBe(0)
+  })
+
+  it('malformed current registry rejects before lower-tier fallback even without bundled root', async () => {
+    const home = join(root, 'home')
+    const pluginRoot = join(root, 'plugin')
+    await mkdir(join(pluginRoot, 'templates'), { recursive: true })
+    await writeFile(join(pluginRoot, 'templates', 'skill-sources.yaml'), 'version: 4\nnot: a registry\n', 'utf8')
+    await makeSkillDir(join(home, '.codex', 'skills'), 'brainstorming', '# lower tier')
+    let lowerTierReads = 0
+    const locator = createProductionSkillContentLocator({
+      home,
+      pluginRoot,
+      runner: 'codex',
+      readdirDirNames: () => {
+        lowerTierReads += 1
+        return []
+      },
+      readInstalledPluginsJson: () => null,
+    })
+
+    await expect(locator.locate('brainstorming')).rejects.toMatchObject({ name: 'SkillProvenanceLocatorError' })
+    expect(lowerTierReads).toBe(0)
+  })
+
   it('selected bundle authority：bundle 命中时不枚举损坏的 lower-trust Codex cache', async () => {
     const home = join(root, 'home')
     const pluginRoot = join(root, 'plugin')
     const bundled = await makeSkillDir(join(pluginRoot, 'skills'), 'brainstorming', '# bundled')
+    await writeBundledRegistry(pluginRoot, 'brainstorming')
     let lowerTierReads = 0
     const locator = createProductionSkillContentLocator({
       home,

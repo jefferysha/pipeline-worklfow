@@ -478,7 +478,9 @@ describe('真实 e2e —— verify-skills 零悬空覆盖本编排实际驱动�
   })
 
   test('tools/verify-skills.sh 真跑全仓：零悬空引用（复用既有工具，而非在此重新实现校验逻辑）', () => {
-    const res = spawnSync('bash', [join(REPO_ROOT, 'tools', 'verify-skills.sh'), '--root', REPO_ROOT], { encoding: 'utf8' })
+    const res = spawnSync('bash', [
+      join(REPO_ROOT, 'tools', 'verify-skills.sh'), '--root', REPO_ROOT, '--node', process.execPath,
+    ], { encoding: 'utf8' })
     expect(res.status, `verify-skills 应 exit 0；stderr=${res.stderr}`).toBe(0)
     expect(res.stdout).toContain('OK')
   })

@@ -32,7 +32,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { skillActionAuthorityContract } from '@tenon/automation'
+import { buildCanonicalManifest, skillActionAuthorityContract } from '@tenon/automation'
 import {
   compileEffectiveWorkflowPlan, createLoopLedgerStore, emptyFields, loadRegistry, workflowPlanSnapshot,
 } from '@tenon/kernel'
@@ -65,11 +65,26 @@ async function initializeCanonicalStepVisit(cwd: string, change = 'w'): Promise<
  */
 async function seedDefaultPhaseSkills(cwd: string): Promise<string> {
   const pluginRoot = join(cwd, '.test-plugin')
+  const registryRows: string[] = []
   for (const phase of ['build', 'ship'] as const) {
-    const skillDir = join(pluginRoot, 'skills', `tenon-${phase}`)
+    const skill = `tenon-${phase}`
+    const skillDir = join(pluginRoot, 'skills', skill)
     await mkdir(skillDir, { recursive: true })
     await writeFile(join(skillDir, 'SKILL.md'), `# hermetic tenon-${phase} fixture\n`, 'utf8')
+    const manifest = await buildCanonicalManifest(skill, skillDir)
+    const digest = `sha256:${manifest.treeSha256}`
+    registryRows.push(
+      `  ${skill}: { tool: bundled, source: tenon, content_skill: ${skill}, tier: mandatory, official: true, source_kind: bundled, source_ref: skills/${skill}, content_hash: ${digest}, coordinate: tenon:skills/${skill}@${digest} }`,
+    )
   }
+  await mkdir(join(pluginRoot, 'templates'), { recursive: true })
+  await writeFile(join(pluginRoot, 'templates', 'skill-sources.yaml'), [
+    'version: 3',
+    'hash_algorithm: tree-sha256-v1',
+    'skills:',
+    ...registryRows,
+    '',
+  ].join('\n'), 'utf8')
   return pluginRoot
 }
 

@@ -35,7 +35,7 @@
  */
 import type { FieldName, FlowEngine, Phase, PipelineState } from '../types.js'
 import { IllegalTransitionError } from '../types.js'
-import { applyBreadcrumbTail, clearReviewGatePatch, reviewGateApprovedFor, transitionRecordToHistoryEntry } from '../state/index.js'
+import { applyBreadcrumbTail, clearReviewGatePatch, readCurrentRunRevision, reviewGateApprovedFor, transitionRecordToHistoryEntry } from '../state/index.js'
 import { evaluateDocumentEvidence } from '../state/document-evidence.js'
 import type { DocumentEvidenceReport } from '../state/document-evidence.js'
 import { eventEdge } from '../flow/index.js'
@@ -62,19 +62,18 @@ import type {
   PreparedTransition, TransitionApplication, TransitionApplicationDeps, TransitionApplicationResult,
   TransitionApplicationWarning, TransitionCommand, TransitionRejection,
 } from './transition-application-types.js'
+import { emitInteractionEffectUnderLock } from './interaction-effect.js'
+import { INTERACTION_PROJECTION_WRITE_FAILED } from '../interaction/contract.js'
 export type {
   TransitionApplication, TransitionApplicationDeps, TransitionApplicationResult,
   TransitionApplicationWarning, TransitionCommand,
 } from './transition-application-types.js'
-
 function isRejection(x: PreparedTransition | TransitionRejection): x is TransitionRejection {
   return 'kind' in x
 }
-
 function fieldStr(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v.join(',') : (v ?? '')
 }
-
 // planner 只收 flow+clock，不收完整 TransitionApplicationDeps——deps 里有 runRepository 与两个
 // projection writer，收整包等于 planner 在类型上仍可间接提交/写盘（第 2 轮 review 抓到：从
 // "直接持有 tx" 变成 "间接可达" 不算收窄）。
@@ -144,7 +143,6 @@ async function planDefaultTransition(
     from: result.from, to: result.to, nextFields, warnings,
   }
 }
-
 async function planCustomTransition(
   state: PipelineState,
   effectivePlan: EffectiveWorkflowPlan,
@@ -234,11 +232,13 @@ async function planCustomTransition(
     from: plan.from, to: plan.to, nextFields, warnings,
   }
 }
-
 export function createTransitionApplication(deps: TransitionApplicationDeps): TransitionApplication {
   return {
     async execute(command: TransitionCommand): Promise<TransitionApplicationResult> {
       return deps.runRepository.transact(command.changeDir, async (tx): Promise<TransitionApplicationResult> => {
+        const beforeInteractionRevision = deps.interaction === undefined
+          ? undefined
+          : await readCurrentRunRevision(command.changeDir)
         // 事实物化在这里、锁内完成（workflow 定义加载），planner 只收规划所需的输入——state 与
         // 已加载并编译的 WorkflowIR，不把带 commit 能力的整个 tx 交给 planner（第 1 轮 review：
         // planner 拿到 tx 就有能力在规划途中提交，类型上就不该给这个权力）。
@@ -281,7 +281,6 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
             }
           }
         }
-
         const policy = tx.run.automationPolicy
         if (policy !== undefined) {
           const facts = deps.resolveConstraintContext === undefined
@@ -293,7 +292,6 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
           })
           if (!decision.allowed) return { kind: 'constraint-denied', reason: decision.reason }
         }
-
         if (
           prepared.documentPolicy
           && shouldEnforceDocumentPolicyOnTransition(prepared.documentPolicy, prepared.from, prepared.to)
@@ -328,19 +326,26 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
             return { kind: 'document-evidence-failed', phase: prepared.from, blockers: evidence.blockers }
           }
         }
-
         // Review 的判定点是“离开当前 review phase”，不是“刚进入就锁住”。所有自动 guards
         // / 文档证据先通过，才允许 request/ack receipt 成为下一步的人类复核证据。CLI/agent
         // 只能消费 `tenon review acknowledge` 写入的 exact-phase-and-event receipt；dashboard
         // 则把真实的、已选中 event 的显式放行点击作为同一语义的 host-bound acknowledgement。
+        const receiptApproved = reviewGateApprovedFor(tx.state, prepared.from, command.event)
+        const bindingApproved = receiptApproved && deps.reviewGateBinding !== undefined
+          ? await deps.reviewGateBinding({
+            changeDir: command.changeDir,
+            state: tx.state,
+            phase: prepared.from,
+            event: command.event,
+          })
+          : receiptApproved
         if (
           prepared.requiresReviewApproval
           && command.humanReviewApproved !== true
-          && !reviewGateApprovedFor(tx.state, prepared.from, command.event)
+          && !bindingApproved
         ) {
           return { kind: 'review-approval-required', phase: prepared.from, event: command.event }
         }
-
         // Receipt 在任一成功 transition 后立即消费，避免一次旧批准在回退/重入同一 phase 后被复用。
         const { record, projection } = await tx.commit({ ...prepared.nextFields, ...clearReviewGatePatch() }, {
           event: command.event, from: prepared.from, to: prepared.to,
@@ -351,7 +356,27 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
             kind: 'projection-write-failed', projection: 'state-yaml', cause: projection.error,
           })
         }
-
+        if (deps.interaction !== undefined && receiptApproved && bindingApproved) {
+          try {
+            await emitInteractionEffectUnderLock({
+              recorder: deps.interaction,
+              changeDir: command.changeDir,
+              changeName: command.changeName,
+              reviewEvent: command.event,
+              from: prepared.from,
+              to: prepared.to,
+              track: fieldStr(tx.state.fields.track),
+              workflowRun: tx.run,
+              before: beforeInteractionRevision,
+              readAfter: () => readCurrentRunRevision(command.changeDir),
+            })
+          } catch (error) {
+            warnings.push({
+              kind: 'projection-write-failed', projection: 'interaction',
+              code: INTERACTION_PROJECTION_WRITE_FAILED, cause: error,
+            })
+          }
+        }
         // 收尾顺序 breadcrumb → history：breadcrumb 是 hook 热路径的当前相位缓存，history 是
         // durable transition audit。review marker 已移到 `tenon review request`，不能在进入
         // review phase 时写，否则会把该 phase 的实现/验证工作本身锁死。

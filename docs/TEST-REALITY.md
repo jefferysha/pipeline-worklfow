@@ -87,6 +87,53 @@
 
 ## 真实证据链（三道，收编门必过）
 
+## 2026-08-10 · Issue #46 interaction observability evidence
+
+- Post-integration focused kernel/CLI Vitest is real source execution: 10 files,
+  157 tests passed.
+  Coverage includes closed/privacy codec and matrix round-trip, deterministic replay,
+  projection sequence/hash/truncation/symlink failures, scorecard denominator guards,
+  unknown-code unclassified handling, scorecard CLI path/error sanitisation, exact review
+  journeys, session resume, and projection-failure compatibility.
+- Tracked fixture replay is deterministic through the built CLI bundle:
+  tenon interaction scorecard tools/fixtures/interaction-events/v1 --json.
+  It reports governedCompletionRate 0.6, humanInterruptionsPerVerifiedCompletion
+  1.6666666666666667, medianTimeToValidResumeMs 4000, eventCompleteness 1,
+  acceptedStaleDecisions 0, sameStateRepeatedPrompts 0, invalidResumes 1; projection-loss,
+  malformed-order, and wrong-resume remain negative controls with sequence-gap,
+  malformed-order, invalid-resume, and incomplete-success-journey diagnostics.
+- Post-integration root verification ran the full repository Vitest suite: 387 files,
+  6,729 tests passed, 27 environment/CI-gated tests skipped, and 0 failed. Docker-backed
+  cases were honestly skipped because the local daemon was unavailable; the real-Codex
+  acceptance remained CI-gated because `TENON_REQUIRE_REAL_CODEX!=1`. This change has no
+  Dashboard UI or server API surface, so browser acceptance was not applicable.
+- `npm run build`, `npm run check:architecture` (864 production files), OpenSpec/docs,
+  comments, repository hygiene, release-workflow/identity, default-workflow/document-template,
+  legacy/npx packaging, migration CAS, and the 32-case bundle smoke gate all passed. The
+  CLI and server dist artifacts were regenerated from the merged source graph.
+
+## 2026-08-10 · Issue #66 bounded remediation worker evidence
+
+- TDD RED replay evidence: `npx vitest run packages/kernel/src/interaction/replay.test.ts
+  --minWorkers=4 --maxWorkers=4` initially reported 21 tests with 2 failures because terminal
+  successors and unknown extension core events were silently skipped. Sidecar RED evidence:
+  `npx vitest run packages/kernel/src/state/review-gate-binding.test.ts --minWorkers=4
+  --maxWorkers=4` initially reported 4 tests with 1 failure because the old reader accepted
+  reordered non-canonical JSON.
+- Focused green gate:
+  `npx vitest run packages/kernel/src/interaction/replay.test.ts packages/kernel/src/interaction/scorecard.test.ts
+  packages/kernel/src/state/review-gate-binding.test.ts packages/cli/src/commands/review.integration.test.ts
+  packages/cli/src/commands/transition.test.ts --minWorkers=4 --maxWorkers=4` — 5 files, 87 tests passed.
+  Coverage includes every terminal successor class, unknown-code fence, idempotent resume, canonical
+  sidecar bytes, missing/ambiguous/oversize/symlink/non-regular/UTF-8 cases, deterministic read-window
+  mutation/replacement/disappearance races, CLI refusal, fresh-request recovery, and projection independence.
+- `npx tsc -b packages/kernel packages/cli --pretty false` passed. `npm run bundle` and
+  `npm run build:server` regenerated the tracked CLI/server artifacts; `bash tools/test-bundle.sh`
+  passed 33/33 checks.
+- The worker did not run the root-owned full `npm test`, `npm run build`, architecture/comments/oracle/
+  OpenSpec gates, formal Review, PR/CI, or browser/Docker/real-Codex acceptance. Those remain separate
+  evidence owned by the root agent; this Change has no Dashboard/server route or browser surface.
+
 | 层 | 文件 | 真实性 | 驱动什么 |
 |---|---|---|---|
 | **真 fs 集成** | `packages/cli/src/integration.test.ts` | 🟢 真 | `buildProgram` + 真 `createStateStore/createFlowEngine/loadManifest/createHistoryWriter` + 真临时目录，断言真实落盘的 .pipeline.yaml/JSONL/marker 字节；真子进程跑 dist bundle --help |

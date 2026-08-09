@@ -66,7 +66,23 @@ async function restoreDirectoryModes(sourceRoot: string, targetRoot: string): Pr
   await visit(targetRoot, '')
 }
 
+async function rejectLegacyProvenanceSource(candidateRoot: string): Promise<void> {
+  const legacyPath = candidatePath(candidateRoot, 'skills-lock.json')
+  try {
+    await lstat(legacyPath)
+    throw new RuntimeFailure(
+      'candidate-invalid',
+      `候选发布包含禁止重新引入的 legacy provenance source [legacy-provenance-source]: ${legacyPath}`,
+    )
+  } catch (error) {
+    if (error instanceof RuntimeFailure) throw error
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw new RuntimeFailure('candidate-invalid', `读取 legacy provenance source 失败: ${legacyPath}（${String(error)}）`)
+  }
+}
+
 export async function copyReleasePayload(candidateRoot: string, payloadRoot: string): Promise<void> {
+  await rejectLegacyProvenanceSource(resolve(candidateRoot))
   for (const entry of PAYLOAD_ENTRIES) {
     const source = candidatePath(candidateRoot, entry)
     try {
@@ -272,7 +288,13 @@ export async function verifyReleasePayload(
   await assertFile(server, 'dashboard server bundle')
   await assertFile(bootstrap, 'runtime bootstrap')
   await verifyHookAbi(payloadRoot)
-  await runChecked(runner, bashPath, [verifier, '--quiet', '--root', payloadRoot], payloadRoot, '插件资产校验')
+  await runChecked(
+    runner,
+    bashPath,
+    [verifier, '--quiet', '--root', payloadRoot, '--node', nodePath],
+    payloadRoot,
+    '插件资产校验',
+  )
   for (const file of await shellFiles(join(payloadRoot, 'hooks'))) {
     await runChecked(runner, bashPath, ['-n', file], payloadRoot, `hook 语法 ${basename(file)}`)
   }
@@ -334,7 +356,11 @@ export async function inspectCandidatePayload(
         ? runner
         : {
             run: async (file, args, cwd) => {
-              if (file === bashPath) options.verifyBash?.()
+              if (file === bashPath) {
+                const isProvenanceVerifier = args.some((arg) => arg.endsWith('verify-skills.sh'))
+                options.verifyBash?.()
+                if (isProvenanceVerifier) options.verifyNode?.()
+              }
               if (file === nodePath) options.verifyNode?.()
               return runner.run(file, args, cwd)
             },

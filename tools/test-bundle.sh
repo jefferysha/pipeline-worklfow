@@ -85,6 +85,20 @@ if [ -f "$BUNDLE" ] && [ -f "$DASHBOARD_SERVER" ] && [ -f "$DASHBOARD_INDEX" ]; 
   fi
 fi
 
+# 3b. The shipped bundle must exercise the real Commander/buildProgram scorecard path, not only
+# the source command unit seam.
+if [ -f "$BUNDLE" ]; then
+  interaction_fixture_dir="$ROOT/tools/fixtures/interaction-events/v1"
+  interaction_scorecard_out="$(node "$BUNDLE" interaction scorecard "$interaction_fixture_dir" --json 2>&1)"
+  if [ "$?" -eq 0 ] && printf '%s' "$interaction_scorecard_out" \
+    | grep -q 'tenon-interaction-scorecard/v1' \
+    && ! printf '%s' "$interaction_scorecard_out" | grep -q "$interaction_fixture_dir"; then
+    ok "bundle: interaction scorecard 真实 CLI 路径"
+  else
+    bad "bundle: interaction scorecard 真实 CLI 路径" "$interaction_scorecard_out"
+  fi
+fi
+
 # 4. 端到端上手路径（真跑 bundle）
 if [ -f "$BUNDLE" ]; then
   TMP="$(mktemp -d)"

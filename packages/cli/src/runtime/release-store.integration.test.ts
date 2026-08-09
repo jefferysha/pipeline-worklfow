@@ -394,6 +394,46 @@ describe('RuntimeReleaseStore', () => {
     expect(invocations).not.toContain('bash')
   }, 30_000)
 
+  it('replays Bash then Node for provenance and preserves selection on Node drift', async () => {
+    const root = await freshRoot('trusted-node-provenance-drift')
+    const candidate = await candidateCopy(root)
+    const events: string[] = []
+    let nodeTrusted = false
+    let runnerCalls = 0
+    const trustedBash = '/trusted/runtime/bash'
+    const trustedNode = '/trusted/runtime/node'
+    const runtimePaths = pathsFor(root)
+    const store = new RuntimeReleaseStore({
+      paths: runtimePaths,
+      bashPath: trustedBash,
+      nodePath: trustedNode,
+      verifyBash: () => { events.push('bash-proof') },
+      verifyNode: () => {
+        events.push('node-proof')
+        if (!nodeTrusted) throw new Error('trusted Node identity drifted')
+      },
+      runner: {
+        run: async () => {
+          runnerCalls += 1
+          events.push('spawn')
+          return { code: 0, stdout: '', stderr: '' }
+        },
+      },
+    })
+    const before = await store.inspect()
+    const launchersBefore = await captureStableLaunchers(runtimePaths, root)
+
+    await expect(store.stageAndActivate(candidate, 'codex')).rejects.toThrow('trusted Node identity drifted')
+    expect(events).toEqual(['bash-proof', 'node-proof'])
+    expect(runnerCalls).toBe(0)
+    expect((await store.inspect()).selection).toEqual(before.selection)
+    expect(await captureStableLaunchers(runtimePaths, root)).toEqual(launchersBefore)
+
+    nodeTrusted = true
+    await expect(store.stageAndActivate(candidate, 'codex')).resolves.toBeDefined()
+    expect(events.slice(2, 5)).toEqual(['bash-proof', 'node-proof', 'spawn'])
+  }, 30_000)
+
   it('revalidates the frozen Node identity when no Bash verifier is configured', async () => {
     const root = await freshRoot('trusted-node-only-revalidation')
     const candidate = await candidateCopy(root)
@@ -1040,6 +1080,39 @@ describe('RuntimeReleaseStore', () => {
     await expect(store.stageAndActivate(broken, 'codex')).rejects.toThrow(/语法|candidate|插件资产/i)
 
     expect((await store.inspect()).selection.activeRelease).toBe(first.release.releaseId)
+  }, 30_000)
+
+  it('rejects candidate Skill provenance drift before activation and preserves selection/launchers', async () => {
+    const root = await freshRoot('provenance-drift-reject')
+    const healthy = await candidateCopy(root, '-healthy')
+    const broken = await candidateCopy(root, '-broken')
+    const store = storeFor(root)
+    const paths = pathsFor(root)
+    const first = await store.stageAndActivate(healthy, 'codex')
+    const selectionBefore = (await store.inspect()).selection
+    const launchersBefore = await captureStableLaunchers(paths, root)
+    await writeFile(join(broken, 'skills', 'tenon', 'SKILL.md'), '# candidate drift\n', 'utf8')
+
+    await expect(store.stageAndActivate(broken, 'codex')).rejects.toThrow(/content-hash-mismatch|provenance|插件资产/i)
+
+    expect((await store.inspect()).selection).toEqual(selectionBefore)
+    expect((await captureStableLaunchers(paths, root))).toEqual(launchersBefore)
+    expect((await store.inspect()).selection.activeRelease).toBe(first.release.releaseId)
+  }, 30_000)
+
+  it('rejects a candidate reintroducing skills-lock.json before activation', async () => {
+    const root = await freshRoot('provenance-legacy-reject')
+    const healthy = await candidateCopy(root, '-healthy')
+    const broken = await candidateCopy(root, '-broken')
+    const store = storeFor(root)
+    const paths = pathsFor(root)
+    const first = await store.stageAndActivate(healthy, 'codex')
+    const launchersBefore = await captureStableLaunchers(paths, root)
+    await writeFile(join(broken, 'skills-lock.json'), '{}\n', 'utf8')
+
+    await expect(store.stageAndActivate(broken, 'codex')).rejects.toThrow(/legacy-provenance-source|skills-lock\.json|插件资产/i)
+    expect((await store.inspect()).selection.activeRelease).toBe(first.release.releaseId)
+    expect((await captureStableLaunchers(paths, root))).toEqual(launchersBefore)
   }, 30_000)
 
   it('rejects a candidate whose manifest version differs from the frozen release target', async () => {

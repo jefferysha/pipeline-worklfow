@@ -1,0 +1,554 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-09T20:12:56Z",
+  "records": [
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/issue-66-interaction-remediation-design.md",
+      "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-09T20:19:18Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-ea3ed41fe7ffcb7358ac5972e8001aa8f30a0284fd92dde633d4dbc85e74cf9d",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T20:24:10Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T20:24:47Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T20:27:21Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T20:45:04Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T21:33:33Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T21:53:48Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",8]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T22:20:14Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",9]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/issue-66-interaction-remediation.md",
+      "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-09T20:19:19Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-a1914a6ba4d097fa7776f49604670d77948af04677fbcfaadce55d4e31947679",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T20:24:10Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T20:24:47Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",3]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T20:27:21Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T20:45:04Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T21:33:33Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T21:53:48Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",8]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T22:20:14Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",9]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/issue-66-interaction-remediation/proposal.md",
+      "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-09T20:27:15Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-dafb2f874a047f2b7ee48d8b1293831018e80f00f346ef1ea9d019ce17f75802",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 4
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
+          "readAt": "2026-08-09T20:27:21Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
+          "readAt": "2026-08-09T20:45:04Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
+          "readAt": "2026-08-09T21:33:33Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
+          "readAt": "2026-08-09T21:53:48Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",8]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
+          "readAt": "2026-08-09T22:20:14Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",9]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/issue-66-interaction-remediation/design.md",
+      "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-09T20:27:15Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-5599ee8fee73edd86360a7a51346332f88d0ba17ff52e3a2e89e48169aecde28",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 4
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
+          "readAt": "2026-08-09T20:27:21Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",4]"
+        },
+        {
+          "phase": "build",
+          "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
+          "readAt": "2026-08-09T20:45:04Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
+          "readAt": "2026-08-09T21:33:33Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
+          "readAt": "2026-08-09T21:53:48Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",8]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
+          "readAt": "2026-08-09T22:20:14Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",9]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/issue-66-interaction-remediation/specs/interaction-observability/spec.md",
+      "sha256": "5b6123611033f7c89693bad424c0e446e67eefb8a5397a34c45ad0d2b147d678",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-09T20:27:16Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-b75f7df35841e2c62ee9768749433f68686fa7c400672e69e4ef089acd2a3e05",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 4
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "5b6123611033f7c89693bad424c0e446e67eefb8a5397a34c45ad0d2b147d678",
+          "readAt": "2026-08-09T20:45:04Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5b6123611033f7c89693bad424c0e446e67eefb8a5397a34c45ad0d2b147d678",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "5b6123611033f7c89693bad424c0e446e67eefb8a5397a34c45ad0d2b147d678",
+          "readAt": "2026-08-09T21:33:33Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5b6123611033f7c89693bad424c0e446e67eefb8a5397a34c45ad0d2b147d678",
+          "readAt": "2026-08-09T21:53:48Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",8]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "5b6123611033f7c89693bad424c0e446e67eefb8a5397a34c45ad0d2b147d678",
+          "readAt": "2026-08-09T22:20:14Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",9]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "5b6123611033f7c89693bad424c0e446e67eefb8a5397a34c45ad0d2b147d678",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/issue-66-interaction-remediation/specs/interaction-and-skill-provenance/spec.md",
+      "sha256": "1db727c3bd5ebdafcf5e947d4a81c33befd1e45674f7d4caff765ee7fdfbb31d",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-09T20:27:17Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-224a0e46447f3947804053489b4cf2cc9bd80c3d81171adfb7deb812dd93875b",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 4
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "1db727c3bd5ebdafcf5e947d4a81c33befd1e45674f7d4caff765ee7fdfbb31d",
+          "readAt": "2026-08-09T20:45:04Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1db727c3bd5ebdafcf5e947d4a81c33befd1e45674f7d4caff765ee7fdfbb31d",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1db727c3bd5ebdafcf5e947d4a81c33befd1e45674f7d4caff765ee7fdfbb31d",
+          "readAt": "2026-08-09T21:33:33Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1db727c3bd5ebdafcf5e947d4a81c33befd1e45674f7d4caff765ee7fdfbb31d",
+          "readAt": "2026-08-09T21:53:48Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",8]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "1db727c3bd5ebdafcf5e947d4a81c33befd1e45674f7d4caff765ee7fdfbb31d",
+          "readAt": "2026-08-09T22:20:14Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",9]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "1db727c3bd5ebdafcf5e947d4a81c33befd1e45674f7d4caff765ee7fdfbb31d",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/issue-66-interaction-remediation.md",
+      "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T20:27:17Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-38b0fdb194e7f176648f984133632d4cad870c8d2b519f86d1cdb280294b7e20",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 4
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T20:45:04Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T21:33:33Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T21:53:48Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",8]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T22:20:14Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",9]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/issue-66-interaction-remediation.md",
+      "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T20:27:17Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-e4b9eac93f42053d7bb116617787f7c8a1545b81edd3d4c5fcdb74d77d1d64d1",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 4
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T20:45:04Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
+        },
+        {
+          "phase": "build",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T21:33:33Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",7]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T21:53:48Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",8]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T22:20:14Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",9]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-10-issue-66-interaction-remediation-verify.md",
+      "sha256": "e77f04308a798c91467ff42c2d3c526c0a9d7e33ebdd3441ddb3faa23784cecd",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-09T21:53:34Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-19b133c832408850a7bcd8929a0885e288fdd25702eb50f1defbeeebe3540f06",
+        "evidenceScope": "verify",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 8
+        }
+      },
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "e77f04308a798c91467ff42c2d3c526c0a9d7e33ebdd3441ddb3faa23784cecd",
+          "readAt": "2026-08-09T22:20:14Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",9]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "e77f04308a798c91467ff42c2d3c526c0a9d7e33ebdd3441ddb3faa23784cecd",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/issue-66-interaction-remediation/applied-spec.md",
+      "sha256": "4ac297a25d077b73724bd9b1a5da92b3720bad0705910527cf6481acc0c485e9",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-08-09T21:58:15Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-c52a64536636be893c070c959cbed1984c7c1482c968fbb806a7ff8f6ad3921c",
+        "evidenceScope": "ship",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 9
+        }
+      },
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "4ac297a25d077b73724bd9b1a5da92b3720bad0705910527cf6481acc0c485e9",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/issue-66-interaction-remediation/tasks.md",
+      "sha256": "7d7f8439c2b432e3fb54d5897a84fc36481a962c93a5b7a22cce9426f22c4292",
+      "producer": "tenon-archive",
+      "recordedAt": "2026-08-09T22:22:09Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-05936f0db238cc7255df419e80f88d55cdac621a1becfa305435e5da50c6ef05",
+        "evidenceScope": "archive",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 10
+        }
+      },
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "7d7f8439c2b432e3fb54d5897a84fc36481a962c93a5b7a22cce9426f22c4292",
+          "readAt": "2026-08-09T22:22:12Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",10]"
+        }
+      ]
+    }
+  ]
+}

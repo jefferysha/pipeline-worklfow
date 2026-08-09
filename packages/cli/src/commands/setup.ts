@@ -64,7 +64,9 @@ export function cmdSetup(
           // 运行时段 dry-run **只提示不真探测**（避免 buildProgram 单测经空 sub 起真 docker 子进程）;
           // 非 dry-run 才经注入 rt 真探测。技能段先同步跑完再接运行时异步段,故非 dry-run 返 Promise。
           printPlanSkeleton(deps, o, host)
-          const skillsCode = cmdSetupSkills(deps, o, env)
+          // Keep the pre-mutation native lifecycle bindings through the complete skills gate;
+          // re-resolving the original env here would reopen the frozen Node TOCTOU window.
+          const skillsCode = cmdSetupSkills(deps, o, lifecycleEnv)
           if (o.dryRun) {
             deps.io.out(
               '[setup] 运行时就绪检查:--dry-run 跳过真探测（不起 docker）——跑 tenon setup runtime ' +
