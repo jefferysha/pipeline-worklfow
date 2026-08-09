@@ -15,7 +15,8 @@
 #   --quiet  成功时零输出（SessionStart hook 用）；失败输出照常（stderr）
 #   --root   指定插件根（默认：本脚本所在 tools/ 的上级）；测试用它指向 sandbox
 #
-# 纯 bash + POSIX 工具（grep/sed/sort/find/stat）——SessionStart 会调本脚本，保持零解释器。
+# Bash 负责资产检查与输出；canonical Skill provenance 校验委托随包 Node CLI，保持与
+# install/doctor/bundle/release 共用同一 verifier（因此本脚本不再声称 zero-interpreter）。
 set -uo pipefail
 
 QUIET=0
@@ -284,45 +285,27 @@ fi
 scan_ext "$HOOKS_JSON"
 scan_ext "$ROOT/templates/manifest.yaml"
 
-# ── 5. registry 完全打包完整性（防漂移）──
-#   每一个 registry token 都必须是 bundled，并且有 plugins skills/ 中的实体。可选外部命令只能
-#   出现在文档说明，绝不能进入这份默认 workflow 安装清单。
-# 只 grep 顶层 token 键（`^  <token>: { … }` 单行流映射），不深解析 yaml。
+# ── 5. canonical provenance verifier（生产 CLI 唯一解析/哈希实现）──
+# 这里不再 grep/解析 YAML，也不计算 Skill hash。所有 canonical registry、source_ref、完整物理集合、
+# tree digest、coordinate 与 legacy-lock 语义由随包的 bundled CLI strict verifier 统一裁决。
 REGISTRY="$ROOT/templates/skill-sources.yaml"
 N_REG=0
-if [ -f "$REGISTRY" ]; then
-  while IFS= read -r line; do
-    case "$line" in
-      '  '[![:space:]#]*'{'*) : ;;   # 顶层 token 行：2 空格缩进 + 非 # 键 + 单行流映射
-      *) continue ;;
-    esac
-    tool=""
-    case "$line" in
-      *"tool: skills-cli"*) tool=skills-cli ;;
-      *"tool: claude-plugin"*) tool=claude-plugin ;;
-      *"tool: npm"*) tool=npm ;;
-      *"tool: bundled"*) tool=bundled ;;
-      *"tool: builtin"*) tool=builtin ;;
-      *) continue ;;
-    esac
-    token=$(printf '%s\n' "$line" | awk '{print $1}')
-    token="${token%:}"
-    [ -n "$token" ] || continue
-    N_REG=$((N_REG + 1))
-    if [ "$tool" != bundled ]; then
-      add_fail "default registry 包含非 bundled token: ${token}（tool=${tool}）" \
-        "templates/skill-sources.yaml" \
-        "把该能力实现为 skills/<name>/SKILL.md 并登记 tool: bundled；默认 pipeline 不允许外部安装依赖"
-      continue
-    fi
-    physical="$(printf '%s\n' "$line" | sed -n 's/.*content_skill:[[:space:]]*\([^,}[:space:]]*\).*/\1/p')"
-    [ -n "$physical" ] || physical="$token"
-    if [ ! -f "$ROOT/skills/$physical/SKILL.md" ]; then
-      add_fail "bundled registry token 缺实体 SKILL.md: ${token} → ${physical}" \
-        "templates/skill-sources.yaml" \
-        "创建 skills/${physical}/SKILL.md，或把 content_skill 改为已有 first-party skill"
-    fi
-  done < "$REGISTRY"
+if [ -d "$ROOT/skills" ]; then
+  N_REG="$(find "$ROOT/skills" -mindepth 1 -maxdepth 1 -type d -print 2>/dev/null | wc -l | tr -d ' ')"
+fi
+PROVENANCE_CLI="$ROOT/packages/cli/dist/tenon.mjs"
+if [ ! -f "$PROVENANCE_CLI" ]; then
+  add_fail "缺失 bundled provenance verifier CLI" \
+    "packages/cli/dist/tenon.mjs" \
+    "运行 npm run bundle 后再执行 verify-skills.sh"
+else
+  provenance_output="$(node "$PROVENANCE_CLI" internal-skill-provenance verify --root "$ROOT" --quiet 2>&1)"
+  provenance_code=$?
+  if [ "$provenance_code" -ne 0 ]; then
+    add_fail "canonical Skill provenance verifier 失败: ${provenance_output}" \
+      "templates/skill-sources.yaml + skills/" \
+      "按上方 category 修复后运行 npm run sync:skill-provenance，再重跑 verify-skills.sh"
+  fi
 fi
 
 # ── 6. OpenSpec Ship/Archive 收据语义 ──

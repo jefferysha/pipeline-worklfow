@@ -66,7 +66,23 @@ async function restoreDirectoryModes(sourceRoot: string, targetRoot: string): Pr
   await visit(targetRoot, '')
 }
 
+async function rejectLegacyProvenanceSource(candidateRoot: string): Promise<void> {
+  const legacyPath = candidatePath(candidateRoot, 'skills-lock.json')
+  try {
+    await lstat(legacyPath)
+    throw new RuntimeFailure(
+      'candidate-invalid',
+      `候选发布包含禁止重新引入的 legacy provenance source [legacy-provenance-source]: ${legacyPath}`,
+    )
+  } catch (error) {
+    if (error instanceof RuntimeFailure) throw error
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw new RuntimeFailure('candidate-invalid', `读取 legacy provenance source 失败: ${legacyPath}（${String(error)}）`)
+  }
+}
+
 export async function copyReleasePayload(candidateRoot: string, payloadRoot: string): Promise<void> {
+  await rejectLegacyProvenanceSource(resolve(candidateRoot))
   for (const entry of PAYLOAD_ENTRIES) {
     const source = candidatePath(candidateRoot, entry)
     try {

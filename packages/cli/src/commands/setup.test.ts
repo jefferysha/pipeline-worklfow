@@ -6,6 +6,8 @@
  * dry-run 零执行/失败容错/engine 附加/禁整装)。候选根仅经 managed-runtime 发布边界进入稳定启动器。
  */
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { cp, readFile, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
@@ -2969,5 +2971,42 @@ describe('⑩ registry 就绪门 —— 坏/缺 registry fail-loud（不空计�
     expect(code).toBe(0)
     expect(deps.outLines.join('\n')).toContain('无待装')
     expect(deps.errLines.join('\n')).not.toContain('registry 未就绪')
+  })
+})
+
+describe('canonical provenance setup gate', () => {
+  test('real bundled setup rejects Skill content drift before producing a plan', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tenon-setup-provenance-'))
+    try {
+      await cp(join(process.cwd(), 'templates'), join(root, 'templates'), { recursive: true })
+      await cp(join(process.cwd(), 'skills'), join(root, 'skills'), { recursive: true })
+      mkdirSync(join(root, 'packages', 'cli', 'dist'), { recursive: true })
+      await cp(
+        join(process.cwd(), 'packages', 'cli', 'dist', 'tenon.mjs'),
+        join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+      )
+      const skillPath = join(root, 'skills', 'tenon', 'SKILL.md')
+      await writeFile(skillPath, `${await readFile(skillPath, 'utf8')}\n# drift\n`, 'utf8')
+
+      let status = 0
+      let output = ''
+      try {
+        execFileSync(process.execPath, [
+          join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+          'setup', 'skills', '--yes',
+        ], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+      } catch (error) {
+        const e = error as { status?: number; stdout?: string; stderr?: string }
+        status = e.status ?? 1
+        output = `${e.stdout ?? ''}${e.stderr ?? ''}`
+      }
+
+      expect(status).not.toBe(0)
+      expect(output).toContain('content-hash-mismatch')
+      expect(output).not.toContain('[setup skills] 技能安装计划')
+      expect(output).not.toContain('无待装技能')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

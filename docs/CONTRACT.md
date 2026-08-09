@@ -377,3 +377,15 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
    在安装/CI 时证实存在（路径存在 + 脚本可执行 + skill 目录含 SKILL.md），缺失即**硬失败并
    逐条列出**。外部 skill 依赖（如 superpowers 系）必须显式清单化声明 + 安装校验，
    **不允许运行时才发现「skill 找不到」**。老内核靠 manifest 选装外部 skills 曾出现此坑，本仓封死。
+
+8. **Canonical Skill provenance（Issue #44）**：`templates/skill-sources.yaml` 是分发
+   Skill 唯一 tracked provenance source，使用 schema `version: 3` 与
+   `hash_algorithm: tree-sha256-v1`。每个 entry 必须声明 `source_kind: bundled`、规范化的
+   `source_ref: skills/<id>`、由 `buildCanonicalManifest()` 得到的 `sha256:` content hash，
+   以及同时绑定 identity/hash 的 `coordinate: tenon:skills/<id>@sha256:<digest>`。install、
+   verify、doctor、release candidate 与 bundled locator 只能消费这一份 registry，并对缺失、
+   额外、重复、漂移、未知 source 和不安全引用 fail-closed；解析/读取错误不得降级为空清单。
+   `skills-lock.json` 已移除，重新出现必须以 `legacy-provenance-source` 失败。作者只可运行
+   `npm run sync:skill-provenance` 原子刷新 registry，随后用
+   `bash tools/verify-skills.sh --quiet --root "$PWD"` 验证；隐藏的
+   `internal-skill-provenance verify|sync --root <path> [--json]` 是共享实现。

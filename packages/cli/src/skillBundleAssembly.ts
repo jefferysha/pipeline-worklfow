@@ -30,11 +30,14 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import { parseSkillSources } from '@tenon/kernel'
 import {
   createFsSkillContentLocator, createRunnerSkillContentLocator, SkillContentNotFoundError,
   type SkillContentLocator,
 } from '@tenon/automation'
+import {
+  createProvenanceAwareBundledLocator,
+  loadSkillAliases,
+} from './skill-provenance-locator.js'
 export {
   createExecutionCoordinatePort,
   type ExecutionCoordinatePortDeps,
@@ -344,29 +347,6 @@ export interface ProductionSkillContentLocatorOptions extends SkillContentRootsO
   readonly runner?: string
 }
 
-function physicalSkillAliases(pluginRoot: string | undefined): ReadonlyMap<string, string> {
-  if (pluginRoot === undefined) return new Map()
-  const path = join(pluginRoot, 'templates', 'skill-sources.yaml')
-  let text: string
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch (error) {
-    if (nodeErrorCode(error) === 'ENOENT') return new Map()
-    throw new SkillCacheAccessError(
-      `读取 skill source registry 失败（${path}，${nodeErrorCode(error)}）：${error instanceof Error ? error.message : String(error)}`,
-    )
-  }
-  const aliases = new Map<string, string>()
-  for (const row of parseSkillSources(text)) {
-    const physical = row.contentSkill
-      ?? ((row.tool === 'skills-cli' || row.tool === 'claude-plugin') ? row.skill : undefined)
-    if (!row.token.includes(':') && physical !== undefined && physical !== row.token) {
-      aliases.set(row.token, physical)
-    }
-  }
-  return aliases
-}
-
 function withLogicalSkillAliases(locator: SkillContentLocator, aliases: ReadonlyMap<string, string>): SkillContentLocator {
   if (aliases.size === 0) return locator
   return {
@@ -387,20 +367,38 @@ function withLogicalSkillAliases(locator: SkillContentLocator, aliases: Readonly
  * 的下一个 alternative；任何 access/schema/registry/ambiguity 错误都原样 fail-loud，不触发回退。
  */
 export function createProductionSkillContentLocator(opts: ProductionSkillContentLocatorOptions): SkillContentLocator {
-  const aliases = physicalSkillAliases(opts.pluginRoot)
+  const aliases = opts.runner === undefined ? new Map<string, string>() : loadSkillAliases(opts.pluginRoot)
   if (opts.runner !== undefined) {
-    return withLogicalSkillAliases(createRunnerSkillContentLocator({
+    const runnerLocator = createRunnerSkillContentLocator({
       runner: opts.runner,
       home: opts.home,
-      bundledRoot: opts.pluginRoot === undefined ? undefined : join(opts.pluginRoot, 'skills'),
+      // Bundled content is wrapped below so runner-specific resolution cannot bypass the
+      // canonical provenance/hash check.
+      bundledRoot: undefined,
       readInstalledPluginsJson: opts.readInstalledPluginsJson,
       readdirDirNames: opts.readdirDirNames,
-    }), aliases)
+    })
+    const bundledLocator = opts.pluginRoot === undefined
+      ? undefined
+      : createProvenanceAwareBundledLocator(opts.pluginRoot)
+    const locator: SkillContentLocator = bundledLocator === undefined
+      ? runnerLocator
+      : {
+          async locate(skillId) {
+            try {
+              return await bundledLocator.locate(skillId)
+            } catch (error) {
+              if (!(error instanceof SkillContentNotFoundError)) throw error
+              return runnerLocator.locate(skillId)
+            }
+          },
+        }
+    return withLogicalSkillAliases(locator, aliases)
   }
   const bundledRoot = opts.pluginRoot === undefined ? undefined : join(opts.pluginRoot, 'skills')
-  const bundledLocator = bundledRoot === undefined
+  const bundledLocator = bundledRoot === undefined || opts.pluginRoot === undefined
     ? undefined
-    : createFsSkillContentLocator([bundledRoot])
+    : createProvenanceAwareBundledLocator(opts.pluginRoot)
   let cachedCodexPluginRoots: Map<string, string[]> | undefined
   let cachedCodexFlatRoots: string[] | undefined
   let cachedCodexFlatLocator: SkillContentLocator | undefined

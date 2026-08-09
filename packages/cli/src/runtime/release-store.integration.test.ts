@@ -1042,6 +1042,39 @@ describe('RuntimeReleaseStore', () => {
     expect((await store.inspect()).selection.activeRelease).toBe(first.release.releaseId)
   }, 30_000)
 
+  it('rejects candidate Skill provenance drift before activation and preserves selection/launchers', async () => {
+    const root = await freshRoot('provenance-drift-reject')
+    const healthy = await candidateCopy(root, '-healthy')
+    const broken = await candidateCopy(root, '-broken')
+    const store = storeFor(root)
+    const paths = pathsFor(root)
+    const first = await store.stageAndActivate(healthy, 'codex')
+    const selectionBefore = (await store.inspect()).selection
+    const launchersBefore = await captureStableLaunchers(paths, root)
+    await writeFile(join(broken, 'skills', 'tenon', 'SKILL.md'), '# candidate drift\n', 'utf8')
+
+    await expect(store.stageAndActivate(broken, 'codex')).rejects.toThrow(/content-hash-mismatch|provenance|插件资产/i)
+
+    expect((await store.inspect()).selection).toEqual(selectionBefore)
+    expect((await captureStableLaunchers(paths, root))).toEqual(launchersBefore)
+    expect((await store.inspect()).selection.activeRelease).toBe(first.release.releaseId)
+  }, 30_000)
+
+  it('rejects a candidate reintroducing skills-lock.json before activation', async () => {
+    const root = await freshRoot('provenance-legacy-reject')
+    const healthy = await candidateCopy(root, '-healthy')
+    const broken = await candidateCopy(root, '-broken')
+    const store = storeFor(root)
+    const paths = pathsFor(root)
+    const first = await store.stageAndActivate(healthy, 'codex')
+    const launchersBefore = await captureStableLaunchers(paths, root)
+    await writeFile(join(broken, 'skills-lock.json'), '{}\n', 'utf8')
+
+    await expect(store.stageAndActivate(broken, 'codex')).rejects.toThrow(/legacy-provenance-source|skills-lock\.json|插件资产/i)
+    expect((await store.inspect()).selection.activeRelease).toBe(first.release.releaseId)
+    expect((await captureStableLaunchers(paths, root))).toEqual(launchersBefore)
+  }, 30_000)
+
   it('rejects a candidate whose manifest version differs from the frozen release target', async () => {
     const root = await freshRoot('version-mismatch')
     const candidate = await candidateCopy(root)

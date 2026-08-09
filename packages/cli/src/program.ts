@@ -41,6 +41,7 @@ import { cmdReview } from './commands/review.js'
 import { cmdInternalSkillGate } from './commands/internalSkillGate.js'
 import { cmdInternalConstraintGate } from './commands/internalConstraintGate.js'
 import { cmdInternalCodexJsonl } from './commands/internalCodexJsonl.js'
+import { cmdInternalSkillProvenance } from './commands/internal-skill-provenance.js'
 import { cmdMigrateWorkflow } from './commands/migrateWorkflow.js'
 import { cmdStateProjection } from './commands/state-projection.js'
 import { cmdTriage, type TriageCommandRuntime } from './commands/triage.js'
@@ -358,6 +359,15 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .description('[内部] 解析 host-owned codex exec --json 事件（usage|transitions）')
     .action(async (mode: string, jsonlPath: string) =>
       bail(await cmdInternalCodexJsonl(deps, mode, jsonlPath)))
+
+  program
+    .command('internal-skill-provenance <mode>', { hidden: true })
+    .description('[内部] canonical Skill provenance verify|sync（供 bundled verifier 使用）')
+    .option('--root <path>', '插件/release root')
+    .option('--json', '输出结构化 findings')
+    .option('--quiet', '成功时不输出')
+    .action(async (mode: string, opts: { root?: string; json?: boolean; quiet?: boolean }) =>
+      bail(await cmdInternalSkillProvenance(deps, mode, opts)))
 
   registerSkillInvocationInternalCommands(program, deps)
 

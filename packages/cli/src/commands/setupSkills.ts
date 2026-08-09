@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { readAutomationJson } from '@tenon/automation'
 import { PREREQ_HINTS } from '@tenon/kernel'
@@ -5,7 +6,7 @@ import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
-import { loadSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
+import { loadCanonicalSkillSources, type SkillSource, type SkillSourcesResult, type SkillTier } from '../skillSources.js'
 import {
   REAL_RELEASED_DASHBOARD_STARTER,
 } from './released-dashboard-starter.js'
@@ -23,7 +24,7 @@ import {
 
 // ── 注入面（测试注入临时 HOME / spy;真实现 = node:fs + os.homedir）──────────────────
 
-import { REAL_SETUP_ENV, type SetupEnv, type SetupOpts } from './setupEnvironment.js'
+import { REAL_SETUP_ENV, resolvePipelineRoot, type SetupEnv, type SetupOpts } from './setupEnvironment.js'
 import {
   buildSkillsPlan, cmdStr, higherTier, renderSkillsPlan, skillInstalled,
   type PlannedCommand, type SkillsPlan,
@@ -104,23 +105,63 @@ function renderSummary(deps: CliDeps, o: ExecOutcome, plan: SkillsPlan): number 
 }
 
 /**
+ * 真实 bundled CLI 的 setup skills 入口必须先验证 exact plugin root 的完整 provenance。
+ * verifier 本身是 async（并复用 automation 的 buildCanonicalManifest），而 setup skills 的
+ * legacy/test seam 是同步命令函数，因此这里通过当前 bundled CLI 的 read-only hidden command
+ * 同步执行 canonical verifier；不重新实现 hash，也不读取 cwd 或任何 lower-tier registry。
+ * 显式注入 sources/loader 的单元测试保留原有 seam，不触发真实仓库 IO。
+ */
+function verifyRealPluginRootBeforePlanning(deps: CliDeps, env: SetupEnv): number {
+  const root = env.pluginRoot() ?? resolvePipelineRoot(env)
+  const self = resolve(env.selfPath())
+  const result = spawnSync(
+    process.execPath,
+    [self, 'internal-skill-provenance', 'verify', '--root', root, '--json'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 },
+  )
+  const stdout = typeof result.stdout === 'string' ? result.stdout.trim() : ''
+  const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : ''
+  const output = stderr !== '' ? stderr : stdout
+  if (result.error !== undefined || result.status !== 0) {
+    deps.io.err(
+      `ERROR: canonical Skill provenance 校验失败（root=${root}）` +
+        (output === '' ? '' : `\n${output}`),
+    )
+    return 1
+  }
+  return 0
+}
+
+/**
  * 技能安装段（Phase 2 · S2）:读 registry → 计划 → dry-run 只打印零副作用 / 非 dry-run 确认(y/N or --yes) → 逐条容错 → 汇总。
- *   sources 缺省真 registry（readSkillSources);测试注入 SkillSource[] 子集。env 缺省真 fs+exec,测试注入 spy。
+ *   sources 缺省真 canonical v3 registry；测试可注入 SkillSource[] 子集或 loader。env 缺省真 fs+exec，测试注入 spy。
  */
 export function cmdSetupSkills(
   deps: CliDeps,
   opts: SetupOpts,
   env: SetupEnv = REAL_SETUP_ENV,
   sources?: SkillSource[],
-  loadSources: () => SkillSourcesResult = loadSkillSources,
+  loadSources: () => SkillSourcesResult = loadCanonicalSkillSources,
 ): number {
+  const selfPath = resolve(env.selfPath())
+  const isBundledCli = /(?:^|[\\/])packages[\\/]cli[\\/]dist[\\/]tenon\.mjs$/u.test(selfPath)
+  const productionCanonicalSetup = sources === undefined
+    && loadSources === loadCanonicalSkillSources
+    && env === REAL_SETUP_ENV
+    && isBundledCli
+  if (productionCanonicalSetup) {
+    const provenanceCode = verifyRealPluginRootBeforePlanning(deps, env)
+    if (provenanceCode !== 0) return provenanceCode
+  }
   let list: SkillSource[]
   if (sources !== undefined) {
     list = sources // 测试注入的显式子集（含合法空 []，为合法空 registry）
   } else {
     // 装机段区分「读失败/解析失败」与「真空 registry」：坏/缺 registry 不能当空计划走
     // 「无待装 exit 0」假成功（什么都没装 → 破 full-install 前提）→ fail-loud 非零退出。
-    const loaded = loadSources()
+    const loaded = productionCanonicalSetup
+      ? loadCanonicalSkillSources(join(env.pluginRoot() ?? resolvePipelineRoot(env), 'templates', 'skill-sources.yaml'))
+      : loadSources()
     if (!loaded.ok) {
       deps.io.err(
         `ERROR: 技能 registry 未就绪（${loaded.error}）——无法生成安装计划，` +

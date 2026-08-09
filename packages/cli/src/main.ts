@@ -298,7 +298,7 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
       return new Promise((resolve) => {
         execFile(
           bash,
-          [join(root, 'tools', 'verify-skills.sh'), '--quiet'],
+          [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root],
           { timeout: 30_000 },
           (err, stdout, stderr) => {
             const errCode = (err as { code?: unknown } | null)?.code
