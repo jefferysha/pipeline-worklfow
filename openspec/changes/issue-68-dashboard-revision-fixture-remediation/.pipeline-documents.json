@@ -1,0 +1,227 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-09T20:53:05Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/proposal.md",
+      "sha256": "df11afd1c7fe050c7c6673d0696638fe120c9b429606d7288a525b1519211504",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-09T21:28:31Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-5b8fb7163ffc7d60dcbe151e48b2b1fd1498befd65a20eecf361ccb620e5ca7c",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "df11afd1c7fe050c7c6673d0696638fe120c9b429606d7288a525b1519211504",
+          "readAt": "2026-08-09T21:28:46Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "df11afd1c7fe050c7c6673d0696638fe120c9b429606d7288a525b1519211504",
+          "readAt": "2026-08-09T21:30:54Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "df11afd1c7fe050c7c6673d0696638fe120c9b429606d7288a525b1519211504",
+          "readAt": "2026-08-09T21:31:30Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/design.md",
+      "sha256": "eb087a13c0ef8a448c861f82ae1b97bd8753681f84511f2bd996202a0c6d43dd",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-09T21:28:35Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-9701ae7ea4c5e36d1cefaf2b83a89dadc4efaffa2ffeda3b24a0caf26b365f88",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "eb087a13c0ef8a448c861f82ae1b97bd8753681f84511f2bd996202a0c6d43dd",
+          "readAt": "2026-08-09T21:28:46Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "eb087a13c0ef8a448c861f82ae1b97bd8753681f84511f2bd996202a0c6d43dd",
+          "readAt": "2026-08-09T21:30:54Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "eb087a13c0ef8a448c861f82ae1b97bd8753681f84511f2bd996202a0c6d43dd",
+          "readAt": "2026-08-09T21:31:30Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-08-10-issue-68-dashboard-revision-fixture-remediation-design.md",
+      "sha256": "0db0ecf433153c4c880fea6e7b5d783437207e4d25c8f518d9895bfcb221dcfd",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-09T21:28:40Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-04160c02c6b8afeb67f52c81cf39ad5b17c292b27514fa361780963786064a63",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "0db0ecf433153c4c880fea6e7b5d783437207e4d25c8f518d9895bfcb221dcfd",
+          "readAt": "2026-08-09T21:30:54Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "0db0ecf433153c4c880fea6e7b5d783437207e4d25c8f518d9895bfcb221dcfd",
+          "readAt": "2026-08-09T21:31:30Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-08-10-issue-68-dashboard-revision-fixture-remediation-explore.md",
+      "sha256": "cc41376fa70b1dea4caeb9461a145df8291582ea99bc46e33f0800f574d53460",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-09T21:28:43Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-baacd14fdcaa0e2600023abe5db8d12039ed6dd54bee9381a494a2572cd74bef",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "cc41376fa70b1dea4caeb9461a145df8291582ea99bc46e33f0800f574d53460",
+          "readAt": "2026-08-09T21:30:54Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "cc41376fa70b1dea4caeb9461a145df8291582ea99bc46e33f0800f574d53460",
+          "readAt": "2026-08-09T21:31:30Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/specs/trustworthy-build-revision/spec.md",
+      "sha256": "d85ea47622518eee8b7b266a079c7e8e1f983e2c58daf8fcfe5c2d89801a42a9",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-09T21:30:39Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-aeabb3fab362fd48a3e2482d773b490c3b561425edda758f4105bc4f4919d711",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "d85ea47622518eee8b7b266a079c7e8e1f983e2c58daf8fcfe5c2d89801a42a9",
+          "readAt": "2026-08-09T21:31:30Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-08-10-issue-68-dashboard-revision-fixture-remediation.md",
+      "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T21:30:41Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-26a39d8f6cbd91086fa2ebc564d47b786a5e9a70a73cd869ee4ad944c459e1f9",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
+          "readAt": "2026-08-09T21:31:30Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-08-10-issue-68-dashboard-revision-fixture-remediation.md",
+      "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T21:30:44Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-c2376e74c02627cb731582bdbfab96dbd98337dd547456c4959a86584e547a22",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
+          "readAt": "2026-08-09T21:31:30Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/tasks.md",
+      "sha256": "e52bd3ad38ad4e5c62a3f0002908abbfd8b777016de3dd129b7f745edf167351",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-09T21:36:29Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-5f69bd3ace2a8b8573aa52e2730ad07ecb9cc5dcc9d072fa57b71db64d289e22",
+        "evidenceScope": "build",
+        "stepVisit": {
+          "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+          "transitionSequence": 3
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "e52bd3ad38ad4e5c62a3f0002908abbfd8b777016de3dd129b7f745edf167351",
+          "readAt": "2026-08-09T21:36:32Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",3]"
+        }
+      ]
+    }
+  ]
+}

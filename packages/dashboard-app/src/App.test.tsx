@@ -9,6 +9,20 @@ import { invalidateMandatoryConfig } from './workbench/mandatoryConfig'
 
 const originalNavigationDescriptor = Object.getOwnPropertyDescriptor(window, 'navigation')
 
+/** Trusted Verify fixture: mirror the server snapshot's canonical readiness projection locally. */
+const TRUSTED_VERIFY_EXECUTION = {
+  readinessByTransition: {
+    verify: {
+      'verify-pass': { ready: true, blockers: [] },
+      'verify-fail': { ready: true, blockers: [] },
+    },
+  },
+}
+
+function trustedVerifyChange(name: string, over: Parameters<typeof makeChange>[2] = {}) {
+  return makeChange(name, 'verify', { ...over, workflowExecution: TRUSTED_VERIFY_EXECUTION })
+}
+
 // T17（计划 2026-07-11-v5-interaction-rebuild）：IA 收敛三视图。旧断言意图迁移表：
 //   · 「一级导航恰 4 项（3+下拉触发）」→「恰 3 项：收件箱/进度/工作台」
 //   · 「点看板→board-view / 点设置→settings-view」→「点进度→progress-view / 点工作台→workbench-view」
@@ -1595,7 +1609,7 @@ describe('App SSE 实时更新（真 EventSource stub → 组件真更新，非 
     // T7 准入修订：verify 卡计入待拍板必须三轨证据齐（缺产出判「等产出」不计）。
     const next = makeSnapshot([
       makeProject('/repo', [
-        makeChange('needs-review', 'verify', {
+        trustedVerifyChange('needs-review', {
           fields: { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' },
         }),
       ]),
@@ -1983,9 +1997,9 @@ describe('App currentRoot 语义（只消费显式选择）', () => {
     // T7 准入修订：证据齐的 gate 卡才计入徽标（判据在 inbox.test.tsx 钉，这里只验 currentRoot 过滤）。
     const evidenceOk = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
     const next = makeSnapshot([
-      makeProject('/repo-a', [makeChange('a-verify', 'verify', { fields: { ...evidenceOk } })]),
+      makeProject('/repo-a', [trustedVerifyChange('a-verify', { fields: { ...evidenceOk } })]),
       makeProject('/repo-b', [
-        makeChange('b-verify', 'verify', { fields: { ...evidenceOk } }),
+        trustedVerifyChange('b-verify', { fields: { ...evidenceOk } }),
         makeChange('b-spec', 'spec', { fields: { design_doc: 'docs/d.md', plan: 'docs/p.md' } }),
       ]),
     ])
