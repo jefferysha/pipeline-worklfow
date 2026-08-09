@@ -3031,7 +3031,7 @@ var require_commander = __commonJS({
 
 // packages/cli/src/main.ts
 import { execFile as execFile6, execFileSync as execFileSync3 } from "node:child_process";
-import { createHash as createHash47 } from "node:crypto";
+import { createHash as createHash46 } from "node:crypto";
 import { accessSync as accessSync6, constants as fsConstants6, readdirSync as readdirSync9, readFileSync as readFileSync30, statSync as statSync11 } from "node:fs";
 import { readFile as readFile43, rm as rm15, stat as stat11, writeFile as writeFile16 } from "node:fs/promises";
 import { homedir as homedir20 } from "node:os";
@@ -16778,7 +16778,6 @@ function evaluateGuard(state, ctx) {
 }
 
 // packages/kernel/dist/workflow/build-revision.js
-import { createHash as createHash15 } from "node:crypto";
 var BUILD_REVISION_TOKEN_PREFIX = "build:v1:";
 var BUILD_REVISION_CODE = "verify-build-revision-untrusted";
 var BUILD_REVISION_REMEDIATION = "return-to-build-and-capture-current-revision";
@@ -16801,7 +16800,7 @@ function makeBuildRevisionBlocker(reason, stateHash, revisionHash) {
   };
 }
 function sha256(domain, value) {
-  return createHash15("sha256").update(`${domain}\0${value}`, "utf8").digest("hex");
+  return sha256Hex(`${domain}\0${value}`);
 }
 function safeRevisionHash(value) {
   let encoded;
@@ -17451,12 +17450,12 @@ function applyStepTransition(state, to, clock) {
 }
 
 // packages/kernel/dist/state/workflow-action-authority-record.js
-import { createHash as createHash17 } from "node:crypto";
+import { createHash as createHash16 } from "node:crypto";
 import { lstat as lstat15, readFile as readFile15 } from "node:fs/promises";
 import { join as join21 } from "node:path";
 
 // packages/kernel/dist/state/workflow-action-authority-snapshot.js
-import { createHash as createHash16 } from "node:crypto";
+import { createHash as createHash15 } from "node:crypto";
 var LAYERS2 = Object.freeze([
   "platform",
   "skill",
@@ -17529,7 +17528,7 @@ function normalizedGrants(value, label) {
   return Object.freeze(WORKFLOW_ACTIONS.filter((action) => present.has(action)));
 }
 function fingerprintFor(core) {
-  return createHash16("sha256").update(JSON.stringify(core)).digest("hex");
+  return createHash15("sha256").update(JSON.stringify(core)).digest("hex");
 }
 function freezeSnapshot(core, fingerprint) {
   const layers = core.layers.map((layer) => Object.freeze({
@@ -17671,7 +17670,7 @@ function errorCode8(error2) {
   return typeof code === "string" ? code : void 0;
 }
 function workflowActionAuthorityRecordPath(changeDir2, iterationId) {
-  const identity2 = createHash17("sha256").update(iterationId).digest("hex");
+  const identity2 = createHash16("sha256").update(iterationId).digest("hex");
   return join21(changeDir2, `${WORKFLOW_ACTION_AUTHORITY_RECORD_PREFIX}${identity2}.json`);
 }
 async function readWorkflowActionAuthorityRecord(changeDir2, iterationId) {
@@ -18583,7 +18582,7 @@ function renderRouteContextText(name2, obj) {
 }
 
 // packages/kernel/dist/state/ownership-manifest.js
-import { createHash as createHash18 } from "node:crypto";
+import { createHash as createHash17 } from "node:crypto";
 var OWNED_MANIFEST = ".pipeline-owned.json";
 var VERSION_FILE = ".pipeline-version";
 var WORKFLOW_DIR = ".pipeline";
@@ -18593,7 +18592,7 @@ var MANAGED_BLOCK_END = "<!-- PIPELINE:END -->";
 var ALL_MANAGED_DIRS = [".pipeline", ".claude", ".codex", ".agents", ".agents/skills"];
 function computeContentHash(content) {
   const normalized2 = content.replace(/\r\n/g, "\n");
-  return createHash18("sha256").update(normalized2, "utf8").digest("hex");
+  return createHash17("sha256").update(normalized2, "utf8").digest("hex");
 }
 function normalizeOwnedKey(rel) {
   if (!rel)
@@ -19668,14 +19667,14 @@ function eventEdge(event) {
 }
 
 // packages/kernel/dist/machine-state-scope.js
-import { createHash as createHash19 } from "node:crypto";
+import { createHash as createHash18 } from "node:crypto";
 import { resolve as resolve8 } from "node:path";
 var STATE_SCOPE_NAMESPACE = "tenon:machine-state-scope:v1\0";
 function canonicalMachineStateRoot(stateRoot) {
   return resolve8(stateRoot);
 }
 function machineStateScopeId(stateRoot) {
-  const digest10 = createHash19("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
+  const digest10 = createHash18("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
   return `sha256-v1-${digest10}`;
 }
 
@@ -19776,7 +19775,7 @@ function resolveProductPaths(input = {}) {
 }
 
 // packages/kernel/dist/workspace/fingerprint.js
-import { createHash as createHash20 } from "node:crypto";
+import { createHash as createHash19 } from "node:crypto";
 import { lstat as lstat16, readdir as readdir5, readFile as readFile18, readlink } from "node:fs/promises";
 import { join as join23 } from "node:path";
 var WORKSPACE_BASELINE_PREFIX = "workspace:sha256:";
@@ -19871,7 +19870,7 @@ async function fingerprintWorkspace(root) {
   const rootStat = await lstat16(root);
   if (!rootStat.isDirectory())
     throw new Error(`workspace root is not a directory: ${root}`);
-  const hash = createHash20("sha256");
+  const hash = createHash19("sha256");
   writeRecord(hash, "D", ".", modeOf(rootStat));
   const names = sortNames(await readdir5(root));
   for (const name2 of names)
@@ -20802,7 +20801,7 @@ function serializeTrackRegistry(config) {
 }
 
 // packages/kernel/dist/tracks/registry.js
-import { createHash as createHash21 } from "node:crypto";
+import { createHash as createHash20 } from "node:crypto";
 import { readFileSync as readFileSync8 } from "node:fs";
 import { mkdir as mkdir12, readFile as readFile19 } from "node:fs/promises";
 import path8 from "node:path";
@@ -20813,7 +20812,7 @@ function trackRegistryPath(repoRoot) {
   return path8.join(repoRoot, TENON_DIR, TRACKS_FILE);
 }
 function registryRevision(config) {
-  return createHash21("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
+  return createHash20("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
 }
 function invariant(v, what) {
   if (v === void 0)
@@ -24660,7 +24659,7 @@ function appendLoopToYamlText(before, entry) {
 }
 
 // packages/kernel/dist/loops/governance.js
-import { createHash as createHash22, randomBytes } from "node:crypto";
+import { createHash as createHash21, randomBytes } from "node:crypto";
 import { mkdir as mkdir14, open as open5, readFile as readFile20, rename as rename5 } from "node:fs/promises";
 import { join as join29, resolve as resolve14 } from "node:path";
 var LOOPS_REL = [".pipeline", "loops.yaml"];
@@ -24715,7 +24714,7 @@ async function readRegistrySnapshot(repoRoot) {
     }
     throw new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${e.code ?? "IO"}\uFF09\uFF1A${e instanceof Error ? e.message : String(e)}`);
   }
-  const epoch = createHash22("sha256").update(text4, "utf8").digest("hex");
+  const epoch = createHash21("sha256").update(text4, "utf8").digest("hex");
   const { data, errors } = loadRegistry(repoRoot, { readText: () => text4 });
   return { text: text4, epoch, registry: data, errors };
 }
@@ -24797,7 +24796,7 @@ async function withLoopMergePermit(repoRoot, loopId, prepared, fn, verifyBase) {
 function registryContentEpoch(registry) {
   if (registry === null)
     return ABSENT_REGISTRY_EPOCH;
-  return createHash22("sha256").update(JSON.stringify(registry), "utf8").digest("hex");
+  return createHash21("sha256").update(JSON.stringify(registry), "utf8").digest("hex");
 }
 function loopMaterialUnchanged(a, b) {
   return a.status === b.status && a.runner === b.runner && a.change_prefix === b.change_prefix && (a.skill_bundle_id ?? null) === (b.skill_bundle_id ?? null) && a.budget.max_runs_per_day === b.budget.max_runs_per_day && a.budget.max_in_flight === b.budget.max_in_flight && a.budget.max_tokens_per_day === b.budget.max_tokens_per_day && a.budget.tokens_per_run === b.budget.tokens_per_run && a.budget.on_exceed === b.budget.on_exceed;
@@ -25666,7 +25665,7 @@ function buildReconciliationPlan(input) {
 }
 
 // packages/kernel/dist/loops/reconciliation-store.js
-import { createHash as createHash23, randomBytes as randomBytes2 } from "node:crypto";
+import { createHash as createHash22, randomBytes as randomBytes2 } from "node:crypto";
 import { constants as constants3 } from "node:fs";
 import { lstat as lstat18, open as open6, rename as rename6, unlink as unlink5 } from "node:fs/promises";
 import { join as join30 } from "node:path";
@@ -25822,8 +25821,8 @@ async function publishLoopDoc(repoRoot, bytes) {
     if (readback === null) {
       warnings.push({ stage: "readback", message: "LOOP.md was absent after atomic publish" });
     } else if (!bytesEqual2(readback, bytes)) {
-      const expected = createHash23("sha256").update(bytes).digest("hex");
-      const actual = createHash23("sha256").update(readback).digest("hex");
+      const expected = createHash22("sha256").update(bytes).digest("hex");
+      const actual = createHash22("sha256").update(readback).digest("hex");
       warnings.push({ stage: "readback", message: `LOOP.md readback mismatch (${expected} != ${actual})` });
     }
   } catch (error2) {
@@ -26120,14 +26119,14 @@ function renderHandoffSummary(doc, label, locale = "zh-CN") {
 }
 
 // packages/kernel/dist/compress/attempt-context.js
-import { createHash as createHash24 } from "node:crypto";
+import { createHash as createHash23 } from "node:crypto";
 var FAILURE_RESULTS = /* @__PURE__ */ new Set(["failed", "retry-queued", "conflict"]);
 function normalizeAttemptError(input) {
   const source = input instanceof Error ? input.message : typeof input === "string" ? input : String(input);
   const message2 = source.replace(/^\s*(?:(?:[A-Za-z][A-Za-z0-9_.]*Error|Error):\s*)/i, "").replace(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\b/g, "<timestamp>").replace(/\breq_[A-Za-z0-9_-]+\b/g, "<request-id>").replace(/(?:\/private)?\/tmp\/[^/\s]+/g, "<tmp>").replace(/:(\d+)(?::\d+)?\b/g, ":<line>").replace(/\s+/g, " ").trim();
   return {
     message: message2,
-    fingerprint: createHash24("sha256").update(message2).digest("hex")
+    fingerprint: createHash23("sha256").update(message2).digest("hex")
   };
 }
 function failureFingerprint(record7) {
@@ -26228,7 +26227,7 @@ function buildAttemptContext(records, options = {}) {
 }
 
 // packages/kernel/dist/compress/context-bundle.js
-import { createHash as createHash25 } from "node:crypto";
+import { createHash as createHash24 } from "node:crypto";
 import { isAbsolute as isAbsolute7 } from "node:path";
 var ContextBundleError = class extends Error {
   constructor(message2) {
@@ -26251,7 +26250,7 @@ function unsignedPayload(input) {
   return input;
 }
 function contextBundleAggregateDigest(bundle) {
-  return `sha256:${createHash25("sha256").update(JSON.stringify(unsignedPayload(bundle)), "utf8").digest("hex")}`;
+  return `sha256:${createHash24("sha256").update(JSON.stringify(unsignedPayload(bundle)), "utf8").digest("hex")}`;
 }
 function compileContextBundle(input) {
   if (!SAFE_ID.test(input.change))
@@ -26554,7 +26553,7 @@ async function compileLedgerContextBundleWithPorts(input) {
 }
 
 // packages/kernel/dist/compress/ledger-context-bundle-node-adapter.js
-import { createHash as createHash26 } from "node:crypto";
+import { createHash as createHash25 } from "node:crypto";
 import { isAbsolute as isAbsolute10, join as join32, posix as posix2 } from "node:path";
 
 // packages/kernel/dist/compress/handoff.js
@@ -26708,7 +26707,7 @@ function sameLedgerContextBundleSourceAnchor(left, right) {
 var nodeLedgerContextBundlePrimitives = {
   isAbsoluteRoot: isAbsolute10,
   ledgerPath: (change) => posix2.join("openspec", "changes", change, ".pipeline-documents.json"),
-  sha256: (text4) => createHash26("sha256").update(text4, "utf8").digest("hex"),
+  sha256: (text4) => createHash25("sha256").update(text4, "utf8").digest("hex"),
   utf8ByteLength: (text4) => Buffer.byteLength(text4, "utf8")
 };
 async function compileLedgerContextBundle(input) {
@@ -28447,7 +28446,7 @@ function createCodexTriageProvider(options = {}) {
 }
 
 // packages/automation/dist/triage/connectors/git-commits.js
-import { createHash as createHash27 } from "node:crypto";
+import { createHash as createHash26 } from "node:crypto";
 
 // packages/automation/dist/runner/exec.js
 import { execFile as execFile2, spawn as spawn2 } from "node:child_process";
@@ -28537,7 +28536,7 @@ var CursorStaleError = class extends Error {
 // packages/automation/dist/triage/connectors/git-commits.js
 var SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 var SAFE_SOURCE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
-var sha2562 = (canonical) => createHash27("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
+var sha2562 = (canonical) => createHash26("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
 var cursorDigest = (sourceId, cursor) => sha2562([
   2,
   "git-commits-cursor",
@@ -28827,7 +28826,7 @@ function createGitCommitsConnector(options) {
 }
 
 // packages/automation/dist/triage/connectors/loop-run-terminals.js
-import { createHash as createHash28 } from "node:crypto";
+import { createHash as createHash27 } from "node:crypto";
 var LoopRunTerminalsSourceError = class extends Error {
   reason;
   _tag = "LoopRunTerminalsSourceError";
@@ -28843,7 +28842,7 @@ var OBSERVED_RUN_RESULTS = /* @__PURE__ */ new Set([
   "conflict",
   "retry-queued"
 ]);
-var sha2563 = (canonical) => createHash28("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
+var sha2563 = (canonical) => createHash27("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
 var assertPositiveLimit2 = (value, name2) => {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${name2} must be a positive safe integer`);
@@ -28956,7 +28955,7 @@ function createLoopRunTerminalsConnector(options) {
 }
 
 // packages/automation/dist/triage/workflow-run-materializer.js
-import { createHash as createHash29 } from "node:crypto";
+import { createHash as createHash28 } from "node:crypto";
 var WorkflowRunMaterializationError = class extends Error {
   issues;
   _tag = "WorkflowRunMaterializationError";
@@ -29053,7 +29052,7 @@ function idempotencyKeyFor(source, actionIdentity) {
     source.observationId,
     actionIdentity
   ]);
-  const digest10 = createHash29("sha256").update(canonical, "utf8").digest("hex");
+  const digest10 = createHash28("sha256").update(canonical, "utf8").digest("hex");
   return `triage-workflow-run:v1:${digest10}`;
 }
 function sameCreateRequest(left, right) {
@@ -29200,7 +29199,7 @@ function createWorkflowRunMaterializer(deps) {
 }
 
 // packages/automation/dist/triage/workflow-run-create-repository.js
-import { createHash as createHash30 } from "node:crypto";
+import { createHash as createHash29 } from "node:crypto";
 import { join as join34, resolve as resolve15 } from "node:path";
 var TOP_LEVEL_KEYS2 = /* @__PURE__ */ new Set([
   "schemaVersion",
@@ -29354,7 +29353,7 @@ function runIdFor(request) {
     request.workflowId,
     request.initialStep
   ]);
-  return `triage-run-v1-${createHash30("sha256").update(canonical, "utf8").digest("hex")}`;
+  return `triage-run-v1-${createHash29("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 function errnoCode3(error2) {
   if (typeof error2 !== "object" || error2 === null || !("code" in error2))
@@ -29484,7 +29483,7 @@ function createWorkflowRunCreateIfAbsentRepository(deps) {
 }
 
 // packages/automation/dist/triage/checkpoint-store.js
-import { createHash as createHash31 } from "node:crypto";
+import { createHash as createHash30 } from "node:crypto";
 import { mkdir as mkdir15, readFile as readFile22 } from "node:fs/promises";
 import { dirname as dirname7, join as join35, resolve as resolve16 } from "node:path";
 var TriageCheckpointStoreError = class extends Error {
@@ -29537,7 +29536,7 @@ function checkpointForKey(input, key) {
   }
   return validated.value;
 }
-var keyDigest = (key) => createHash31("sha256").update(JSON.stringify([1, key.sourceId, key.actionKind]), "utf8").digest("hex");
+var keyDigest = (key) => createHash30("sha256").update(JSON.stringify([1, key.sourceId, key.actionKind]), "utf8").digest("hex");
 function slotDirectory(repoRoot, key) {
   return join35(resolve16(repoRoot), ".pipeline", "triage", "checkpoints", keyDigest(key));
 }
@@ -29668,7 +29667,7 @@ function createTriageCheckpointStore(options) {
 }
 
 // packages/automation/dist/triage/orchestrator-support.js
-import { createHash as createHash32 } from "node:crypto";
+import { createHash as createHash31 } from "node:crypto";
 var frozenEmptyMaterializations = Object.freeze([]);
 function emptyProgress(retryable = false) {
   return Object.freeze({
@@ -29767,7 +29766,7 @@ function assertNonNegativeSafeInteger(value, name2) {
   }
 }
 function deriveStableTriageCandidateIdentity(input) {
-  const digest10 = createHash32("sha256").update(JSON.stringify([
+  const digest10 = createHash31("sha256").update(JSON.stringify([
     1,
     "triage-workflow-run",
     input.observation.sourceId,
@@ -30399,14 +30398,14 @@ var classifyFailure = (err) => {
 };
 
 // packages/automation/dist/verifier/verifier.js
-import { createHash as createHash33 } from "node:crypto";
+import { createHash as createHash32 } from "node:crypto";
 function automationPolicySubjectFor(policy2) {
   if (policy2 === void 0)
     return void 0;
   return Object.freeze({
     policy_id: policy2.policy_id,
     policy_version: policy2.policy_version,
-    goal_sha256: createHash33("sha256").update(policy2.goal).digest("hex")
+    goal_sha256: createHash32("sha256").update(policy2.goal).digest("hex")
   });
 }
 function freezeVerifierInput(input) {
@@ -32817,7 +32816,7 @@ function createLoopAdmission(deps) {
 }
 
 // packages/automation/dist/skills/snapshot-manifest.js
-import { createHash as createHash34 } from "node:crypto";
+import { createHash as createHash33 } from "node:crypto";
 import { constants as constants4 } from "node:fs";
 import { chmod, lstat as lstat20, mkdir as mkdir16, open as open7, readdir as readdir7, realpath as realpath9, stat as stat6, writeFile as writeFile8 } from "node:fs/promises";
 import { dirname as dirname8, join as join37, relative as relative8, sep as sep9 } from "node:path";
@@ -32849,7 +32848,7 @@ var SKILL_SNAPSHOT_COMMIT_MARKER = ".snapshot-committed";
 var PUBLISH_LOCK_RETRY_MS = 5;
 var PUBLISH_LOCK_TIMEOUT_MS = 5e3;
 function sha256Hex2(data) {
-  return createHash34("sha256").update(data).digest("hex");
+  return createHash33("sha256").update(data).digest("hex");
 }
 var EMPTY_FILE_SHA256 = sha256Hex2(Buffer.alloc(0));
 function byRelativePath(a, b) {
@@ -34761,14 +34760,14 @@ var runChangeInSandbox = async (ports, cfg2, signal) => {
 };
 
 // packages/automation/dist/verifier/git-revision-verifier.js
-import { createHash as createHash35 } from "node:crypto";
+import { createHash as createHash34 } from "node:crypto";
 var GIT_REVISION_VERIFIER_ISSUER_IDENTITY = Object.freeze({
   kind: "host-verifier",
   verifier: "pipeline-git-integrity",
   version: "1"
 });
 var defaultNewId2 = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-var sha2564 = (value) => createHash35("sha256").update(value).digest("hex");
+var sha2564 = (value) => createHash34("sha256").update(value).digest("hex");
 var errorText = (error2) => {
   if (error2 instanceof Error)
     return error2.message;
@@ -34892,10 +34891,10 @@ function readAutomationJson(root, fs = { readFileSync: readFileSync12 }) {
 }
 
 // packages/kernel/dist/skill-invocation/document-producer.js
-import { createHash as createHash36 } from "node:crypto";
+import { createHash as createHash35 } from "node:crypto";
 import { join as join42 } from "node:path";
 function digest8(...values) {
-  const hash = createHash36("sha256");
+  const hash = createHash35("sha256");
   for (const value of values)
     hash.update(value).update("\0");
   return hash.digest("hex");
@@ -38552,7 +38551,7 @@ async function stopHandles(handles) {
 }
 
 // packages/tap/dist/certs.js
-import { X509Certificate as X509Certificate2, createPublicKey, createPrivateKey as createPrivateKey2, createHash as createHash37, generateKeyPairSync, randomBytes as randomBytes5, sign as cryptoSign } from "node:crypto";
+import { X509Certificate as X509Certificate2, createPublicKey, createPrivateKey as createPrivateKey2, createHash as createHash36, generateKeyPairSync, randomBytes as randomBytes5, sign as cryptoSign } from "node:crypto";
 
 // packages/tap/dist/certificate-store.js
 import { X509Certificate, createPrivateKey, randomBytes as randomBytes4 } from "node:crypto";
@@ -38845,7 +38844,7 @@ function spkiPublicKeyBits(spkiDer) {
   return spkiDer.subarray(bits.contentStart + 1, bits.contentEnd);
 }
 function subjectKeyIdentifier(spkiDer) {
-  return createHash37("sha1").update(spkiPublicKeyBits(spkiDer)).digest();
+  return createHash36("sha1").update(spkiPublicKeyBits(spkiDer)).digest();
 }
 function extractSubjectDn(certDer) {
   const cert = readTlv(certDer, 0);
@@ -40502,7 +40501,7 @@ function launchDetachedDashboardProcess(serverBundle, env, nodeExecutable = proc
 }
 
 // packages/cli/src/commands/trusted-executable.ts
-import { createHash as createHash38 } from "node:crypto";
+import { createHash as createHash37 } from "node:crypto";
 import { accessSync as accessSync3, constants as fsConstants3, lstatSync as lstatSync3, readFileSync as readFileSync19, realpathSync as realpathSync3 } from "node:fs";
 import { dirname as dirname12, isAbsolute as isAbsolute12, parse } from "node:path";
 function pathProof(value) {
@@ -40601,7 +40600,7 @@ function freezeTrustedExecutable(requestedPath, platform = process.platform) {
       requestedPath: executable,
       executable: pathProof(executableIdentity),
       parents: parents.map(pathProof),
-      sha256: createHash38("sha256").update(readFileSync19(executable)).digest("hex")
+      sha256: createHash37("sha256").update(readFileSync19(executable)).digest("hex")
     },
     verify,
     assert: () => {
@@ -41585,7 +41584,7 @@ import { rm as rm7 } from "node:fs/promises";
 import { join as join62 } from "node:path";
 
 // packages/cli/src/runtime/release-store-codecs.ts
-import { createHash as createHash39 } from "node:crypto";
+import { createHash as createHash38 } from "node:crypto";
 import { appendFile as appendFile3, readFile as readFile25 } from "node:fs/promises";
 import { join as join61 } from "node:path";
 var EMPTY_SELECTION = {
@@ -41648,7 +41647,7 @@ function identityFrame(hash, value) {
   hash.update(bytes);
 }
 function runtimeReleaseIdV2(payloadDigest, source, stableTarget) {
-  const hash = createHash39("sha256");
+  const hash = createHash38("sha256");
   for (const field2 of [
     "tenon-runtime-release-v2",
     payloadDigest,
@@ -41838,7 +41837,7 @@ async function compensateActivation(input) {
 }
 
 // packages/cli/src/runtime/release-payload.ts
-import { createHash as createHash40 } from "node:crypto";
+import { createHash as createHash39 } from "node:crypto";
 import { execFile as execFile5 } from "node:child_process";
 import { chmod as chmod3, copyFile, lstat as lstat25, mkdir as mkdir22, mkdtemp as mkdtemp2, readFile as readFile26, readdir as readdir10, rm as rm8 } from "node:fs/promises";
 import { tmpdir as tmpdir4 } from "node:os";
@@ -41934,7 +41933,7 @@ async function copyReleasePayload(candidateRoot, payloadRoot) {
   await restoreDirectoryModes(resolve21(candidateRoot), resolve21(payloadRoot));
 }
 async function hashLegacyReleasePayload(root) {
-  const hash = createHash40("sha256");
+  const hash = createHash39("sha256");
   async function visit(dir, rel) {
     const entries = await readdir10(dir, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
@@ -41966,7 +41965,7 @@ function compareUtf8Names(left, right) {
   return Buffer.compare(Buffer.from(left.name, "utf8"), Buffer.from(right.name, "utf8"));
 }
 async function hashReleasePayload(root) {
-  const hash = createHash40("sha256");
+  const hash = createHash39("sha256");
   hashFrame(hash, "tenon-release-payload-v2");
   async function visit(dir, rel) {
     const entries = await readdir10(dir, { withFileTypes: true });
@@ -44640,7 +44639,7 @@ import { lstat as lstat32 } from "node:fs/promises";
 import { relative as relative16, resolve as resolve30 } from "node:path";
 
 // packages/cli/src/codexSkillReceipt.ts
-import { createHash as createHash41 } from "node:crypto";
+import { createHash as createHash40 } from "node:crypto";
 import { appendFile as appendFile4, lstat as lstat30, mkdir as mkdir26, readdir as readdir12, readFile as readFile33 } from "node:fs/promises";
 import { homedir as homedir11 } from "node:os";
 import { basename as basename9, isAbsolute as isAbsolute21, join as join75, relative as relative14, resolve as resolve27, sep as sep16 } from "node:path";
@@ -45976,7 +45975,7 @@ async function reconcileCodexSkillEvidence(input) {
   }
   const recorded = /* @__PURE__ */ new Set();
   for (const skillId of confirmed) {
-    const receiptHash = createHash41("sha256").update(changeName).update("\0").update(skillId).update("\0").update(input.recordedAt);
+    const receiptHash = createHash40("sha256").update(changeName).update("\0").update(skillId).update("\0").update(input.recordedAt);
     if (input.stepVisit !== void 0) {
       receiptHash.update("\0").update(input.stepVisit.runId).update("\0").update(String(input.stepVisit.transitionSequence));
     }
@@ -47172,13 +47171,13 @@ import { readdirSync as readdirSync4, readFileSync as readFileSync21, statSync a
 import { isAbsolute as isAbsolute23, join as join77 } from "node:path";
 
 // packages/cli/src/executionCoordinatePort.ts
-import { createHash as createHash42 } from "node:crypto";
+import { createHash as createHash41 } from "node:crypto";
 function scalarField3(state, field2) {
   const value = state.fields[field2];
   return Array.isArray(value) ? value.join(",") : value ?? "";
 }
 function sha256Hex3(value) {
-  return createHash42("sha256").update(value).digest("hex");
+  return createHash41("sha256").update(value).digest("hex");
 }
 function emptyDeclaredStep(stepId) {
   return {
@@ -47585,7 +47584,7 @@ function createProductionSkillContentLocator(opts) {
 }
 
 // packages/cli/src/commands/afk-executor-contract.ts
-import { createHash as createHash43 } from "node:crypto";
+import { createHash as createHash42 } from "node:crypto";
 import { readFile as readFile35, realpath as realpath15 } from "node:fs/promises";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var SHA256_HEX = /^[0-9a-f]{64}$/;
@@ -47633,7 +47632,7 @@ async function resolveBundledCliDistSha256(moduleUrl = import.meta.url) {
     throw new BundledCliDigestUnavailableError(resolved);
   }
   try {
-    return createHash43("sha256").update(await readFile35(resolved)).digest("hex");
+    return createHash42("sha256").update(await readFile35(resolved)).digest("hex");
   } catch (error2) {
     throw new BundledCliDigestUnavailableError(resolved, `\u8BFB\u53D6 bundle \u5931\u8D25\uFF1A${messageOf(error2)}`);
   }
@@ -50868,7 +50867,7 @@ async function cmdChannel(deps, sub, args, host = nodeChannelHost(deps.cwd)) {
 
 // packages/cli/src/commands/gen-router.ts
 import { spawnSync as spawnSync3 } from "node:child_process";
-import { createHash as createHash44 } from "node:crypto";
+import { createHash as createHash43 } from "node:crypto";
 import { existsSync as existsSync9, readFileSync as readFileSync23, realpathSync as realpathSync5 } from "node:fs";
 import { join as join81 } from "node:path";
 function assertTargetGrepPatterns(projection) {
@@ -50912,7 +50911,7 @@ async function cmdGenRouterSh(deps, manifestPath2, repoRoot) {
     assertTargetGrepPatterns(projection);
     const cache2 = encodeRouterDataCache({
       projectRoot: canonicalRoot,
-      manifestSha256: createHash44("sha256").update(manifestBytes).digest("hex"),
+      manifestSha256: createHash43("sha256").update(manifestBytes).digest("hex"),
       registryRevision: effectiveRouterRevision(registry.revision, projection),
       contractRevision: routerContractRevision(manifest),
       tracksPresent: existsSync9(join81(canonicalRoot, ".pipeline", "tracks.yaml")),
@@ -53075,7 +53074,7 @@ import { randomUUID as randomUUID14 } from "node:crypto";
 import { dirname as dirname20, isAbsolute as isAbsolute27, relative as relative19, resolve as resolve35, sep as sep19 } from "node:path";
 
 // packages/cli/src/commands/specScaffoldTree.ts
-import { createHash as createHash45 } from "node:crypto";
+import { createHash as createHash44 } from "node:crypto";
 import { copyFile as copyFile2, lstat as lstat34, mkdir as mkdir27, readFile as readFile36, readdir as readdir13 } from "node:fs/promises";
 import { relative as relative17, resolve as resolve33 } from "node:path";
 async function copyOrdinaryTree(source, target) {
@@ -53117,7 +53116,7 @@ async function syncUnmanagedOrdinaryTree(source, target, managedPaths) {
   await walk(source, target);
 }
 async function ordinaryTreeDigest(root) {
-  const hash = createHash45("sha256");
+  const hash = createHash44("sha256");
   const walk = async (directory, prefix) => {
     const entries = (await readdir13(directory, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
@@ -53150,7 +53149,7 @@ async function ordinaryDirectoryIdentity(target) {
   return `${info.dev}:${info.ino}`;
 }
 function ordinaryPathKey(target) {
-  return createHash45("sha256").update(target).digest("hex").slice(0, 16);
+  return createHash44("sha256").update(target).digest("hex").slice(0, 16);
 }
 
 // packages/cli/src/commands/specScaffoldRecovery.ts
@@ -60169,7 +60168,7 @@ function registerWorkflowCommands(program2, deps) {
 }
 
 // packages/cli/src/commands/hostInteraction.ts
-import { createHash as createHash46, createHmac } from "node:crypto";
+import { createHash as createHash45, createHmac } from "node:crypto";
 import { closeSync as closeSync7, constants as constants10, fstatSync as fstatSync2, openSync as openSync7, readFileSync as readFileSync28 } from "node:fs";
 var MAX_PAYLOAD_BYTES = 128 * 1024;
 var MAX_TEXT_BYTES = 8 * 1024;
@@ -60181,7 +60180,7 @@ function text3(value, field2) {
   return value;
 }
 function digest9(value) {
-  return createHash46("sha256").update(value).digest("hex");
+  return createHash45("sha256").update(value).digest("hex");
 }
 function stableId(prefix, value) {
   return `${prefix}-${digest9(value).slice(0, 32)}`;
@@ -60215,7 +60214,7 @@ function decodeHostInteractionPostToolUse(raw, recordedAt) {
   const hasHostIdentity = typeof decoded.session_id === "string" && typeof decoded.turn_id === "string" && typeof decoded.tool_use_id === "string" && decoded.session_id !== "" && decoded.turn_id !== "" && decoded.tool_use_id !== "";
   if (!hasHostIdentity) throw new Error("host interaction lacks exact session, turn, and tool identity");
   const sessionId = decoded.session_id;
-  const hostIdentity = createHash46("sha256").update(`${sessionId}\0${String(decoded.turn_id)}\0${String(decoded.tool_use_id)}`).digest();
+  const hostIdentity = createHash45("sha256").update(`${sessionId}\0${String(decoded.turn_id)}\0${String(decoded.tool_use_id)}`).digest();
   const questions = decoded.tool_input.questions.map((candidate, index) => {
     if (!isRecord22(candidate)) throw new Error(`question ${index + 1} must be an object`);
     const header = text3(candidate.header, `question ${index + 1}.header`);
@@ -60945,7 +60944,7 @@ function scanSkillDigests(skillsRoot) {
     try {
       const skillPath = join103(skillsRoot, name2, "SKILL.md");
       if (!statSync11(skillPath).isFile()) continue;
-      digests.set(name2, createHash47("sha256").update(readFileSync30(skillPath)).digest("hex"));
+      digests.set(name2, createHash46("sha256").update(readFileSync30(skillPath)).digest("hex"));
     } catch {
     }
   }

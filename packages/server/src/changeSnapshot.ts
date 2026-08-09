@@ -341,8 +341,7 @@ export async function readChangeSnapshot(
         throw error
       }
     })
-    const gitHeadSha = deps.gitHeadSha
-    const workspaceFingerprint = deps.workspaceFingerprint
+    const { gitHeadSha, workspaceFingerprint } = deps
     const capabilityDeps: WorkflowSnapshotCapabilityDeps = {
       ...(deps.fileExists === undefined ? {} : { fileExists: deps.fileExists }),
       ...(gitHeadSha === undefined ? {} : { gitHeadSha: () => gitHeadSha(rootPath) }),

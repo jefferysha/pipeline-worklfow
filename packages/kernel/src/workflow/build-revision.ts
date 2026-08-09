@@ -6,7 +6,7 @@
  * compare a raw Git SHA or workspace baseline directly: those values do not bind the project,
  * worktree, or the Build transition that produced them.
  */
-import { createHash } from 'node:crypto'
+import { sha256Hex } from '../sha256.js'
 
 export const BUILD_REVISION_TOKEN_PREFIX = 'build:v1:'
 export const BUILD_REVISION_CODE = 'verify-build-revision-untrusted' as const
@@ -100,7 +100,7 @@ export function makeBuildRevisionBlocker(
 }
 
 function sha256(domain: string, value: string): string {
-  return createHash('sha256').update(`${domain}\0${value}`, 'utf8').digest('hex')
+  return sha256Hex(`${domain}\0${value}`)
 }
 
 /** Hash arbitrary state input without exposing it in API/log projections. */
