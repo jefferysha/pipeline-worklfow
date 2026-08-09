@@ -3,6 +3,12 @@ name: Public release acceptance
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published stable release tag to accept
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -15,29 +21,38 @@ jobs:
   public-install-update:
     if: >-
       github.event.repository.default_branch == 'main' &&
-      github.event.release.draft == false &&
-      github.event.release.prerelease == false
+      (
+        (github.event_name == 'release' && github.event.release.draft == false && github.event.release.prerelease == false) ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Validate immutable stable release event
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_TARGET: ${{ github.event.release.target_commitish }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           set -euo pipefail
           [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          release="$(gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease,targetCommitish)"
+          [ "$(jq -r '.tagName' <<<"$release")" = "$RELEASE_TAG" ]
+          RELEASE_DRAFT="$(jq -r '.isDraft' <<<"$release")"
+          RELEASE_PRERELEASE="$(jq -r '.isPrerelease' <<<"$release")"
+          RELEASE_TARGET="$(jq -r '.targetCommitish' <<<"$release")"
+          [ "$RELEASE_DRAFT" = false ]
+          [ "$RELEASE_PRERELEASE" = false ]
           [ "$RELEASE_TARGET" = main ]
           [ "$WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release-public-acceptance.yml@refs/heads/main" ]
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
           persist-credentials: false
       - name: Prove checkout is the published immutable tag
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
         run: |
           set -euo pipefail
           [ "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" ]
@@ -53,5 +68,5 @@ jobs:
           echo "$trusted_bin" >> "$GITHUB_PATH"
       - name: Public new-user install, repeat install, update and Dashboard proof
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
         run: node tools/clean-codex-install-acceptance.mjs --mode public --public-ref "$RELEASE_TAG"

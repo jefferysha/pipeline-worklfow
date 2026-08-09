@@ -249,3 +249,22 @@ jobs:
       payload_artifact_name: ${{ needs.create-tag.outputs.payload_artifact_name }}
       payload_artifact_digest: ${{ needs.create-tag.outputs.payload_artifact_digest }}
       payload_manifest_sha256: ${{ needs.create-tag.outputs.payload_manifest_sha256 }}
+
+  dispatch-public-acceptance:
+    needs: [create-tag, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch public acceptance through an explicit non-recursive event
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.create-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh workflow run release-public-acceptance.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f tag="$RELEASE_TAG"
