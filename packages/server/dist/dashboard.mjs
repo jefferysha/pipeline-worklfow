@@ -9672,6 +9672,15 @@ function parseWorkflow(content) {
   };
 }
 
+// packages/kernel/dist/workflow/identifier.js
+var WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u;
+function isValidWorkflowName(value) {
+  return WORKFLOW_NAME_RE.test(value);
+}
+function isDefaultWorkflowName(value) {
+  return value === "default";
+}
+
 // packages/kernel/dist/workflow/validate.js
 function detectCycle(skillIds, dependsOn) {
   const WHITE = 0, GRAY = 1, BLACK = 2;
@@ -9696,13 +9705,12 @@ function detectCycle(skillIds, dependsOn) {
   return errors;
 }
 var IDENT_RE = /^[a-zA-Z0-9_-]+$/;
-var WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u;
 var SKILL_IDENT_RE = /^[a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)*$/;
 function validateWorkflow(wf, options = {}) {
   const errors = [];
   const producedByEarlierStep = /* @__PURE__ */ new Set();
   const allStepIds = new Set(wf.steps.map((s) => s.id));
-  if (!WORKFLOW_NAME_RE.test(wf.name)) {
+  if (!isValidWorkflowName(wf.name)) {
     errors.push(`workflow name '${wf.name}' \u542B\u975E\u6CD5\u5B57\u7B26\uFF08\u5141\u8BB8\u4E2D\u6587\u3001\u5B57\u6BCD\u3001\u6570\u5B57\u3001- \u4E0E _\uFF1B\u4E0D\u5141\u8BB8\u7A7A\u683C\u3001\u70B9\u6216\u8DEF\u5F84\u7B26\u53F7\uFF09`);
   }
   wf.steps.forEach((step) => {
@@ -20869,7 +20877,7 @@ function createInteractionEffectDraft(input) {
     actor: "agent",
     surface: "cli",
     executionMode: "interactive",
-    workflowMode: (/* @__PURE__ */ new Set(["default"])).has(input.workflowRun.workflowId) ? "default" : "custom",
+    workflowMode: isDefaultWorkflowName(input.workflowRun.workflowId) ? "default" : "custom",
     track: input.track,
     trackKind: trackKind(input.track),
     pipelineStage: pipelineStage(input.from),
@@ -21106,7 +21114,14 @@ function createTransitionApplication(deps) {
             return { kind: "document-evidence-failed", phase: prepared.from, blockers: evidence.blockers };
           }
         }
-        if (prepared.requiresReviewApproval && command.humanReviewApproved !== true && !reviewGateApprovedFor(tx.state, prepared.from, command.event)) {
+        const receiptApproved = reviewGateApprovedFor(tx.state, prepared.from, command.event);
+        const bindingApproved = receiptApproved && deps.reviewGateBinding !== void 0 ? await deps.reviewGateBinding({
+          changeDir: command.changeDir,
+          state: tx.state,
+          phase: prepared.from,
+          event: command.event
+        }) : receiptApproved;
+        if (prepared.requiresReviewApproval && command.humanReviewApproved !== true && !bindingApproved) {
           return { kind: "review-approval-required", phase: prepared.from, event: command.event };
         }
         const { record: record5, projection } = await tx.commit({ ...prepared.nextFields, ...clearReviewGatePatch() }, {
@@ -21122,7 +21137,7 @@ function createTransitionApplication(deps) {
             cause: projection.error
           });
         }
-        if (deps.interaction !== void 0 && reviewGateApprovedFor(tx.state, prepared.from, command.event)) {
+        if (deps.interaction !== void 0 && receiptApproved && bindingApproved) {
           try {
             await emitInteractionEffectUnderLock({
               recorder: deps.interaction,

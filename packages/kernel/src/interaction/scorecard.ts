@@ -4,10 +4,13 @@ import {
   type InteractionScorecardFixture,
   type InteractionScorecardV1,
   type InteractionEventV1,
-  type InteractionJourneyReplay,
 } from './contract.js'
 import { interactionEventCodesAreKnown } from './codec.js'
-import { replayInteractionEvents, isVerifiedInteractionJourney } from './replay.js'
+import {
+  expectedInteractionJourneyEvents,
+  replayInteractionEvents,
+  isVerifiedInteractionJourney,
+} from './replay.js'
 
 export interface InteractionScorecardInput {
   readonly id: string
@@ -29,14 +32,6 @@ function median(values: readonly number[]): number | null {
   const left = sorted[middle - 1]
   const right = sorted[middle]
   return left === undefined || right === undefined ? null : (left + right) / 2
-}
-
-function expectedJourneyEvents(journey: Pick<InteractionJourneyReplay,
-  'validResume' | 'failed' | 'staleRejected' | 'suppressedRequests'>): number {
-  if (journey.validResume) return 4 + journey.suppressedRequests
-  if (journey.failed) return 3 + journey.suppressedRequests
-  if (journey.staleRejected) return 2 + journey.suppressedRequests
-  return 4 + journey.suppressedRequests
 }
 
 export function computeInteractionScorecard(
@@ -82,14 +77,14 @@ export function computeInteractionScorecard(
       const end = Date.parse(journey.validResumeAt)
       if (Number.isFinite(start) && Number.isFinite(end) && end >= start) resumeDurations.push(end - start)
     }
-    const expected = started.reduce((total, journey) => total + expectedJourneyEvents(journey), 0)
+    const expected = started.reduce((total, journey) => total + expectedInteractionJourneyEvents(journey), 0)
     const observedByJourney = new Map<string, number>()
     for (const event of replay.events) {
       if (!interactionEventCodesAreKnown(event)) continue
       observedByJourney.set(event.journeyId, (observedByJourney.get(event.journeyId) ?? 0) + 1)
     }
     const observed = started.reduce((total, journey) => total + Math.min(
-      expectedJourneyEvents(journey), observedByJourney.get(journey.journeyId) ?? 0,
+      expectedInteractionJourneyEvents(journey), observedByJourney.get(journey.journeyId) ?? 0,
     ), 0)
     measurementExpectedEvents += expected
     measurementObservedEvents += observed

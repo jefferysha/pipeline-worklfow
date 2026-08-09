@@ -57,6 +57,15 @@ export { ACTIVE_POINTER_FILE, INTERACTION_AUTHORITY_FILE, INTERACTION_AUTHORITY_
 /** 项目根 package 声明文件（老仓 monorepo.py PROJECT_CONFIG_FILE）。 */
 export const PROJECT_CONFIG_FILE = '.pipeline-project.yaml'
 
+/** Keep resume timestamps measurable while closing a wall-clock rollback gap. */
+export function resumeOccurredAt(candidate: string, latestEffectAt: string): string {
+  const candidateMs = Date.parse(candidate)
+  const effectMs = Date.parse(latestEffectAt)
+  if (!Number.isFinite(candidateMs) || !Number.isFinite(effectMs)) return candidate
+  if (candidateMs <= effectMs) return new Date(effectMs + 1).toISOString()
+  return candidate
+}
+
 /**
  * session fs 注入面（默认真 fs；mock 层注入 fake，见 session.test.ts）。
  *   loadPackages: 读项目根 .pipeline-project.yaml → package 声明（缺失/解析失败 → null 单仓，fail-open）。
@@ -278,7 +287,7 @@ async function cmdActivate(deps: CliDeps, args: string[], fs: SessionFs): Promis
           result: valid ? 'success' : 'rejected',
           journeyId: effect.journeyId,
           originStepVisit: effect.originStepVisit,
-          clock: deps.clock(),
+          clock: resumeOccurredAt(deps.clock(), effect.occurredAt),
         })
       })
     } catch (error) {

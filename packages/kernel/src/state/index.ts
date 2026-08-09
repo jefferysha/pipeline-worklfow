@@ -92,6 +92,15 @@ export {
   reviewGatePendingFor, reviewGateRequestPatch, reviewGateStatus, REVIEW_GATE_APPROVED, REVIEW_GATE_PENDING,
 } from './review-gate.js'
 export type { ReviewGateStatus } from './review-gate.js'
+export {
+  REVIEW_GATE_BINDING_FILE,
+  readReviewGateBinding,
+  reviewGateBindingForState,
+  reviewGateBindingMatches,
+  reviewGateDecisionStateDigest,
+  writeReviewGateBindingUnderLock,
+} from './review-gate-binding.js'
+export type { ReviewGateBinding } from './review-gate-binding.js'
 export { applyBreadcrumbTail } from './transitionTail.js'
 export type { BreadcrumbTailArgs, TailWriteOutcome } from './transitionTail.js'
 // WorkflowRun 持久化提交接缝（W1 第二增量，2026-07-16 codex 范围评估）

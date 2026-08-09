@@ -146,6 +146,10 @@
   review 确认，而不是“刚进入 phase 就暂停”；例如 `verify-fail` 的确认绝不能授权 `verify-pass`。常规确认
   由 `acknowledge` 记录；用户明确的 Change 绑定持续授权只能在真实 review 证据完成后经
   `acknowledge --delegated` 记录来源与授权时间，不能跳过该 receipt 或任何 guard。
+  每个 request 还在 Change 锁内写 `.pipeline-review-gate-binding.json`：它绑定排除上述五个 receipt
+  字段（以及派生 interaction projection）的 canonical decision digest、exact phase/event、requestedAt
+  与 run identity。缺失、损坏或 digest/visit 漂移的 binding 一律 fail-closed，不参与也不读取 interaction
+  projection 做授权判断；pending/approved receipt 可通过 fresh request 撤销旧决定并重新绑定后恢复。
 - **不可变 TransitionRecord**（同上）：`openspec/changes/<name>/.pipeline-transitions/
   <sequence 零填充 6 位>-<recordId>.json`，每条记录一个文件，写入用「临时文件 + `link()` +
   `unlink()` 临时文件」而非 rename——`link()` 目标已存在时原子失败（`EEXIST`），存储层强制

@@ -330,10 +330,19 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
         // / 文档证据先通过，才允许 request/ack receipt 成为下一步的人类复核证据。CLI/agent
         // 只能消费 `tenon review acknowledge` 写入的 exact-phase-and-event receipt；dashboard
         // 则把真实的、已选中 event 的显式放行点击作为同一语义的 host-bound acknowledgement。
+        const receiptApproved = reviewGateApprovedFor(tx.state, prepared.from, command.event)
+        const bindingApproved = receiptApproved && deps.reviewGateBinding !== undefined
+          ? await deps.reviewGateBinding({
+            changeDir: command.changeDir,
+            state: tx.state,
+            phase: prepared.from,
+            event: command.event,
+          })
+          : receiptApproved
         if (
           prepared.requiresReviewApproval
           && command.humanReviewApproved !== true
-          && !reviewGateApprovedFor(tx.state, prepared.from, command.event)
+          && !bindingApproved
         ) {
           return { kind: 'review-approval-required', phase: prepared.from, event: command.event }
         }
@@ -347,7 +356,7 @@ export function createTransitionApplication(deps: TransitionApplicationDeps): Tr
             kind: 'projection-write-failed', projection: 'state-yaml', cause: projection.error,
           })
         }
-        if (deps.interaction !== undefined && reviewGateApprovedFor(tx.state, prepared.from, command.event)) {
+        if (deps.interaction !== undefined && receiptApproved && bindingApproved) {
           try {
             await emitInteractionEffectUnderLock({
               recorder: deps.interaction,

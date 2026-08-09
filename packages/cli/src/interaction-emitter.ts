@@ -1,5 +1,6 @@
 import {
   interactionJourneyId,
+  isDefaultWorkflowName,
   type InteractionEventRecorder,
   type InteractionEventRecordDraft,
   type InteractionEventV1,
@@ -44,7 +45,7 @@ function scalar(state: PipelineState, field: keyof PipelineState['fields']): str
 }
 
 function workflowMode(workflow: string): 'default' | 'custom' {
-  return new Set(['default']).has(workflow) ? 'default' : 'custom'
+  return isDefaultWorkflowName(workflow) ? 'default' : 'custom'
 }
 
 function trackKind(track: string): 'built-in' | 'free' | 'custom' {
@@ -158,7 +159,7 @@ export function createInteractionCapture(recorder: InteractionEventRecorder, clo
         stateAfterHash: input.revision.stateDigest,
         reasonCode: rejected ? 'decision.state-stale' : 'decision.accepted',
         triggerCode: 'review.acknowledge',
-        effectCode: 'review-gate.approved',
+        effectCode: rejected ? 'review-gate.rejected' : 'review-gate.approved',
         result: rejected ? 'rejected' : 'success',
         outcomeCode: 'review.acknowledged',
         occurredAt: input.clock ?? clock(),

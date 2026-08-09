@@ -133,4 +133,28 @@ describe('interaction contract v1', () => {
     expect(isInteractionExtensionCode(oversized)).toBe(false)
     expect(() => createInteractionEvent(draft({ reasonCode: oversized }))).toThrow(/reason_code/)
   })
+
+  it('rejects a fully-known code tuple whose event semantics do not match', () => {
+    expect(() => createInteractionEvent(draft({
+      reasonCode: 'decision.accepted',
+    }))).toThrow(/semantic tuple/)
+    expect(() => createInteractionEvent(draft({
+      event: 'review.acknowledged',
+      result: 'rejected',
+      reasonCode: 'decision.state-stale',
+      effectCode: 'review-gate.approved',
+      outcomeCode: 'review.acknowledged',
+    }))).toThrow(/semantic tuple/)
+  })
+
+  it('keeps category-unknown namespaced codes opaque for future extensions', () => {
+    const event = createInteractionEvent(draft({ reasonCode: 'transition.approved' }))
+    expect(decodeInteractionEvent(encodeInteractionEvent(event))).toEqual(event)
+  })
+
+  it('uses the canonical Unicode workflow-name validator', () => {
+    const event = createInteractionEvent(draft({ workflow: '工作流_日本語_2' }))
+    expect(decodeInteractionEvent(encodeInteractionEvent(event)).workflow).toBe('工作流_日本語_2')
+    expect(() => createInteractionEvent(draft({ workflow: 'workflow.invalid' }))).toThrow(/workflow/)
+  })
 })

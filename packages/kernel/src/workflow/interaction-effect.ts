@@ -6,6 +6,7 @@ import {
 import type { RunRevision } from '../state/run-revision-store.js'
 import type { PipelineState } from '../types.js'
 import type { WorkflowRun } from './run-types.js'
+import { isDefaultWorkflowName } from './identifier.js'
 
 interface InteractionEffectInput {
   readonly changeName: string
@@ -73,7 +74,7 @@ export function createInteractionEffectDraft(input: InteractionEffectInput): Int
     actor: 'agent',
     surface: 'cli',
     executionMode: 'interactive',
-    workflowMode: new Set(['default']).has(input.workflowRun.workflowId) ? 'default' : 'custom',
+    workflowMode: isDefaultWorkflowName(input.workflowRun.workflowId) ? 'default' : 'custom',
     track: input.track,
     trackKind: trackKind(input.track),
     pipelineStage: pipelineStage(input.from),

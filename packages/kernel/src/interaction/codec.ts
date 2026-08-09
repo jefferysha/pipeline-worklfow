@@ -26,6 +26,7 @@ import {
   type InteractionEventV1Wire,
   type InteractionStepVisit,
 } from './contract.js'
+import { isValidWorkflowName } from '../workflow/identifier.js'
 
 const EVENT_KEYS = [
   'schema', 'event_id', 'sequence', 'previous_event_hash', 'journey_id', 'occurred_at', 'change', 'run_id',
@@ -69,6 +70,13 @@ function stringField(value: unknown, label: string, pattern = IDENTIFIER_RE): st
   return value
 }
 
+function workflowField(value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 128 || !isValidWorkflowName(value)) {
+    fail('workflow 非法')
+  }
+  return value
+}
+
 function enumField<T extends string>(value: unknown, values: readonly T[], label: string): T {
   if (typeof value !== 'string' || !values.includes(value as T)) fail(`${label} 非法`)
   return value as T
@@ -96,6 +104,38 @@ function validateCode(value: unknown, label: string): string {
 
 function validateResultCombination(event: InteractionEventV1['event'], result: InteractionEventV1['result']): void {
   if (!expectedInteractionResult(event).includes(result)) fail(`event/result 组合非法: ${event}/${result}`)
+}
+
+function validateKnownSemanticTuple(
+  event: InteractionEventV1['event'],
+  result: InteractionEventV1['result'],
+  reasonCode: string,
+  triggerCode: string,
+  effectCode: string,
+  outcomeCode: string,
+): void {
+  // A namespaced extension is intentionally opaque. Only a tuple whose four codes are all in
+  // their field-specific v1 registries is subject to the stable semantic table.
+  if (!(interactionEventCodeIsKnown('reason', reasonCode)
+    && interactionEventCodeIsKnown('trigger', triggerCode)
+    && interactionEventCodeIsKnown('effect', effectCode)
+    && interactionEventCodeIsKnown('outcome', outcomeCode))) return
+  const expected: ReadonlyArray<readonly [InteractionEventV1['event'], InteractionEventV1['result'], string, string, string, string]> = [
+    ['review.requested', 'success', 'review.required', 'review.exit-requested', 'review-gate.pending', 'review.requested'],
+    ['review.prompt-suppressed', 'suppressed', 'review.same-state-repeat', 'review.exit-requested', 'review-gate.pending', 'review.prompt-suppressed'],
+    ['review.acknowledged', 'success', 'decision.accepted', 'review.acknowledge', 'review-gate.approved', 'review.acknowledged'],
+    ['review.acknowledged', 'rejected', 'decision.state-stale', 'review.acknowledge', 'review-gate.rejected', 'review.acknowledged'],
+    ['review.effect-applied', 'success', 'effect.applied', 'transition.approved', 'transition.applied', 'review.effect-applied'],
+    ['review.effect-applied', 'failure', 'effect.failed', 'transition.approved', 'transition.applied', 'review.effect-applied'],
+    ['resume.validated', 'success', 'resume.valid', 'session.activate', 'resume.bound', 'resume.valid'],
+    ['resume.validated', 'rejected', 'resume.state-mismatch', 'session.activate', 'resume.bound', 'resume.state-mismatch'],
+    ['operation.failed', 'failure', 'effect.failed', 'transition.approved', 'transition.applied', 'operation.failed'],
+  ]
+  if (!expected.some((tuple) => tuple[0] === event && tuple[1] === result
+    && tuple[2] === reasonCode && tuple[3] === triggerCode
+    && tuple[4] === effectCode && tuple[5] === outcomeCode)) {
+    fail('known interaction semantic tuple 非法')
+  }
 }
 
 function validateTime(value: unknown, label: string): string {
@@ -230,7 +270,7 @@ function validateWire(value: unknown): InteractionEventV1Wire {
   const occurredAt = validateTime(raw.occurred_at, 'occurred_at')
   const change = stringField(raw.change, 'change')
   const runId = stringField(raw.run_id, 'run_id')
-  const workflow = stringField(raw.workflow, 'workflow')
+  const workflow = workflowField(raw.workflow)
   const workflowHash = hashField(raw.workflow_hash, 'workflow_hash')
   const originStepVisit = visitField(raw.origin_step_visit, 'origin_step_visit')
   const stepVisit = visitField(raw.step_visit, 'step_visit')
@@ -254,6 +294,7 @@ function validateWire(value: unknown): InteractionEventV1Wire {
   const durationMs = raw.duration_ms
   if (typeof durationMs !== 'number' || !Number.isSafeInteger(durationMs) || durationMs < 0) fail('duration_ms 非法')
   validateResultCombination(event, result)
+  validateKnownSemanticTuple(event, result, reasonCode, triggerCode, effectCode, outcomeCode)
   const candidate: InteractionEventV1Wire = {
     schema: 'tenon-interaction-event/v1', event_id: eventId, sequence, previous_event_hash: previousEventHash,
     journey_id: journeyId, occurred_at: occurredAt, change, run_id: runId, workflow, workflow_hash: workflowHash,

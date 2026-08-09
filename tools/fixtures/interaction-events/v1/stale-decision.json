@@ -43,7 +43,7 @@
     },
     {
       "schema": "tenon-interaction-event/v1",
-      "event_id": "sha256:bfd63f31a3a69703de25b86436c76ea5df441c02305f79ce336677e7575044a1",
+      "event_id": "sha256:9ec5fabef6d6a98499dfb127decdeeb6a54089ea4bee1bb242bdc23ab8520f06",
       "sequence": 2,
       "previous_event_hash": "sha256:be47274efabb7503d599e77bb36f79a6889c5d3fcd3de47ba2be67104197a71e",
       "journey_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -75,7 +75,7 @@
       "event": "review.acknowledged",
       "reason_code": "decision.state-stale",
       "trigger_code": "review.acknowledge",
-      "effect_code": "review-gate.approved",
+      "effect_code": "review-gate.rejected",
       "result": "rejected",
       "outcome_code": "review.acknowledged",
       "duration_ms": 10

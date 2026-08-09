@@ -52,6 +52,7 @@
 import {
   compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
   loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack, resolveRequiredSkillSlots,
+  readReviewGateBinding, reviewGateBindingMatches,
   TASK_PLAN_CURRENT_FILE, TASK_PLAN_LIMITS, TASK_PLAN_STATE_DIR,
   taskPlanTasksThroughPhaseForChange,
 } from '@tenon/kernel'
@@ -116,6 +117,12 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
   const app = createTransitionApplication({
     runRepository: deps.runRepo,
     interaction: deps.interaction,
+    // Canonical review authorization is always bound to the sidecar digest. The interaction
+    // projection remains optional and must never decide whether a transition is allowed.
+    reviewGateBinding: deps.reviewGateBinding ?? (async ({ changeDir, state, phase, event }) => {
+      const binding = await readReviewGateBinding(changeDir)
+      return reviewGateBindingMatches(binding, state, phase, event)
+    }),
     flow: deps.flow,
     clock: deps.clock,
     history: deps.history,

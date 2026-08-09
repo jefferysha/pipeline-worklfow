@@ -119,4 +119,17 @@ describe('interaction JSONL projection store', () => {
     await expect(appendInteractionEventUnderLock(root, makeEvent(3, null)))
       .rejects.toMatchObject({ diagnostic: 'sequence-gap' })
   })
+
+  it('does not leak filesystem paths in projection write warnings', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'interaction-store-'))
+    roots.push(root)
+    const missingParent = join(root, 'missing-parent')
+    try {
+      await appendInteractionEventUnderLock(missingParent, makeEvent(1, null))
+      throw new Error('expected projection append to fail')
+    } catch (error) {
+      expect(error).toMatchObject({ diagnostic: 'projection-unavailable' })
+      expect(error instanceof Error ? error.message : String(error)).not.toContain(missingParent)
+    }
+  })
 })

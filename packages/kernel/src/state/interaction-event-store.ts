@@ -113,8 +113,8 @@ export async function readInteractionProjection(changeDir: string): Promise<Inte
     let event: InteractionEventV1
     try {
       event = parseInteractionEventLine(line)
-    } catch (error) {
-      throw new InteractionProjectionError('event-schema-invalid', `interaction projection event 非法: ${String(error)}`)
+    } catch {
+      throw new InteractionProjectionError('event-schema-invalid', 'interaction projection event 非法')
     }
     const expectedSequence = events.length + 1
     if (event.sequence !== expectedSequence) {
@@ -182,7 +182,7 @@ export async function appendInteractionEventUnderLock(
     if (code === 'ELOOP' || code === 'EISDIR' || code === 'ENOTDIR') {
       throw new InteractionProjectionError('projection-not-regular', 'interaction projection 必须是非 symlink 普通文件')
     }
-    throw new InteractionProjectionError('projection-unavailable', `interaction projection append 失败: ${String(error)}`)
+    throw new InteractionProjectionError('projection-unavailable', 'interaction projection append 失败')
   }
 }
 

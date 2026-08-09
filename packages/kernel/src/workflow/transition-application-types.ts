@@ -1,4 +1,4 @@
-import type { FieldName, FlowEngine, HistoryWriter, Phase } from '../types.js'
+import type { FieldName, FlowEngine, HistoryWriter, Phase, PipelineState } from '../types.js'
 import type { BreadcrumbWriter, DocumentEvidenceReport } from '../state/index.js'
 import type { TransitionContext } from '../flow/index.js'
 import type { AutomationPolicySnapshot, ConstraintDecision } from '../loops/automation-policy.js'
@@ -14,6 +14,13 @@ export interface TransitionApplicationDeps {
   runRepository: WorkflowRunRepository
   /** Best-effort interaction projection emitter; it never participates in canonical decisions. */
   interaction?: InteractionEventRecorder
+  /** Optional canonical review binding verifier; projection data is never consulted here. */
+  reviewGateBinding?: (input: {
+    readonly changeDir: string
+    readonly state: PipelineState
+    readonly phase: string
+    readonly event: string
+  }) => Promise<boolean>
   flow: FlowEngine
   clock: () => string
   history?: HistoryWriter

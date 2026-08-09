@@ -23,7 +23,9 @@ import { errMsg, type CliDeps } from '../deps.js'
 const MAX_FIXTURE_BYTES = 1024 * 1024
 const MAX_EVENT_FILE_BYTES = 1024 * 1024
 const MAX_FIXTURES = 256
-const SAFE_RELATIVE = /^[A-Za-z0-9._/-]+\.json$/
+// Fixtures are deliberately flat basenames. This closes ancestor-symlink traversal and keeps
+// physical identity checks unambiguous without echoing or resolving attacker-controlled paths.
+const SAFE_RELATIVE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/
 const SAFE_FIXTURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -82,7 +84,7 @@ async function readRegularJson(path: string, maxBytes: number, label: string): P
 }
 
 function assertFixturePath(root: string, file: string): string {
-  if (isAbsolute(file) || file.includes('\\') || file.split('/').some((part) => part === '..') || !SAFE_RELATIVE.test(file)) {
+  if (isAbsolute(file) || file.includes('\\') || !SAFE_RELATIVE.test(file)) {
     throw new Error('fixture file path invalid')
   }
   const target = resolve(root, file)
@@ -184,11 +186,24 @@ export async function cmdInteraction(
     }
     if (directory.isSymbolicLink() || !directory.isDirectory()) throw new Error('fixture directory unavailable')
     const manifest = parseManifest(await readRegularJson(join(fixtureDir, 'manifest.json'), MAX_FIXTURE_BYTES, 'manifest'))
-    const inputs = await Promise.all([...manifest.fixtures]
-      .sort((left, right) => left.id.localeCompare(right.id))
-      .map((entry) => readFixture(fixtureDir, entry)))
+    const orderedEntries = [...manifest.fixtures].sort((left, right) => left.id.localeCompare(right.id))
+    const physicalFiles = new Set<string>()
+    for (const entry of orderedEntries) {
+      const target = assertFixturePath(fixtureDir, entry.file)
+      let info
+      try {
+        info = await lstat(target)
+      } catch {
+        throw new Error('fixture unavailable')
+      }
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error('fixture unavailable')
+      const identity = `${info.dev}:${info.ino}`
+      if (physicalFiles.has(identity)) throw new Error('manifest fixture duplicate')
+      physicalFiles.add(identity)
+    }
+    const inputs = await Promise.all(orderedEntries.map((entry) => readFixture(fixtureDir, entry)))
     const scorecard = computeInteractionScorecard(inputs)
-    for (const [index, entry] of [...manifest.fixtures].sort((left, right) => left.id.localeCompare(right.id)).entries()) {
+    for (const [index, entry] of orderedEntries.entries()) {
       const observed = scorecard.fixtures[index]
       const expected = entry.expected
       if (observed === undefined || observed.valid !== expected.valid

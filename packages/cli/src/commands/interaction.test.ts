@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { link, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -92,6 +92,42 @@ describe('interaction scorecard CLI', () => {
       expect(oversizedErrors.join('\n')).not.toContain(root)
     } finally {
       await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects nested ancestor symlinks and physical fixture aliases', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'interaction-cli-'))
+    const outside = await mkdtemp(join(tmpdir(), 'interaction-cli-outside-'))
+    try {
+      const fixture = JSON.parse(await readFile(join(fixtureRoot, 'positive.json'), 'utf8')) as unknown
+      await writeFile(join(outside, 'positive.json'), JSON.stringify(fixture), 'utf8')
+      await symlink(outside, join(root, 'nested'))
+      const nestedManifest = minimalManifest()
+      ;(nestedManifest.fixtures as Array<Record<string, unknown>>)[0] = {
+        ...(nestedManifest.fixtures as Array<Record<string, unknown>>)[0],
+        file: 'nested/positive.json',
+      }
+      await writeFile(join(root, 'manifest.json'), JSON.stringify(nestedManifest), 'utf8')
+      const nestedErrors: string[] = []
+      expect(await cmdInteraction(deps([], nestedErrors), 'scorecard', [root], { json: true })).toBe(1)
+      expect(nestedErrors.join('\n')).not.toContain(root)
+
+      await rm(join(root, 'nested'))
+      const aliasManifest = minimalManifest()
+      aliasManifest.fixtures = [
+        ...(aliasManifest.fixtures as Array<Record<string, unknown>>),
+        { id: 'alias', mode: 'measurement', file: 'alias.json', expected: { valid: true, diagnostics: [] } },
+      ]
+      const positivePath = join(root, 'positive.json')
+      await writeFile(positivePath, JSON.stringify(fixture), 'utf8')
+      await link(positivePath, join(root, 'alias.json'))
+      await writeFile(join(root, 'manifest.json'), JSON.stringify(aliasManifest), 'utf8')
+      const aliasErrors: string[] = []
+      expect(await cmdInteraction(deps([], aliasErrors), 'scorecard', [root], { json: true })).toBe(1)
+      expect(aliasErrors.join('\n')).not.toContain(root)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
     }
   })
 

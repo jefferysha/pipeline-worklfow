@@ -70,6 +70,47 @@ describe('interaction replay', () => {
     expect(malformed.journeys.every((journey) => !journey.validResume)).toBe(true)
   })
 
+  it('validates physical JSONL order before replaying a sorted journey', () => {
+    const events = loadFixture('positive')
+    const first = events[0]
+    const second = events[1]
+    expect(first).toBeDefined()
+    expect(second).toBeDefined()
+    if (first === undefined || second === undefined) return
+    const replay = replayInteractionEvents([second, first, ...events.slice(2)])
+    expect(replay.diagnostics.some((diagnostic) => diagnostic.code === 'malformed-order')).toBe(true)
+    expect(replay.journeys[0]?.validResume).toBe(false)
+  })
+
+  it('keeps stale rejection terminal even when a later success chain is present', () => {
+    const events = loadFixture('positive')
+    const request = events[0]
+    const acknowledgement = events[1]
+    const effect = events[2]
+    const resume = events[3]
+    expect(request).toBeDefined()
+    expect(acknowledgement).toBeDefined()
+    expect(effect).toBeDefined()
+    expect(resume).toBeDefined()
+    if (request === undefined || acknowledgement === undefined || effect === undefined || resume === undefined) return
+    const replay = replayInteractionEvents(rebuild([
+      request,
+      {
+        ...acknowledgement,
+        result: 'rejected',
+        reasonCode: 'decision.state-stale',
+        effectCode: 'review-gate.rejected',
+      },
+      acknowledgement,
+      effect,
+      resume,
+    ]))
+    const journey = replay.journeys[0]
+    expect(journey?.staleRejected).toBe(true)
+    expect(journey?.validResume).toBe(false)
+    expect(journey === undefined ? false : isVerifiedInteractionJourney(journey, replay)).toBe(false)
+  })
+
   it('keeps unknown extension codes unclassified and out of success metrics', () => {
     const [request] = loadFixture('positive')
     expect(request).toBeDefined()
@@ -229,6 +270,44 @@ describe('interaction replay', () => {
       1: { originStepVisit: origin, stepVisit: origin },
       2: { originStepVisit: origin },
     }))
+    expect(replay.diagnostics.some((diagnostic) => diagnostic.code === 'state-discontinuity')).toBe(true)
+    expect(replay.journeys[0]?.validResume).toBe(false)
+  })
+
+  it('validates failed effect state continuity before marking the journey terminal', () => {
+    const events = loadFixture('failure')
+    const failed = events[2]
+    expect(failed).toBeDefined()
+    if (failed === undefined) return
+    const replay = replayInteractionEvents(rebuild(events, {
+      2: { stateBeforeHash: 'd'.repeat(64), stateAfterHash: 'e'.repeat(64) },
+    }))
+    expect(replay.diagnostics.some((diagnostic) => diagnostic.code === 'state-discontinuity')).toBe(true)
+    expect(replay.journeys[0]?.validResume).toBe(false)
+  })
+
+  it('validates operation.failed state continuity before marking the journey terminal', () => {
+    const events = loadFixture('positive')
+    const request = events[0]
+    const acknowledgement = events[1]
+    const effect = events[2]
+    expect(request).toBeDefined()
+    expect(acknowledgement).toBeDefined()
+    expect(effect).toBeDefined()
+    if (request === undefined || acknowledgement === undefined || effect === undefined) return
+    const replay = replayInteractionEvents(rebuild([
+      request,
+      acknowledgement,
+      {
+        ...effect,
+        event: 'operation.failed',
+        result: 'failure',
+        reasonCode: 'effect.failed',
+        outcomeCode: 'operation.failed',
+        stateBeforeHash: 'd'.repeat(64),
+        stateAfterHash: 'e'.repeat(64),
+      },
+    ]))
     expect(replay.diagnostics.some((diagnostic) => diagnostic.code === 'state-discontinuity')).toBe(true)
     expect(replay.journeys[0]?.validResume).toBe(false)
   })

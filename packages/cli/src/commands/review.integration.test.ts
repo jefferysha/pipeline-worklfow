@@ -1,7 +1,13 @@
 import { readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { readInteractionProjection, REVIEW_MARKER_PROTOCOL } from '@tenon/kernel'
+import {
+  isVerifiedInteractionJourney,
+  readInteractionProjection,
+  replayInteractionEvents,
+  REVIEW_GATE_BINDING_FILE,
+  REVIEW_MARKER_PROTOCOL,
+} from '@tenon/kernel'
 import { freshHarness, type Harness } from '../integration-harness.js'
 
 describe('真实 e2e —— review exit receipt（default workflow）', () => {
@@ -94,6 +100,10 @@ describe('真实 e2e —— review exit receipt（default workflow）', () => {
     expect(request?.originStepVisit).toEqual(acknowledgement?.originStepVisit)
     expect(acknowledgement?.originStepVisit).toEqual(effect?.originStepVisit)
     expect(resume?.originStepVisit).toEqual(effect?.originStepVisit)
+    expect(Date.parse(resume?.occurredAt ?? '')).toBeGreaterThan(Date.parse(effect?.occurredAt ?? ''))
+    const replay = replayInteractionEvents(projection.events)
+    expect(replay.diagnostics.filter((diagnostic) => diagnostic.code === 'malformed-order')).toEqual([])
+    expect(replay.journeys.some((journey) => isVerifiedInteractionJourney(journey, replay))).toBe(true)
     expect(projection.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4])
   })
 
@@ -110,11 +120,70 @@ describe('真实 e2e —— review exit receipt（default workflow）', () => {
     expect(projection.events[1]?.result).toBe('suppressed')
   })
 
-  test('stale projection does not change canonical acknowledgement', async () => {
+  test('canonical decision drift rejects acknowledgement until a fresh request rebinds it', async () => {
     expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
     expect(await h.run(['set', 'demo', 'scope', 'changed-before-ack.ts'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(1)
+    expect(await h.read('demo')).toMatch(/^review_gate_status: pending$/m)
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
     expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
-    expect(await h.read('demo')).toMatch(/^review_gate_status: approved$/m)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
+  })
+
+  test('state-drift re-request is fresh, then replay keeps stale rejection separate from completion', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['set', 'demo', 'scope', 'changed-before-ack.ts'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(1)
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
+    expect(await h.run(['session', 'activate', 'demo'])).toBe(0)
+
+    const projection = await readInteractionProjection(join(h.cwd, 'openspec/changes/demo'))
+    expect(projection.kind).toBe('valid')
+    if (projection.kind !== 'valid') return
+    expect(projection.events.map((event) => `${event.event}/${event.result}`)).toEqual([
+      'review.requested/success',
+      'review.acknowledged/rejected',
+      'review.requested/success',
+      'review.acknowledged/success',
+      'review.effect-applied/success',
+      'resume.validated/success',
+    ])
+    expect(projection.events[1]?.reasonCode).toBe('decision.state-stale')
+    expect(projection.events[1]?.effectCode).toBe('review-gate.rejected')
+    expect(projection.events[0]?.journeyId).not.toBe(projection.events[2]?.journeyId)
+    const replay = replayInteractionEvents(projection.events)
+    const stale = replay.journeys.find((journey) => journey.staleRejected)
+    expect(stale).toBeDefined()
+    expect(stale?.validResume).toBe(false)
+    const completed = replay.journeys.filter((journey) => isVerifiedInteractionJourney(journey, replay))
+    expect(completed).toHaveLength(1)
+  })
+
+  test('approved receipt with deleted binding can recover through a fresh request', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    await rm(join(h.cwd, 'openspec/changes/demo', REVIEW_GATE_BINDING_FILE), { force: true })
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(2)
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
+  })
+
+  test('corrupt binding stays fail-closed until fresh request atomically rebuilds it', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    const bindingPath = join(h.cwd, 'openspec/changes/demo', REVIEW_GATE_BINDING_FILE)
+    await writeFile(bindingPath, '{"decisionStateDigest":"attacker-secret"}\n', 'utf8')
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(1)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(1)
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    const rebuilt = JSON.parse(await readFile(bindingPath, 'utf8')) as Record<string, unknown>
+    expect(rebuilt.version).toBe(1)
+    expect(rebuilt.decisionStateDigest).not.toBe('attacker-secret')
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
   })
 
   test('missing interaction projection does not change canonical acknowledgement', async () => {
@@ -122,6 +191,21 @@ describe('真实 e2e —— review exit receipt（default workflow）', () => {
     await rm(join(h.cwd, 'openspec/changes/demo/.pipeline-interactions.jsonl'), { force: true })
     expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^review_gate_status: approved$/m)
+  })
+
+  test('legacy approved receipt without a canonical decision binding fails closed', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    await rm(join(h.cwd, 'openspec/changes/demo', REVIEW_GATE_BINDING_FILE), { force: true })
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(1)
+    expect(await h.read('demo')).toMatch(/^review_gate_status: pending$/m)
+  })
+
+  test('transition refuses an approved receipt after its canonical binding is removed', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    await rm(join(h.cwd, 'openspec/changes/demo', REVIEW_GATE_BINDING_FILE), { force: true })
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(2)
+    expect(await h.read('demo')).toMatch(/^phase: explore$/m)
   })
 
   test('corrupt interaction projection does not change canonical acknowledgement', async () => {

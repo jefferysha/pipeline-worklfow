@@ -90,7 +90,7 @@
 ## 2026-08-10 · Issue #46 interaction observability evidence
 
 - Post-integration focused kernel/CLI Vitest is real source execution: 10 files,
-  138 tests passed.
+  157 tests passed.
   Coverage includes closed/privacy codec and matrix round-trip, deterministic replay,
   projection sequence/hash/truncation/symlink failures, scorecard denominator guards,
   unknown-code unclassified handling, scorecard CLI path/error sanitisation, exact review
@@ -107,7 +107,7 @@
   cases were honestly skipped because the local daemon was unavailable; the real-Codex
   acceptance remained CI-gated because `TENON_REQUIRE_REAL_CODEX!=1`. This change has no
   Dashboard UI or server API surface, so browser acceptance was not applicable.
-- `npm run build`, `npm run check:architecture` (861 production files), OpenSpec/docs,
+- `npm run build`, `npm run check:architecture` (864 production files), OpenSpec/docs,
   comments, repository hygiene, release-workflow/identity, default-workflow/document-template,
   legacy/npx packaging, migration CAS, and the 32-case bundle smoke gate all passed. The
   CLI and server dist artifacts were regenerated from the merged source graph.

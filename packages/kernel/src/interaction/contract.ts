@@ -62,7 +62,7 @@ export const INTERACTION_TRIGGER_CODES = [
 export type InteractionTriggerCode = string
 
 export const INTERACTION_EFFECT_CODES = [
-  'review-gate.pending', 'review-gate.approved', 'transition.applied', 'resume.bound',
+  'review-gate.pending', 'review-gate.approved', 'review-gate.rejected', 'transition.applied', 'resume.bound',
 ] as const
 export type InteractionEffectCode = string
 
