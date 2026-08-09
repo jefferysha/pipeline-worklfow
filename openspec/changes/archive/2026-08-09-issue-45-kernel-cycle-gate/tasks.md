@@ -32,8 +32,8 @@
 
 ## 交付
 
-- [ ] 同步受控文档/spec/生成物，提交并推送唯一分支，创建含 `Closes #45` 的非草稿 PR，并等待 exact-head CI。
+- [x] 同步受控文档/spec/生成物，提交并推送唯一分支，创建含 `Closes #45` 的非草稿 PR。
 
 ## 归档
 
-- [ ] 完成 applied spec、Change 归档与最终证据审计；不合并 PR、不发布版本。
+- [x] 完成 applied spec、Change 归档与最终证据审计，推送归档状态并等待 exact-head CI；不合并 PR、不发布版本。
