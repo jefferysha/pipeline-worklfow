@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { loadSkillSources, parseSkillSources, readSkillSources, SkillSourcesError } from './skillSources.js'
+import { loadCanonicalSkillSources, loadSkillSources, parseSkillSources, readSkillSources, SkillSourcesError } from './skillSources.js'
 
 // src 与 dist 同深度：三级上溯 → 仓根（对齐 loader / cli main.ts pluginRoot）
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
@@ -185,6 +185,20 @@ describe('④ 真读 templates/skill-sources.yaml', () => {
       expect(typeof r.official, `${r.token} official`).toBe('boolean')
       expect(r.tool, `${r.token} tool`).toBe('bundled')
       expect(r.source, `${r.token} source`).toBe('tenon')
+    }
+  })
+})
+
+describe('⑥ canonical provenance loader', () => {
+  it('does not turn a malformed v3 registry into an empty successful list', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'skillsrc-canonical-'))
+    try {
+      const path = join(dir, 'skill-sources.yaml')
+      await writeFile(path, 'version: 2\nskills:\n', 'utf8')
+      const result = loadCanonicalSkillSources(path)
+      expect(result.ok).toBe(false)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
     }
   })
 })

@@ -139,8 +139,22 @@ projection, and document the document-contract behavior.
 
 ### Skill
 
-Update the Skill source/lock inventory, prove bundled resolution and
-provenance, and run `bash tools/verify-skills.sh`.
+`templates/skill-sources.yaml` is the only tracked provenance source. It uses
+schema v3 (`tree-sha256-v1`) with a bundled `source_ref`, canonical `sha256:`
+content hash, and immutable coordinate for every distributed Skill. After
+editing Skill bytes, run the explicit authoring sync and inspect its diff:
+
+```bash
+npm run sync:skill-provenance
+bash tools/verify-skills.sh --quiet --root "$PWD"
+```
+
+The packaged `internal-skill-provenance verify|sync --root <path>` command is
+the shared implementation. `verify` is read-only and must pass before
+install/release activation; `sync` atomically writes only the canonical
+registry. Do not create or restore `skills-lock.json`; it is a rejected legacy
+provenance source. Generic external/custom Skill metadata may remain a
+compatibility projection, but it is not bundled release provenance.
 
 ### Host adapter
 
@@ -157,4 +171,3 @@ machine-readable output stable, and documentation/help synchronized.
 Use [SUPPORT.md](SUPPORT.md) for questions and non-sensitive defects. Maintainers
 may close reports that omit a reproducible case, include secrets, or combine
 unrelated changes.
-

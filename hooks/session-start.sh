@@ -5,8 +5,8 @@
 #   ① 宪法：cat templates/workflow.md（相对插件根定位）
 #   ② 当前项目 pipeline 上下文：cwd 上溯找 openspec/changes，列活跃 change 的 名字/相位/门状态
 #   ③ openspec 目录存在时输出一段使用提示
-# 纯 bash（SessionStart 低频，但仍守 §5.4 红线：零解释器 spawn，yaml 只 grep 顶层键）；
-# 校验交给 tools/verify-skills.sh。任何一步失败静默跳过、绝不阻断会话，exit 恒 0
+# Shell 负责 SessionStart envelope 与 fail-open 注入；校验交给 tools/verify-skills.sh，后者的
+# canonical provenance 段委托随包 Node CLI。任何一步失败静默跳过、绝不阻断会话，exit 恒 0。
 # （fail-open——SessionStart 挂了会拖慢/卡死所有会话，宁可放行）。
 set -uo pipefail
 

@@ -20202,12 +20202,23 @@ var SkillSourcesError = class extends Error {
     this.name = "SkillSourcesError";
   }
 };
+var SKILL_PROVENANCE_ERROR_CATEGORIES = [
+  "unsupported-registry-version",
+  "unknown-source-kind",
+  "invalid-source-ref",
+  "missing-distributed-skill",
+  "unregistered-distributed-skill",
+  "duplicate-distributed-source",
+  "content-hash-mismatch",
+  "coordinate-mismatch",
+  "legacy-provenance-source"
+];
 function stripComment2(line) {
   const t = line.trimStart();
   if (t.startsWith("#"))
     return "";
   const m = line.match(/^(.*?)\s#/);
-  return (m ? m[1] : line).trimEnd();
+  return (m ? required(m[1]) : line).trimEnd();
 }
 function splitTopLevel(s, sep15) {
   const out = [];
@@ -22037,6 +22048,9 @@ async function evaluateSkillBundleWiring(loop, deps, resolutionInputs) {
   }
   return { status: "ready", bundleId, reason: null };
 }
+
+// packages/automation/dist/skills/skill-provenance.js
+var CATEGORY_ORDER = new Map(SKILL_PROVENANCE_ERROR_CATEGORIES.map((category, index) => [category, index]));
 
 // packages/automation/dist/starters/wiring.js
 function invalidReport(starterId, reason, loopId = null) {

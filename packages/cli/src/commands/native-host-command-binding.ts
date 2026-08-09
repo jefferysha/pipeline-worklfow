@@ -8,6 +8,12 @@ export interface HostCommandInvocation {
   readonly cwd?: string
 }
 
+export interface NativeCommandResult {
+  readonly code: number
+  readonly stdout: string
+  readonly stderr: string
+}
+
 export interface NativeHostCommandBinding {
   /** Exact PATH object selected once for this setup/update lifecycle. */
   readonly executable: string
@@ -31,7 +37,17 @@ export interface NativeHostCommandEnvironment {
     cmd: string,
     args: string[],
     options?: { readonly cwd?: string; readonly timeoutMs?: number },
-  ): { code: number; stdout: string; stderr: string }
+  ): NativeCommandResult
+  /**
+   * Bound lifecycle runner used after a composite provenance proof.  The method deliberately
+   * bypasses the ordinary per-command verification wrapper so callers can observe exactly one
+   * synchronous `bash-proof -> node-proof -> spawn` sequence.
+   */
+  runTrustedLifecycleCommand?(
+    command: TrustedLifecycleCommand,
+    args: string[],
+    options?: { readonly cwd?: string; readonly timeoutMs?: number },
+  ): NativeCommandResult
   /** Cross-process lease shared with the public installer for every host-owned mutation step. */
   withHostMutationLock?<T>(host: NativePipelineHost, operation: () => Promise<T>): Promise<T>
   managedHostReconciliation?(
@@ -59,6 +75,70 @@ export interface FrozenTrustedLifecycleCommands {
   readonly gitBinding?: TrustedExecutable
   readonly nodeBinding?: TrustedExecutable
   readonly missing: readonly TrustedLifecycleCommand[]
+}
+
+export interface ProvenanceVerifierBinding {
+  /** Frozen executable used for the verifier's `--node` argument. */
+  readonly nodePath: string
+  /** Whether both physical bindings were available at construction time. */
+  readonly enforced: boolean
+  /** Synchronously prove both tools, then spawn the verifier as the next side effect. */
+  run(
+    args: string[],
+    options?: { readonly cwd?: string; readonly timeoutMs?: number },
+  ): NativeCommandResult
+}
+
+const provenanceFailure = (detail: string): NativeCommandResult => ({
+  code: 1,
+  stdout: '',
+  stderr: detail,
+})
+
+/**
+ * Compose the frozen Bash and Node proofs used by every provenance verifier invocation.  The
+ * returned `nodePath` is captured from the same binding whose `verify()` runs immediately before
+ * the spawn, so callers cannot accidentally pass a second PATH lookup or `process.execPath`.
+ * Legacy injected environments without a physical resolver retain their historical pathname
+ * seam; production environments expose `resolveTrustedCommandBinding` and therefore fail closed
+ * when either binding is absent or drifts.
+ */
+export function provenanceVerifierBinding(
+  env: NativeHostCommandEnvironment,
+): ProvenanceVerifierBinding {
+  const resolver = env.resolveTrustedCommandBinding
+  if (resolver === undefined) {
+    return {
+      enforced: false,
+      nodePath: env.resolveTrustedCommand?.('node') ?? process.execPath,
+      run: (args, options) => env.runCommand('bash', args, options),
+    }
+  }
+
+  const bash = resolver('bash')
+  const node = resolver('node')
+  const nodePath = node?.executable ?? ''
+  return {
+    enforced: true,
+    nodePath,
+    run: (args, options) => {
+      if (bash === undefined || node === undefined) {
+        return provenanceFailure('可信 Bash/Node 不可执行；未启动 provenance verifier。')
+      }
+      try {
+        if (!bash.verify()) {
+          return provenanceFailure(`可信 Bash 可执行文件身份已漂移: ${bash.executable}`)
+        }
+        if (!node.verify()) {
+          return provenanceFailure(`可信 Node 可执行文件身份已漂移: ${node.executable}`)
+        }
+      } catch {
+        return provenanceFailure('可信 Bash/Node 可执行文件身份已漂移；未启动 provenance verifier。')
+      }
+      return env.runTrustedLifecycleCommand?.('bash', args, options)
+        ?? env.runCommand(bash.executable, args, options)
+    },
+  }
 }
 
 export function freezeTrustedLifecycleCommands(
@@ -171,6 +251,17 @@ export function bindNativeHostCommand<T extends NativeHostCommandEnvironment>(
     return { file: command, args: [...args] }
   }
   const reconcile = env.managedHostReconciliation
+  const runTrustedLifecycleCommand = (
+    command: TrustedLifecycleCommand,
+    args: string[],
+    options?: { readonly cwd?: string; readonly timeoutMs?: number },
+  ): NativeCommandResult => {
+    const file = frozenTrustedCommands[command]
+    if (file === undefined) {
+      return { code: 1, stdout: '', stderr: `可信 ${command} 不可执行；未执行。` }
+    }
+    return env.runCommand(file, [...args], options)
+  }
   return {
     ...env,
     resolveHostCommand: (candidate) => candidate === host
@@ -201,6 +292,7 @@ export function bindNativeHostCommand<T extends NativeHostCommandEnvironment>(
         ...(plan.cwd === undefined ? {} : { cwd: plan.cwd }),
       })
     },
+    ...(frozenTrustedCommands.enforced ? { runTrustedLifecycleCommand } : {}),
     ...(reconcile === undefined
       ? {}
       : {

@@ -4,8 +4,8 @@
  * 纯解析单测（不 import 任何包源码，只用 fs 读两份仓根清单）：让
  *   `claude plugin marketplace add jefferysha/tenon`
  *   `claude plugin install tenon@tenon`
- * 的名对得上、source 指向仓根。verify-skills.sh 是 SessionStart 调的零解释器纯 bash，
- * 不宜做 JSON 字段等值断言，故字段一致性落在此处（见 fi-f1-report.md 决策）。
+ * 的名对得上、source 指向仓根。verify-skills.sh 是 SessionStart 调的 Bash wrapper，且其
+ * provenance 校验委托随包 Node CLI；不宜做 JSON 字段等值断言，故字段一致性落在此处（见 fi-f1-report.md 决策）。
  */
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'

@@ -382,7 +382,9 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
   return {
     nodeVersion: () => 'v22.5.0',
     gitAvailable: async () => true,
-    pluginRoot: '/plugin',
+    // Keep the default probe rooted at the checked-out fixture so strict canonical provenance
+    // loading exercises the real v3 registry instead of a generic cwd fallback.
+    pluginRoot: process.cwd(),
     manifestError: () => null,
     fileExists: () => true,
     fileExecutable: () => true,

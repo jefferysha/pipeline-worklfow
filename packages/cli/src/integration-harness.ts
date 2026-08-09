@@ -360,7 +360,9 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
       codexAuthStatus: async () => ({ state: 'authenticated' }),
       runVerifySkills: async () => {
         try {
-          const output = execFileSync('bash', [join(REPO_ROOT, 'tools', 'verify-skills.sh')], { encoding: 'utf8' })
+          const output = execFileSync('bash', [
+            join(REPO_ROOT, 'tools', 'verify-skills.sh'), '--node', process.execPath,
+          ], { encoding: 'utf8' })
           return { code: 0, output }
         } catch (e) {
           const er = e as { status?: number; stdout?: string; stderr?: string }

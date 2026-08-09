@@ -30,34 +30,32 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
-import { parseSkillSources } from '@tenon/kernel'
 import {
   createFsSkillContentLocator, createRunnerSkillContentLocator, SkillContentNotFoundError,
   type SkillContentLocator,
 } from '@tenon/automation'
+import {
+  createProvenanceAwareBundledLocator,
+  loadSkillAliases,
+} from './skill-provenance-locator.js'
 export {
   createExecutionCoordinatePort,
   type ExecutionCoordinatePortDeps,
 } from './executionCoordinatePort.js'
-
 // ── productionSkillContentRoots ─────────────────────────────────────────────────
-
 export class SkillCacheAccessError extends Error {
   override readonly name = 'SkillCacheAccessError'
   readonly _tag = 'SkillCacheAccessError'
 }
-
 export class SkillCacheSchemaError extends Error {
   override readonly name = 'SkillCacheSchemaError'
   readonly _tag = 'SkillCacheSchemaError'
 }
-
 function nodeErrorCode(error: unknown): string {
   return typeof error === 'object' && error !== null && 'code' in error
     ? String((error as { code?: unknown }).code)
     : 'unknown'
 }
-
 function validateCodexRemotePluginMetadata(path: string): void {
   let raw: string
   try {
@@ -344,29 +342,6 @@ export interface ProductionSkillContentLocatorOptions extends SkillContentRootsO
   readonly runner?: string
 }
 
-function physicalSkillAliases(pluginRoot: string | undefined): ReadonlyMap<string, string> {
-  if (pluginRoot === undefined) return new Map()
-  const path = join(pluginRoot, 'templates', 'skill-sources.yaml')
-  let text: string
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch (error) {
-    if (nodeErrorCode(error) === 'ENOENT') return new Map()
-    throw new SkillCacheAccessError(
-      `读取 skill source registry 失败（${path}，${nodeErrorCode(error)}）：${error instanceof Error ? error.message : String(error)}`,
-    )
-  }
-  const aliases = new Map<string, string>()
-  for (const row of parseSkillSources(text)) {
-    const physical = row.contentSkill
-      ?? ((row.tool === 'skills-cli' || row.tool === 'claude-plugin') ? row.skill : undefined)
-    if (!row.token.includes(':') && physical !== undefined && physical !== row.token) {
-      aliases.set(row.token, physical)
-    }
-  }
-  return aliases
-}
-
 function withLogicalSkillAliases(locator: SkillContentLocator, aliases: ReadonlyMap<string, string>): SkillContentLocator {
   if (aliases.size === 0) return locator
   return {
@@ -379,6 +354,31 @@ function withLogicalSkillAliases(locator: SkillContentLocator, aliases: Readonly
 }
 
 /**
+ * Legacy runner fixtures may provide only the generic alias registry and no bundled `skills/` root.
+ * Keep that compatibility surface for external tiers; any real bundled root, or a v3 registry whose
+ * root has been deleted, must still enter the strict provenance locator and fail closed.
+ */
+function hasCanonicalBundledSurface(pluginRoot: string): boolean {
+  try {
+    if (statSync(join(pluginRoot, 'skills')).isDirectory()) return true
+  } catch (error) {
+    if (nodeErrorCode(error) !== 'ENOENT') return true
+  }
+  try {
+    const raw = readFileSync(join(pluginRoot, 'templates', 'skill-sources.yaml'), 'utf8')
+    if (/^\s*version:\s*3\s*$/m.test(raw) || /^\s*hash_algorithm\s*:/m.test(raw)) return true
+    const versions = [...raw.matchAll(/^\s*version\s*:\s*(\S+)\s*$/gm)].map((match) => match[1])
+    // Only an unambiguous historical v1/v2 source registry with no bundled root may use the
+    // generic compatibility projection. Any other existing registry, including malformed/current
+    // data, must remain on the strict locator and fail closed instead of falling to lower tiers.
+    return !(versions.length === 1 && (versions[0] === '1' || versions[0] === '2'))
+  } catch (error) {
+    if (nodeErrorCode(error) !== 'ENOENT') return true
+    return false
+  }
+}
+
+/**
  * 生产 `SkillContentLocator`：裸与 namespaced token 都先查 Codex tier；只有 NotFound 才查
  * Claude/agents fallback。每个 tier 内部仍用 createFsSkillContentLocator 做访问错误分类、realpath、
  * 同内容折叠与异内容歧义拒绝。namespaced 返回值回填完整原始 token，而非内部 leaf。
@@ -387,20 +387,38 @@ function withLogicalSkillAliases(locator: SkillContentLocator, aliases: Readonly
  * 的下一个 alternative；任何 access/schema/registry/ambiguity 错误都原样 fail-loud，不触发回退。
  */
 export function createProductionSkillContentLocator(opts: ProductionSkillContentLocatorOptions): SkillContentLocator {
-  const aliases = physicalSkillAliases(opts.pluginRoot)
+  const aliases = opts.runner === undefined ? new Map<string, string>() : loadSkillAliases(opts.pluginRoot)
   if (opts.runner !== undefined) {
-    return withLogicalSkillAliases(createRunnerSkillContentLocator({
+    const runnerLocator = createRunnerSkillContentLocator({
       runner: opts.runner,
       home: opts.home,
-      bundledRoot: opts.pluginRoot === undefined ? undefined : join(opts.pluginRoot, 'skills'),
+      // Bundled content is wrapped below so runner-specific resolution cannot bypass the
+      // canonical provenance/hash check.
+      bundledRoot: undefined,
       readInstalledPluginsJson: opts.readInstalledPluginsJson,
       readdirDirNames: opts.readdirDirNames,
-    }), aliases)
+    })
+    const bundledLocator = opts.pluginRoot === undefined || !hasCanonicalBundledSurface(opts.pluginRoot)
+      ? undefined
+      : createProvenanceAwareBundledLocator(opts.pluginRoot)
+    const locator: SkillContentLocator = bundledLocator === undefined
+      ? runnerLocator
+      : {
+          async locate(skillId) {
+            try {
+              return await bundledLocator.locate(skillId)
+            } catch (error) {
+              if (!(error instanceof SkillContentNotFoundError)) throw error
+              return runnerLocator.locate(skillId)
+            }
+          },
+        }
+    return withLogicalSkillAliases(locator, aliases)
   }
   const bundledRoot = opts.pluginRoot === undefined ? undefined : join(opts.pluginRoot, 'skills')
-  const bundledLocator = bundledRoot === undefined
+  const bundledLocator = bundledRoot === undefined || opts.pluginRoot === undefined || !hasCanonicalBundledSurface(opts.pluginRoot)
     ? undefined
-    : createFsSkillContentLocator([bundledRoot])
+    : createProvenanceAwareBundledLocator(opts.pluginRoot)
   let cachedCodexPluginRoots: Map<string, string[]> | undefined
   let cachedCodexFlatRoots: string[] | undefined
   let cachedCodexFlatLocator: SkillContentLocator | undefined
