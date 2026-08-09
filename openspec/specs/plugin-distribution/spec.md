@@ -345,8 +345,10 @@ Skills、hooks、CLI、Dashboard、workflow 与 adapters SHALL 来自同一候�
 
 宿主 Marketplace/plugin manager SHALL 是宿主插件登记与 cache 的唯一写入者；Tenon 不得直接改写、
 备份或恢复宿主私有 cache 目录。Tenon SHALL 在自己的所有权边界内对 content-addressed runtime、
-active/previous selection、bootstrap、stable launchers 与 Dashboard 服务执行可审计事务，并明确报告
-宿主提交与 Tenon 提交两个边界，不得把只回滚 managed selection 描述成“整个宿主插件已恢复”。
+active/previous selection、当前 hardened stable bootstrap、stable launchers 与 Dashboard 服务执行可审计事务，
+并明确报告宿主提交与 Tenon 提交两个边界，不得把只回滚 managed selection 描述成“整个宿主插件已恢复”。
+已验证 previous payload 的 rollback/补偿 SHALL 只切换 selection 并恢复精确 launcher/Dashboard 状态；
+它 SHALL NOT 用 previous payload 的旧 bootstrap 替换当前兼容 bootstrap。
 
 项目 canonical Change、OpenSpec 与任务文件不属于插件更新事务。更新 SHALL 只读取机器级项目注册表，
 报告需要显式 `tenon sync` 的项目，不得在后台或 `--auto` 模式中静默修改工作区。
@@ -357,7 +359,7 @@ active/previous selection、bootstrap、stable launchers 与 Dashboard 服务执
 - **THEN** 只有 Codex Marketplace/plugin manager 更新 `tenon@tenon`
 - **AND** 宿主 inventory 返回的候选先完成 payload、CLI、workflow、hook、Skill 与 Dashboard smoke
 - **AND** Tenon 再把同一 digest 发布为 content-addressed managed release
-- **AND** active selection、bootstrap、两个 stable launchers 与 18765 Dashboard 共同提交。
+- **AND** active selection、当前 hardened bootstrap、两个 stable launchers 与 18765 Dashboard 共同提交。
 
 #### Scenario: 自动更新已明确启用
 
@@ -368,7 +370,8 @@ active/previous selection、bootstrap、stable launchers 与 Dashboard 服务执
 #### Scenario: launcher 或 Dashboard 提交失败
 
 - **WHEN** managed release 已验证，但任一 launcher 写入或新 Dashboard readiness 失败
-- **THEN** Tenon SHALL 以 activation 前快照精确恢复 selection、bootstrap、launcher 的存在性/内容/mode
+- **THEN** Tenon SHALL 以 activation 前快照精确恢复 selection、launcher 的存在性/内容/mode 与 Dashboard
+- **AND** 当前 hardened bootstrap 保持不降级，不复制 previous payload 的旧 bootstrap
 - **AND** 终止本次候选 Dashboard child，并重新验证或恢复 previous release 的 18765 服务
 - **AND** 持久诊断分别说明宿主提交状态与 Tenon managed transaction 的补偿结果。
 
@@ -516,7 +519,7 @@ design、tasks、Superpowers design 与 ADR 的新 digest。旧 producer 与旧 
 
 Tenon SHALL 提供一个可重复、失败关闭的真实 Codex 首装验收。验收 SHALL 把 `HOME`、
 `CODEX_HOME`、`TENON_RUNTIME_HOME` 与 Dashboard 端口限制在本轮唯一临时作用域，通过真实
-Codex Marketplace 安装当前候选或公开 `main/install.sh`，并验证 stable launcher、managed
+Codex Marketplace 安装当前候选或已发布的精确 `vX.Y.Z/install.sh`，并验证 stable launcher、managed
 runtime、doctor、Dashboard 产品身份以及新 Codex 进程发现的插件、入口 Skill 与 hooks。
 
 验收 SHALL 不读取或复制真实用户凭据，不修改真实宿主或 Tenon 状态，不信任 hook，不停止未知
@@ -597,7 +600,7 @@ coordinator/restore 边界收到身份不匹配的 session 时 MUST NOT 调用�
 - **GIVEN** release workflow 已 checkout 一个待发布的不可变 Git ref/commit
 - **WHEN** public 轨从该精确 ref/commit 对应的 raw URL 下载 `install.sh` 并执行 `--codex`
 - **THEN** 它执行与 CI 候选轨相同的 runtime、doctor、Dashboard、新 Codex 进程和重复安装断言
-- **AND** 下载 ref 与当前 checkout 一致，漂移的 `main` 不得代替待发布候选
+- **AND** 下载 ref 与当前 checkout 一致，移动的 `main` 不得代替待发布候选
 - **AND** 任一 Marketplace、安装、身份或清理断言失败都会使 release 验收非零退出。
 
 #### Scenario: 严格保留锁与 HTTP 诊断
@@ -744,3 +747,100 @@ Tenon SHALL 在 Codex 首次安装、重复 setup、成功的前台 update 和 d
 - **THEN** 两次安装均成功并出现确定性三路径引导和复验命令
 - **AND** 验收不读取或复制真实用户凭证、不创建登录态、不信任 hook
 - **AND** 插件、Skill、hook、runtime、Dashboard 和重复安装身份断言继续完整执行。
+
+### Requirement: 公开安装 SHALL 从版本标签提供完整预构建产品
+
+官方安装命令 SHALL 从不可变稳定 SemVer 标签读取 `install.sh`。该脚本 SHALL 安装同标签的完整 Codex 插件并运行打包 CLI；用户机器 SHALL NOT 需要 clone 仓库、安装 workspace 依赖、调用构建命令或从源码入口启动 Tenon。
+
+#### Scenario: 干净 Codex 用户安装正式版本
+
+- **WHEN** 用户执行固定到 `vX.Y.Z/install.sh` 的官方一行命令
+- **THEN** installer 只调用受信任 PATH 中的 Codex CLI、Node 和标签内已发布 bundle
+- **AND** 安装后的插件包含 CLI、server、Dashboard、Skills、hooks 和 manifests
+- **AND** 命令历史不包含 `npm install`、`npm run build` 或本地源码路径
+- **AND** installer 与生成的稳定 launcher 执行冻结的绝对 Node/Bash/host CLI 路径，不重新从 cwd 或相对 PATH 解析程序
+
+#### Scenario: 标签内版本身份漂移
+
+- **WHEN** install 脚本默认 ref、根 package、Codex/Claude plugin manifest 或 workspace package 版本与标签不一致
+- **THEN** release/identity 门禁失败
+- **AND** 该候选不得成为正式安装命令
+
+#### Scenario: 同版本插件登记存在但被禁用
+
+- **WHEN** 预检发现 Tenon plugin/marketplace 版本与目标一致但 plugin registration 被禁用
+- **THEN** installer 把它视为可修复状态并通过公开 remove/add 收敛
+- **AND** 不在任何 mutation 前错误拒绝本次安装
+
+#### Scenario: 公开 bootstrap 在 packaged CLI 可用前中断
+
+- **WHEN** 一行安装器必须先通过宿主 CLI 重绑定 Marketplace/plugin，且在任一 remove/add 后中断
+- **THEN** 它已在 Tenon machine state 中持久化 target tag/commit、原 inventory、transaction 与下一 phase
+- **AND** 同一宿主的并发 installer 由存活 owner lease 串行化
+- **AND** 重跑只接纳 journal 记录的 before 状态或已证明的目标 postcondition，并从原 phase 幂等继续
+- **AND** 任一并发第三状态保持不变并失败关闭，不被无条件 remove
+
+### Requirement: 正式新用户验收 SHALL 使用宿主级卸载与版本化重装
+
+稳定 Release 发布后 SHALL 在真实用户路径验证：通过宿主 CLI 删除现有 Tenon plugin 和 Tenon marketplace，执行公开版本化一行安装，重复安装，并执行 `tenon update --codex`。该验收 SHALL 保留项目 Change/OpenSpec、用户规则、截图和可恢复 managed runtime。
+
+#### Scenario: 维护者验收公众安装命令
+
+- **WHEN** 新稳定 Release 已发布且维护者开始最终安装验收
+- **THEN** 维护者先记录当前 plugin、marketplace、launcher、runtime 和 Dashboard 身份
+- **AND** 仅通过 Codex 公开 CLI 删除 Tenon plugin/marketplace
+- **AND** 从 GitHub 已发布标签执行 README 中完全相同的一行命令
+- **AND** 最终 inventory 不指向本地 marketplace、开发 worktree 或 `main`
+
+#### Scenario: 重装失败
+
+- **WHEN** 宿主 plugin 已删除但正式安装在网络或候选校验阶段失败
+- **THEN** 项目数据和旧 managed runtime 保持不变
+- **AND** 稳定 launcher 提供重试或 runtime 诊断路径
+
+### Requirement: 可执行工具冻结 SHALL 绑定文件身份与可信路径链
+
+安装器与 native lifecycle 在首个 mutation 前 SHALL 把 host CLI、Node、Bash 和 Git 解析为
+普通文件的 realpath，冻结 device/inode/mode/owner、size/change identity 以及父目录身份。它 SHALL
+拒绝 executable 自身的 group/world write 位或非 root/当前用户 owner，也 SHALL 拒绝非 sticky 的
+world-writable 父目录，也 SHALL 拒绝由不同 owner 控制的 group-writable 父目录；由同一冻结 owner
+控制的 package-manager 根（例如 Homebrew `0775` Cellar）和 sticky 系统临时根 MAY 使用，但同样
+必须冻结完整父目录身份。每次 spawn 前 SHALL 重验原始路径仍解析到同一普通文件、物理文件及父目录
+身份均未变化，且可执行文件未被同 inode 原地改写；仅保存绝对 pathname 不构成信任证据。runtime
+repair、候选/已存 payload 校验和 installer decoder SHALL 使用同一冻结证明，不得回退到
+`process.execPath`、裸 PATH 或未绑定 pathname。
+
+POSIX SHALL 应用 owner 与 group/world-write 约束；Windows SHALL 以 realpath/file identity/change
+identity 复验替代无意义的 POSIX uid/mode 判定。Windows `.cmd`/`.bat` 宿主还 SHALL 同时冻结并在每次
+spawn 前复验其绝对 `ComSpec`/`cmd.exe` 物理身份。正式 CI SHALL 在真实 Windows runner 运行该链路。
+
+#### Scenario: 冻结后 symlink 或 executable 被换位
+
+- **WHEN** 预检后某个工具的 realpath、inode、owner、mode、父目录身份或上述 owner/write 约束发生变化
+- **THEN** 安装/update 在调用该工具前失败关闭
+- **AND** 不执行被换位的程序或任何后续宿主 mutation
+
+#### Scenario: executable 在原 inode 上被改写
+
+- **WHEN** 预检后工具内容、size 或 change identity 在原 inode 上变化
+- **THEN** 下一次 spawn 前的物理重验失败
+- **AND** runtime selection、宿主 plugin 与 marketplace 保持 mutation 前状态
+
+#### Scenario: Windows batch interpreter 漂移
+
+- **WHEN** 已冻结的 host shim 仍不变，但其绝对 `cmd.exe` 物理身份在 batch spawn 前变化
+- **THEN** native setup/update/doctor 不执行 shim
+- **AND** 不回退到 PATH、cwd 或只保存 pathname 的 interpreter
+
+### Requirement: Release 门禁 SHALL 使用精确公开 N-1 产物
+
+每个稳定 Release 候选 SHALL 以固定版本、commit 和 digest 的完整公开 N-1 payload
+执行兼容测试。缺少 N-1、使用任意本机 previous release、fixture 版本不匹配，或
+N-1 `status`/`set`/bundle contract 无法读写当前候选 Change 时 SHALL 阻止发布。
+
+#### Scenario: v1.0.2 验证真实 v1.0.1
+
+- **WHEN** release candidate 运行 N-1 compatibility gate
+- **THEN** gate 校验完整 v1.0.1 payload 的固定 commit 与 CLI SHA-256
+- **AND** v1.0.1 的 `status`、`set` 与 bundle 兼容断言全部通过
+- **AND** 不得在 N-1 缺失时静默 skip 并报告成功

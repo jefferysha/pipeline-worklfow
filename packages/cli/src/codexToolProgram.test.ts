@@ -34,6 +34,12 @@ text(result);
     }])
   })
 
+  it('accepts the host output-budget pragma when stdout is still verified byte-for-byte', () => {
+    expect(transcriptExecInvocations(`// @exec: {"yield_time_ms":30000,"max_output_tokens":30000}
+const r = await tools.exec_command({cmd:"cat /trusted/SKILL.md",max_output_tokens:30000}); text(r);
+`)).toEqual([{ command: 'cat /trusted/SKILL.md' }])
+  })
+
   it.each([
     '0',
     '-1',

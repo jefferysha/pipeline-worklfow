@@ -153,10 +153,7 @@ export function transcriptExecInvocations(input: string): readonly TranscriptExe
   if (pragma?.[1] !== undefined) {
     try {
       const parsed = JSON.parse(pragma[1].trim()) as unknown
-      if (
-        !isCompleteOutputSafeExecArguments(parsed)
-        || Object.hasOwn(parsed, 'max_output_tokens')
-      ) return []
+      if (!isCompleteOutputSafeExecArguments(parsed)) return []
     } catch {
       return []
     }

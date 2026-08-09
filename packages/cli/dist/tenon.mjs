@@ -44489,7 +44489,7 @@ function transcriptExecInvocations(input) {
   if (pragma?.[1] !== void 0) {
     try {
       const parsed = JSON.parse(pragma[1].trim());
-      if (!isCompleteOutputSafeExecArguments(parsed) || Object.hasOwn(parsed, "max_output_tokens")) return [];
+      if (!isCompleteOutputSafeExecArguments(parsed)) return [];
     } catch {
       return [];
     }

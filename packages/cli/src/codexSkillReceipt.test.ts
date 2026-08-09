@@ -237,6 +237,7 @@ function eventLines(
     readonly outputCallId?: string
     readonly command?: string
     readonly execArgs?: Readonly<Record<string, unknown>>
+    readonly pragma?: string
   } = {},
 ): string {
   const callId = options.callId ?? toolUseId
@@ -265,7 +266,7 @@ function eventLines(
         status: 'completed',
         call_id: callId,
         name: 'exec',
-        input: `const r = await tools.exec_command(${JSON.stringify({
+        input: `${options.pragma === undefined ? '' : `${options.pragma}\n`}const r = await tools.exec_command(${JSON.stringify({
           cmd: command,
           ...options.execArgs,
         })}); text(r);`,
@@ -632,7 +633,7 @@ describe('Codex transcript skill receipt', () => {
     )).toEqual([{ command: 'cat /trusted/SKILL.md' }])
     expect(transcriptExecInvocations(
       `// @exec: {"max_output_tokens":1}\nconst r = await tools.exec_command({cmd:"cat /trusted/SKILL.md"}); text(r);`,
-    )).toEqual([])
+    )).toEqual([{ command: 'cat /trusted/SKILL.md' }])
   })
 
   it('rejects a relative cat operand even when the verifier cwd resolves it to the trusted Skill', () => {
@@ -954,6 +955,50 @@ describe('Codex transcript skill receipt', () => {
       codexHomeDir: join(home, '.codex'),
     })
     expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+  })
+
+  it('accepts a host output-budget pragma only when the forwarded Skill remains complete', async () => {
+    await writeFile(
+      transcript,
+      eventLines(customResultOutput(), turnId, [skillPath], '2026-07-24T00:02:00Z', {
+        pragma: '// @exec: {"max_output_tokens":20000}',
+      }),
+      'utf8',
+    )
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual(['openspec-propose'])
+  })
+
+  it('rejects truncated Skill output even when the host output-budget pragma is valid', async () => {
+    await writeFile(
+      transcript,
+      eventLines(customResultOutput(0, '# OpenSpec'), turnId, [skillPath], '2026-07-24T00:02:00Z', {
+        pragma: '// @exec: {"max_output_tokens":1}',
+      }),
+      'utf8',
+    )
+    await recordPendingReceipt()
+
+    const result = await reconcileCodexSkillEvidence({
+      repoRoot: root,
+      changeDir,
+      producer: 'openspec-propose',
+      recordedAt: '2026-07-24T00:03:00Z',
+      history: historyWriter,
+      homeDir: home,
+      codexHomeDir: join(home, '.codex'),
+    })
+    expect(result.confirmedSkillIds).toEqual([])
   })
 
   it('rejects a successful receipt when max_output_tokens can truncate the trusted Skill output', async () => {

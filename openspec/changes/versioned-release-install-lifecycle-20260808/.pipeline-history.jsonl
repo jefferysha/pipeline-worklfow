@@ -414,3 +414,45 @@
 {"ts":"2026-08-09T06:59:33Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
 {"ts":"2026-08-09T06:59:33Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"6af068a4-3472-455f-84c4-c106ababfc52"}
 {"ts":"2026-08-09T07:36:01Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-09T07:39:07Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T07:39:07Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T07:39:08Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"17d06a8f-fecc-4a1d-8bc8-833cf2d86a0d"}
+{"ts":"2026-08-09T07:40:07Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T07:59:46Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-09-versioned-release-install-lifecycle-20260808-verify-attempt-2.md"}
+{"ts":"2026-08-09T08:04:14Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T08:04:14Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion b1ef6032-2cfe-4a12-a5db-41d46f07ff23 38"}
+{"ts":"2026-08-09T08:12:56Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-09-versioned-release-install-lifecycle-20260808-verify-fail-host-output-budget.md"}
+{"ts":"2026-08-09T08:12:56Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T08:12:56Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion b1ef6032-2cfe-4a12-a5db-41d46f07ff23 38"}
+{"ts":"2026-08-09T08:12:56Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-09T08:12:56Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify b1ef6032-2cfe-4a12-a5db-41d46f07ff23 38"}
+{"ts":"2026-08-09T08:13:02Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-09T08:13:02Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T02:30:09Z authority_host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-09T08:13:02Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"b51f3cb3-2da0-4bbc-b9c9-68dfe1835dd8"}
+{"ts":"2026-08-09T08:27:38Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-09T08:27:38Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build b1ef6032-2cfe-4a12-a5db-41d46f07ff23 39"}
+{"ts":"2026-08-09T08:27:38Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-09T08:30:19Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T08:30:19Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T08:31:19Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-09T08:31:19Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build b1ef6032-2cfe-4a12-a5db-41d46f07ff23 39"}
+{"ts":"2026-08-09T08:31:20Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"0fffa0bc-9c98-4f3e-954e-66262512d8e4"}
+{"ts":"2026-08-09T08:51:09Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-09T08:51:09Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T08:51:32Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-09-versioned-release-install-lifecycle-20260808-verify-attempt-3.md"}
+{"ts":"2026-08-09T08:51:32Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-09T08:51:32Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify b1ef6032-2cfe-4a12-a5db-41d46f07ff23 40"}
+{"ts":"2026-08-09T08:51:50Z","kind":"set","field":"verify_result","to":"pass"}
+{"ts":"2026-08-09T08:51:50Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-09T08:51:51Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-08-09T08:51:51Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-08-09T08:52:07Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-09T08:52:07Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-09T02:30:09Z authority_host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-09T08:52:07Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"c5614e92-164f-424f-a3f9-cba5cb41980d"}
+{"ts":"2026-08-09T08:55:25Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-08-09T08:55:25Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-09T08:55:25Z","kind":"tool","raw":"CodexSkillRead: finishing-a-development-branch"}
+{"ts":"2026-08-09T08:55:31Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-09T08:55:31Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change b1ef6032-2cfe-4a12-a5db-41d46f07ff23 41"}
+{"ts":"2026-08-09T08:56:59Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-09T08:56:59Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change b1ef6032-2cfe-4a12-a5db-41d46f07ff23 41"}

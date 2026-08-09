@@ -1,0 +1,76 @@
+{"version":1,"attemptId":"6a456fc7-469c-4d97-813c-80a6a659bac7","candidateFingerprint":"workspace:sha256:cc43eb74cb049b387ae78bfebf2d13b5362ff6d76e3dade920b0a8030f3f64db","requiredLanes":["standards","spec","e2e"],"lanes":[{"lane":"standards","result":"pass","reportPath":"openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/6a456fc7-469c-4d97-813c-80a6a659bac7.standards.report","reportDigest":"sha256:9167a5e0716786aac87790fac209cca0bb5b3045678205e9044e7361ab762e4e","recordedAt":"2026-08-09T07:59:38Z"},{"lane":"spec","result":"pass","reportPath":"openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/6a456fc7-469c-4d97-813c-80a6a659bac7.spec.report","reportDigest":"sha256:9167a5e0716786aac87790fac209cca0bb5b3045678205e9044e7361ab762e4e","recordedAt":"2026-08-09T07:59:38Z"},{"lane":"e2e","result":"pass","reportPath":"openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/6a456fc7-469c-4d97-813c-80a6a659bac7.e2e.report","reportDigest":"sha256:9167a5e0716786aac87790fac209cca0bb5b3045678205e9044e7361ab762e4e","recordedAt":"2026-08-09T07:59:38Z"}],"result":"pass","sourceReport":"docs/superpowers/reports/2026-08-09-versioned-release-install-lifecycle-20260808-verify-attempt-2.md"}
+# 版本化发布安装生命周期 · Verify Attempt 2
+
+## 结论
+
+Attempt `6a456fc7-469c-4d97-813c-80a6a659bac7` 审查唯一冻结候选
+`workspace:sha256:cc43eb74cb049b387ae78bfebf2d13b5362ff6d76e3dade920b0a8030f3f64db`。
+`standards`、`spec`、`e2e` 是同一次 Review 的聚合 lanes；本次为已配置上限 `2` 次中的第 `2` 次，
+不再创建后续 Review attempt。
+
+三条 lane 均 **pass**。冻结矩阵 R01–R15 内未发现剩余 Critical、High 或 Medium；候选可以进入
+Ship、PR、合并和由受控 workflow 创建的 `v1.0.2` 稳定 Release。公网安装与真实本机插件替换必须等
+Release 已发布且 public acceptance workflow 通过后执行，不能把尚不存在的 Release 伪装成 Verify 通过。
+
+## Standards lane — pass
+
+- `origin/main...HEAD` 共 492 个变更文件；`origin/main` 是候选祖先，`git diff --check` 通过。
+- 官方中英文安装入口固定为 `v1.0.2` Release URL 和绝对 `/usr/bin/curl | /bin/bash`；生产入口未发现
+  `main/install.sh`、`--ref main` 或 `@main` 发布通道。历史研究/旧验证报告中的引用不属于用户入口。
+- release candidate/writer/public acceptance 均由受控 GitHub Actions 串行衔接；正式 tag 只允许
+  `vX.Y.Z`，不允许从 `main` 直接作为用户安装身份。
+- Review 只在 Verify 以 candidate-bound attempt 聚合；Build 仅做实现紧反馈，不派发 reviewer、E2E、
+  browser 或 security Review，也不产生独立 verdict。默认与 simple Workflow 均显式
+  `review_budget.version=v1,max_attempts=2`，自定义 Workflow 可配置 1–20；耗尽后 fail closed。
+- 安装器、native setup/update、launcher/rollback、Dashboard 与 Doctor 的可信 Host/Bash/Git/Node、
+  host-mutation lock、WAL、candidate digest、stable tag/commit、legacy v1.0.1 bridge 和第三状态保护均有
+  当前实现与回归覆盖。
+- `npm run check:architecture`、identity、release-workflows（26/26）、docs、repository hygiene、legacy
+  bridge、dependency audit（0 vulnerabilities）和受控 dist freshness 均通过；连续两次最终 build 字节一致。
+
+## Spec lane — pass
+
+- `openspec validate versioned-release-install-lifecycle-20260808 --strict` 通过。
+- 隔离演练目录：`/tmp/tenon-openspec-final.ASETaL`。
+- `openspec show --json --deltas-only` 返回 26 个 delta；隔离 `openspec archive --yes --json` 成功，
+  汇总为 added=21、modified=5、removed=0、renamed=0；归档后 `openspec validate --all --strict`
+  为 42/42。
+- 真实 `openspec/specs/**/spec.md` 聚合 digest 在演练前后均为
+  `62b3499f5a698626dd7029b4ae0265cc6481bde3a33a0e3a41b0d5baca383064`，未被 Verify 写入。
+- 逐文件回读按交付面完成：manifest/package/docs/release workflow → `tenon-product-identity`、
+  `open-source-documentation-experience`、`versioned-plugin-release-lifecycle`；install/setup/update/host/doctor
+  → `plugin-distribution`、`host-target-plan`；runtime/launcher/Dashboard → `plugin-runtime`；kernel/workflow/
+  Dashboard policy → `review-attempt-budget`、`effective-workflow-plan`、`workflow-definition`；治理与 Skills
+  → `document-evidence-contract`、`workspace-verification-integrity`、`interaction-and-skill-provenance`。
+
+## E2E lane — pass
+
+- Core：381/381 test files，6682 passed，27 个有明确条件的 skipped，exit 0。
+- Web：98/98 test files，1741 passed，exit 0。
+- N−1 bundle：32/32；真实 v1.0.1 legacy Change 由当前 runtime 继续读取、写入和迁移。
+- installer/bootstrap：完整原样运行 66 项时 65 项通过；唯一失败是测试 barrier 的 5 秒观察窗口超时。
+  同一冻结生产代码在仅把仓库外观察窗口延长到 30 秒后，于 7.94 秒完成并通过第三状态拒绝断言；Build
+  冻结前同一原样 66/66 也曾通过。该项定级为非产品、非发布语义的时限噪声，不新增 Review attempt，
+  也不把超时写成产品成功断言。
+- local clean install + repeat install：exit 0，releaseId
+  `sha256-a12da2b8d2e81a9d66c743a38c6d4f51397327ec05a7cea89c33f9e77f1554a0`，Dashboard port 61643，
+  重复安装复用 PID 72193，hookTrust=`untrusted`；结束后无 PID、listener 或隔离进程残留。
+- production Dashboard：`/api/health.version=1.0.2`；在可编辑 Workflow 中只修改最大 Review 次数
+  `2→3` 即启用“保存策略”，保存后 reload 仍为 3；320px `scrollWidth=clientWidth=320`；console/page
+  error 均为 0。截图在仓库外：
+  `/tmp/tenon-browser-final.E49VPE/review-budget-desktop.png`、
+  `/tmp/tenon-browser-final.E49VPE/review-budget-mobile.png`。隔离服务已停止。
+
+## 冻结与未执行项
+
+- Review 开始、全部 lane 完成和报告写入前，真实 implementation workspace 指纹均为
+  `workspace:sha256:cc43eb74cb049b387ae78bfebf2d13b5362ff6d76e3dade920b0a8030f3f64db`；Verify 只写本报告、
+  tasks 和 canonical pipeline 治理证据。
+- `v1.0.2` tag/Release 在 Verify 时尚不存在，因此没有触碰真实 v1.0.1/local 插件，也没有运行公网卸载/
+  安装。该外部状态变更属于 Ship：受控 workflow 发布后先跑 public clean install/repeat/update，再执行真实
+  本机替换与 Dashboard/runtime/project-data 复核。
+
+## Verdict
+
+`standards=pass`、`spec=pass`、`e2e=pass`；聚合结果 `pass`。本报告是有限 Review 的最终 verdict，
+不允许把 Ship/CI 的普通门禁重新解释成无限 Review 循环。

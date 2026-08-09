@@ -2,18 +2,18 @@ track: backend
 preset: full
 created_by: unknown
 assignee: null
-phase: build
-phase_status: in_progress
+phase: ship
+phase_status: pending
 design_doc: docs/superpowers/specs/2026-08-08-versioned-release-install-lifecycle-design.md
 plan: docs/superpowers/plans/2026-08-08-versioned-release-install-lifecycle.md
-verification_report: docs/superpowers/reports/2026-08-09-versioned-release-install-lifecycle-20260808-verify-attempt-1.md
+verification_report: docs/superpowers/reports/2026-08-09-versioned-release-install-lifecycle-20260808-verify-attempt-3.md
 build_mode: direct
 isolation: in-place
-build_sha: null
-agent_review_result: fail
-codex_review_result: fail
-verify_result: fail
-branch_status: pending
+build_sha: workspace:sha256:be20ce0b4075cd9abc96262b393e0b36c362aad024b7a02d55d31dd7a8c77345
+agent_review_result: pass
+codex_review_result: pass
+verify_result: pass
+branch_status: handled
 direct_override: true
 prd_path: null
 pr_url: null
@@ -31,18 +31,18 @@ related_files: null
 spec_scope: null
 depends_on: null
 created_at: 2026-08-08T06:59:22Z
-updated_at: 2026-08-09T06:59:33Z
-verified_at: null
+updated_at: 2026-08-09T08:52:07Z
+verified_at: 2026-08-09T08:52:07Z
 archived_at: null
 archived: false
 workflow: default
 automation_current_phase: ""
 automation_cause: ""
 pipeline_run_id: b1ef6032-2cfe-4a12-a5db-41d46f07ff23
-pipeline_transition_sequence: 37
-pipeline_transition_head: 6af068a4-3472-455f-84c4-c106ababfc52
-pipeline_state_revision: 101
-pipeline_state_revision_id: a4b522cc-06a5-4357-b143-499f8c42488b
-pipeline_state_digest: 48f872a492fa251f4a5b9a42be5453734c0bd89e70f0225f09b253954cfe9e15
-# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTAxLCJyZXZpc2lvbklkIjoiYTRiNTIyY2MtMDZhNS00MzU3LWIxNDMtNDk5ZjhjNDI0ODhiIiwicGF5bG9hZERpZ2VzdCI6IjIwMTViZDVkZGYzMGI3ZDlkOTZjMjEwMTI3OGUwMThjYmJiOTdmMTE0MDBmMDhkMTY3NDk0MDZjMjQ2MWE4OTcifQ
-# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImIxZWY2MDMyLTJjZmUtNGExMi1hNWRiLTQxZDQ2ZjA3ZmYyMyIsInNlcXVlbmNlIjozNywicmVjb3JkSWQiOiI2YWYwNjhhNC0zNDcyLTQ1NWYtODRjNC1jMTA2YWJhYmZjNTIiLCJyZWNvcmREaWdlc3QiOiIwMjE1MjExMTE2YzcxMjBlZTNmOGEzNWY2N2QxYzgwY2UwZjcxMDEyM2E5MzBlMGM1MzA0YmRiZmQ3YWYzZDNhIn0
+pipeline_transition_sequence: 41
+pipeline_transition_head: c5614e92-164f-424f-a3f9-cba5cb41980d
+pipeline_state_revision: 117
+pipeline_state_revision_id: c628a8de-f186-456e-9d2b-9cb0d6310e63
+pipeline_state_digest: 2adf26d4460803c9874a1028cd56f68447b2bd035da933ad3dfe9cc6e649030f
+# tenon-internal-pre-verify-review-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJyZXZpc2lvbiI6MTE3LCJyZXZpc2lvbklkIjoiYzYyOGE4ZGUtZjE4Ni00NTZlLTlkMmItOWNiMGQ2MzEwZTYzIiwicGF5bG9hZERpZ2VzdCI6IjlkNTU1ODQ4NTIxNTYxZjBmNWZlOWMwY2Y1MmViNWJmZTYzZGZkMWQ4NzFjNWIxOGMyMTVmZmFlNjkyYzRlMGYifQ
+# tenon-internal-transition-head-v1: eyJzY2hlbWFWZXJzaW9uIjoxLCJydW5JZCI6ImIxZWY2MDMyLTJjZmUtNGExMi1hNWRiLTQxZDQ2ZjA3ZmYyMyIsInNlcXVlbmNlIjo0MSwicmVjb3JkSWQiOiJjNTYxNGU5Mi0xNjRmLTQyNGYtYTNmOS1jYmE1Y2I0MTk4MGQiLCJyZWNvcmREaWdlc3QiOiIyMmE2ZTUwZjY0YjJjYzY0MzYxMDg1ZTgxNDk5M2I1OWMzYWMyNDAwOTczM2RiMTEyOGY5NzkxMDA1MzU2OTNlIn0

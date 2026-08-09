@@ -73,11 +73,13 @@
 - [x] 对 R01-R14 逐项完成失败测试先红、最小实现转绿和定向验证，不接受弱化断言。 (build)
 - [x] 在源码停止变更后双重构建，证明受控 dist 新鲜且候选 fingerprint 前后相同。 (build)
 - [x] 实现并验证 R15：Workflow/Pipeline 可配置 Review 次数，显式 Review lanes 共用候选 attempt，跨进程持久且耗尽后在任何 Skill/agent/E2E 派发前停止。 (build)
+- [x] 接受安全的 Codex host output-budget pragma，同时以可信 Skill 全字节比对继续拒绝截断回执。 (build)
 
 ## 验证
 
-- [ ] 运行定向测试、安装/更新/卸载集成测试、构建、bundle、skills、adapter 与 release 门禁。 (verify)
-- [ ] 在隔离环境验证 CLI、Skills/hooks、managed runtime、Dashboard API/页面身份及用户数据保留。 (verify)
+- [x] 运行定向测试、安装/更新/卸载集成测试、构建、bundle、skills、adapter 与 release 门禁。 (verify)
+- [x] 在隔离环境验证 CLI、Skills/hooks、managed runtime、Dashboard API/页面身份及用户数据保留。 (verify)
+- [x] 在有限 Review attempt 3/3 对最终冻结候选完成 standards/spec/e2e 聚合并确认零实现漂移。 (verify)
 
 ## 交付
 
