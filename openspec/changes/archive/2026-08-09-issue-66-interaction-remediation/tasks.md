@@ -38,10 +38,10 @@
 ## 交付
 
 - [x] 应用两个 capability 的 OpenSpec 变更并同步交付证据。
-- [ ] 提交、推送 `codex/issue-66-interaction-remediation`，创建非 draft PR，正文包含 `Closes #66` 与 `Closes #46`。
-- [ ] 等待并核验 exact-head CI、mergeability 与 review threads；不 merge、不发布。
+- [x] 提交、推送 `codex/issue-66-interaction-remediation`，创建非 draft PR，正文包含 `Closes #66` 与 `Closes #46`。
+- [x] 等待并核验 exact-head CI、mergeability 与 review threads；不 merge、不发布。
 
 ## 归档
 
-- [ ] 完成官方 Archive 证据与最终 tasks 登记，不修改本机插件。
-- [ ] 回报 task/worktree/branch/HEAD/PR/CI/Review 尝试、验证证据和剩余风险。
+- [x] 完成官方 Archive 证据与最终 tasks 登记，不修改本机插件。
+- [x] 回报 task/worktree/branch/HEAD/PR/CI/Review 尝试、验证证据和剩余风险。
