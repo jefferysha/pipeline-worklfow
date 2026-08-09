@@ -83,3 +83,24 @@
 {"ts":"2026-08-09T21:32:28Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"95a6afba-6c48-4f86-b74f-4a878fcc5779"}
 {"ts":"2026-08-09T21:33:33Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-09T21:33:33Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 8a27f53e-17d9-4479-814e-a6006a88a00a 7"}
+{"ts":"2026-08-09T21:35:27Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-09T21:35:45Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T21:35:45Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T21:35:46Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"d729edaa-dd06-4526-8aaa-435dd6fbad05"}
+{"ts":"2026-08-09T21:52:46Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-09T21:53:28Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe867-3fbd-7c03-aa7f-ad619a6bbf86"}
+{"ts":"2026-08-09T21:53:34Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T21:53:34Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 8a27f53e-17d9-4479-814e-a6006a88a00a 8"}
+{"ts":"2026-08-09T21:53:45Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-09T21:53:45Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify 8a27f53e-17d9-4479-814e-a6006a88a00a 8"}
+{"ts":"2026-08-09T21:54:12Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-09T21:54:22Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-09T21:53:28Z authority_host_session=019fe867-3fbd-7c03-aa7f-ad619a6bbf86"}
+{"ts":"2026-08-09T21:54:25Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"e13324ae-1dfb-4c27-8fa1-988aeedde0bc"}
+{"ts":"2026-08-09T21:56:38Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-09T21:56:38Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change 8a27f53e-17d9-4479-814e-a6006a88a00a 9"}
+{"ts":"2026-08-09T21:56:45Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-08-09T21:56:45Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-ship 8a27f53e-17d9-4479-814e-a6006a88a00a 9"}
+{"ts":"2026-08-09T21:57:12Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-09T21:57:12Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change 8a27f53e-17d9-4479-814e-a6006a88a00a 9"}
+{"ts":"2026-08-09T21:58:15Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-09T21:58:15Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change 8a27f53e-17d9-4479-814e-a6006a88a00a 9"}

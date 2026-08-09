@@ -1,6 +1,10 @@
-# Interaction Observability 增量规格
+# Interaction Observability Specification
 
-## ADDED Requirements
+## Purpose
+
+Define the versioned, privacy-minimized interaction event contract, append-only projection, deterministic replay, scorecard metrics, and distributed verification assets.
+
+## Requirements
 
 ### Requirement: 系统必须提供版本化且隐私最小化的 InteractionEventV1
 
@@ -126,6 +130,8 @@ Kernel MUST 提供 deterministic replay validator，并至少产生下列稳定 
 
 Validator MUST 在同一 fixture/journey 内校验 Change/run/workflow/step visit 与 state continuity。任何 error diagnostic MUST 阻止该 journey 计入 verified completion。
 
+一旦 journey 因被拒绝的 acknowledgement、失败的 effect/operation 或首次合法 `resume.validated(success)` 进入 terminal，validator MUST 在通用 anchor/time continuity 校验之后建立 terminal fence。除 journey 已完成且 codes 全部已知的幂等 `resume.validated(success)` 外，terminal 后任何 core event MUST 同时产生全局和 journey-local `malformed-order`，MUST NOT 更新 request/ack/effect/resume 成功语义，并 MUST 使先前 valid completion 失效。unknown namespaced extension code MAY 继续进入 `unclassified_codes`，但 MUST NOT 绕过该 core-event ordering fence。允许的幂等 resume MUST 保留第一次 `validResumeAt`，不得增加 completion 或改变 scorecard。
+
 #### Scenario: 中间事件丢失
 
 - **WHEN** fixture 删除 acknowledgement 或制造 sequence gap
@@ -143,6 +149,27 @@ Validator MUST 在同一 fixture/journey 内校验 Change/run/workflow/step visi
 - **WHEN** successful acknowledgement 的 state-before 不等于 request state-after
 - **THEN** replay 产生 `accepted-stale-decision`
 - **AND** safety failure 保持独立，不得被其他成功事件抵消
+
+#### Scenario: terminal 后出现非法核心事件
+
+- **GIVEN** journey 已因 rejected acknowledgement、failed effect/operation 或 valid resume 进入 terminal
+- **WHEN** 后续出现 request、prompt-suppressed、acknowledgement、effect、非幂等 resume 或 operation failure
+- **THEN** replay 同时产生全局和 journey-local `malformed-order`
+- **AND** 不执行该事件的成功语义，不得保留或推断 verified completion
+
+#### Scenario: unknown extension code 不得绕过 terminal fence
+
+- **GIVEN** journey 已进入 terminal
+- **WHEN** 后续 core event 携带合法 namespaced grammar 但未分类的 extension code
+- **THEN** code 保留在 `unclassified_codes`
+- **AND** core event 仍产生 `malformed-order` 并阻止 completion
+
+#### Scenario: 幂等 valid resume 保持第一次完成
+
+- **GIVEN** journey 已完成合法 request → acknowledgement → effect → valid resume
+- **WHEN** 同一 journey/anchors/effect state 后再次出现 codes 全部已知的 `resume.validated(success)`
+- **THEN** replay 不产生 `malformed-order`
+- **AND** `validResumeAt` 保留第一次时间，completion 与 scorecard 不重复增加
 
 ### Requirement: 本地 JSON Scorecard 必须使用固定指标语义
 
@@ -198,10 +225,10 @@ Kernel public barrel MUST 导出 interaction contract/replay/scorecard/store por
 
 `docs/CONTRACT.md` MUST 记录 projection path、source-of-truth、wire schema、failure semantics 与 CLI JSON；`docs/TEST-REALITY.md` MUST 记录实际 fixture、unit/integration/concurrency/bundle coverage 和真实 skip。tracked `packages/cli/dist/tenon.mjs` MUST 只由 `npm run bundle` 生成并通过 freshness/smoke。
 
-#### Scenario: 旧 Change 没有 interaction projection
+#### Scenario: 旧 Change 仅缺少 interaction projection
 
-- **WHEN** 新 runtime 读取一个从未产生 interaction event 的旧 Change
-- **THEN** canonical CLI/review/transition 行为保持不变
+- **WHEN** 新 runtime 读取一个没有 `.pipeline-interactions.jsonl`、但 canonical review 证据按其独立契约验证的旧 Change
+- **THEN** projection 的缺失本身不得参与 acknowledgement 或 transition 授权判断
 - **AND** interaction reader 报 `projection-unavailable`，不得把 missing 当空且完整
 
 #### Scenario: 架构检查扫描 interaction domain

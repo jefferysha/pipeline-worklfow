@@ -7,7 +7,7 @@
       "scope": "verify",
       "defaultMaxAttempts": 2,
       "override": null,
-      "used": 1,
+      "used": 2,
       "active": null,
       "completed": [
         {
@@ -48,6 +48,45 @@
           "result": "pass",
           "reportPath": "openspec/changes/issue-66-interaction-remediation/.pipeline-run/review-attempt-reports/17ea9685-9d3e-4674-a123-3890d61bcbac.aggregate.report",
           "reportDigest": "sha256:d9da55c0cb19f0669549d11a8526c6111c021e8e70169d7bc03ec03107a2bdd5"
+        },
+        {
+          "attemptId": "c4ddcde3-e057-46c4-bd7e-ef9dc1ed072c",
+          "sequence": 2,
+          "candidateFingerprint": "workspace:sha256:ea69b37322009f9571cefe43e34a187a8e5b15929c40a3c1a33889906d0767d0",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T21:36:18Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-66-interaction-remediation/.pipeline-run/review-attempt-reports/c4ddcde3-e057-46c4-bd7e-ef9dc1ed072c.standards.report",
+              "reportDigest": "sha256:e77f04308a798c91467ff42c2d3c526c0a9d7e33ebdd3441ddb3faa23784cecd",
+              "recordedAt": "2026-08-09T21:52:26Z"
+            },
+            {
+              "lane": "spec",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-66-interaction-remediation/.pipeline-run/review-attempt-reports/c4ddcde3-e057-46c4-bd7e-ef9dc1ed072c.spec.report",
+              "reportDigest": "sha256:e77f04308a798c91467ff42c2d3c526c0a9d7e33ebdd3441ddb3faa23784cecd",
+              "recordedAt": "2026-08-09T21:52:26Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-66-interaction-remediation/.pipeline-run/review-attempt-reports/c4ddcde3-e057-46c4-bd7e-ef9dc1ed072c.e2e.report",
+              "reportDigest": "sha256:e77f04308a798c91467ff42c2d3c526c0a9d7e33ebdd3441ddb3faa23784cecd",
+              "recordedAt": "2026-08-09T21:52:26Z"
+            }
+          ],
+          "completedAt": "2026-08-09T21:52:27Z",
+          "result": "pass",
+          "reportPath": "openspec/changes/issue-66-interaction-remediation/.pipeline-run/review-attempt-reports/c4ddcde3-e057-46c4-bd7e-ef9dc1ed072c.aggregate.report",
+          "reportDigest": "sha256:18c86f04263c1e8d3a94f884d40f6916d57419d5a59cb9105951f590ad8772b7"
         }
       ]
     }

@@ -37,7 +37,7 @@
 
 ## 交付
 
-- [ ] 应用两个 capability 的 OpenSpec 变更并同步交付证据。
+- [x] 应用两个 capability 的 OpenSpec 变更并同步交付证据。
 - [ ] 提交、推送 `codex/issue-66-interaction-remediation`，创建非 draft PR，正文包含 `Closes #66` 与 `Closes #46`。
 - [ ] 等待并核验 exact-head CI、mergeability 与 review threads；不 merge、不发布。
 
