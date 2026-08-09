@@ -38,12 +38,28 @@ test('builds a release-pinned thin package without repository or test payload', 
       /unsupported option/,
     )
     await assert.rejects(
-      generated.verifyInstaller('#!/usr/bin/env bash\necho tampered\n'),
+      generated.verifyInstaller('#!/bin/bash\necho tampered\n'),
       /digest mismatch/,
     )
     assert.deepEqual((await readdir(output)).sort(), ['LICENSE', 'README.md', 'bin', 'package.json', 'product'])
     const help = await exec(process.execPath, [join(output, 'bin', 'tenon-bootstrap.mjs'), '--help'])
     assert.match(help.stdout, /tenon setup --codex/)
+  } finally {
+    await rm(output, { recursive: true, force: true })
+  }
+})
+
+test('rejects mutable branch, commit, and prerelease refs', async () => {
+  const output = await mkdtemp(join(tmpdir(), 'tenon-npx-package-ref-'))
+  try {
+    for (const ref of ['main', 'a'.repeat(40), 'v1.0.2-rc.1']) {
+      await assert.rejects(exec(process.execPath, [
+        join(root, 'tools', 'build-npx-package.mjs'),
+        '--package-name', '@example/tenon',
+        '--ref', ref,
+        '--output', output,
+      ], { cwd: root }), /complete stable release tag/)
+    }
   } finally {
     await rm(output, { recursive: true, force: true })
   }

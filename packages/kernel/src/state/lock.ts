@@ -7,7 +7,8 @@
  * - 跨进程：mkdir 抢占 + 轮询等待 + 陈锁回收（owner 文件 mtime 超 60s 视为持有者已死，接管）。
  *
  * 跨进程正确性（B1 修复）：
- * - **owner token**：抢锁成功后在锁目录写 `<lockDir>/owner`（pid+随机 token）。
+ * - **owner token**：先在私有 claim 目录写完整 `<lockDir>/owner.json`，再用 rename 一次发布；
+ *   public installer 与 native lifecycle 共用同一 wire protocol，不再出现各持一把“同名锁”。
  * - **心跳刷新 mtime**：持锁期间周期性 utimes owner 文件，令「活着的长任务（fn>60s）」的锁不被误判陈锁
  *   （老实现 mtime 从不刷新 → 长任务被夺锁双持）。
  * - **存活检测**：owner PID 已消失时立即接管；PID 仍存活或无法确认时才等待心跳陈旧阈值，
@@ -20,14 +21,17 @@
  *
  * 注意：锁不可重入——fn 内组合多步请用 read/write 原语，勿嵌套 set/setMany/cas/withLock。
  */
-import { randomBytes } from 'node:crypto'
-import { mkdir, readFile, rename, rm, stat, utimes, writeFile } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { link, lstat, mkdir, readFile, rename, rm, rmdir, unlink, utimes, writeFile } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 export const LOCK_DIR_NAME = '.pipeline.lock'
-/** 锁归属令牌文件（锁目录内）：记 pid+随机 token；回收/释放据此校验「锁是否仍属自己」 */
-export const LOCK_OWNER_FILE = 'owner'
+/** 当前锁归属协议；public installer 与 native lifecycle 必须共同使用。 */
+export const LOCK_OWNER_FILE = 'owner.json'
+/** 只读兼容旧 native 版本；新锁永不再写这个文件。 */
+export const LEGACY_LOCK_OWNER_FILE = 'owner'
 /** 陈锁阈值：锁 owner 文件 mtime 超过 60s 视为陈锁，可回收接管 */
 export const STALE_LOCK_MS = 60_000
 /** 心跳周期：持锁期间每 STALE_LOCK_MS/3 刷新一次 owner 文件 mtime，令活锁永不被误判陈锁 */
@@ -40,8 +44,22 @@ const queues = new Map<string, Promise<void>>()
 
 /** 持锁凭据：token（release/回收据此校验归属）+ 心跳计时器（release 时清除）。 */
 interface Held {
-  token: string
+  owner: string
   heartbeat: ReturnType<typeof setInterval>
+}
+
+interface LockOwnerRecord {
+  version: 1
+  owner: string
+  pid: number
+  pidStart?: string
+  createdAt: number
+}
+
+interface ObservedLock {
+  ageMs: number
+  processState: 'alive' | 'dead' | 'unknown'
+  retirementKey: string
 }
 
 function lockDirFor(changeDir: string): string {
@@ -52,52 +70,142 @@ function ownerPathFor(lockDir: string): string {
   return path.join(lockDir, LOCK_OWNER_FILE)
 }
 
+function legacyOwnerPathFor(lockDir: string): string {
+  return path.join(lockDir, LEGACY_LOCK_OWNER_FILE)
+}
+
+function ownRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value))
+    : null
+}
+
 /** 锁年龄（ms）：优先按 owner 文件 mtime（心跳刷新的真相源）；无 owner 文件回退锁目录 mtime；
  *  两者皆 stat 失败（锁刚消失）→ null，调用方立刻重试 mkdir。 */
-async function lockAgeMs(lockDir: string): Promise<number | null> {
+async function processStartIdentity(pid: number): Promise<string | null> {
   try {
-    const st = await stat(ownerPathFor(lockDir))
-    return Date.now() - st.mtimeMs
-  } catch {
-    try {
-      const st = await stat(lockDir)
-      return Date.now() - st.mtimeMs
-    } catch {
-      return null
+    if (process.platform === 'linux') {
+      const raw = await readFile(`/proc/${pid}/stat`, 'utf8')
+      const close = raw.lastIndexOf(')')
+      if (close < 0) return null
+      const fields = raw.slice(close + 2).trim().split(/\s+/u)
+      const start = fields[19]
+      return start !== undefined && /^[0-9]+$/u.test(start) ? `linux:${start}` : null
     }
+    const ps = process.platform === 'darwin' ? '/bin/ps' : '/usr/bin/ps'
+    const result = spawnSync(ps, ['-o', 'lstart=', '-p', String(pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    const start = result.status === 0 && typeof result.stdout === 'string' ? result.stdout.trim() : ''
+    return start === '' ? null : `${process.platform}:${start}`
+  } catch {
+    return null
   }
 }
 
-/** owner token 首段是持锁 PID；仅 ESRCH 能证明进程已消失，EPERM/格式异常均保守视为未知。 */
-async function lockOwnerProcessIsDead(lockDir: string): Promise<boolean> {
-  let owner: string
+function parseOwnerRecord(text: string): LockOwnerRecord | null {
   try {
-    owner = (await readFile(ownerPathFor(lockDir), 'utf8')).trim()
+    const value = ownRecord(JSON.parse(text))
+    if (value === null) return null
+    const keys = Object.keys(value).sort().join(',')
+    if (keys !== 'createdAt,owner,pid,pidStart,version' && keys !== 'createdAt,owner,pid,version') return null
+    if (value.version !== 1 || typeof value.owner !== 'string' || !/^[0-9a-f-]{36}$/u.test(value.owner)) return null
+    if (typeof value.pid !== 'number' || !Number.isSafeInteger(value.pid) || value.pid <= 0) return null
+    if (typeof value.createdAt !== 'number'
+      || !Number.isSafeInteger(value.createdAt)
+      || value.createdAt <= 0) return null
+    if (value.pidStart !== undefined && (typeof value.pidStart !== 'string' || value.pidStart === '')) return null
+    return {
+      version: 1,
+      owner: value.owner,
+      pid: value.pid,
+      ...(value.pidStart === undefined ? {} : { pidStart: value.pidStart }),
+      createdAt: value.createdAt,
+    }
   } catch {
-    return false
+    return null
   }
+}
+
+function parseLegacyOwner(text: string): { pid: number; pidStart?: string } | null {
+  const owner = text.trim()
   const pidText = owner.split('.', 1)[0] ?? ''
-  if (!/^[1-9][0-9]*$/.test(pidText)) return false
+  if (!/^[1-9][0-9]*$/.test(pidText)) return null
   const pid = Number(pidText)
-  if (!Number.isSafeInteger(pid) || pid <= 0) return false
+  if (!Number.isSafeInteger(pid) || pid <= 0) return null
+  const encodedStart = owner.split('.')[3]
+  if (encodedStart === undefined) return { pid }
+  try {
+    return { pid, pidStart: Buffer.from(encodedStart, 'base64url').toString('utf8') }
+  } catch {
+    return null
+  }
+}
+
+/** 仅 ESRCH 或 PID start identity 不同能证明 owner 已死；其余情况一律 fail closed。 */
+async function processState(pid: number, expectedStart?: string): Promise<'alive' | 'dead' | 'unknown'> {
   try {
     process.kill(pid, 0)
-    return false
+    if (expectedStart === undefined) return 'alive'
+    const actualStart = await processStartIdentity(pid)
+    return actualStart === null ? 'alive' : actualStart === expectedStart ? 'alive' : 'dead'
   } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'ESRCH'
+    return (error as NodeJS.ErrnoException).code === 'ESRCH' ? 'dead' : 'unknown'
+  }
+}
+
+async function observeLock(lockDir: string): Promise<ObservedLock | null> {
+  let dirItem
+  try {
+    dirItem = await lstat(lockDir)
+  } catch {
+    return null
+  }
+  if (!dirItem.isDirectory() || dirItem.isSymbolicLink()) {
+    return { ageMs: 0, processState: 'unknown', retirementKey: `${dirItem.dev}-${dirItem.ino}` }
+  }
+
+  let ownerMtime = dirItem.mtimeMs
+  let ownerIdentity: { pid: number; pidStart?: string } | null = null
+  try {
+    const item = await lstat(ownerPathFor(lockDir))
+    if (!item.isFile() || item.isSymbolicLink()) {
+      return { ageMs: Date.now() - item.mtimeMs, processState: 'unknown', retirementKey: `${dirItem.dev}-${dirItem.ino}` }
+    }
+    ownerMtime = item.mtimeMs
+    ownerIdentity = parseOwnerRecord(await readFile(ownerPathFor(lockDir), 'utf8'))
+  } catch {
+    try {
+      const item = await lstat(legacyOwnerPathFor(lockDir))
+      if (item.isFile() && !item.isSymbolicLink()) {
+        ownerMtime = item.mtimeMs
+        ownerIdentity = parseLegacyOwner(await readFile(legacyOwnerPathFor(lockDir), 'utf8'))
+      }
+    } catch {
+      // An owner-less directory is an unknown generation and is reclaimable only after staleness.
+    }
+  }
+  return {
+    ageMs: Date.now() - ownerMtime,
+    processState: ownerIdentity === null
+      ? 'unknown'
+      : await processState(ownerIdentity.pid, ownerIdentity.pidStart),
+    retirementKey: `${dirItem.dev}-${dirItem.ino}`,
   }
 }
 
 /** 原子回收废弃锁：把锁目录 rename 到唯一坟墓名（原子，多回收者只有一个成功），再删坟墓。
  *  rename 失败（他人已移走/替换）→ 静默返回，调用方退回循环重试 mkdir。 */
-async function reclaimAbandoned(lockDir: string): Promise<void> {
-  const grave = `${lockDir}.stale.${process.pid}.${randomBytes(6).toString('hex')}`
+async function reclaimAbandoned(lockDir: string, retirementKey: string): Promise<void> {
+  // 同一目录 generation 使用同一个永久 tombstone。并发回收者中首个 rename 成功后，后续
+  // 回收者不能把刚发布的 successor 移走，因为 no-overwrite 目标已经存在。
+  const grave = `${lockDir}.stale-${retirementKey}`
   try {
     await rename(lockDir, grave)
   } catch {
     return
   }
-  await rm(grave, { recursive: true, force: true }).catch(() => {})
 }
 
 /** 持锁期间周期刷新 owner 文件 mtime（unref，不拖住事件循环/进程退出）。 */
@@ -112,60 +220,72 @@ function startHeartbeat(lockDir: string): ReturnType<typeof setInterval> {
 }
 
 async function acquire(lockDir: string): Promise<Held> {
-  const token = `${process.pid}.${randomBytes(8).toString('hex')}.${Date.now()}`
+  const processStart = await processStartIdentity(process.pid)
+  if (processStart === null) throw new Error('withLock: current process start identity is unavailable')
+  const owner = randomUUID()
+  const claim = `${lockDir}.claim-${owner}`
+  const record: LockOwnerRecord = {
+    version: 1,
+    owner,
+    pid: process.pid,
+    pidStart: processStart,
+    createdAt: Date.now(),
+  }
+  await mkdir(claim, { mode: 0o700 })
+  await writeFile(ownerPathFor(claim), `${JSON.stringify(record)}\n`, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
   const deadline = Date.now() + ACQUIRE_TIMEOUT_MS
-  for (;;) {
-    let created = false
-    try {
-      await mkdir(lockDir)
-      created = true // 锁目录是本进程建的
-      await writeFile(ownerPathFor(lockDir), `${token}\n`, 'utf8')
-      return { token, heartbeat: startHeartbeat(lockDir) }
-    } catch (err) {
-      // mkdir 成功但写 owner 失败（ENOSPC/瞬态 IO，codex review P2）：不能把自己刚建的锁目录留成孤儿
-      // ——它没有 owner 文件、mtime 也不会被心跳刷新，后续调用者会当它是活锁空等满 10s 直到 60s 变陈锁。
-      // 清掉再抛，让下一个调用者立刻能 mkdir。
-      if (created) {
-        await rm(lockDir, { recursive: true, force: true }).catch(() => {})
-        throw err
+  try {
+    for (;;) {
+      let created = false
+      try {
+        // mkdir is the portable no-overwrite namespace claim. The owner file is already complete
+        // in the private directory and is hard-linked in one step; observers treat the tiny
+        // owner-less crash window as unknown/live until it is stale, never as immediately free.
+        await mkdir(lockDir, { mode: 0o700 })
+        created = true
+        await link(ownerPathFor(claim), ownerPathFor(lockDir))
+        await rm(claim, { recursive: true, force: true }).catch(() => {})
+        return { owner, heartbeat: startHeartbeat(lockDir) }
+      } catch (err) {
+        if (created) {
+          await unlink(ownerPathFor(lockDir)).catch(() => {})
+          await rmdir(lockDir).catch(() => {})
+          throw err
+        }
+        const code = (err as NodeJS.ErrnoException).code
+        if (code !== 'EEXIST') throw err
       }
-      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
+      const observed = await observeLock(lockDir)
+      if (observed === null) continue
+      if (observed.processState === 'dead'
+        || (observed.ageMs > STALE_LOCK_MS && observed.processState !== 'alive')) {
+        await reclaimAbandoned(lockDir, observed.retirementKey)
+        continue
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(`withLock: acquire timeout after ${ACQUIRE_TIMEOUT_MS}ms: ${lockDir}`)
+      }
+      await sleep(POLL_MS)
     }
-    // 已被占用：owner PID 已死或心跳陈旧 → 原子回收后立刻重试；否则轮询等待。
-    if (await lockOwnerProcessIsDead(lockDir)) {
-      await reclaimAbandoned(lockDir)
-      continue
-    }
-    const age = await lockAgeMs(lockDir)
-    if (age === null) continue // 锁刚消失，立刻重试 mkdir
-    if (age > STALE_LOCK_MS) {
-      await reclaimAbandoned(lockDir)
-      continue
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(`withLock: acquire timeout after ${ACQUIRE_TIMEOUT_MS}ms: ${lockDir}`)
-    }
-    await sleep(POLL_MS)
+  } catch (error) {
+    await rm(claim, { recursive: true, force: true }).catch(() => {})
+    throw error
   }
 }
 
 async function release(lockDir: string, held: Held): Promise<void> {
   clearInterval(held.heartbeat)
-  // token 守卫释放：读 owner，是自己才删（不是自己=已被夺锁/已消失 → 绝不删他人锁,幂等空操作）。
-  // 诚实登记的残留（codex review，接受）：读 owner 与 rm 之间存在纳秒级 TOCTOU——若本进程恰在这两个相邻
-  // await 之间被冻结/暂停超过 STALE_LOCK_MS 被夺锁、且新持有者重建同名 lockDir,则 rm 会误删新持有者的锁。
-  // 但这要求进程冻结点精确落在这两行之间(心跳期间进程活着就不会被判陈锁),单机罕见到近零,且影响是罕见
-  // 丢一次更新(可恢复),非崩溃。曾试过"rename 到坟墓再核对"消除本窗口,但那会主动移走新持有者的活锁(更差,
-  // codex 复审坐实),故回退本更简单、窗口更窄、不扰新持有者的实现。真需强一致须换心跳-liveness 协议或专用
-  // 锁服务——对单机工具属过度工程。
-  let owner: string | null = null
+  // 只移除自己的 immutable owner，再 rmdir 已空目录；绝不 recursive-delete 同名路径。
+  // 即使第三方增加了新内容，rmdir 也会失败并保留它，而不会删除后继者状态。
+  let owner: LockOwnerRecord | null = null
   try {
-    owner = (await readFile(ownerPathFor(lockDir), 'utf8')).trim()
+    owner = parseOwnerRecord(await readFile(ownerPathFor(lockDir), 'utf8'))
   } catch {
     owner = null
   }
-  if (owner !== held.token) return
-  await rm(lockDir, { recursive: true, force: true }).catch(() => {})
+  if (owner?.owner !== held.owner) return
+  await unlink(ownerPathFor(lockDir)).catch(() => {})
+  await rmdir(lockDir).catch(() => {})
 }
 
 /** mkdir 原子锁 + 陈锁回收，锁内串行执行 fn；透传 fn 结果，异常时保证释放。 */

@@ -5,22 +5,21 @@ import {
   type ManagedRuntimeTransaction,
   type RuntimeInstaller,
 } from '../runtime/installer.js'
-import {
-  createManagedHostStepRunner,
-} from '../runtime/managed-host-reconciliation.js'
 import type { RuntimeActivation } from '../runtime/types.js'
 import {
   DEFAULT_DASHBOARD_PORT,
   type ReleasedDashboardStarter,
 } from './dashboard.js'
-import { resolveManagedReleaseJournal } from './managed-release-journal-coordinator.js'
 import { coordinateReleaseDashboard } from './release-dashboard-coordinator.js'
 import {
-  isCompensationPhase,
   resumeManagedReleaseCompensation,
 } from './release-compensation.js'
+import { prepareManagedReleaseCandidate } from './release-candidate-coordinator.js'
+import {
+  assertManagedActivationIdentity,
+  revalidateResolvedCandidate,
+} from './release-activation-validation.js'
 import type {
-  ManagedHostPreparationContext,
   ManagedReleaseOutcome,
   ManagedReleaseRequest,
 } from './release-coordinator-contract.js'
@@ -71,78 +70,18 @@ async function publishWithinManagedTransaction(
   transaction: ManagedRuntimeTransaction,
   dashboardStarter: ReleasedDashboardStarter | undefined,
 ): Promise<ManagedReleaseOutcome> {
-  let journal = await resolveManagedReleaseJournal(deps, request, transaction)
-  if (isCompensationPhase(journal.phase)) {
-    return resumeManagedReleaseCompensation(
-      deps,
-      request.source,
-      transaction,
-      journal,
-      dashboardStarter,
-    )
-  }
-  if (
-    dashboardStarter !== undefined
-    && (journal.phase === 'activating-runtime'
-      || journal.phase === 'runtime-activated'
-      || journal.phase === 'starting-dashboard'
-      || journal.phase === 'dashboard-ready'
-      || journal.phase === 'evidence-committed')
-    && journal.dashboardBefore === undefined
-    && journal.dashboardBeforeAbsent !== true
-  ) {
-    throw new ManagedRuntimeIndeterminateError(
-      `旧 journal 已进入 ${journal.phase}，但缺少 pre-activation Dashboard identity/empty proof；`
-      + '拒绝从 activation 后的 retry 环境补证',
-    )
-  }
+  const prepared = await prepareManagedReleaseCandidate(
+    deps,
+    request,
+    transaction,
+    dashboardStarter,
+  )
+  if ('outcome' in prepared) return prepared.outcome
+  let { journal } = prepared
+  const { candidate } = prepared
 
-  let candidate: { readonly candidateRoot: string; readonly evidence?: string }
-  if (
-    journal.phase === 'candidate-resolved'
-    || journal.phase === 'activating-runtime'
-    || journal.phase === 'runtime-activated'
-    || journal.phase === 'starting-dashboard'
-    || journal.phase === 'dashboard-ready'
-    || journal.phase === 'evidence-committed'
-  ) {
-    if (journal.candidateRoot === undefined) {
-      throw new ManagedRuntimeIndeterminateError('write-ahead journal 缺少 candidateRoot')
-    }
-    candidate = {
-      candidateRoot: journal.candidateRoot,
-      ...(journal.evidence === undefined ? {} : { evidence: journal.evidence }),
-    }
-  } else {
-    try {
-      const runStep: ManagedHostPreparationContext['runStep'] = createManagedHostStepRunner({
-        journal: () => journal,
-        commit: async (record) => {
-          await transaction.journal.write(record)
-          journal = record
-        },
-        now: deps.clock,
-      })
-      candidate = await request.prepareCandidate({
-        transactionId: journal.transactionId,
-        runStep,
-      })
-      journal = {
-        ...journal,
-        phase: 'candidate-resolved',
-        candidateRoot: candidate.candidateRoot,
-        ...(candidate.evidence === undefined ? {} : { evidence: candidate.evidence }),
-        updatedAt: deps.clock(),
-      }
-      await transaction.journal.write(journal)
-    } catch (error) {
-      return {
-        ok: false,
-        state: error instanceof ManagedRuntimeIndeterminateError ? 'indeterminate' : 'unchanged',
-        detail: `宿主候选准备失败；managed runtime 保持不变，journal 已保留供幂等恢复：`
-          + `${error instanceof Error ? error.message : String(error)}`,
-      }
-    }
+  if (journal.phase === 'candidate-resolved') {
+    await revalidateResolvedCandidate(request, journal, candidate)
   }
 
   if (
@@ -180,7 +119,27 @@ async function publishWithinManagedTransaction(
   }
 
   let activation: RuntimeActivation
-  if (
+  if (journal.phase === 'candidate-resolved' && journal.activation !== undefined) {
+    if (journal.activationCheckpoint === undefined) {
+      throw new ManagedRuntimeIndeterminateError('Dashboard-only reconciliation 缺少 activation checkpoint')
+    }
+    activation = journal.activation
+    if (!await transaction.proveActivation(activation)) {
+      throw new ManagedRuntimeIndeterminateError('Dashboard-only reconciliation 的 current activation 已漂移')
+    }
+    if (activation.auditPending === true) {
+      throw new ManagedRuntimeIndeterminateError(
+        'runtime selection/launcher 已提交，但 terminal audit 尚未持久化；保留 activating-runtime WAL 供同一命令恢复',
+      )
+    }
+    assertManagedActivationIdentity(activation, request, journal)
+    journal = {
+      ...journal,
+      phase: 'runtime-activated',
+      updatedAt: deps.clock(),
+    }
+    await transaction.journal.write(journal)
+  } else if (
     journal.phase === 'runtime-activated'
     || journal.phase === 'starting-dashboard'
     || journal.phase === 'dashboard-ready'
@@ -201,6 +160,7 @@ async function publishWithinManagedTransaction(
         `journal 中的 activation ${activation.release.releaseId} 与当前 selection/launcher 不一致`,
       )
     }
+    assertManagedActivationIdentity(activation, request, journal)
   } else {
     let recovered: Awaited<ReturnType<ManagedRuntimeTransaction['recoverActivation']>> = {
       state: 'not-started',
@@ -237,8 +197,14 @@ async function publishWithinManagedTransaction(
     if (recovered.state === 'activated') {
       activation = recovered.activation
     } else {
+      await revalidateResolvedCandidate(request, journal, candidate)
       try {
-        activation = await transaction.activate(candidate.candidateRoot, request.source)
+        activation = await transaction.activate(
+          candidate.candidateRoot,
+          request.source,
+          request.expectedPluginVersion ?? journal.stableTarget?.version,
+          journal.stableTarget,
+        )
       } catch (error) {
         const indeterminate = error instanceof ManagedRuntimeIndeterminateError
         if (!indeterminate) {
@@ -254,6 +220,9 @@ async function publishWithinManagedTransaction(
               ...(journal.dashboardPort === undefined
                 ? {}
                 : { dashboardPort: journal.dashboardPort }),
+              ...(journal.stableTarget === undefined
+                ? {}
+                : { stableTarget: journal.stableTarget }),
               ...(journal.hostSteps === undefined ? {} : { hostSteps: journal.hostSteps }),
             }
             await transaction.journal.write(retryable)
@@ -274,6 +243,12 @@ async function publishWithinManagedTransaction(
         }
       }
     }
+    if (activation.auditPending === true) {
+      throw new ManagedRuntimeIndeterminateError(
+        'runtime selection/launcher 已提交，但 terminal audit 尚未持久化；保留 activating-runtime WAL 供同一命令恢复',
+      )
+    }
+    assertManagedActivationIdentity(activation, request, journal)
     try {
       journal = {
         ...journal,
@@ -297,9 +272,11 @@ async function publishWithinManagedTransaction(
     transaction,
     journal,
     activation,
-    request.openBrowser,
+    candidate.openBrowser ?? request.openBrowser,
     journal.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
     dashboardStarter,
+    request.runtime.trustedNodePath,
+    request.runtime.verifyTrustedNode,
   )
   if (!dashboard.ok) return dashboard
   journal = dashboard.journal
@@ -313,7 +290,12 @@ async function publishWithinManagedTransaction(
     if (journal.phase === 'evidence-committed') {
       try {
         await transaction.journal.clear(journal.transactionId)
-        return { ok: true, state: 'ready', activation }
+        return {
+          ok: true,
+          state: 'ready',
+          activation,
+          ...(journal.stableTarget === undefined ? {} : { stableTarget: journal.stableTarget }),
+        }
       } catch (error) {
         return {
           ok: false,
@@ -323,7 +305,9 @@ async function publishWithinManagedTransaction(
       }
     }
     try {
-      await request.commitReadyEvidence?.(activation, candidate, journal.transactionId)
+      await request.commitReadyEvidence?.(activation, candidate, journal.transactionId, {
+        ...(journal.stableTarget === undefined ? {} : { stableTarget: journal.stableTarget }),
+      })
     } catch (error) {
       dashboardFailure = `ready evidence 提交失败：${error instanceof Error ? error.message : String(error)}`
     }
@@ -337,7 +321,12 @@ async function publishWithinManagedTransaction(
         }
         await transaction.journal.write(journal)
         await transaction.journal.clear(journal.transactionId)
-        return { ok: true, state: 'ready', activation }
+        return {
+          ok: true,
+          state: 'ready',
+          activation,
+          ...(journal.stableTarget === undefined ? {} : { stableTarget: journal.stableTarget }),
+        }
       } catch (error) {
         return {
           ok: false,
@@ -381,5 +370,7 @@ async function publishWithinManagedTransaction(
     journal,
     dashboardStarter,
     candidateDashboard,
+    request.runtime.trustedNodePath,
+    request.runtime.verifyTrustedNode,
   )
 }

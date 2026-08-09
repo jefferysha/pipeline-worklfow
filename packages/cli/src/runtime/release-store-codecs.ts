@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { appendFile, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type {
@@ -5,6 +6,7 @@ import type {
   RuntimePaths,
   RuntimeReleaseManifest,
   RuntimeReleaseSource,
+  RuntimeStableReleaseTarget,
   RuntimeSelection,
 } from './types.js'
 import { RuntimeFailure } from './types.js'
@@ -34,6 +36,7 @@ export const PAYLOAD_ENTRIES = [
 ] as const
 
 const RELEASE_ID = /^sha256-[a-f0-9]{64}$/
+const STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -54,13 +57,51 @@ export function isExistingReleaseCollision(error: unknown): boolean {
 }
 
 function sourceFromUnknown(value: unknown): RuntimeReleaseSource | null {
-  if (!isRecord(value)) return null
+  if (!isRecord(value) || Object.keys(value).sort().join(',') !== 'host,pluginVersion') return null
   const host = value.host
   const pluginVersion = nonEmptyString(value.pluginVersion)
   if ((host !== 'codex' && host !== 'claude' && host !== 'adapter' && host !== 'manual') || pluginVersion === null) {
     return null
   }
   return { host, pluginVersion }
+}
+
+function stableTargetFromUnknown(value: unknown): RuntimeStableReleaseTarget | null {
+  if (!isRecord(value) || Object.keys(value).sort().join(',') !== 'commit,tag,version') return null
+  const version = value.version
+  const tag = value.tag
+  const commit = value.commit
+  if (typeof version !== 'string'
+    || !STABLE_VERSION.test(version)
+    || tag !== `v${version}`
+    || typeof commit !== 'string'
+    || !/^[a-f0-9]{40}$/.test(commit)) return null
+  return { version, tag, commit }
+}
+
+function identityFrame(hash: ReturnType<typeof createHash>, value: string): void {
+  const bytes = Buffer.from(value, 'utf8')
+  hash.update(`${bytes.byteLength}:`, 'utf8')
+  hash.update(bytes)
+}
+
+export function runtimeReleaseIdV2(
+  payloadDigest: string,
+  source: RuntimeReleaseSource,
+  stableTarget?: RuntimeStableReleaseTarget,
+): string {
+  const hash = createHash('sha256')
+  for (const field of [
+    'tenon-runtime-release-v2',
+    payloadDigest,
+    source.host,
+    source.pluginVersion,
+    stableTarget === undefined ? 'no-stable-target' : 'stable-target',
+    stableTarget?.version ?? '',
+    stableTarget?.tag ?? '',
+    stableTarget?.commit ?? '',
+  ]) identityFrame(hash, field)
+  return `sha256-${hash.digest('hex')}`
 }
 
 export function parseManifest(raw: string): RuntimeReleaseManifest | null {
@@ -70,13 +111,35 @@ export function parseManifest(raw: string): RuntimeReleaseManifest | null {
   } catch {
     return null
   }
-  if (!isRecord(value) || value.version !== 1 || !validReleaseId(value.releaseId)) return null
+  if (!isRecord(value) || !validReleaseId(value.releaseId)) return null
   const payloadDigest = nonEmptyString(value.payloadDigest)
   const createdAt = nonEmptyString(value.createdAt)
   const source = sourceFromUnknown(value.source)
   if (payloadDigest === null || !/^[a-f0-9]{64}$/.test(payloadDigest) || createdAt === null || source === null) return null
-  if (value.releaseId !== `sha256-${payloadDigest}`) return null
-  return { version: 1, releaseId: value.releaseId, payloadDigest, createdAt, source }
+  if (value.version === 1) {
+    if (Object.keys(value).sort().join(',') !== 'createdAt,payloadDigest,releaseId,source,version'
+      || value.releaseId !== `sha256-${payloadDigest}`) return null
+    return { version: 1, releaseId: value.releaseId, payloadDigest, createdAt, source }
+  }
+  if (value.version !== 2) return null
+  const allowed = value.stableTarget === undefined
+    ? 'createdAt,payloadDigest,releaseId,source,version'
+    : 'createdAt,payloadDigest,releaseId,source,stableTarget,version'
+  if (Object.keys(value).sort().join(',') !== allowed) return null
+  const stableTarget = value.stableTarget === undefined
+    ? undefined
+    : stableTargetFromUnknown(value.stableTarget)
+  if (stableTarget === null
+    || (stableTarget !== undefined && stableTarget.version !== source.pluginVersion)
+    || value.releaseId !== runtimeReleaseIdV2(payloadDigest, source, stableTarget)) return null
+  return {
+    version: 2,
+    releaseId: value.releaseId,
+    payloadDigest,
+    createdAt,
+    source,
+    ...(stableTarget === undefined ? {} : { stableTarget }),
+  }
 }
 
 export function parseSelection(raw: string): RuntimeSelection | null {
@@ -111,7 +174,8 @@ export function parseAudit(raw: string): RuntimeAuditEntry | null {
   const releaseId = value.releaseId
   const previousRelease = value.previousRelease
   if (at === null || detail === null
-    || (kind !== 'activated' && kind !== 'activation-rejected' && kind !== 'rolled-back'
+    || (kind !== 'activation-prepared' && kind !== 'activated' && kind !== 'activation-rejected'
+      && kind !== 'rollback-prepared' && kind !== 'rolled-back'
       && kind !== 'rollback-rejected' && kind !== 'update-rejected' && kind !== 'pruned')
     || (releaseId !== undefined && !validReleaseId(releaseId))
     || (previousRelease !== undefined && previousRelease !== null && !validReleaseId(previousRelease))) return null
@@ -148,19 +212,35 @@ export async function readSelection(paths: RuntimePaths): Promise<RuntimeSelecti
   }
 }
 
-export async function lastAudit(paths: RuntimePaths): Promise<RuntimeAuditEntry | null> {
+export interface RuntimeAuditState {
+  readonly lastAudit: RuntimeAuditEntry | null
+  readonly auditCorrupt: boolean
+}
+
+export async function readAuditState(paths: RuntimePaths): Promise<RuntimeAuditState> {
   try {
-    const lines = (await readFile(paths.auditPath, 'utf8')).trim().split(/\r?\n/)
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      const line = lines[index]
-      if (line === undefined || line === '') continue
+    const raw = await readFile(paths.auditPath, 'utf8')
+    if (raw === '') return { lastAudit: null, auditCorrupt: false }
+    if (!raw.endsWith('\n')) return { lastAudit: null, auditCorrupt: true }
+    const lines = raw.slice(0, -1).split(/\r?\n/)
+    let latest: RuntimeAuditEntry | null = null
+    for (const line of lines) {
+      if (line === '') return { lastAudit: null, auditCorrupt: true }
       const parsed = parseAudit(line)
-      if (parsed !== null) return parsed
+      if (parsed === null) return { lastAudit: null, auditCorrupt: true }
+      latest = parsed
     }
-    return null
-  } catch {
-    return null
+    return { lastAudit: latest, auditCorrupt: false }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { lastAudit: null, auditCorrupt: false }
+    }
+    return { lastAudit: null, auditCorrupt: true }
   }
+}
+
+export async function lastAudit(paths: RuntimePaths): Promise<RuntimeAuditEntry | null> {
+  return (await readAuditState(paths)).lastAudit
 }
 
 export async function writeAudit(paths: RuntimePaths, entry: RuntimeAuditEntry): Promise<void> {

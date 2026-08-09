@@ -7,6 +7,7 @@ import {
   observeNativeHost,
 } from './managed-host-observation.js'
 import type { NativePipelineHost } from './plugin-host.js'
+import type { StableReleaseTarget } from './stable-release.js'
 
 export interface ManagedHostCommandResult {
   readonly code: number
@@ -48,6 +49,7 @@ export async function runManagedHostCommand(
   stepId: string,
   env: SetupEnv,
   command: HostCommandPlanItem,
+  target?: StableReleaseTarget,
 ): Promise<ManagedHostCommandResult> {
   if (stepId.startsWith('inventory-')) {
     return env.runCommand(command.cmd, [...command.args])
@@ -58,19 +60,28 @@ export async function runManagedHostCommand(
   const host = command.cmd as NativePipelineHost
   const injected = env.managedHostReconciliation?.(host, stepId, command)
   const desired = injected === undefined
-    ? desiredNativeHostPostcondition(env, host, stepId)
+    ? desiredNativeHostPostcondition(env, host, stepId, target)
     : {
         serialized: injected.desired,
         isDesired: injected.isDesired,
         isEquivalentDesired: injected.isEquivalentDesired,
+        isCompletedCompatible: injected.isCompletedCompatible,
       }
-  const raw = await transaction.runStep(stepId, {
-    desired: desired.serialized,
-    isEquivalentDesired: desired.isEquivalentDesired,
-    observe: injected?.observe ?? (() => observeNativeHost(env, host)),
-    isDesired: desired.isDesired,
-    execute: () => JSON.stringify(env.runCommand(command.cmd, [...command.args])),
-  })
+  const reconcile = () => transaction.runStep(stepId, {
+      desired: desired.serialized,
+      isEquivalentDesired: desired.isEquivalentDesired,
+      observe: injected?.observe ?? (() => observeNativeHost(env, host)),
+      isDesired: desired.isDesired,
+      ...(desired.isCompletedCompatible === undefined
+        ? {}
+        : { isCompletedCompatible: desired.isCompletedCompatible }),
+      execute: () => JSON.stringify(env.runCommand(command.cmd, [...command.args])),
+    })
+  // The lock covers before/WAL/pre-execute-CAS/mutation/postcondition as one host-owned step. The
+  // public bootstrap uses the exact same path, so two entrypoints cannot both authorize a delete.
+  const raw = await (env.withHostMutationLock === undefined
+    ? reconcile()
+    : env.withHostMutationLock(host, reconcile))
   // The fresh host observation is the commit fact. A host CLI may report non-zero after reaching
   // the desired state (for example an idempotent "already installed" diagnostic); retaining that
   // raw result in the WAL is useful for audit, but it must not permanently fail first-run or

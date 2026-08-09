@@ -1,40 +1,30 @@
-/**
- * Release update command for the one packaged Tenon plugin.
- *
- * Codex and Claude own their marketplace/cache lifecycles, so this command only asks the selected
- * host to refresh and reinstall its own plugin.  Other supported runtimes are adapters rather than
- * marketplaces; for them `update` deliberately re-applies the adapter from the already updated
- * package instead of falsely claiming to fetch a release from that host.
- */
-import { isAbsolute, join } from 'node:path'
 import type { CliDeps } from '../deps.js'
+import { printCodexAuthGuidance } from '../codexAuth.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
 import {
-  REAL_RELEASED_DASHBOARD_STARTER,
-} from './released-dashboard-starter.js'
+  inspectCandidatePayload,
+  type CandidatePayloadIdentity,
+} from '../runtime/release-store.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
+import {
+  bindNativeHostCommand,
+  freezeTrustedLifecycleCommands,
+} from './native-host-command-binding.js'
 import {
   hostFlag,
   isNativePipelineHost,
   nativeUpdatePlan,
-  parseHostPluginInventory,
   selectPipelineHost,
-  type HostCommandPlanItem,
-  type PipelineHost,
   type PipelineHostFlags,
 } from './plugin-host.js'
-import { cmdSetupHost, type SetupEnv, REAL_SETUP_ENV } from './setup.js'
-import { bindNativeHostCommand } from './native-host-command-binding.js'
-import { publishManagedRelease } from './release-coordinator.js'
-import { parseDashboardPort } from './dashboard-launch-options.js'
-import { runManagedHostCommand } from './managed-host-command.js'
-import { resolveRuntimePaths } from '../runtime/paths.js'
+import { REAL_RELEASED_DASHBOARD_STARTER } from './released-dashboard-starter.js'
+import { cmdSetupHost, REAL_SETUP_ENV, type SetupEnv } from './setup.js'
 import {
-  finalizePendingHostPluginConflict,
-  readHostPluginConvergenceReceipt,
-  recordPendingHostPluginConflict,
-} from './host-plugin-convergence.js'
-import { printCodexAuthGuidance, renderDeferredCodexAuthLine } from '../codexAuth.js'
+  REAL_STABLE_RELEASE_RESOLVER,
+  type StableReleaseResolver,
+  type StableReleaseTarget,
+} from './stable-release.js'
+import { renderNativeUpdatePlan, runNativeUpdate } from './update-native.js'
 
 export interface UpdateOpts extends PipelineHostFlags {
   dryRun?: boolean
@@ -45,80 +35,14 @@ export interface UpdateOpts extends PipelineHostFlags {
 
 export { nativeUpdatePlan } from './plugin-host.js'
 
-function renderPlan(deps: CliDeps, host: PipelineHost, plan: readonly HostCommandPlanItem[]): void {
-  deps.io.out(`[update] ${hostFlag(host)} 发布更新计划（只更新所选宿主）`)
-  for (const item of plan) deps.io.out(`  $ ${item.cmd} ${item.args.join(' ')}`)
-}
-
-/** Hosts differ on whether reinstalling an already-installed plugin is exit 0 or an idempotent error. */
-function isAlreadyInstalledResult(result: { readonly stdout: string; readonly stderr: string }): boolean {
-  return /already|exists|installed|duplicate/i.test(`${result.stdout}\n${result.stderr}`)
-}
-
-/**
- * Codex exposes one refresh command for Git marketplaces only.  A configured local marketplace
- * is already reading its source directory, so the correct equivalent is to skip that fetch and
- * let the following `plugin add` rebuild Codex's installed plugin cache.  Do not treat any other
- * marketplace error as a success: auth, network, and malformed-registry failures must still keep
- * the current managed runtime selected.
- */
-function isLocalCodexMarketplaceUpgradeNoop(result: { readonly stdout: string; readonly stderr: string }): boolean {
-  return /not configured as a Git marketplace/i.test(`${result.stdout}\n${result.stderr}`)
-}
-
-function verifyUpdatedRoot(deps: CliDeps, env: SetupEnv, root: string): boolean {
-  // `tenon` is a user-level launcher and its cwd is normally the target project, not the
-  // plugin checkout.  Verify the freshly installed package using its own absolute asset path.
-  const result = env.runCommand('bash', [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root])
-  if (result.code === 0) return true
-  deps.io.err(`ERROR: 新插件资产校验失败，保持原 launcher：${result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`}`)
-  return false
-}
-
-function rejectUpdate(
-  installer: RuntimeInstaller,
-  env: SetupEnv,
-  detail: string,
-): number | Promise<number> {
-  const record = installer.recordUpdateFailure?.({
-    homeDir: env.homeDir(),
-    env: env.runtimeEnv(),
-  }, detail)
-  if (record === undefined) return 1
-  return record.then(() => 1).catch(() => 1)
-}
-
-type HostBoundaryState = 'in-progress' | 'committed'
-type ManagedBoundaryState = 'unchanged' | 'restored' | 'indeterminate'
-
-function boundaryDetail(
-  hostState: HostBoundaryState,
-  managedState: ManagedBoundaryState,
-  detail: string,
-): string {
-  return `host=${hostState}; managed=${managedState}; ${detail}`
-}
-
-function reportHostBoundary(deps: CliDeps, host: PipelineHost, state: HostBoundaryState): void {
-  if (state === 'committed') {
-    deps.io.err(
-      `[update] 宿主插件缓存已由 ${host === 'codex' ? 'Codex' : 'Claude'} 更新；` +
-      'Tenon 未回滚宿主私有缓存，当前会话仍使用其已加载版本。',
-    )
-    return
-  }
-  deps.io.err(
-    `[update] ${hostFlag(host)} 宿主更新在 inventory 提交确认前失败；` +
-    '宿主私有缓存状态由宿主 CLI 管理，Tenon 未直接写入或恢复该缓存。',
-  )
-}
-
 export function cmdUpdate(
   deps: CliDeps,
   opts: UpdateOpts,
   env: SetupEnv = REAL_SETUP_ENV,
   installer: RuntimeInstaller = REAL_RUNTIME_INSTALLER,
   dashboardStarter: ReleasedDashboardStarter = REAL_RELEASED_DASHBOARD_STARTER,
+  releaseResolver: StableReleaseResolver = REAL_STABLE_RELEASE_RESOLVER,
+  candidateInspector: (root: string) => Promise<CandidatePayloadIdentity> = inspectCandidatePayload,
 ): number | Promise<number> {
   const selection = selectPipelineHost(opts)
   if (selection.host === null) {
@@ -128,189 +52,59 @@ export function cmdUpdate(
   const host = selection.host
   if (!isNativePipelineHost(host)) {
     deps.io.out(`[update] ${hostFlag(host)} 没有独立 marketplace；从当前已更新的 Tenon 包重新部署 adapter。`)
-    return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env, installer, dashboardStarter, opts.auto !== true)
+    return cmdSetupHost(deps, host, { ...opts, autoUpdate: false }, env, installer, dashboardStarter, false)
   }
-
-  const plan = nativeUpdatePlan(host)
-  renderPlan(deps, host, plan)
   if (opts.dryRun) {
+    const previewTarget: StableReleaseTarget = {
+      version: '<latest-stable>',
+      tag: '<latest-stable>',
+      commit: '0'.repeat(40),
+    }
+    renderNativeUpdatePlan(deps, host, nativeUpdatePlan(host, previewTarget))
+    deps.io.out('[update] 执行时先只读解析并冻结官方 latest stable Release；dry-run 不联网。')
     deps.io.out('[update] --dry-run:未刷新 marketplace、未重装插件、未切换 launcher。')
     return 0
   }
   const hostBinding = env.resolveHostCommand(host)
   if (hostBinding === undefined) {
-    if (host === 'codex') {
-      printCodexAuthGuidance(deps.io, { state: 'unavailable', reason: 'cli-missing' })
-    }
+    if (host === 'codex') printCodexAuthGuidance(deps.io, { state: 'unavailable', reason: 'cli-missing' })
     deps.io.err(`ERROR: ${host} CLI 不在可信的绝对 PATH 项中；未执行宿主或 Tenon 状态变更。`)
     return 1
   }
-  const lifecycleEnv = bindNativeHostCommand(env, host, hostBinding)
-
-  return (async () => {
-  const convergence = readHostPluginConvergenceReceipt(lifecycleEnv, host)
-  if (convergence.state === 'invalid') {
-    deps.io.err(`ERROR: ${convergence.detail}；未执行新的 marketplace/runtime 变更。`)
+  const trustedCommands = freezeTrustedLifecycleCommands(env)
+  if (trustedCommands.missing.length > 0) {
+    deps.io.err(
+      `ERROR: ${trustedCommands.missing.join('/')} 不在可信的绝对 PATH 项中；`
+      + '未执行宿主或 Tenon 状态变更。',
+    )
     return 1
   }
-  if (convergence.state === 'receipt' && convergence.receipt.state === 'cleanup-pending') {
-    const finalized = await finalizePendingHostPluginConflict(deps, lifecycleEnv, installer, host, convergence.receipt)
-    if (finalized.state === 'failed') {
-      deps.io.err(`ERROR: 冲突插件官方清理失败：${finalized.detail}`)
-      return 1
-    }
-    // waiting/completed 都终止本次 update，避免同一调用继续刷新或发布另一个候选。
-    return 0
-  }
-
-  let hostBoundary: HostBoundaryState = 'in-progress'
-  const dashboardPort = parseDashboardPort(lifecycleEnv.runtimeEnv().TENON_DASHBOARD_PORT)
-  const outcome = await publishManagedRelease(
+  const lifecycleEnv = bindNativeHostCommand(env, host, hostBinding, trustedCommands)
+  const trustedBash = trustedCommands.bashBinding
+  const trustedNode = trustedCommands.nodeBinding
+  const inspectCandidate = candidateInspector !== inspectCandidatePayload
+    ? candidateInspector
+    : lifecycleEnv.inspectCandidatePayload
+      ?? ((root: string) => inspectCandidatePayload(root, {
+        bashPath: trustedCommands.bash,
+        ...(trustedBash === undefined ? {} : { verifyBash: trustedBash.assert }),
+        nodePath: trustedCommands.node,
+        ...(trustedNode === undefined ? {} : { verifyNode: trustedNode.assert }),
+      }))
+  return runNativeUpdate({
     deps,
-    {
-      operation: 'update',
-      source: host,
-      runtime: {
-        homeDir: lifecycleEnv.homeDir(),
-        env: lifecycleEnv.runtimeEnv(),
-      },
-      openBrowser: opts.auto !== true,
-      ...(dashboardPort === null ? {} : { dashboardPort }),
-      prepareCandidate: async (transaction) => {
-        let inventory = ''
-        for (let index = 0; index < plan.length; index += 1) {
-          const item = plan[index]!
-          const stepId = index === 0
-            ? 'marketplace-refresh'
-            : index === 1
-              ? 'plugin-install'
-              : 'inventory-after'
-          const result = await runManagedHostCommand(transaction, stepId, lifecycleEnv, item)
-          if (result.stdout.trim() !== '' && !opts.auto) deps.io.out(result.stdout.trimEnd())
-          if (host === 'codex' && index === 0 && isLocalCodexMarketplaceUpgradeNoop(result)) {
-            deps.io.out('[update] Codex 本地 marketplace 不需要 Git fetch；继续刷新 tenon 插件缓存。')
-            continue
-          }
-          if (result.code !== 0) {
-            // `plugin add` is the host's only cross-version reinstall primitive. Some host releases
-            // report an idempotent existing install as non-zero; inventory is the sole proof.
-            if (index === 1 && isAlreadyInstalledResult(result)) {
-              const inventoryItem = plan[plan.length - 1]!
-              const inventoryResult = await runManagedHostCommand(
-                transaction,
-                'inventory-after',
-                lifecycleEnv,
-                inventoryItem,
-              )
-              const parsedInventory = inventoryResult.code === 0
-                ? parseHostPluginInventory(host, inventoryResult.stdout)
-                : null
-              if (parsedInventory?.tenonRoot !== null && parsedInventory?.tenonRoot !== undefined) {
-                inventory = inventoryResult.stdout
-                break
-              }
-            }
-            throw new Error(
-              `${item.cmd} ${item.args.join(' ')} 失败：${result.stderr.trim() || `退出码 ${result.code}`}`,
-            )
-          }
-          inventory = result.stdout
-        }
-        const parsedInventory = parseHostPluginInventory(host, inventory)
-        if (parsedInventory === null) {
-          throw new Error(`${hostFlag(host)} 更新后的宿主插件清单响应畸形；未切换 launcher。`)
-        }
-        const root = parsedInventory.tenonRoot
-        if (root === null) {
-          throw new Error(`${hostFlag(host)} 更新后未在宿主插件清单中找到 tenon；未切换 launcher。`)
-        }
-        hostBoundary = 'committed'
-        if (!verifyUpdatedRoot(deps, lifecycleEnv, root)) {
-          throw new Error('宿主刷新后的 tenon 候选未通过打包资产校验')
-        }
-        return { candidateRoot: root, evidence: inventory }
-      },
-      commitReadyEvidence: (activation, candidate, transactionId) => {
-        const parsedInventory = candidate.evidence === undefined
-          ? null
-          : parseHostPluginInventory(host, candidate.evidence)
-        if (parsedInventory === null) throw new Error('journal 中的宿主 inventory evidence 无效')
-        if (!recordPendingHostPluginConflict(
-          deps,
-          lifecycleEnv,
-          host,
-          parsedInventory,
-          activation,
-          candidate.candidateRoot,
-          transactionId,
-        )) throw new Error('宿主插件收敛 receipt 未能持久化')
-      },
-    },
+    env: lifecycleEnv,
     installer,
     dashboardStarter,
-  )
-  if (!outcome.ok) {
-    deps.io.err(`ERROR: ${outcome.detail}`)
-    reportHostBoundary(deps, host, hostBoundary)
-    return await rejectUpdate(installer, lifecycleEnv, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
-  }
-  const { activation } = outcome
-  deps.io.out(`[update] 已原子切换至已验证 runtime: ${activation.release.releaseId}（revision ${activation.selection.revision}）。`)
-  if (opts.auto) {
-    deps.io.out(`[update] ${hostFlag(host)} 已在后台刷新；当前会话继续使用已加载版本，新会话将加载新 skills/hooks。`)
-  } else {
-    deps.io.out(`[update] ${hostFlag(host)} 已更新；稳定 tenon launcher 已保持不变，新会话将加载新 skills/hooks。`)
-  }
-  if (host === 'codex') {
-    deps.io.out('[update] 若 Codex 将新版本 Tenon hook 标为未信任或已变更，请在 Codex 输入 /hooks 后重新信任；这是宿主的安全边界。')
-    if (opts.auto) {
-      deps.io.out(renderDeferredCodexAuthLine('后台更新未检查登录状态'))
-    } else {
-      const auth = await lifecycleEnv.codexAuthStatus(hostBinding.executable)
-        .catch(() => ({ state: 'unavailable', reason: 'spawn-error' } as const))
-      printCodexAuthGuidance(deps.io, auth)
-    }
-  }
-  reportRegisteredProjects(deps, lifecycleEnv, activation.release.source.pluginVersion)
-  return 0
-  })()
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'"'"'`)}'`
-}
-
-function reportRegisteredProjects(deps: CliDeps, env: SetupEnv, pluginVersion: string): void {
-  let registry: string | undefined
-  try {
-    registry = env.readText(resolveRuntimePaths({
-      homeDir: env.homeDir(),
-      env: env.runtimeEnv(),
-    }).registryPath)
-  } catch {
-    deps.io.err('[update] WARN: 项目注册表无法读取；未修改任何工作区。')
-    return
-  }
-  if (registry === undefined) return
-  let roots: unknown
-  try {
-    roots = JSON.parse(registry)
-  } catch {
-    deps.io.err('[update] WARN: 项目注册表无法解析；未修改任何工作区。')
-    return
-  }
-  if (!Array.isArray(roots)) return
-  const registeredRoots = [...new Set(
-    roots.filter((root): root is string => typeof root === 'string' && isAbsolute(root)),
-  )]
-  const outdated = registeredRoots.filter((root) => {
-    try {
-      return env.readText(join(root, '.pipeline-version'))?.trim() !== pluginVersion
-    } catch {
-      return true
-    }
+    releaseResolver,
+    inspectCandidate,
+    host,
+    hostExecutable: hostBinding.executable,
+    trustedBashPath: trustedCommands.bash,
+    verifyTrustedBash: trustedBash?.assert,
+    trustedNodePath: trustedCommands.node,
+    trustedNodeProof: trustedNode?.proof,
+    verifyTrustedNode: trustedNode?.assert,
+    auto: opts.auto === true,
   })
-  if (outdated.length === 0) return
-  deps.io.out(`[update] ${outdated.length} 个已登记项目需要显式同步（本次更新未写工作区）：`)
-  for (const root of outdated) deps.io.out(`  cd ${shellQuote(root)} && tenon sync`)
 }

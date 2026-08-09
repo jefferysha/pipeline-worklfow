@@ -14,7 +14,9 @@ fi
 commit="$(node -p "require('$META').gitCommit")"
 expected_cli="$(node -p "require('$META').cliSha256")"
 cli_entry="$(node -p "require('$META').cliEntry")"
-release="$(node -p "require('$META').releaseId + ' plugin@' + require('$META').pluginVersion")"
+tag="$(node -p "require('$META').tag")"
+version="$(node -p "require('$META').pluginVersion")"
+release="$tag plugin@$version commit@$commit"
 entries=()
 while IFS= read -r entry; do
   [ -n "$entry" ] && entries+=("$entry")
@@ -39,6 +41,10 @@ printf '%s\n' "${entries[@]}" | grep -Fxq "$cli_entry" || {
 }
 
 git -C "$ROOT" cat-file -e "$commit^{commit}"
+[ "$(git -C "$ROOT" rev-parse "$tag^{commit}")" = "$commit" ] || {
+  printf 'N-1 tag 未绑定固定 commit: tag=%s commit=%s\n' "$tag" "$commit" >&2
+  exit 1
+}
 mkdir -p "$PAYLOAD"
 git -C "$ROOT" archive "$commit" -- "${entries[@]}" | tar -x -C "$PAYLOAD"
 
@@ -59,6 +65,14 @@ actual_cli="$(node -e '
   printf 'N-1 CLI 摘要不匹配: expected=%s actual=%s\n' "$expected_cli" "$actual_cli" >&2
   exit 1
 }
+
+for manifest in .codex-plugin/plugin.json .claude-plugin/plugin.json; do
+  actual_version="$(node -p "require('$PAYLOAD/$manifest').version")"
+  [ "$actual_version" = "$version" ] || {
+    printf 'N-1 manifest 版本不匹配: %s expected=%s actual=%s\n' "$manifest" "$version" "$actual_version" >&2
+    exit 1
+  }
+done
 
 printf 'N-1 release ready: %s\n' "$release"
 printf 'N-1 CLI: %s\n' "$cli"

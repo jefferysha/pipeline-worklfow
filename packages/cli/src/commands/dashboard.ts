@@ -23,7 +23,15 @@ import {
   parseDashboardPort,
   type ReleasedDashboardOptions,
 } from './dashboard-launch-options.js'
+import { freezeTrustedExecutable, type TrustedExecutable } from './trusted-executable.js'
+import {
+  releasedDashboardSession,
+  type ReleasedDashboardSession,
+  type ReleasedDashboardStopOutcome,
+} from './dashboard-session.js'
 export type { ReleasedDashboardOptions } from './dashboard-launch-options.js'
+export type { ReleasedDashboardSession, ReleasedDashboardStopOutcome } from './dashboard-session.js'
+export { releasedDashboardSession } from './dashboard-session.js'
 
 export {
   DashboardTerminationUnconfirmedError,
@@ -45,8 +53,8 @@ export interface DashboardOpts {
 export interface DashboardRuntime {
   resolveRoot(): string
   fileExists(path: string): boolean
-  launch(serverBundle: string, env: NodeJS.ProcessEnv): Promise<number>
-  launchDetached(serverBundle: string, env: NodeJS.ProcessEnv): Promise<DashboardProcessHandle | null>
+  launch(serverBundle: string, env: NodeJS.ProcessEnv, nodeExecutable?: string): Promise<number>
+  launchDetached(serverBundle: string, env: NodeJS.ProcessEnv, nodeExecutable?: string): Promise<DashboardProcessHandle | null>
   resolveStateScopeId(): string
   waitForHealthyServer(
     port: number,
@@ -73,12 +81,24 @@ function fileExists(path: string): boolean {
   }
 }
 
-function launch(serverBundle: string, env: NodeJS.ProcessEnv): Promise<number> {
+function launch(
+  serverBundle: string,
+  env: NodeJS.ProcessEnv,
+  nodeExecutable = process.execPath,
+): Promise<number> {
   return new Promise((resolveCode) => {
-    const child = spawn(process.execPath, [serverBundle], { stdio: 'inherit', env })
+    const child = spawn(nodeExecutable, [serverBundle], { stdio: 'inherit', env })
     child.once('error', () => resolveCode(1))
     child.once('exit', (code) => resolveCode(code ?? 1))
   })
+}
+
+export interface DashboardCommandEnvironment {
+  resolveTrustedNode(): TrustedExecutable | undefined
+}
+
+const REAL_DASHBOARD_COMMAND_ENV: DashboardCommandEnvironment = {
+  resolveTrustedNode: () => freezeTrustedExecutable(process.execPath),
 }
 
 /** Opens a URL through the platform's registered browser without shell interpolation. */
@@ -166,52 +186,10 @@ export interface ReleasedDashboardStarter {
   ): Promise<ReleasedDashboardStartOutcome>
 }
 
-export type ReleasedDashboardStopOutcome =
-  | { readonly state: 'stopped' }
-  | { readonly state: 'indeterminate'; readonly detail: string }
-
-export interface ReleasedDashboardSession {
-  readonly ownership: ManagedDashboardIdentity
-  /** Stops only the exact listener whose release/state/PID identity still matches. */
-  stop(): Promise<ReleasedDashboardStopOutcome>
-}
-
 export type ReleasedDashboardStartOutcome =
   | { readonly state: 'ready'; readonly session: ReleasedDashboardSession }
   | { readonly state: 'failed'; readonly detail: string }
   | { readonly state: 'indeterminate'; readonly detail: string }
-
-export function releasedDashboardSession(
-  deps: CliDeps,
-  ownership: ManagedDashboardIdentity,
-  stopOwned: (identity: ManagedDashboardIdentity) => Promise<boolean>,
-): ReleasedDashboardSession {
-  let stopped = false
-  return {
-    ownership,
-    stop: async () => {
-      if (stopped) return { state: 'stopped' }
-      try {
-        if (!await stopOwned(ownership)) {
-          throw new DashboardTerminationUnconfirmedError(
-            `Dashboard pid=${ownership.pid} 的 listener 终止未获证明`,
-          )
-        }
-        stopped = true
-        return { state: 'stopped' }
-      } catch (error) {
-        const terminationDetail = error instanceof Error ? error.message : String(error)
-        deps.io.err(`[dashboard] 候选进程终止状态无法确认：${terminationDetail}`)
-        return {
-          state: 'indeterminate',
-          detail: error instanceof DashboardTerminationUnconfirmedError
-            ? error.message
-            : new DashboardTerminationUnconfirmedError(terminationDetail).message,
-        }
-      }
-    },
-  }
-}
 
 async function stopFailedCandidate(
   deps: CliDeps,
@@ -250,9 +228,11 @@ async function startManagedDashboard(
   }
   let child: DashboardProcessHandle | null
   try {
+    opts.verifyTrustedNode?.()
     child = await runtime.launchDetached(
       assets.serverBundle,
       dashboardProcessEnvironment(port, opts.transactionId),
+      opts.trustedNodePath,
     )
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
@@ -293,6 +273,8 @@ async function startManagedDashboard(
     && Number.isSafeInteger(healthy.pid)
     && healthy.pid > 0
     && (expectedReleaseId === undefined || healthy.releaseId === expectedReleaseId)
+    && (opts.expectedServerVersion === undefined
+      || healthy.serverVersion === opts.expectedServerVersion)
     && healthy.stateScopeId === expectedStateScopeId
     && healthy.transactionId === opts.transactionId
   if (!identityMatchesSpawn) {
@@ -348,6 +330,7 @@ export async function cmdDashboard(
   deps: CliDeps,
   opts: DashboardOpts,
   runtime: DashboardRuntime = REAL_DASHBOARD_RUNTIME,
+  commandEnv: DashboardCommandEnvironment = REAL_DASHBOARD_COMMAND_ENV,
 ): Promise<number> {
   const explicitPort = opts.port === undefined ? null : parseDashboardPort(opts.port)
   if (opts.port !== undefined && explicitPort === null) {
@@ -374,6 +357,11 @@ export async function cmdDashboard(
     deps.io.out('[dashboard] --dry-run：未启动 server。')
     return 0
   }
+  const trustedNode = commandEnv.resolveTrustedNode()
+  if (trustedNode === undefined) {
+    deps.io.err('ERROR: Dashboard 启动前无法冻结当前 Node 物理身份。')
+    return 1
+  }
 
   // Browser opening is meaningful only after readiness; make `--open` imply the safe managed
   // background mode rather than racing a foreground server startup.
@@ -381,12 +369,27 @@ export async function cmdDashboard(
     return (await startManagedDashboard(
       deps,
       root,
-      { port, openBrowser: opts.open === true },
+      {
+        port,
+        openBrowser: opts.open === true,
+        trustedNodePath: trustedNode.executable,
+        verifyTrustedNode: trustedNode.assert,
+      },
       runtime,
     )).state === 'ready' ? 0 : 1
   }
 
-  const code = await runtime.launch(assets.serverBundle, dashboardProcessEnvironment(port))
+  try {
+    trustedNode.assert()
+  } catch (error) {
+    deps.io.err(`ERROR: Dashboard 启动前 Node 身份已漂移：${error instanceof Error ? error.message : String(error)}`)
+    return 1
+  }
+  const code = await runtime.launch(
+    assets.serverBundle,
+    dashboardProcessEnvironment(port),
+    trustedNode.executable,
+  )
   if (code !== 0) deps.io.err(`[dashboard] server 退出，code=${code}`)
   return code
 }

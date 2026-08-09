@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+  "workflowFingerprint": "e0a5f815ec73ffe72c082ed7ca4b2f92ede3623d6d2ccdbe8bde97ceb678e35f",
+  "scopes": [
+    {
+      "scope": "verify",
+      "defaultMaxAttempts": 2,
+      "override": {
+        "maxAttempts": 3,
+        "setAt": "2026-08-09T08:11:10Z"
+      },
+      "used": 3,
+      "active": null,
+      "completed": [
+        {
+          "attemptId": "14e9438b-464b-4b13-a921-4cd856c35926",
+          "sequence": 1,
+          "candidateFingerprint": "workspace:sha256:a40bea5f1cf9e24d45da45569c5f9ea066dd0f8297ab17ff0c2a02e5cec27c09",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T05:02:07Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "fail",
+              "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/14e9438b-464b-4b13-a921-4cd856c35926.standards.report",
+              "reportDigest": "sha256:c143a7144747eaa8a8fe66bfb56d0f8fcf46e6ae69e8d511a8b76cb684361aa4",
+              "recordedAt": "2026-08-09T06:59:25Z"
+            },
+            {
+              "lane": "spec",
+              "result": "fail",
+              "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/14e9438b-464b-4b13-a921-4cd856c35926.spec.report",
+              "reportDigest": "sha256:c143a7144747eaa8a8fe66bfb56d0f8fcf46e6ae69e8d511a8b76cb684361aa4",
+              "recordedAt": "2026-08-09T06:59:25Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "fail",
+              "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/14e9438b-464b-4b13-a921-4cd856c35926.e2e.report",
+              "reportDigest": "sha256:c143a7144747eaa8a8fe66bfb56d0f8fcf46e6ae69e8d511a8b76cb684361aa4",
+              "recordedAt": "2026-08-09T06:59:26Z"
+            }
+          ],
+          "completedAt": "2026-08-09T06:59:26Z",
+          "result": "fail",
+          "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/14e9438b-464b-4b13-a921-4cd856c35926.aggregate.report",
+          "reportDigest": "sha256:f2f977bc102e663080badea7336e7d00ce5e6e63a29f31ab913ed3a1ab74dfad"
+        },
+        {
+          "attemptId": "6a456fc7-469c-4d97-813c-80a6a659bac7",
+          "sequence": 2,
+          "candidateFingerprint": "workspace:sha256:cc43eb74cb049b387ae78bfebf2d13b5362ff6d76e3dade920b0a8030f3f64db",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T07:39:19Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "pass",
+              "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/6a456fc7-469c-4d97-813c-80a6a659bac7.standards.report",
+              "reportDigest": "sha256:9167a5e0716786aac87790fac209cca0bb5b3045678205e9044e7361ab762e4e",
+              "recordedAt": "2026-08-09T07:59:38Z"
+            },
+            {
+              "lane": "spec",
+              "result": "pass",
+              "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/6a456fc7-469c-4d97-813c-80a6a659bac7.spec.report",
+              "reportDigest": "sha256:9167a5e0716786aac87790fac209cca0bb5b3045678205e9044e7361ab762e4e",
+              "recordedAt": "2026-08-09T07:59:38Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/6a456fc7-469c-4d97-813c-80a6a659bac7.e2e.report",
+              "reportDigest": "sha256:9167a5e0716786aac87790fac209cca0bb5b3045678205e9044e7361ab762e4e",
+              "recordedAt": "2026-08-09T07:59:38Z"
+            }
+          ],
+          "completedAt": "2026-08-09T07:59:38Z",
+          "result": "pass",
+          "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/6a456fc7-469c-4d97-813c-80a6a659bac7.aggregate.report",
+          "reportDigest": "sha256:fa53ccc02d2d9fde1723882675650bcf983b830d6423349ecb87d4cb56479d44"
+        },
+        {
+          "attemptId": "c5343e49-3d6a-4a79-8dc8-f752fb20309f",
+          "sequence": 3,
+          "candidateFingerprint": "workspace:sha256:be20ce0b4075cd9abc96262b393e0b36c362aad024b7a02d55d31dd7a8c77345",
+          "maxAttempts": 3,
+          "startedAt": "2026-08-09T08:31:29Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "pass",
+              "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/c5343e49-3d6a-4a79-8dc8-f752fb20309f.standards.report",
+              "reportDigest": "sha256:546ef5cf64a121d6ac856f4c01155c634c2729fa31c2bfbb3d1d35d2ba82bfc3",
+              "recordedAt": "2026-08-09T08:51:50Z"
+            },
+            {
+              "lane": "spec",
+              "result": "pass",
+              "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/c5343e49-3d6a-4a79-8dc8-f752fb20309f.spec.report",
+              "reportDigest": "sha256:546ef5cf64a121d6ac856f4c01155c634c2729fa31c2bfbb3d1d35d2ba82bfc3",
+              "recordedAt": "2026-08-09T08:51:50Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/c5343e49-3d6a-4a79-8dc8-f752fb20309f.e2e.report",
+              "reportDigest": "sha256:546ef5cf64a121d6ac856f4c01155c634c2729fa31c2bfbb3d1d35d2ba82bfc3",
+              "recordedAt": "2026-08-09T08:51:50Z"
+            }
+          ],
+          "completedAt": "2026-08-09T08:51:50Z",
+          "result": "pass",
+          "reportPath": "openspec/changes/versioned-release-install-lifecycle-20260808/.pipeline-run/review-attempt-reports/c5343e49-3d6a-4a79-8dc8-f752fb20309f.aggregate.report",
+          "reportDigest": "sha256:adff75231c47276fc54d2cfe6ab72c3bf29ced68a67c6225e1fb573e1e70fbd7"
+        }
+      ]
+    }
+  ]
+}

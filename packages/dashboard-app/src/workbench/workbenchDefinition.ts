@@ -14,6 +14,7 @@ import type {
 import {
   DEFAULT_WB_DECOMPOSITION_POLICY,
   DEFAULT_WB_INTERACTION_POLICY,
+  DEFAULT_WB_REVIEW_BUDGET_POLICY,
 } from '../api/governanceTypes'
 import type { LanePatch } from './orchestrationBoardModel'
 export type {
@@ -35,6 +36,7 @@ export type {
   WbDecompositionTarget,
   WbInteractionMode,
   WbInteractionPolicy,
+  WbReviewBudgetPolicy,
 } from '../api/governanceTypes'
 
 export function editLaneInDef(
@@ -120,10 +122,12 @@ export function buildDefaultDef(labels: Partial<Record<(typeof PHASES)[number], 
       ask_when: [],
     },
     interaction: { ...DEFAULT_WB_INTERACTION_POLICY },
+    reviewBudget: { ...DEFAULT_WB_REVIEW_BUDGET_POLICY },
     steps: PHASES.map((phase) => ({
       id: phase,
       ...shape[phase],
       gate: (REVIEW_PHASES as readonly string[]).includes(phase) ? 'review' : null,
+      ...(phase === 'verify' ? { reviewLanes: ['standards', 'spec', 'e2e'] } : {}),
       skills: [],
       transitions: TRANSITIONS[phase].flatMap((to) => {
         if (to === phase) return []
@@ -142,11 +146,13 @@ export function governedWorkflow(
 ): WbWorkflowDef {
   const base = buildDefaultDef(labels)
   return {
+    ...base,
     name,
-    openspecContract: 'required',
     steps: base.steps.map((step) => ({
       ...step,
-      skills: (GOVERNED_PHASE_SKILLS[step.id] ?? []).map((id) => ({ id })),
+      skills: (GOVERNED_PHASE_SKILLS[step.id] ?? []).map((id) => id === 'verification-before-completion'
+        ? { id, kind: 'review' as const, review_lane: 'e2e' }
+        : { id }),
       artifacts: step.artifacts?.map(({ requiredWhen: _ignored, ...artifact }) => ({
         ...artifact,
         producerPolicy: 'effective-step-skills',
@@ -359,8 +365,10 @@ export function cloneWorkflowDef(def: WbWorkflowDef, name: string): WbWorkflowDe
       ask_when: [...def.decomposition.ask_when],
     },
     interaction: def.interaction === undefined ? undefined : { ...def.interaction },
+    reviewBudget: def.reviewBudget === undefined ? undefined : { ...def.reviewBudget },
     steps: def.steps.map((step) => ({
       ...step,
+      reviewLanes: step.reviewLanes === undefined ? undefined : [...step.reviewLanes],
       skills: step.skills.map((skill) => ({
         ...skill,
         depends_on: skill.depends_on ? [...skill.depends_on] : undefined,

@@ -5,6 +5,12 @@ export interface ReleasedDashboardOptions {
   readonly openBrowser?: boolean
   /** Present only when a managed release transaction owns this launch attempt. */
   readonly transactionId?: string
+  /** Stable product version expected from /api/health for managed release publication. */
+  readonly expectedServerVersion?: string
+  /** Frozen Node executable used by a native setup/update transaction. */
+  readonly trustedNodePath?: string
+  /** Re-proves the frozen Node identity immediately before the Dashboard process spawn. */
+  readonly verifyTrustedNode?: () => void
 }
 
 export function parseDashboardPort(raw: string | undefined): number | null {

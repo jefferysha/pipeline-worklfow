@@ -74,9 +74,46 @@ workflow token 始终保持英文。冲突策略使用 `--strategy skip|overwrit
 tenon review request <change> --event <event>
 tenon review acknowledge <change>
 tenon review acknowledge <change> --delegated
+tenon review-attempt begin <change> --candidate <fingerprint> --json
+tenon review-attempt lane <change> --attempt-id <id> --lane <lane> \
+  --result <pass|fail> --report <项目内相对路径> --json
+tenon review-attempt complete <change> --attempt-id <id> \
+  --result <pass|fail> --report <项目内相对路径> --json
+tenon review-budget show <change> --json
+tenon review-budget set <change> --max-attempts <1..20> --json
 ```
 
 delegated 需要 Change 绑定的持续授权，且不能跳过 check。
+
+自动 Review 与人工确认是两套不同边界。一次冻结候选只消耗一次 attempt，代码、规格、安全、
+E2E、浏览器和视觉验收都是该 attempt 的 lane；lane 分片、重跑和恢复不会重复计数。
+`review-budget set` 绑定当前 Run、Workflow 指纹和 step，active attempt 存在时不能改上限，
+也不能把上限降到已使用次数以下。
+
+Workflow 用显式契约识别 Review，不根据 Skill 名称或命令文本猜测：
+
+```yaml
+name: release-train
+review_budget:
+  version: v1
+  max_attempts: 2
+steps:
+  - id: verify
+    label: 验证
+    gate: review
+    review_lanes: [standards, spec, e2e]
+    skills:
+      - id: acme-quality-gate
+        kind: review
+        review_lane: standards
+      - id: e2e-looking-work
+        kind: work
+```
+
+默认插件在 `templates/manifest.yaml` 的 `review_skills` 中声明打包 Skill 与 lane 的映射；
+自定义 Workflow 必须同时声明 `kind: review` 和所属 `review_lane`。未声明的第三方 Skill
+一律是普通工作，不消耗 Review 次数。Dashboard 策略编辑器可以直接配置 `max_attempts`，
+并会保留 lane 与 Skill 分类字段。
 
 ## Session 与恢复
 

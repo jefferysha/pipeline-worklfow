@@ -52,6 +52,49 @@ function harness(initial?: ManagedReleaseJournalRecord): {
 }
 
 describe('managed host command result is diagnostic after desired-state proof', () => {
+  test('refuses a third host state introduced after the before checkpoint and before mutation', async () => {
+    let observation = 'before'
+    let executions = 0
+    let journal: ManagedReleaseJournalRecord = {
+      version: 1,
+      transactionId: 'host-command-cas-test',
+      operation: 'setup',
+      source: 'codex',
+      phase: 'preparing-host',
+      startedAt: '2026-08-09T00:00:00Z',
+      updatedAt: '2026-08-09T00:00:00Z',
+    }
+    const runStep = createManagedHostStepRunner({
+      journal: () => journal,
+      commit: async (record) => {
+        journal = record
+        if (record.hostSteps?.[0]?.state === 'started') observation = 'third-state'
+      },
+      now: () => '2026-08-09T00:00:01Z',
+    })
+    const env = {
+      runCommand: () => {
+        executions += 1
+        observation = 'desired'
+        return { code: 0, stdout: '', stderr: '' }
+      },
+      managedHostReconciliation: () => ({
+        desired: 'desired',
+        observe: () => observation,
+        isDesired: (value: string) => value === 'desired',
+      }),
+    } as unknown as SetupEnv
+
+    await expect(runManagedHostCommand(
+      { transactionId: journal.transactionId, runStep },
+      'plugin-remove',
+      env,
+      { cmd: 'codex', args: ['plugin', 'remove', 'tenon@tenon', '--json'] },
+    )).rejects.toThrow(/既不满足 desired.*也不精确等于 before/u)
+    expect(executions).toBe(0)
+    expect(journal.hostSteps?.[0]?.state).toBe('started')
+  })
+
   test('first execution returns control-flow success after observation proves desired', async () => {
     const h = harness()
 
@@ -123,6 +166,8 @@ describe('managed host desired identity recovery', () => {
         mutationExecutions: 0,
       }
       const env = {
+        homeDir: () => '/home/managed-host-command-test',
+        runtimeEnv: () => ({}),
         readText: (path: string) => path === `${marketplaceRoot}/.codex-plugin/plugin.json`
           ? JSON.stringify({ version: '1.0.1' })
           : undefined,

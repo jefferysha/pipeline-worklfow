@@ -105,9 +105,9 @@ Codex 的第三方 hook 必须由用户在 `/hooks` 完成一次性信任；新�
 重新信任，不能用安装脚本绕过这一安全边界。完整工作台固定通过 `tenon dashboard` 启动，默认端口
 18765；其他端口需显式 `tenon dashboard --port <port>`。
 
-可选 npx 包固定下载自身 release tag 对应的 `install.sh`，并验证构建时内嵌的 SHA-256；该安装脚本仍
-注册 `main` 稳定发行通道，使 npx 与 Marketplace 在执行时消费相同候选 digest，又不把后续 update
-锁死在旧 tag。
+可选 npx 包固定下载自身 release tag 对应的 `install.sh`，并验证构建时内嵌的 SHA-256；该安装脚本
+把 Marketplace 精确绑定到同一个不可变 release tag，使 npx 与 Marketplace 消费同一发布身份。
+后续 `tenon update` 会重新解析最新的正式稳定 Release，并以新的不可变 tag 完成重绑。
 
 每次发布至少执行：
 

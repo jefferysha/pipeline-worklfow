@@ -12,24 +12,32 @@ import { builtinTrack } from '../tracks/builtins.js'
 
 function preVerifyConvergenceWorkflow() {
   const current = compileEffectiveWorkflowPlan('default').workflow
-  const { decomposition: _decomposition, interaction: _interaction, ...legacy } = current
+  const {
+    decomposition: _decomposition,
+    interaction: _interaction,
+    reviewBudget: _reviewBudget,
+    ...legacy
+  } = current
   return {
     ...legacy,
-    steps: legacy.steps.map((step) => ({
-      ...step,
-      guards: step.id === 'build'
-        ? step.guards.filter((guard) =>
-            !(guard.type === 'field-equals' && guard.field === 'pre_verify_review_result'))
-        : step.guards,
-      transitions: step.transitions.map((transition) => ({
-        ...transition,
-        actions: transition.actions.filter((action) =>
-          action.type !== 'reset-pre-verify-review'
-            && !(step.id === 'verify'
-              && transition.event === 'verify-fail'
-              && action.type === 'mark-verification-failed')),
-      })),
-    })),
+    steps: legacy.steps.map((step) => {
+      const { reviewLanes: _reviewLanes, ...legacyStep } = step
+      return {
+        ...legacyStep,
+        guards: step.id === 'build'
+          ? step.guards.filter((guard) =>
+              !(guard.type === 'field-equals' && guard.field === 'pre_verify_review_result'))
+          : step.guards,
+        transitions: step.transitions.map((transition) => ({
+          ...transition,
+          actions: transition.actions.filter((action) =>
+            action.type !== 'reset-pre-verify-review'
+              && !(step.id === 'verify'
+                && transition.event === 'verify-fail'
+                && action.type === 'mark-verification-failed')),
+        })),
+      }
+    }),
   }
 }
 
@@ -90,12 +98,16 @@ describe('compileEffectiveWorkflowPlan', () => {
   })
 
   it('writes self-contained v3 snapshots with their frozen document policy and workflow policies', () => {
-    const plan = compileEffectiveWorkflowPlan('default')
+    const plan = compileEffectiveWorkflowPlan('v3-policy', {
+      name: 'v3-policy',
+      interaction: { version: 'v1', mode: 'recommended-defaults' },
+      steps: [{ id: 'one', label: 'One', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] }],
+    })
     const snapshot = workflowPlanSnapshot(plan)
 
     expect(snapshot.version).toBe(3)
     if (snapshot.version !== 3) throw new Error('expected v3 workflow snapshot')
-    expect(snapshot.documentPolicy).toEqual(plan.documentPolicy)
+    expect(snapshot.documentPolicy).toEqual(plan.documentPolicy ?? null)
     expect(snapshot.decomposition).toEqual(plan.decomposition)
     expect(snapshot.interaction).toEqual(plan.interaction)
     expect(effectiveWorkflowPlanFromSnapshot(snapshot).workflowFingerprint)

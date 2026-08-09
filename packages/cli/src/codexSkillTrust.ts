@@ -1,6 +1,7 @@
 import { lstat, readFile, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { parseManifest } from './runtime/release-store-codecs.js'
 
 export interface CodexSkillTrustRoots {
   readonly selectedCacheRoot?: string
@@ -106,21 +107,19 @@ async function activeReleaseRoot(roots: CodexSkillTrustRoots): Promise<TrustedSk
   if (rel.length !== 2 || !/^sha256-[a-f0-9]{64}$/.test(rel[0] ?? '') || rel[1] !== 'payload') return undefined
   if (!await ordinaryDirectoryChain(runtimeData, logical)) return undefined
   try {
-    const releaseId = rel[0]!
+    const releaseId = rel.at(0)
+    if (releaseId === undefined) return undefined
     const selection = JSON.parse(await readFile(join(runtimeState, 'selection.json'), 'utf8')) as unknown
-    const manifest = JSON.parse(
+    const manifest = parseManifest(
       await readFile(join(runtimeData, 'releases', releaseId, 'release.json'), 'utf8'),
-    ) as unknown
+    )
     if (
       typeof selection !== 'object'
       || selection === null
       || Array.isArray(selection)
       || (selection as Record<string, unknown>).activeRelease !== releaseId
-      || typeof manifest !== 'object'
       || manifest === null
-      || Array.isArray(manifest)
-      || (manifest as Record<string, unknown>).releaseId !== releaseId
-      || (manifest as Record<string, unknown>).payloadDigest !== releaseId.slice('sha256-'.length)
+      || manifest.releaseId !== releaseId
     ) return undefined
     return { logical, physical: await realpath(logical) }
   } catch {

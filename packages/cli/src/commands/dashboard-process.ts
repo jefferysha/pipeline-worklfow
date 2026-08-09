@@ -78,6 +78,7 @@ function confirmedTermination(child: ChildProcess): Promise<void> {
 export function launchDetachedDashboardProcess(
   serverBundle: string,
   env: NodeJS.ProcessEnv,
+  nodeExecutable = process.execPath,
 ): Promise<DashboardProcessHandle | null> {
   return new Promise((resolveStarted) => {
     let settled = false
@@ -86,7 +87,7 @@ export function launchDetachedDashboardProcess(
       settled = true
       resolveStarted(started)
     }
-    const child = spawn(process.execPath, [serverBundle], { detached: true, stdio: 'ignore', env })
+    const child = spawn(nodeExecutable, [serverBundle], { detached: true, stdio: 'ignore', env })
     child.once('error', () => finish(null))
     child.once('spawn', () => {
       const pid = child.pid

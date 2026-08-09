@@ -4,6 +4,22 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
+## v1.0.2 · 2026-08-08
+
+### Versioned installation and updates
+
+- The public one-line installer is pinned to immutable `v1.0.2` prebuilt assets; it never installs from `main` or compiles source.
+- `tenon update --codex` resolves the official latest stable GitHub Release, freezes its tag and commit, and rebinds the Codex Marketplace through host-owned commands.
+- Exact same-version host/runtime/Dashboard state is a zero-mutation no-op; downgrade attempts and unverifiable Release metadata fail before mutation.
+- Setup always waits for Dashboard readiness. Piped/CI installs and all updates keep the browser closed and print the verified URL plus `tenon dashboard --open`.
+
+### Upgrade
+
+Existing v1.0.1 users run the immutable `v1.0.2/install.sh` one-liner once; the
+v1.0.1 launcher cannot safely self-rebind the new tag in one old-updater
+invocation. From v1.0.2 onward, run one `tenon update --codex`. Open a new Codex
+session to load the released Skills and hooks, then run `tenon doctor --json`.
+
 ## v1.0.1 · 2026-07-26
 
 ### Normal-chat entry contract

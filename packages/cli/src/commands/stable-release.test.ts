@@ -1,0 +1,136 @@
+import { describe, expect, test } from 'vitest'
+import type { SetupEnv } from './setup.js'
+import {
+  compareStableVersions,
+  decodeStableReleaseMetadata,
+  resolveStableReleaseTarget,
+  resolveStableTagTarget,
+  stableTagForVersion,
+  type StableReleaseHttp,
+} from './stable-release.js'
+
+function envFor(
+  output: string,
+  code = 0,
+  objectType: 'commit' | 'tree' | 'blob' = 'commit',
+): SetupEnv {
+  const advertised = output.trim().split(/\r?\n/u)
+    .map((line) => line.trim().split(/\s+/u))
+  const commit = advertised.find((row) => row[1] === 'refs/tags/v1.2.3^{}')?.[0]
+    ?? advertised.find((row) => row[1] === 'refs/tags/v1.2.3')?.[0]
+    ?? ''
+  return {
+    homeDir: () => '/home/test',
+    runtimeEnv: () => ({}),
+    pluginRoot: () => null,
+    selfPath: () => '/release/packages/cli/dist/tenon.mjs',
+    pathExists: () => true,
+    readText: () => undefined,
+    readTextState: () => ({ state: 'missing' }),
+    mkdirp: () => undefined,
+    commandExists: () => true,
+    resolveHostCommand: () => undefined,
+    codexAuthStatus: async () => ({ state: 'authenticated', method: 'chatgpt' }),
+    listDir: () => [],
+    writeText: () => undefined,
+    writeTextAtomic: () => undefined,
+    runCommand: (cmd, args, options) => {
+      expect(cmd).toBe('git')
+      expect(options).toEqual({ timeoutMs: 10_000 })
+      if (args[0] === 'ls-remote') {
+        expect(args).toEqual([
+          'ls-remote',
+          'https://github.com/jefferysha/tenon.git',
+          'refs/tags/v1.2.3',
+          'refs/tags/v1.2.3^{}',
+        ])
+        return { code, stdout: output, stderr: code === 0 ? '' : 'network failed' }
+      }
+      if (args[0] === 'init') return { code: 0, stdout: '', stderr: '' }
+      if (args[2] === 'fetch') return { code: 0, stdout: '', stderr: '' }
+      if (args[2] === 'rev-parse') {
+        return objectType === 'commit'
+          ? { code: 0, stdout: `${commit}\n`, stderr: '' }
+          : { code: 1, stdout: '', stderr: `not a commit: ${objectType}` }
+      }
+      if (args[2] === 'cat-file') return { code: 0, stdout: `${objectType}\n`, stderr: '' }
+      throw new Error(`unexpected git command: ${args.join(' ')}`)
+    },
+    confirm: () => false,
+  }
+}
+
+const metadata = {
+  tag_name: 'v1.2.3',
+  draft: false,
+  prerelease: false,
+  html_url: 'https://github.com/jefferysha/tenon/releases/tag/v1.2.3',
+}
+
+describe('stable Release identity', () => {
+  test('accepts only complete stable SemVer and compares numerically', () => {
+    expect(stableTagForVersion('1.2.3')).toBe('v1.2.3')
+    for (const invalid of ['v1.2.3', '1.2', '01.2.3', '1.2.3-rc.1', '1.2.3+build', 'main']) {
+      expect(() => stableTagForVersion(invalid)).toThrow(/stable SemVer/i)
+    }
+    expect(compareStableVersions('1.10.0', '1.9.9')).toBeGreaterThan(0)
+    expect(compareStableVersions('2.0.0', '2.0.0')).toBe(0)
+    expect(compareStableVersions('0.9.9', '1.0.0')).toBeLessThan(0)
+    expect(compareStableVersions('9007199254740993.0.0', '9007199254740992.999999999999999999.999999999999999999')).toBeGreaterThan(0)
+  })
+
+  test('decodes only the official non-draft non-prerelease stable Release', () => {
+    expect(decodeStableReleaseMetadata(metadata)).toEqual({ version: '1.2.3', tag: 'v1.2.3' })
+    expect(() => decodeStableReleaseMetadata({ ...metadata, draft: true })).toThrow(/draft/i)
+    expect(() => decodeStableReleaseMetadata({ ...metadata, prerelease: true })).toThrow(/prerelease/i)
+    expect(() => decodeStableReleaseMetadata({ ...metadata, tag_name: 'v1.2.3-rc.1' })).toThrow(/stable SemVer/i)
+    expect(() => decodeStableReleaseMetadata({ ...metadata, html_url: 'https://example.com/v1.2.3' })).toThrow(/official/i)
+    expect(() => decodeStableReleaseMetadata({ ...metadata, unexpected: true })).toThrow(/schema/i)
+  })
+
+  test('peels an annotated tag and freezes the exact commit', async () => {
+    const tagObject = 'a'.repeat(40)
+    const commit = 'b'.repeat(40)
+    const http: StableReleaseHttp = { getJson: async () => metadata }
+    await expect(resolveStableReleaseTarget(envFor(
+      `${tagObject}\trefs/tags/v1.2.3\n${commit}\trefs/tags/v1.2.3^{}\n`,
+    ), http)).resolves.toEqual({ version: '1.2.3', tag: 'v1.2.3', commit })
+  })
+
+  test('resolves an explicitly selected stable tag without a Release API or branch lookup', () => {
+    const commit = 'e'.repeat(40)
+    expect(resolveStableTagTarget(
+      envFor(`${commit}\trefs/tags/v1.2.3\n`),
+      '1.2.3',
+    )).toEqual({ version: '1.2.3', tag: 'v1.2.3', commit })
+  })
+
+  test('accepts a lightweight tag and rejects ambiguous or unavailable tag proof', async () => {
+    const commit = 'c'.repeat(40)
+    const http: StableReleaseHttp = { getJson: async () => metadata }
+    await expect(resolveStableReleaseTarget(
+      envFor(`${commit}\trefs/tags/v1.2.3\n`),
+      http,
+    )).resolves.toMatchObject({ commit })
+    await expect(resolveStableReleaseTarget(
+      envFor(`${commit}\trefs/tags/v1.2.3\n${'d'.repeat(40)}\trefs/tags/v1.2.3\n`),
+      http,
+    )).rejects.toThrow(/tag proof/i)
+    await expect(resolveStableReleaseTarget(envFor('', 1), http)).rejects.toThrow(/tag proof/i)
+  })
+
+  test.each(['tree', 'blob'] as const)('rejects a tag whose final object is %s', (objectType) => {
+    const oid = 'f'.repeat(40)
+    expect(() => resolveStableTagTarget(
+      envFor(`${oid}\trefs/tags/v1.2.3\n`, 0, objectType),
+      '1.2.3',
+    )).toThrow(/commit object/i)
+  })
+
+  test('fails before Git proof when Release metadata cannot be fetched', async () => {
+    const http: StableReleaseHttp = {
+      getJson: async () => { throw new Error('timeout') },
+    }
+    await expect(resolveStableReleaseTarget(envFor(''), http)).rejects.toThrow(/timeout/)
+  })
+})

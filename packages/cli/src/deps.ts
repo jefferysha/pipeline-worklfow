@@ -44,6 +44,26 @@ export type HostPluginInventorySource =
   | { readonly kind: 'static' }
   | { readonly kind: 'unavailable'; readonly host: 'codex' | 'claude'; readonly detail: string }
 
+export type DoctorProductIdentity =
+  | {
+      readonly state: 'native'
+      readonly expectedVersion: string
+      readonly host: 'codex' | 'claude'
+      readonly hostPluginVersion: string | null
+      readonly hostPluginRoot: string | null
+      readonly stableTargetTag: string
+      readonly stableTargetCommit: string
+      readonly hostTargetExact: boolean
+      readonly hostPayloadDigest: string | null
+      readonly runtimePluginVersion: string
+      readonly runtimeReleaseId: string
+      readonly runtimePayloadDigest: string
+      readonly payloadDigestExact: boolean
+      readonly dashboardServerVersion: string | null
+      readonly dashboardReleaseId: string | null
+    }
+  | { readonly state: 'unavailable'; readonly detail: string }
+
 export interface DoctorProbes {
   /** process.version 形如 'v22.1.0' */
   nodeVersion: () => string
@@ -70,6 +90,8 @@ export interface DoctorProbes {
   codexAuthStatus: () => Promise<CodexAuthStatus>
   /** 子进程跑 tools/verify-skills.sh；spawn 失败也折算为非 0 code */
   runVerifySkills: () => Promise<{ code: number; output: string }>
+  /** 宿主插件、managed runtime 与 Dashboard 必须共同证明同一编译发布身份。 */
+  productIdentity: () => Promise<DoctorProductIdentity>
   /** tap 流量代理状态（BACKLOG #34e：敏感能力 doctor 明示）。main.ts 注入 @tenon/tap tapStatus */
   tapStatus?: () => { intercepting: boolean; captureEnabled: boolean; message: string }
   /**

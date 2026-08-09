@@ -84,10 +84,54 @@ export function cmdSetup(
           })
       }
       const runHost = (): number | Promise<number> => {
-        const hostCode = cmdSetupHost(deps, host, o, lifecycleEnv, installer, dashboardStarter)
-        return typeof hostCode === 'number'
-          ? finish(hostCode)
-          : hostCode.then((code) => finish(code))
+        const interactive = lifecycleEnv.isInteractive?.() ?? true
+        const runWithBrowserPolicy = (openDashboard: boolean): number | Promise<number> => {
+          const hostCode = cmdSetupHost(
+            deps,
+            host,
+            o,
+            lifecycleEnv,
+            installer,
+            dashboardStarter,
+            openDashboard,
+          )
+          return typeof hostCode === 'number'
+            ? finish(hostCode)
+            : hostCode.then((code) => finish(code))
+        }
+        if (o.dryRun || !interactive) return runWithBrowserPolicy(false)
+        const trustedBash = isNativePipelineHost(host)
+          ? lifecycleEnv.resolveTrustedCommandBinding?.('bash')
+          : undefined
+        const trustedBashPath = trustedBash?.executable
+        const trustedNode = isNativePipelineHost(host)
+          ? lifecycleEnv.resolveTrustedCommandBinding?.('node')
+          : undefined
+        if (isNativePipelineHost(host)
+          && lifecycleEnv.resolveTrustedCommandBinding !== undefined
+          && trustedBashPath === undefined) {
+          return runWithBrowserPolicy(false)
+        }
+        return installer.inspect({
+          homeDir: lifecycleEnv.homeDir(),
+          env: lifecycleEnv.runtimeEnv(),
+          ...(trustedBashPath === undefined ? {} : { trustedBashPath }),
+          ...(trustedBash === undefined ? {} : { verifyTrustedBash: trustedBash.assert }),
+          ...(trustedNode === undefined ? {} : {
+            trustedNodePath: trustedNode.executable,
+            trustedNodeProof: trustedNode.proof,
+            verifyTrustedNode: trustedNode.assert,
+          }),
+        }).then(
+          (before) => runWithBrowserPolicy(!before.activeValid),
+          (error) => {
+            deps.io.out(
+              `[dashboard] 无法证明这是首次 setup，不自动打开浏览器；`
+              + `将输出手动打开命令：${error instanceof Error ? error.message : String(error)}`,
+            )
+            return runWithBrowserPolicy(false)
+          },
+        )
       }
       if (host !== 'codex' || o.dryRun) return runHost()
       if (nativeBinding === undefined) {
@@ -112,7 +156,8 @@ export {
   type SetupEnv, type SetupOpts,
 } from './setupEnvironment.js'
 export { commandExistsOnPath } from './commandExists.js'
-export { cmdSetupHost, verifyPackagedAssets } from './setupHost.js'
+export { cmdSetupHost } from './setupHost.js'
+export { verifyPackagedAssets } from './packaged-assets.js'
 export { buildSkillsPlan, type CmdGroup, type PlannedCommand, type SkillsPlan } from './setupSkillsPlan.js'
 export { cmdSetupSkills } from './setupSkills.js'
 export { cmdSetupRuntime, REAL_RUNTIME_ENV, type RuntimeEnv } from './setupRuntime.js'

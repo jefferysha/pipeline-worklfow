@@ -34,6 +34,12 @@ export interface EffectiveSkillSlot {
 }
 
 export interface EffectiveSkillResolver {
+  /** Explicit Review classification for dispatch gates; false/undefined means ordinary work. */
+  reviewLaneFor?(
+    capability: EffectiveWorkflowPlan['capabilities']['skills'],
+    stepId: string,
+    skillId: string,
+  ): string | undefined
   /**
    * Resolve the mandatory exit requirements declared by an EffectiveWorkflowPlan.  Runtime
    * consumers use this one entrypoint for every execution model; source dispatch is contained
@@ -62,6 +68,7 @@ export interface EffectiveSkillResolver {
 export interface EffectiveSkillResolverManifest {
   readonly mandatorySkills: SkillTable
   readonly recommendedSkills: SkillTable
+  readonly reviewSkillLanes?: Readonly<Record<string, string>>
 }
 
 /** T-R6 装配面：effective registry 决定 track 使用哪个 manifest skill profile。 */
@@ -133,6 +140,11 @@ export function createEffectiveSkillResolver(
     }))
   }
   return {
+    reviewLaneFor(capability, stepId, skillId) {
+      if (capability.source === 'manifest-overlay') return manifest.reviewSkillLanes?.[skillId]
+      const step = capability.steps.find((candidate) => candidate.stepId === stepId)
+      return step?.declared.find((skill) => skill.id === skillId && skill.kind === 'review')?.reviewLane
+    },
     resolveRequired(capability, stepId) {
       if (capability.source === 'manifest-overlay') {
         if (!capability.trackOverlay.matrix) return []

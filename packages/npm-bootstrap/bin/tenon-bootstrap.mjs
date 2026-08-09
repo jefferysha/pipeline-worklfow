@@ -63,7 +63,7 @@ async function downloadInstaller(url) {
 }
 
 export async function verifyInstaller(script) {
-  if (!script.startsWith('#!/usr/bin/env bash')) {
+  if (!script.startsWith('#!/bin/bash')) {
     throw new Error('downloaded installer is not the Tenon bash bootstrap')
   }
   const digest = createHash('sha256').update(script).digest('hex')
@@ -75,7 +75,7 @@ export async function verifyInstaller(script) {
 
 function runInstaller(script, args) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn('bash', ['-s', '--', ...args], {
+    const child = spawn('/bin/bash', ['-s', '--', ...args], {
       stdio: ['pipe', 'inherit', 'inherit'],
       env: process.env,
     })

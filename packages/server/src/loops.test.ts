@@ -581,10 +581,27 @@ describe('loop-init L4：status 写回清标记（批准/驳回即已审阅，be
     await addDraftMark(draftMarksPath(root), 'build-loop')
     const yamlPath = join(root, '.pipeline', 'loops.yaml')
     const orig = await readFile(yamlPath, 'utf8')
-    // 注入：applyLoopsUpdate 内两次 readFile——首读回真原文，CAS 复读回被改文本 → current !== before → 拒
-    vi.mocked(readFile).mockResolvedValueOnce(orig).mockResolvedValueOnce(`${orig}# concurrent\n`)
-    const r = await applyLoopsUpdate(root, 'build-loop', { status: 'active' })
+    // 只拦目标 registry 的两次读取。Linux governance lock 会在两读之间读取 /proc/<pid>/stat；
+    // 若按全局调用序号打桩，会把 YAML 文本误送给锁身份解析并制造平台相关假失败。
+    const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
+    const actualReadText = actual.readFile as (path: string, encoding: 'utf8') => Promise<string>
+    const mockedReadFile = vi.mocked(readFile)
+    const previousImplementation = mockedReadFile.getMockImplementation()
+    let registryReads = 0
+    mockedReadFile.mockImplementation(((path: string, encoding: 'utf8') => {
+      if (path !== yamlPath) return actualReadText(path, encoding)
+      registryReads += 1
+      return Promise.resolve(registryReads === 1 ? orig : `${orig}# concurrent\n`)
+    }) as typeof readFile)
+    let r
+    try {
+      r = await applyLoopsUpdate(root, 'build-loop', { status: 'active' })
+    } finally {
+      if (previousImplementation === undefined) mockedReadFile.mockReset()
+      else mockedReadFile.mockImplementation(previousImplementation)
+    }
     expect(r.ok).toBe(false)
+    expect(registryReads).toBe(2)
     expect(vi.mocked(clearDraftMark)).not.toHaveBeenCalled()
     expect(readDraftMarks(draftMarksPath(root))).toContain('build-loop')
   })

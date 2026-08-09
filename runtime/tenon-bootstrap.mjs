@@ -7,13 +7,17 @@
  * runtime state.  Keep the accepted recovery grammar deliberately narrow: it is a repair
  * capability, not a workflow-policy bypass.
  */
-import { copyFile, lstat, mkdir, readFile, rename, rm, writeFile, appendFile, readdir, stat, utimes } from 'node:fs/promises'
+import { chmod, lstat, mkdir, readFile, rename, rm, writeFile, appendFile, readdir, stat, utimes } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 
 const RELEASE_ID = /^sha256-[a-f0-9]{64}$/
+const PAYLOAD_DIGEST = /^[a-f0-9]{64}$/
+const STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
+const GIT_COMMIT = /^[a-f0-9]{40}$/
+const RELEASE_HOSTS = new Set(['codex', 'claude', 'adapter', 'manual'])
 
 function safeRoot(value) {
   return typeof value === 'string' && value.trim() !== '' && isAbsolute(value.trim()) ? resolve(value.trim()) : null
@@ -140,6 +144,7 @@ function runtimePaths() {
     bootstrapRoot: join(dataRoot, 'bootstrap'),
     selectionPath: join(stateRoot, 'selection.json'),
     auditPath: join(stateRoot, 'audit.jsonl'),
+    managedTransactionRoot: join(stateRoot, 'managed-release-transaction'),
   }
 }
 
@@ -174,30 +179,100 @@ async function normalFile(path) {
   }
 }
 
+function exactKeys(value, expected) {
+  return Object.keys(value).sort().join(',') === [...expected].sort().join(',')
+}
+
+function releaseSource(value) {
+  if (!isRecord(value) || !exactKeys(value, ['host', 'pluginVersion'])
+    || !RELEASE_HOSTS.has(value.host)
+    || typeof value.pluginVersion !== 'string' || value.pluginVersion.trim() === '') return null
+  return { host: value.host, pluginVersion: value.pluginVersion }
+}
+
+function stableReleaseTarget(value) {
+  if (!isRecord(value) || !exactKeys(value, ['commit', 'tag', 'version'])
+    || typeof value.version !== 'string' || !STABLE_VERSION.test(value.version)
+    || value.tag !== `v${value.version}`
+    || typeof value.commit !== 'string' || !GIT_COMMIT.test(value.commit)) return null
+  return { version: value.version, tag: value.tag, commit: value.commit }
+}
+
+function hashFrame(hash, value) {
+  const bytes = typeof value === 'string' ? Buffer.from(value, 'utf8') : value
+  hash.update(`${bytes.byteLength}:`, 'utf8')
+  hash.update(bytes)
+}
+
+function runtimeReleaseIdV2(payloadDigest, source, stableTarget) {
+  const hash = createHash('sha256')
+  for (const field of [
+    'tenon-runtime-release-v2',
+    payloadDigest,
+    source.host,
+    source.pluginVersion,
+    stableTarget === undefined ? 'no-stable-target' : 'stable-target',
+    stableTarget?.version ?? '',
+    stableTarget?.tag ?? '',
+    stableTarget?.commit ?? '',
+  ]) hashFrame(hash, field)
+  return `sha256-${hash.digest('hex')}`
+}
+
+function releaseManifest(value, releaseId) {
+  if (!isRecord(value) || value.releaseId !== releaseId || !RELEASE_ID.test(releaseId)
+    || typeof value.payloadDigest !== 'string' || !PAYLOAD_DIGEST.test(value.payloadDigest)
+    || typeof value.createdAt !== 'string' || value.createdAt.trim() === '') return null
+  const source = releaseSource(value.source)
+  if (source === null) return null
+  if (value.version === 1) {
+    if (!exactKeys(value, ['version', 'releaseId', 'payloadDigest', 'createdAt', 'source'])
+      || releaseId !== `sha256-${value.payloadDigest}`) return null
+    return { version: 1, releaseId, payloadDigest: value.payloadDigest, source }
+  }
+  if (value.version !== 2) return null
+  const expectedKeys = value.stableTarget === undefined
+    ? ['version', 'releaseId', 'payloadDigest', 'createdAt', 'source']
+    : ['version', 'releaseId', 'payloadDigest', 'createdAt', 'source', 'stableTarget']
+  if (!exactKeys(value, expectedKeys)) return null
+  const stableTarget = value.stableTarget === undefined ? undefined : stableReleaseTarget(value.stableTarget)
+  if (stableTarget === null
+    || (stableTarget !== undefined && stableTarget.version !== source.pluginVersion)
+    || releaseId !== runtimeReleaseIdV2(value.payloadDigest, source, stableTarget)) return null
+  return {
+    version: 2,
+    releaseId,
+    payloadDigest: value.payloadDigest,
+    source,
+    ...(stableTarget === undefined ? {} : { stableTarget }),
+  }
+}
+
 async function releasePayload(paths, releaseId) {
   if (!RELEASE_ID.test(releaseId)) return null
   const releaseRoot = join(paths.releasesRoot, releaseId)
   const manifestPath = join(releaseRoot, 'release.json')
   try {
-    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-    if (!isRecord(manifest) || manifest.version !== 1 || manifest.releaseId !== releaseId
-      || typeof manifest.payloadDigest !== 'string' || !/^[a-f0-9]{64}$/.test(manifest.payloadDigest)
-      || !isRecord(manifest.source)
-      || !['codex', 'claude', 'adapter', 'manual'].includes(manifest.source.host)) return null
+    const manifest = releaseManifest(JSON.parse(await readFile(manifestPath, 'utf8')), releaseId)
+    if (manifest === null) return null
     const payload = join(releaseRoot, 'payload')
     const cli = join(payload, 'packages', 'cli', 'dist', 'tenon.mjs')
     const bootstrap = join(payload, 'runtime', 'tenon-bootstrap.mjs')
     if (!await normalFile(cli) || !await normalFile(bootstrap)) return null
     // Selection and manifest shape are not integrity proof. Recompute the immutable tree before
     // every execution boundary so a locally forged active payload enters recovery-only mode.
-    if (await hashPayload(payload) !== manifest.payloadDigest) return null
-    return { releaseRoot, payload, releaseId, host: manifest.source.host }
+    if (await hashPayload(payload, manifest.version) !== manifest.payloadDigest) return null
+    return { releaseRoot, payload, ...manifest, host: manifest.source.host }
   } catch {
     return null
   }
 }
 
-async function hashPayload(root) {
+function compareUtf8Names(left, right) {
+  return Buffer.compare(Buffer.from(left.name, 'utf8'), Buffer.from(right.name, 'utf8'))
+}
+
+async function hashLegacyPayload(root) {
   const hash = createHash('sha256')
   async function visit(dir, rel) {
     const entries = await readdir(dir, { withFileTypes: true })
@@ -222,6 +297,40 @@ async function hashPayload(root) {
   return hash.digest('hex')
 }
 
+async function hashPayloadV2(root) {
+  const hash = createHash('sha256')
+  hashFrame(hash, 'tenon-release-payload-v2')
+  async function visit(dir, rel) {
+    const entries = await readdir(dir, { withFileTypes: true })
+    entries.sort(compareUtf8Names)
+    for (const entry of entries) {
+      const child = join(dir, entry.name)
+      const childRel = rel === '' ? entry.name : `${rel}/${entry.name}`
+      const item = await lstat(child)
+      if (item.isSymbolicLink()) throw new Error(`payload contains symbolic link: ${childRel}`)
+      if (item.isDirectory()) {
+        hashFrame(hash, 'directory')
+        hashFrame(hash, childRel)
+        hashFrame(hash, (item.mode & 0o777).toString(8))
+        await visit(child, childRel)
+      } else if (item.isFile()) {
+        hashFrame(hash, 'file')
+        hashFrame(hash, childRel)
+        hashFrame(hash, (item.mode & 0o777).toString(8))
+        hashFrame(hash, await readFile(child))
+      } else {
+        throw new Error(`payload contains unsupported entry: ${childRel}`)
+      }
+    }
+  }
+  await visit(root, '')
+  return hash.digest('hex')
+}
+
+async function hashPayload(root, manifestVersion) {
+  return manifestVersion === 1 ? hashLegacyPayload(root) : hashPayloadV2(root)
+}
+
 function now() {
   return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
 }
@@ -236,45 +345,81 @@ async function atomicWrite(path, text) {
   }
 }
 
-async function installBootstrap(paths, releaseRoot) {
-  const source = join(releaseRoot, 'payload', 'runtime', 'tenon-bootstrap.mjs')
-  if (!await normalFile(source)) throw new Error('previous release bootstrap is missing')
-  await mkdir(paths.bootstrapRoot, { recursive: true })
-  const active = join(paths.bootstrapRoot, 'active.mjs')
-  const previous = join(paths.bootstrapRoot, 'previous.mjs')
-  if (await normalFile(active)) {
-    const tmpPrevious = `${previous}.tmp-${process.pid}-${Date.now()}`
-    await copyFile(active, tmpPrevious)
-    await rename(tmpPrevious, previous)
-  }
-  const tmpActive = `${active}.tmp-${process.pid}-${Date.now()}`
-  await copyFile(source, tmpActive)
-  await rename(tmpActive, active)
-}
-
 async function appendAudit(paths, entry) {
   await mkdir(dirname(paths.auditPath), { recursive: true })
+  const failOnce = process.env.TENON_TEST_FAIL_ROLLBACK_TERMINAL_AUDIT_ONCE
+  if (entry.kind === 'rolled-back' && typeof failOnce === 'string' && failOnce !== '') {
+    try {
+      await writeFile(failOnce, 'failed\n', { encoding: 'utf8', flag: 'wx', mode: 0o600 })
+      throw new Error('injected rollback terminal audit failure')
+    } catch (error) {
+      if (!(error && typeof error === 'object' && error.code === 'EEXIST')) throw error
+    }
+  }
   await appendFile(paths.auditPath, `${JSON.stringify(entry)}\n`, 'utf8')
 }
 
-async function readLastAudit(paths) {
+function validAudit(value) {
+  if (!isRecord(value) || value.version !== 1 || typeof value.at !== 'string' || value.at.trim() === ''
+    || typeof value.detail !== 'string' || value.detail.trim() === '') return null
+  const kinds = new Set([
+    'activation-prepared', 'activated', 'activation-rejected',
+    'rollback-prepared', 'rolled-back', 'rollback-rejected',
+    'update-rejected', 'pruned',
+  ])
+  if (!kinds.has(value.kind)) return null
+  if (value.releaseId !== undefined && (typeof value.releaseId !== 'string' || !RELEASE_ID.test(value.releaseId))) return null
+  if (value.previousRelease !== undefined && value.previousRelease !== null
+    && (typeof value.previousRelease !== 'string' || !RELEASE_ID.test(value.previousRelease))) return null
+  return value
+}
+
+async function readAuditState(paths) {
   try {
-    const lines = (await readFile(paths.auditPath, 'utf8')).trim().split(/\r?\n/)
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      const line = lines[index]
-      if (line === undefined || line === '') continue
-      const parsed = JSON.parse(line)
-      if (isRecord(parsed) && parsed.version === 1 && typeof parsed.kind === 'string'
-        && typeof parsed.at === 'string' && typeof parsed.detail === 'string') return parsed
+    const raw = await readFile(paths.auditPath, 'utf8')
+    if (raw === '') return { lastAudit: null, auditCorrupt: false }
+    if (!raw.endsWith('\n')) return { lastAudit: null, auditCorrupt: true }
+    let latest = null
+    for (const line of raw.slice(0, -1).split(/\r?\n/)) {
+      if (line === '') return { lastAudit: null, auditCorrupt: true }
+      let parsed
+      try { parsed = validAudit(JSON.parse(line)) } catch { parsed = null }
+      if (parsed === null) return { lastAudit: null, auditCorrupt: true }
+      latest = parsed
     }
-  } catch {
-    // Missing or malformed audit history is reported as no last event; it never authorizes runtime.
+    return { lastAudit: latest, auditCorrupt: false }
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') {
+      return { lastAudit: null, auditCorrupt: false }
+    }
+    return { lastAudit: null, auditCorrupt: true }
   }
-  return null
 }
 
 function delay(ms) {
   return new Promise((resolveDelay) => setTimeout(resolveDelay, ms))
+}
+
+async function processStartIdentity(pid) {
+  try {
+    if (process.platform === 'linux') {
+      const raw = await readFile(`/proc/${pid}/stat`, 'utf8')
+      const close = raw.lastIndexOf(')')
+      if (close < 0) return null
+      const fields = raw.slice(close + 2).trim().split(/\s+/u)
+      const start = fields[19]
+      return start !== undefined && /^[0-9]+$/u.test(start) ? `linux:${start}` : null
+    }
+    const ps = process.platform === 'darwin' ? '/bin/ps' : '/usr/bin/ps'
+    const result = spawnSync(ps, ['-o', 'lstart=', '-p', String(pid)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    const start = result.status === 0 && typeof result.stdout === 'string' ? result.stdout.trim() : ''
+    return start === '' ? null : `${process.platform}:${start}`
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -288,16 +433,28 @@ async function withStateLock(paths, operation) {
   const lock = join(paths.stateRoot, '.pipeline.lock')
   const owner = join(lock, 'owner')
   const token = `${process.pid}.${randomBytes(8).toString('hex')}.${Date.now()}`
-  const deadline = Date.now() + 10_000
+  const claim = `${lock}.claim.${token}`
+  const testTimeout = process.env.TENON_TEST_STATE_LOCK_TIMEOUT_MS
+  const timeoutMs = testTimeout !== undefined && /^[1-9][0-9]{0,4}$/u.test(testTimeout)
+    ? Number(testTimeout)
+    : 10_000
+  const deadline = Date.now() + timeoutMs
   let acquired = false
   let heartbeat = null
   try {
+    await mkdir(claim, { mode: 0o700 })
+    const pidStart = await processStartIdentity(process.pid)
+    if (pidStart === null) throw new Error('runtime recovery cannot prove its process start identity')
+    await writeFile(
+      join(claim, 'owner'),
+      `${JSON.stringify({ version: 1, token, pid: process.pid, pidStart, createdAt: Date.now() })}\n`,
+      { encoding: 'utf8', flag: 'wx', mode: 0o600 },
+    )
     while (!acquired) {
-      let created = false
       try {
-        await mkdir(lock)
-        created = true
-        await writeFile(owner, `${token}\n`, { encoding: 'utf8', flag: 'wx' })
+        // Publish a fully populated private claim. No contender can observe a lock directory
+        // without its immutable owner record.
+        await rename(claim, lock)
         acquired = true
         heartbeat = setInterval(() => {
           const now = new Date()
@@ -305,28 +462,84 @@ async function withStateLock(paths, operation) {
         }, 20_000)
         if (typeof heartbeat.unref === 'function') heartbeat.unref()
       } catch (error) {
-        if (created) {
-          await rm(lock, { recursive: true, force: true }).catch(() => {})
-          throw error
-        }
-        if ((error && typeof error === 'object' && error.code) !== 'EEXIST') throw error
+        const code = error && typeof error === 'object' ? error.code : undefined
+        if (code !== 'EEXIST' && code !== 'ENOTEMPTY') throw error
         let age = null
+        let ownerKey = null
+        let ownerPid = null
+        let ownerPidStart = null
         try {
-          age = Date.now() - (await stat(owner)).mtimeMs
+          const ownerStat = await stat(owner)
+          const value = JSON.parse(await readFile(owner, 'utf8'))
+          if (!isRecord(value)
+            || value.version !== 1
+            || typeof value.token !== 'string'
+            || !/^[0-9]+\.[a-f0-9]+\.[0-9]+$/u.test(value.token)
+            || !Number.isSafeInteger(value.pid)
+            || value.pid <= 0
+            || (value.pidStart !== undefined
+              && (typeof value.pidStart !== 'string' || value.pidStart === ''))) throw new Error('invalid owner')
+          age = Date.now() - ownerStat.mtimeMs
+          ownerKey = value.token
+          ownerPid = value.pid
+          ownerPidStart = value.pidStart ?? null
         } catch {
-          try { age = Date.now() - (await stat(lock)).mtimeMs } catch { age = null }
+          // Compatibility for a pre-v1.0.2 lock whose owner was a plain token, including the
+          // mkdir-before-owner crash shape. Preserve its owner-file heartbeat when present; for
+          // the crash shape derive one stable tombstone key from the directory inode so two
+          // reclaimers cannot rename a newly published successor lock.
+          try {
+            const ownerStat = await stat(owner)
+            const legacyToken = (await readFile(owner, 'utf8')).trim()
+            if (!/^[0-9]+\.[a-f0-9]+\.[0-9]+$/u.test(legacyToken)) throw new Error('invalid legacy owner')
+            age = Date.now() - ownerStat.mtimeMs
+            ownerKey = `legacy-${legacyToken}`
+            const legacyPid = Number(legacyToken.split('.')[0])
+            ownerPid = Number.isSafeInteger(legacyPid) && legacyPid > 0 ? legacyPid : null
+          } catch {
+            try {
+              const lockStat = await stat(lock)
+              age = Date.now() - lockStat.mtimeMs
+              ownerKey = `legacy-${lockStat.dev}-${lockStat.ino}-${Math.trunc(lockStat.birthtimeMs)}`
+            } catch {
+              age = null
+            }
+          }
         }
-        if (age !== null && age > 60_000) {
-          const grave = `${lock}.stale.${process.pid}.${randomBytes(6).toString('hex')}`
+        let ownerAlive = false
+        let ownerReused = false
+        if (ownerPid !== null) {
+          try {
+            process.kill(ownerPid, 0)
+            ownerAlive = true
+            if (ownerPidStart !== null) {
+              const observedStart = await processStartIdentity(ownerPid)
+              if (observedStart !== null && observedStart !== ownerPidStart) {
+                ownerAlive = false
+                ownerReused = true
+              }
+            }
+          } catch (ownerError) {
+            if (!(ownerError && typeof ownerError === 'object' && ownerError.code === 'ESRCH')) {
+              ownerAlive = true
+            }
+          }
+        }
+        if (ownerKey !== null && age !== null && (!ownerAlive || ownerReused)) {
+          const grave = `${lock}.stale.${ownerKey}`
           try {
             await rename(lock, grave)
-            await rm(grave, { recursive: true, force: true })
-          } catch {
-            // Another process either released or reclaimed it.  Retry the atomic mkdir.
+          } catch (reclaimError) {
+            const reclaimCode = reclaimError && typeof reclaimError === 'object'
+              ? reclaimError.code
+              : undefined
+            if (reclaimCode !== 'ENOENT'
+              && reclaimCode !== 'EEXIST'
+              && reclaimCode !== 'ENOTEMPTY') throw reclaimError
           }
           continue
         }
-        if (Date.now() >= deadline) throw new Error('runtime recovery lock acquisition timed out')
+        if (Date.now() >= deadline) throw new Error(`runtime recovery lock acquisition timed out after ${timeoutMs}ms`)
         await delay(25)
       }
     }
@@ -335,57 +548,366 @@ async function withStateLock(paths, operation) {
     if (heartbeat !== null) clearInterval(heartbeat)
     if (acquired) {
       let own = false
-      try { own = (await readFile(owner, 'utf8')).trim() === token } catch { own = false }
+      try {
+        const current = JSON.parse(await readFile(owner, 'utf8'))
+        own = isRecord(current) && current.version === 1 && current.token === token
+      } catch { own = false }
       if (own) await rm(lock, { recursive: true, force: true }).catch(() => {})
+    } else {
+      await rm(claim, { recursive: true, force: true }).catch(() => {})
     }
   }
 }
 
-async function rollback(paths) {
-  return withStateLock(paths, async () => {
-  const selection = await readSelection(paths)
-  if (selection === null || selection.previousRelease === null) {
-    throw new Error('no verified previous release is available; run tenon setup --codex or tenon setup --claude')
+function shellQuote(value) {
+  return `'${value.replace(/'/g, `'"'"'`)}'`
+}
+
+function launcherStatValue(proof, includeSize) {
+  const mode = process.platform === 'darwin' ? proof.mode.toString(8) : proof.mode.toString(16)
+  return [proof.dev, proof.ino, mode, proof.uid, ...(includeSize ? [proof.size] : [])].join(':')
+}
+
+async function currentNodeProof() {
+  if (process.platform !== 'darwin' && process.platform !== 'linux') {
+    throw new Error(`stable launcher cannot persist ${process.platform} Node identity`)
   }
-  const previous = await releasePayload(paths, selection.previousRelease)
-  if (previous === null) throw new Error('previous release integrity check failed; reinstall the selected host package')
-  const manifest = JSON.parse(await readFile(join(previous.releaseRoot, 'release.json'), 'utf8'))
-  if (!isRecord(manifest) || await hashPayload(previous.payload) !== manifest.payloadDigest) {
-    throw new Error('previous release digest check failed; reinstall the selected host package')
+  const executableInfo = await lstat(process.execPath)
+  if (!executableInfo.isFile() || executableInfo.isSymbolicLink()) {
+    throw new Error('current Node executable is not an ordinary file')
   }
-  await mkdir(paths.stateRoot, { recursive: true })
-  const next = {
+  const entry = (path, info) => ({
+    path,
+    dev: info.dev,
+    ino: info.ino,
+    mode: info.mode,
+    uid: info.uid,
+    size: info.size,
+  })
+  const parents = []
+  let cursor = dirname(process.execPath)
+  while (true) {
+    const info = await lstat(cursor)
+    if (!info.isDirectory() || info.isSymbolicLink()) {
+      throw new Error(`current Node parent is not an ordinary directory: ${cursor}`)
+    }
+    parents.push(entry(cursor, info))
+    const parent = dirname(cursor)
+    if (parent === cursor) break
+    cursor = parent
+  }
+  return {
     version: 1,
-    revision: selection.revision + 1,
-    activeRelease: selection.previousRelease,
-    previousRelease: selection.activeRelease,
-    updatedAt: now(),
+    platform: process.platform,
+    requestedPath: process.execPath,
+    executable: entry(process.execPath, executableInfo),
+    parents,
+    sha256: createHash('sha256').update(await readFile(process.execPath)).digest('hex'),
   }
+}
+
+function launcherNodeGuard(proof) {
+  if (proof === undefined) return ''
+  const statArgs = process.platform === 'darwin' ? "-f '%d:%i:%p:%u:%z'" : "-c '%d:%i:%f:%u:%s'"
+  const dirStatArgs = process.platform === 'darwin' ? "-f '%d:%i:%p:%u'" : "-c '%d:%i:%f:%u'"
+  const followArgs = process.platform === 'darwin' ? "-L -f '%d:%i'" : "-L -c '%d:%i'"
+  const hash = process.platform === 'darwin'
+    ? `/usr/bin/shasum -a 256 ${shellQuote(proof.executable.path)}`
+    : `/usr/bin/sha256sum ${shellQuote(proof.executable.path)}`
+  const parentChecks = proof.parents.map((parent) => `
+[ ! -L ${shellQuote(parent.path)} ] || tenon_node_identity_changed
+[ "$(/usr/bin/stat ${dirStatArgs} ${shellQuote(parent.path)} 2>/dev/null)" = ${shellQuote(launcherStatValue(parent, false))} ] || tenon_node_identity_changed`).join('')
+  return `
+tenon_node_identity_changed() {
+  printf 'tenon runtime Node identity changed; rerun tenon setup --codex or tenon setup --claude\\n' >&2
+  exit 126
+}
+[ ! -L ${shellQuote(proof.executable.path)} ] || tenon_node_identity_changed
+[ "$(/usr/bin/stat ${statArgs} ${shellQuote(proof.executable.path)} 2>/dev/null)" = ${shellQuote(launcherStatValue(proof.executable, true))} ] || tenon_node_identity_changed
+[ "$(/usr/bin/stat ${followArgs} ${shellQuote(proof.requestedPath)} 2>/dev/null)" = ${shellQuote(`${proof.executable.dev}:${proof.executable.ino}`)} ] || tenon_node_identity_changed${parentChecks}
+tenon_node_digest_output="$(${hash} 2>/dev/null)" || tenon_node_identity_changed
+tenon_node_digest="${'${tenon_node_digest_output%% *}'}"
+[ "$tenon_node_digest" = ${shellQuote(proof.sha256)} ] || tenon_node_identity_changed
+`
+}
+
+function productRootContract(paths) {
+  return JSON.stringify({
+    version: 1,
+    dataRoot: paths.dataRoot,
+    stateRoot: paths.stateRoot,
+    configRoot: paths.configRoot,
+  })
+}
+
+function stableLauncherText(paths, mode, legacy = false, nodeProof) {
+  const bootstrap = join(paths.bootstrapRoot, 'active.mjs')
+  const missing = mode === 'hook'
+    ? 'exit 0'
+    : 'printf "tenon runtime bootstrap unavailable; run tenon setup --codex or tenon setup --claude\\n" >&2\n  exit 1'
+  return `${legacy ? '#!/usr/bin/env bash' : '#!/bin/sh'}
+set -eu
+export TENON_RUNTIME_ROOTS=${shellQuote(productRootContract(paths))}
+# N-1 bootstrap ABI: previous verified releases read these exact roots during rollback.
+export TENON_RUNTIME_DATA_ROOT=${shellQuote(paths.dataRoot)}
+export TENON_RUNTIME_STATE_ROOT=${shellQuote(paths.stateRoot)}
+export TENON_RUNTIME_CONFIG_ROOT=${shellQuote(paths.configRoot)}
+[ -f ${shellQuote(bootstrap)} ] || { ${missing}; }
+${launcherNodeGuard(nodeProof)}
+exec ${legacy ? 'node' : shellQuote(process.execPath)} ${shellQuote(bootstrap)} ${mode} "$@"
+`
+}
+
+function expectedStableLaunchers(paths, legacy = false, nodeProof) {
+  const bin = join(homedir(), '.local', 'bin')
+  return {
+    tenon: {
+      path: join(bin, 'tenon'),
+      state: { kind: 'file', content: stableLauncherText(paths, 'cli', legacy, nodeProof), mode: 0o755 },
+    },
+    hook: {
+      path: join(bin, 'tenon-hook'),
+      state: { kind: 'file', content: stableLauncherText(paths, 'hook', legacy, nodeProof), mode: 0o755 },
+    },
+  }
+}
+
+async function captureLauncher(path) {
   try {
-    // Write-ahead audit: an audit append failure must leave bootstrap and selection untouched.
-    await appendAudit(paths, {
-      version: 1,
-      at: now(),
-      kind: 'rolled-back',
-      releaseId: next.activeRelease,
-      previousRelease: next.previousRelease,
-      detail: 'verified bootstrap rollback prepared; selection publication follows under lock',
-    })
-    await installBootstrap(paths, previous.releaseRoot)
-    await atomicWrite(paths.selectionPath, `${JSON.stringify(next, null, 2)}\n`)
-    return next
+    const item = await lstat(path)
+    if (!item.isFile() || item.isSymbolicLink()) throw new Error(`stable launcher is not an ordinary file: ${path}`)
+    return { path, state: { kind: 'file', content: await readFile(path, 'utf8'), mode: item.mode & 0o777 } }
   } catch (error) {
-    await appendAudit(paths, {
-      version: 1,
-      at: now(),
-      kind: 'rollback-rejected',
-      releaseId: next.activeRelease,
-      previousRelease: next.previousRelease,
-      detail: error instanceof Error ? error.message : String(error),
-    }).catch(() => {})
+    if (error && typeof error === 'object' && error.code === 'ENOENT') return { path, state: { kind: 'missing' } }
     throw error
   }
+}
+
+async function captureStableLaunchers(paths) {
+  const expected = expectedStableLaunchers(paths)
+  const [tenon, hook] = await Promise.all([
+    captureLauncher(expected.tenon.path),
+    captureLauncher(expected.hook.path),
+  ])
+  return { tenon, hook }
+}
+
+function sameLauncherState(left, right) {
+  if (left.kind !== right.kind) return false
+  return left.kind === 'missing'
+    || (left.content === right.content && left.mode === right.mode)
+}
+
+function validLauncherSnapshot(value) {
+  if (!isRecord(value) || !exactKeys(value, ['tenon', 'hook'])) return false
+  return ['tenon', 'hook'].every((name) => {
+    const file = value[name]
+    if (!isRecord(file) || !exactKeys(file, ['path', 'state']) || typeof file.path !== 'string') return false
+    const state = file.state
+    return isRecord(state) && (state.kind === 'missing'
+      ? exactKeys(state, ['kind'])
+      : state.kind === 'file' && exactKeys(state, ['kind', 'content', 'mode'])
+        && typeof state.content === 'string' && Number.isSafeInteger(state.mode)
+        && state.mode >= 0 && state.mode <= 0o777)
   })
+}
+
+function validRollbackJournal(value) {
+  if (!isRecord(value) || !exactKeys(value, [
+    'version', 'transactionId', 'beforeSelection', 'target', 'launchers',
+  ]) || value.version !== 1 || typeof value.transactionId !== 'string'
+    || !/^[0-9a-f-]{36}$/.test(value.transactionId)
+    || parseSelection(value.beforeSelection) === null || !validLauncherSnapshot(value.launchers)
+    || !isRecord(value.target) || !exactKeys(value.target, ['revision', 'activeRelease', 'previousRelease'])
+    || !Number.isSafeInteger(value.target.revision)
+    || value.target.revision !== value.beforeSelection.revision + 1
+    || value.target.activeRelease !== value.beforeSelection.previousRelease
+    || value.target.previousRelease !== value.beforeSelection.activeRelease
+    || !RELEASE_ID.test(value.target.activeRelease)) return null
+  return value
+}
+
+async function readRollbackJournal(paths) {
+  try {
+    return validRollbackJournal(JSON.parse(await readFile(join(
+      paths.managedTransactionRoot,
+      'runtime-rollback.json',
+    ), 'utf8')))
+  } catch (error) {
+    if (error && typeof error === 'object' && error.code === 'ENOENT') return null
+    throw new Error('runtime rollback journal is malformed')
+  }
+}
+
+function selectionMatchesRollbackTarget(selection, target) {
+  return selection !== null
+    && selection.revision === target.revision
+    && selection.activeRelease === target.activeRelease
+    && selection.previousRelease === target.previousRelease
+}
+
+async function convergeRollbackLauncher(name, expected, legacy, checkpoint, transactionId) {
+  if (expected.path !== checkpoint.path) throw new Error(`rollback launcher checkpoint path drifted: ${name}`)
+  const privatePrevious = `${expected.path}.tenon-rollback-${transactionId}.previous`
+  let current = await captureLauncher(expected.path)
+  let previous = await captureLauncher(privatePrevious)
+  if (sameLauncherState(current.state, expected.state)) {
+    if (previous.state.kind !== 'missing') {
+      if (!sameLauncherState(previous.state, checkpoint.state)) {
+        throw new Error(`rollback launcher private checkpoint drifted: ${name}`)
+      }
+      await rm(privatePrevious)
+    }
+    return
+  }
+  const checkpointAllowed = checkpoint.state.kind === 'missing'
+    || sameLauncherState(checkpoint.state, legacy.state)
+    || sameLauncherState(checkpoint.state, expected.state)
+  if (!checkpointAllowed) throw new Error(`rollback refuses a third-party launcher checkpoint: ${name}`)
+  if (previous.state.kind === 'missing' && sameLauncherState(current.state, checkpoint.state)
+    && current.state.kind === 'file') {
+    await rename(expected.path, privatePrevious)
+    previous = await captureLauncher(privatePrevious)
+    current = await captureLauncher(expected.path)
+  }
+  if (previous.state.kind !== 'missing' && !sameLauncherState(previous.state, checkpoint.state)) {
+    throw new Error(`rollback launcher private previous is not the journal checkpoint: ${name}`)
+  }
+  if (current.state.kind !== 'missing') {
+    throw new Error(`rollback launcher changed after its checkpoint: ${name}`)
+  }
+  await mkdir(dirname(expected.path), { recursive: true })
+  await writeFile(expected.path, expected.state.content, { flag: 'wx', mode: expected.state.mode })
+  await chmod(expected.path, expected.state.mode)
+  current = await captureLauncher(expected.path)
+  if (!sameLauncherState(current.state, expected.state)) {
+    throw new Error(`rollback launcher publication did not converge: ${name}`)
+  }
+  if (previous.state.kind !== 'missing') await rm(privatePrevious)
+}
+
+async function convergeRollbackLaunchers(paths, journal) {
+  const expected = expectedStableLaunchers(paths, false, await currentNodeProof())
+  const legacy = expectedStableLaunchers(paths, true)
+  await convergeRollbackLauncher('tenon', expected.tenon, legacy.tenon, journal.launchers.tenon, journal.transactionId)
+  await convergeRollbackLauncher('hook', expected.hook, legacy.hook, journal.launchers.hook, journal.transactionId)
+  const current = await captureStableLaunchers(paths)
+  if (!sameLauncherState(current.tenon.state, expected.tenon.state)
+    || !sameLauncherState(current.hook.state, expected.hook.state)) {
+    throw new Error('rollback stable launcher pair did not converge')
+  }
+}
+
+async function recoverCommittedRollbackAudit(paths, selection) {
+  const audit = await readAuditState(paths)
+  if (audit.auditCorrupt) throw new Error('rollback audit is incomplete or malformed')
+  const prepared = audit.lastAudit
+  if (prepared?.kind !== 'rollback-prepared') return
+  if (prepared.releaseId !== selection.activeRelease
+    || (prepared.previousRelease ?? null) !== selection.previousRelease) {
+    throw new Error('rollback prepared audit does not match the committed selection')
+  }
+  await appendAudit(paths, {
+    version: 1,
+    at: now(),
+    kind: 'rolled-back',
+    releaseId: selection.activeRelease,
+    previousRelease: selection.previousRelease,
+    detail: 'recovered terminal audit for committed bootstrap rollback',
+  })
+}
+
+async function rollback(paths) {
+  return withStateLock({ stateRoot: paths.managedTransactionRoot }, () => withStateLock(paths, async () => {
+    await mkdir(paths.managedTransactionRoot, { recursive: true })
+    const journalPath = join(paths.managedTransactionRoot, 'runtime-rollback.json')
+    let journal = await readRollbackJournal(paths)
+    if (journal === null) {
+      const selection = await readSelection(paths)
+      if (selection === null || selection.previousRelease === null) {
+        throw new Error('no verified previous release is available; run tenon setup --codex or tenon setup --claude')
+      }
+      const previous = await releasePayload(paths, selection.previousRelease)
+      if (previous === null) throw new Error('previous release integrity check failed; reinstall the selected host package')
+      journal = {
+        version: 1,
+        transactionId: randomBytes(18).toString('hex').replace(
+          /^(........)(....)(....)(....)(............).*$/,
+          '$1-$2-$3-$4-$5',
+        ),
+        beforeSelection: selection,
+        target: {
+          revision: selection.revision + 1,
+          activeRelease: selection.previousRelease,
+          previousRelease: selection.activeRelease,
+        },
+        launchers: await captureStableLaunchers(paths),
+      }
+      await atomicWrite(journalPath, `${JSON.stringify(journal, null, 2)}\n`)
+    }
+
+    let selection = await readSelection(paths)
+    if (JSON.stringify(selection) === JSON.stringify(journal.beforeSelection)) {
+      const previous = await releasePayload(paths, journal.target.activeRelease)
+      if (previous === null) throw new Error('rollback target integrity check failed; reinstall the selected host package')
+      const next = {
+        version: 1,
+        revision: journal.target.revision,
+        activeRelease: journal.target.activeRelease,
+        previousRelease: journal.target.previousRelease,
+        updatedAt: now(),
+      }
+      let selectionCommitted = false
+      try {
+        // Keep this current hardened dual-reader bootstrap active; only the frozen selection and
+        // stable launcher pair move under the durable rollback journal.
+        await appendAudit(paths, {
+          version: 1,
+          at: now(),
+          kind: 'rollback-prepared',
+          releaseId: next.activeRelease,
+          previousRelease: next.previousRelease,
+          detail: 'verified bootstrap rollback prepared; durable target journal already committed',
+        })
+        await atomicWrite(paths.selectionPath, `${JSON.stringify(next, null, 2)}\n`)
+        selectionCommitted = true
+        selection = next
+        await appendAudit(paths, {
+          version: 1,
+          at: now(),
+          kind: 'rolled-back',
+          releaseId: next.activeRelease,
+          previousRelease: next.previousRelease,
+          detail: 'verified bootstrap rollback selection committed',
+        })
+      } catch (error) {
+        if (!selectionCommitted) {
+          await appendAudit(paths, {
+            version: 1,
+            at: now(),
+            kind: 'rollback-rejected',
+            releaseId: next.activeRelease,
+            previousRelease: next.previousRelease,
+            detail: error instanceof Error ? error.message : String(error),
+          }).catch(() => {})
+        }
+        throw error
+      }
+    }
+    if (!selectionMatchesRollbackTarget(selection, journal.target)
+      || await releasePayload(paths, journal.target.activeRelease) === null) {
+      throw new Error('rollback journal does not match the current selection; refusing a second swap')
+    }
+    await recoverCommittedRollbackAudit(paths, selection)
+    await convergeRollbackLaunchers(paths, journal)
+    const persisted = await readRollbackJournal(paths)
+    if (persisted === null || persisted.transactionId !== journal.transactionId) {
+      throw new Error('rollback journal owner changed before commit')
+    }
+    await rm(journalPath)
+    return selection
+  })
+  )
 }
 
 function recoveryCommand(input) {
@@ -439,17 +961,30 @@ async function emitBootstrapStatus(paths, asJson) {
   const selection = await readSelection(paths)
   const active = selection?.activeRelease === null || selection === null ? null : await releasePayload(paths, selection.activeRelease)
   const previous = selection?.previousRelease === null || selection === null ? null : await releasePayload(paths, selection.previousRelease)
+  const audit = await readAuditState(paths)
+  const identity = (release) => release === null ? null : ({
+    version: release.version,
+    releaseId: release.releaseId,
+    payloadDigest: release.payloadDigest,
+    source: release.source,
+    ...(release.stableTarget === undefined ? {} : { stableTarget: release.stableTarget }),
+  })
   const payload = {
     selection,
+    active: identity(active),
+    previous: identity(previous),
     activeValid: active !== null,
     previousValid: previous !== null,
     bootstrap: join(paths.bootstrapRoot, 'active.mjs'),
-    lastAudit: await readLastAudit(paths),
+    lastAudit: audit.lastAudit,
+    auditCorrupt: audit.auditCorrupt,
   }
   if (asJson) process.stdout.write(`${JSON.stringify(payload)}\n`)
   else {
     process.stdout.write(`[runtime] active=${selection?.activeRelease ?? 'none'} valid=${active === null ? 'no' : 'yes'}\n`)
     process.stdout.write(`[runtime] previous=${selection?.previousRelease ?? 'none'} valid=${previous === null ? 'no' : 'yes'} revision=${selection?.revision ?? 'unknown'}\n`)
+    if (active !== null) process.stdout.write(`[runtime] version=${active.source.pluginVersion} release=${active.releaseId}\n`)
+    if (audit.auditCorrupt) process.stdout.write('[runtime] WARNING: audit.jsonl is incomplete or malformed.\n')
     if (active === null) process.stdout.write('[runtime] 修复：tenon runtime repair --rollback；或 tenon setup --codex / --claude。\n')
   }
   return 0
@@ -510,7 +1045,7 @@ async function runHook(paths, hookId) {
     process.stderr.write(`[tenon] active runtime hook is missing: ${hookId}\n`)
     return hookId === 'gate' ? 2 : 0
   }
-  const result = spawnSync('bash', [hook], {
+  const result = spawnSync('/bin/bash', [hook], {
     cwd: process.cwd(),
     env: await childEnv(active, paths),
     input,

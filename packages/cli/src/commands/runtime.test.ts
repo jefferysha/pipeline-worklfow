@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'vitest'
+import { chmodSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { makeDeps } from '../test-support.js'
 import type { RuntimeInstaller } from '../runtime/installer.js'
 import { cmdRuntime } from './runtime.js'
@@ -95,6 +98,42 @@ describe('tenon runtime', () => {
       ok: true,
       selection: { activeRelease: previousRelease, previousRelease: activeRelease, revision: 8 },
     })
+  })
+
+  test('repair --rollback rejects a frozen Bash symlink drift before runtime selection mutation', async () => {
+    const deps = makeDeps()
+    const root = mkdtempSync(join(tmpdir(), 'tenon-runtime-bash-drift-'))
+    const original = join(root, 'bash-original')
+    const attacker = join(root, 'bash-attacker')
+    const requested = join(root, 'bash')
+    let selectionMutations = 0
+    try {
+      writeFileSync(original, '#!/bin/sh\nexit 0\n')
+      writeFileSync(attacker, '#!/bin/sh\nexit 97\n')
+      chmodSync(original, 0o755)
+      chmodSync(attacker, 0o755)
+      symlinkSync(original, requested)
+      const installer = {
+        ...fakeInstaller().installer,
+        rollback: async (scope: Parameters<RuntimeInstaller['rollback']>[0]) => {
+          unlinkSync(requested)
+          symlinkSync(attacker, requested)
+          scope.verifyTrustedBash?.()
+          selectionMutations += 1
+          throw new Error('unreachable')
+        },
+      }
+
+      expect(await cmdRuntime(deps, 'repair', { rollback: true }, {
+        homeDir: () => root,
+        runtimeEnv: () => ({}),
+        resolveTrustedBash: () => requested,
+      }, installer)).toBe(1)
+      expect(selectionMutations).toBe(0)
+      expect(deps.errLines.join('\n')).toContain('可信可执行文件身份已漂移')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   test.each([

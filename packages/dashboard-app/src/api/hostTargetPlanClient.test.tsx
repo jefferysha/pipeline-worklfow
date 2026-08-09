@@ -39,29 +39,39 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
   const nativeCommands = host === 'codex'
     ? operation === 'setup'
       ? [
-          command('codex', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'main']),
+          command('codex', ['plugin', 'remove', 'tenon@tenon', '--json']),
+          command('codex', ['plugin', 'marketplace', 'remove', 'tenon', '--json']),
+          command('codex', [
+            'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'v1.0.2', '--json',
+          ]),
           command('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
           command('codex', ['plugin', 'list', '--json']),
         ]
       : [
-          command('codex', ['plugin', 'marketplace', 'upgrade', 'tenon', '--json']),
+          command('codex', ['plugin', 'remove', 'tenon@tenon', '--json']),
+          command('codex', ['plugin', 'marketplace', 'remove', 'tenon', '--json']),
+          command('codex', [
+            'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', '<latest-stable>', '--json',
+          ]),
           command('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
           command('codex', ['plugin', 'list', '--json']),
         ]
     : operation === 'setup'
       ? [
-          command('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon']),
+          command('claude', ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user']),
+          command('claude', ['plugin', 'marketplace', 'remove', 'tenon']),
+          command('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon@v1.0.2']),
           command('claude', ['plugin', 'install', 'tenon@tenon']),
           command('claude', ['plugin', 'list', '--json']),
         ]
       : [
-          command('claude', ['plugin', 'marketplace', 'update', 'tenon']),
-          command('claude', ['plugin', 'update', 'tenon@tenon']),
+          command('claude', ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user']),
+          command('claude', ['plugin', 'marketplace', 'remove', 'tenon']),
+          command('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon@<latest-stable>']),
+          command('claude', ['plugin', 'install', 'tenon@tenon']),
           command('claude', ['plugin', 'list', '--json']),
         ]
-  const nativeIds = operation === 'setup'
-    ? ['marketplace-register', 'plugin-install', 'plugin-inventory']
-    : ['marketplace-refresh', 'plugin-update', 'plugin-inventory']
+  const nativeIds = ['plugin-remove', 'marketplace-remove', 'marketplace-register', 'plugin-install', 'plugin-inventory']
   return {
     schema_version: 'host-target-plan/v1',
     side_effects: 'none',
@@ -69,12 +79,19 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
     operation,
     command: hostCommand,
     steps: [
+      {
+        id: operation === 'setup' ? 'stable-release-target' : 'stable-release-resolve',
+        label: `host-plan.step.${operation === 'setup' ? 'stable-release-target' : 'stable-release-resolve'}`,
+        command: null,
+      },
       ...nativeIds.map((id, index) => ({
         id,
         label: `host-plan.step.${id}`,
         command: nativeCommands[index],
       })),
+      { id: 'candidate-validation', label: 'host-plan.step.candidate-validation', command: null },
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      { id: 'dashboard-readiness', label: 'host-plan.step.dashboard-readiness', command: null },
       ...(host === 'codex'
         ? [{
             id: 'codex-auth-status',
@@ -92,6 +109,10 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
     notices: [
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
+      'host-plan.notice.dashboard-readiness',
+      ...(operation === 'setup' ? ['host-plan.notice.first-setup-browser'] : []),
+      ...(operation === 'setup' ? ['host-plan.notice.setup-rebind-conditional'] : []),
+      ...(operation === 'update' ? ['host-plan.notice.update-target-frozen-at-execution'] : []),
       ...(host === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
     ],
   }
@@ -110,6 +131,7 @@ function adapterPlan(host: 'cursor', operation: 'setup' | 'update') {
     steps: [
       { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      { id: 'dashboard-readiness', label: 'host-plan.step.dashboard-readiness', command: null },
       { id: 'adapter-deploy', label: 'host-plan.step.adapter-deploy', command: hostCommand },
       ...(operation === 'setup'
         ? [
@@ -121,6 +143,8 @@ function adapterPlan(host: 'cursor', operation: 'setup' | 'update') {
     notices: [
       'host-plan.notice.read-only-generation',
       'host-plan.notice.manual-command-has-effects',
+      'host-plan.notice.dashboard-readiness',
+      ...(operation === 'setup' ? ['host-plan.notice.first-setup-browser'] : []),
       'host-plan.notice.current-project-target',
     ],
   }
@@ -261,19 +285,29 @@ describe('host target plan read-only client', () => {
     await expect(fetchHostTargetPlan(host, operation)).resolves.toEqual(value)
     expect(value.steps.map(({ id }) => id)).toEqual(operation === 'setup'
       ? [
+          'stable-release-target',
+          'plugin-remove',
+          'marketplace-remove',
           'marketplace-register',
           'plugin-install',
           'plugin-inventory',
+          'candidate-validation',
           'managed-runtime',
+          'dashboard-readiness',
           ...(host === 'codex' ? ['codex-auth-status'] : []),
           'bundled-skills',
           'runtime-readiness',
         ]
       : [
-          'marketplace-refresh',
-          'plugin-update',
+          'stable-release-resolve',
+          'plugin-remove',
+          'marketplace-remove',
+          'marketplace-register',
+          'plugin-install',
           'plugin-inventory',
+          'candidate-validation',
           'managed-runtime',
+          'dashboard-readiness',
           ...(host === 'codex' ? ['codex-auth-status'] : []),
         ])
   })
@@ -288,8 +322,8 @@ describe('host target plan read-only client', () => {
 
       await expect(fetchHostTargetPlan('cursor', operation)).resolves.toEqual(value)
       expect(value.steps.map(({ id }) => id)).toEqual(operation === 'setup'
-        ? ['package-assets', 'managed-runtime', 'adapter-deploy', 'bundled-skills', 'runtime-readiness']
-        : ['package-assets', 'managed-runtime', 'adapter-deploy'])
+        ? ['package-assets', 'managed-runtime', 'dashboard-readiness', 'adapter-deploy', 'bundled-skills', 'runtime-readiness']
+        : ['package-assets', 'managed-runtime', 'dashboard-readiness', 'adapter-deploy'])
     },
   )
 

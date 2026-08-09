@@ -233,6 +233,63 @@ test('canonical CI actions are immutable full-SHA pins', async () => {
   assert.doesNotMatch(ci, /actions\/(?:checkout|setup-node)@v\d+\b/)
 })
 
+test('every clean-install workflow uses the pinned trusted Codex acceptance root', async () => {
+  for (const path of [
+    '.github/workflows/ci.yml',
+    '.github/workflows/release-candidate.yml',
+    '.github/workflows/release-public-acceptance.yml',
+  ]) {
+    const workflow = await text(path)
+    assert.match(workflow, /tools\/prepare-trusted-codex-acceptance\.sh/)
+    assert.doesNotMatch(workflow, /npm install --global @openai\/codex/)
+  }
+  const helper = await text('tools/prepare-trusted-codex-acceptance.sh')
+  assert.match(helper, /@openai\/codex@0\.144\.1/)
+  assert.match(helper, /cp "\$NODE_SOURCE" "\$TOOL_ROOT\/bin\/node"/)
+})
+
+test('trusted Codex acceptance helper materializes Node and the pinned CLI in one owner root', async (t) => {
+  const directory = await fixtureDir(t)
+  const bin = join(directory, 'bin')
+  const target = join(directory, 'trusted-tools')
+  await mkdir(bin)
+  await writeExecutable(join(bin, 'node'), '#!/bin/sh\nexit 0\n')
+  await writeExecutable(join(bin, 'npm'), `#!/bin/sh
+set -eu
+prefix=''
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --prefix ]; then prefix="$2"; shift 2; continue; fi
+  [ "$1" != '@openai/codex@0.144.1' ] || seen=1
+  shift
+done
+[ "${'$'}{seen:-0}" = 1 ]
+mkdir -p "$prefix/node_modules/.bin"
+printf '#!/bin/sh\\nexit 0\\n' > "$prefix/node_modules/.bin/codex"
+chmod 0755 "$prefix/node_modules/.bin/codex"
+`)
+
+  const result = spawnSync(
+    'bash',
+    [join(root, 'tools', 'prepare-trusted-codex-acceptance.sh'), target],
+    { env: { ...process.env, PATH: `${bin}:${process.env.PATH}` }, encoding: 'utf8' },
+  )
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.stdout.trim(), join(target, 'bin'))
+  assert.equal(await readFile(join(target, 'bin', 'node'), 'utf8'), '#!/bin/sh\nexit 0\n')
+  assert.equal(await readFile(join(target, 'bin', 'codex'), 'utf8'), '#!/bin/sh\nexit 0\n')
+})
+
+test('release publication and public latest acceptance share one non-cancelling queue', async () => {
+  const writer = await text('.github/workflows/release-writer.yml')
+  const acceptance = await text('.github/workflows/release-public-acceptance.yml')
+  const shared = 'group: stable-release-${{ github.event.repository.full_name }}'
+
+  assert.match(writer, new RegExp(shared.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.match(acceptance, new RegExp(shared.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.match(writer, /concurrency:\s*\n\s+group:[^\n]+\n\s+cancel-in-progress: false/u)
+  assert.match(acceptance, /concurrency:\s*\n\s+group:[^\n]+\n\s+cancel-in-progress: false/u)
+})
+
 test('canonical CI never exposes the real-Codex secret to pull-request code', async () => {
   const ci = await text('.github/workflows/ci.yml')
   const mainPush = "github.event_name == 'push' && github.ref == 'refs/heads/main'"
@@ -696,4 +753,19 @@ test('release automation never publishes to npm', async () => {
     assert.doesNotMatch(workflow, /npm publish/)
     assert.doesNotMatch(workflow, /NPM_TOKEN|NODE_AUTH_TOKEN/)
   }
+})
+
+test('published stable releases trigger an isolated public install, repeat, update and Dashboard acceptance', async () => {
+  const workflow = await text('.github/workflows/release-public-acceptance.yml')
+  assert.match(workflow, /release:\s*\n\s+types: \[published\]/)
+  assert.match(workflow, /github\.event\.release\.draft == false/)
+  assert.match(workflow, /github\.event\.release\.prerelease == false/)
+  assert.match(workflow, /target_commitish/)
+  assert.match(workflow, /\.github\/workflows\/release-public-acceptance\.yml@refs\/heads\/main/)
+  assert.match(workflow, /persist-credentials: false/)
+  assert.match(
+    workflow,
+    /clean-codex-install-acceptance\.mjs --mode public --public-ref "\$RELEASE_TAG"/,
+  )
+  assert.doesNotMatch(workflow, /contents: write|\$\{\{\s*secrets\./)
 })

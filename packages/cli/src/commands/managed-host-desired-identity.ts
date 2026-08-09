@@ -3,9 +3,17 @@ interface MarketplaceDesiredIdentity {
   readonly source: string
   readonly sourceType: string
   readonly head: string | null
+  readonly ref: string | null
+  readonly clean: boolean
 }
 
 type NativeHostDesiredIdentity =
+  | {
+      readonly version: 1
+      readonly kind: 'plugin-absent' | 'marketplace-absent'
+      readonly targetVersion: string
+      readonly targetCommit: string
+    }
   | {
       readonly version: 1
       readonly kind: 'marketplace-present'
@@ -13,6 +21,7 @@ type NativeHostDesiredIdentity =
       readonly root: string | null
       readonly sourceType: string
       readonly head: string
+      readonly ref: string
     }
   | {
       readonly version: 1
@@ -43,13 +52,16 @@ function isGitOid(value: unknown): value is string {
 }
 
 function decodeMarketplaceIdentity(value: unknown): MarketplaceDesiredIdentity | null {
-  if (!isRecord(value) || !hasExactKeys(value, ['head', 'root', 'source', 'sourceType'])) {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['clean', 'head', 'ref', 'root', 'source', 'sourceType'])) {
     return null
   }
   if (typeof value.root !== 'string'
     || typeof value.source !== 'string'
     || typeof value.sourceType !== 'string'
-    || (value.head !== null && !isGitOid(value.head))) {
+    || (value.head !== null && !isGitOid(value.head))
+    || (value.ref !== null && typeof value.ref !== 'string')
+    || typeof value.clean !== 'boolean') {
     return null
   }
   return {
@@ -57,6 +69,8 @@ function decodeMarketplaceIdentity(value: unknown): MarketplaceDesiredIdentity |
     source: value.source,
     sourceType: value.sourceType,
     head: value.head,
+    ref: value.ref,
+    clean: value.clean,
   }
 }
 
@@ -68,12 +82,26 @@ function decodeDesiredIdentity(text: string): NativeHostDesiredIdentity | null {
     return null
   }
   if (!isRecord(value) || value.version !== 1 || typeof value.kind !== 'string') return null
+  if (value.kind === 'plugin-absent' || value.kind === 'marketplace-absent') {
+    return hasExactKeys(value, ['kind', 'targetCommit', 'targetVersion', 'version'])
+      && typeof value.targetVersion === 'string'
+      && value.targetVersion !== ''
+      && isGitOid(value.targetCommit)
+      ? {
+          version: 1,
+          kind: value.kind,
+          targetVersion: value.targetVersion,
+          targetCommit: value.targetCommit,
+        }
+      : null
+  }
   if (value.kind === 'marketplace-present') {
-    if (!hasExactKeys(value, ['head', 'kind', 'root', 'source', 'sourceType', 'version'])
+    if (!hasExactKeys(value, ['head', 'kind', 'ref', 'root', 'source', 'sourceType', 'version'])
       || typeof value.source !== 'string'
       || (value.root !== null && typeof value.root !== 'string')
       || typeof value.sourceType !== 'string'
-      || typeof value.head !== 'string') {
+      || !isGitOid(value.head)
+      || typeof value.ref !== 'string') {
       return null
     }
     return {
@@ -83,6 +111,7 @@ function decodeDesiredIdentity(text: string): NativeHostDesiredIdentity | null {
       root: value.root,
       sourceType: value.sourceType,
       head: value.head,
+      ref: value.ref,
     }
   }
   if (value.kind === 'marketplace-head') {
@@ -123,6 +152,8 @@ function sameMarketplaceIdentity(
   return left.root === right.root
     && left.source === right.source
     && left.sourceType === right.sourceType
+    && left.ref === right.ref
+    && left.clean === right.clean
 }
 
 /**
@@ -137,20 +168,27 @@ export function equivalentNativeHostDesired(
   const persisted = decodeDesiredIdentity(persistedSerialized)
   const current = decodeDesiredIdentity(currentSerialized)
   if (persisted === null || current === null || persisted.kind !== current.kind) return false
+  if (current.kind === 'plugin-absent' || current.kind === 'marketplace-absent') {
+    return persisted.kind === current.kind
+      && persisted.targetVersion === current.targetVersion
+      && persisted.targetCommit === current.targetCommit
+  }
   if (current.kind === 'marketplace-present') {
     return persisted.kind === current.kind
       && persisted.source === current.source
-      && persisted.root === current.root
+      && (persisted.root === null || persisted.root === current.root)
       && persisted.sourceType === current.sourceType
       && persisted.head === current.head
+      && persisted.ref === current.ref
   }
   if (current.kind === 'marketplace-head') {
     return persisted.kind === current.kind
       && sameMarketplaceIdentity(persisted.marketplace, current.marketplace)
       && persisted.head === current.head
   }
+  if (current.kind !== 'plugin-version' || persisted.kind !== 'plugin-version') return false
   return persisted.kind === current.kind
     && sameMarketplaceIdentity(persisted.marketplace, current.marketplace)
-    && persisted.pluginRoot === current.pluginRoot
+    && (persisted.pluginRoot === null || persisted.pluginRoot === current.pluginRoot)
     && persisted.pluginVersion === current.pluginVersion
 }

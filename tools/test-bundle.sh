@@ -7,8 +7,8 @@
 #   4. 端到端上手路径：临时目录 init → .pipeline.yaml 落盘 → get phase = open
 #      → 登记随 init 生成的 OpenSpec proposal/design/tasks 的真实 skill 证据
 #      → transition open-complete → get phase = explore → history JSONL 有 init+transition
-#   5. 冻结 N-1 严格读取器必须接受当前新 Change；本机有 managed previous release 时再用真实
-#      上一发行版 CLI 交叉验证。CI 不依赖用户缓存也不会静默丢掉兼容门。
+#   5. 冻结 N-1 reader 保持旧写入协议；真实 v1.0.1 创建 V1/V2 state，再由当前 CLI 读取和继续
+#      mutation。兼容方向是 current reads N-1，不要求 immutable N-1 理解未来 V3。
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUNDLE="$ROOT/packages/cli/dist/tenon.mjs"
@@ -39,16 +39,21 @@ plugin_runtime_spec="$ROOT/openspec/changes/fix-tenon-entry-skill-contract/specs
 if [ ! -f "$plugin_runtime_spec" ]; then
   plugin_runtime_spec="$ROOT/openspec/specs/plugin-runtime/spec.md"
 fi
-grep -q 'Critical/High/Medium 全部清零' "$ROOT/docs/CONTRACT.md" \
-  && grep -q '所有 MEDIUM 同样必须修复' "$ROOT/skills/tenon-build/SKILL.md" \
-  && grep -q '完整待冻结 diff 与全部 capability' "$ROOT/skills/tenon-build/SKILL.md" \
-  && grep -q '不得发现第一个 CRITICAL/HIGH 就提前停止' "$ROOT/skills/tenon-build/SKILL.md" \
-  && [ "$(grep -c '全部 critical/high/medium' "$ROOT/skills/tenon-build/SKILL.md")" -ge 2 ] \
-  && ! grep -qi 'medium 尽量修' "$ROOT/skills/tenon-build/SKILL.md" \
-  && ! grep -qi '无 high/critical' "$ROOT/skills/tenon-build/SKILL.md" \
-  && grep -q 'Critical/High/Medium 全部清零' "$plugin_runtime_spec" \
-  && ok "bundle: Build 全量收敛要求完整聚合且 C/H/M 清零" \
-  || bad "bundle: Build 全量收敛要求完整聚合且 C/H/M 清零" "治理契约或 delta spec 未闭环"
+review_budget_spec="$ROOT/openspec/changes/versioned-release-install-lifecycle-20260808/specs/review-attempt-budget/spec.md"
+if [ ! -f "$review_budget_spec" ]; then
+  review_budget_spec="$ROOT/openspec/specs/review-attempt-budget/spec.md"
+fi
+grep -q 'Build pre-Verify readiness 门' "$ROOT/docs/CONTRACT.md" \
+  && grep -q '不得.*创建 Review attempt' "$ROOT/skills/tenon-build/SKILL.md" \
+  && grep -q '不产生放行 verdict，也不消耗 Review 次数' "$ROOT/skills/tenon-build/SKILL.md" \
+  && grep -q '同一个有限 Review attempt' "$ROOT/skills/tenon-build/SKILL.md" \
+  && ! grep -Eq '循环.*(critical|high|medium)|直到.*(critical|high|medium)' "$ROOT/skills/tenon-build/SKILL.md" \
+  && grep -q 'Critical/High/Medium 全部清零' "$ROOT/docs/CONTRACT.md" \
+  && grep -q '同一候选的一轮复核 SHALL 只有一个 attempt' "$review_budget_spec" \
+  && grep -q 'Review 预算耗尽 SHALL 停止自动循环' "$review_budget_spec" \
+  && grep -q '所有适用轨必须读取同一冻结基线' "$ROOT/skills/tenon-verify/SKILL.md" \
+  && ok "bundle: Build 实现反馈与有限聚合 Review 边界闭环" \
+  || bad "bundle: Build 实现反馈与有限聚合 Review 边界闭环" "治理契约、Skill 或 Review budget delta 未闭环"
 grep -q 'repo-zero-output barrier' "$ROOT/skills/tenon-verify/SKILL.md" \
   && grep -q '每轨前后都重算 fingerprint' "$ROOT/skills/tenon-verify/SKILL.md" \
   && grep -q '截图、Playwright' "$ROOT/skills/tenon-verify/SKILL.md" \
@@ -186,48 +191,57 @@ if [ -f "$BUNDLE" ]; then
       explicit_n_minus_cli="$explicit_n_minus_payload/$n_minus_cli_entry"
     fi
   fi
-  N_MINUS_CLI="$explicit_n_minus_cli"
-  if [ -z "$N_MINUS_CLI" ]; then
-    managed_home="${TENON_MANAGED_HOME:-$HOME/Library/Application Support/tenon}"
-    selection="$managed_home/state/selection.json"
-    if [ -f "$selection" ]; then
-      previous_release="$(node -e '
-        const fs = require("fs")
-        const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"))
-        if (typeof value.previousRelease === "string") process.stdout.write(value.previousRelease)
-      ' "$selection" 2>/dev/null || true)"
-      candidate="$managed_home/releases/$previous_release/payload/packages/cli/dist/tenon.mjs"
-      [ -n "$previous_release" ] && [ -f "$candidate" ] && N_MINUS_CLI="$candidate"
+  if [ -z "$explicit_n_minus_cli" ]; then
+    prepared_n_minus="$TMP/n-minus-one-release"
+    if bash "$ROOT/tools/prepare-n-minus-one-release.sh" "$prepared_n_minus" >/dev/null; then
+      n_minus_cli_entry="$(node -p "require('$ROOT/tools/fixtures/n-minus-one-release.json').cliEntry")"
+      explicit_n_minus_cli="$prepared_n_minus/payload/$n_minus_cli_entry"
+    else
+      bad "bundle: 固定公开 N-1 payload 可准备" "v1.0.1 tag/commit/完整 payload 缺失"
     fi
   fi
+  N_MINUS_CLI="$explicit_n_minus_cli"
+  expected_n_minus_digest="$(node -p "require('$ROOT/tools/fixtures/n-minus-one-release.json').cliSha256")"
+  actual_n_minus_digest="$(node -e '
+    const { createHash } = require("node:crypto")
+    const { readFileSync } = require("node:fs")
+    try { process.stdout.write(createHash("sha256").update(readFileSync(process.argv[1])).digest("hex")) }
+    catch { process.exit(2) }
+  ' "$N_MINUS_CLI" 2>/dev/null || true)"
+  [ "$actual_n_minus_digest" = "$expected_n_minus_digest" ] \
+    && ok "bundle: 固定公开 N-1 CLI digest 精确" \
+    || bad "bundle: 固定公开 N-1 CLI digest 精确" \
+      "expected=$expected_n_minus_digest actual=${actual_n_minus_digest:-missing}"
   if [ -n "$explicit_n_minus_cli" ] && [ ! -f "$explicit_n_minus_cli" ]; then
     bad "bundle: 显式 N-1 bundle 存在" "$explicit_n_minus_cli"
   elif [ -n "$N_MINUS_CLI" ] && [ -f "$N_MINUS_CLI" ]; then
-    n_minus_release="${TENON_N_MINUS_ONE_RELEASE:-未标注版本}"
-    n_minus_real="$(cd "$TMP" && node "$N_MINUS_CLI" status t8-smoke --json 2>&1)"
-    [ "$?" -eq 0 ] && printf '%s' "$n_minus_real" | grep -q '"phase":"explore"' \
-      && ok "bundle: 真实上一发行版 CLI（${n_minus_release}）可读当前新 Change" \
-      || bad "bundle: 真实上一发行版 CLI（${n_minus_release}）可读当前新 Change" "$n_minus_real"
-    n_minus_write="$(cd "$TMP" && node "$N_MINUS_CLI" set t8-smoke scope n1-compatible 2>&1)"
+    n_minus_release="${TENON_N_MINUS_ONE_RELEASE:-v1.0.1}"
+    n_minus_change="n1-created"
+    n_minus_init="$(cd "$TMP" && TENON_RUNTIME_HOME="$TMP/.tenon-runtime-home" \
+      node "$N_MINUS_CLI" init "$n_minus_change" --track backend --preset full --user n1-smoke 2>&1)"
+    n_minus_init_code="$?"
+    n_minus_real="$(cd "$TMP" && node "$N_MINUS_CLI" status "$n_minus_change" --json 2>&1)"
+    n_minus_status_code="$?"
+    [ "$n_minus_init_code" -eq 0 ] && [ "$n_minus_status_code" -eq 0 ] \
+      && printf '%s' "$n_minus_real" | grep -q '"phase":"open"' \
+      && ok "bundle: 真实上一发行版 CLI（${n_minus_release}）创建并读取 legacy Change" \
+      || bad "bundle: 真实上一发行版 CLI（${n_minus_release}）创建并读取 legacy Change" \
+        "init=$n_minus_init_code $n_minus_init status=$n_minus_real"
+    n_minus_write="$(cd "$TMP" && node "$N_MINUS_CLI" set "$n_minus_change" scope n1-compatible 2>&1)"
     n_minus_write_code="$?"
-    n_minus_scope="$(cd "$TMP" && node "$BUNDLE" get t8-smoke scope 2>/dev/null)"
+    n_minus_scope="$(cd "$TMP" && node "$BUNDLE" get "$n_minus_change" scope 2>/dev/null)"
     [ "$n_minus_write_code" -eq 0 ] && [ "$n_minus_scope" = "n1-compatible" ] \
-      && ok "bundle: 真实上一发行版 CLI（${n_minus_release}）可继续合法 mutation" \
-      || bad "bundle: 真实上一发行版 CLI（${n_minus_release}）可继续合法 mutation" \
+      && ok "bundle: 当前 runtime 可读真实 N-1 mutation" \
+      || bad "bundle: 当前 runtime 可读真实 N-1 mutation" \
         "exit=$n_minus_write_code scope=$n_minus_scope $n_minus_write"
-    after_n_minus_pre="$(cd "$TMP" && node "$BUNDLE" get t8-smoke pre_verify_review_result 2>/dev/null)"
-    [ "$after_n_minus_pre" = "pending" ] \
-      && ok "bundle: N-1 新 revision 缺 companion 时 pre-Verify 失败关闭" \
-      || bad "bundle: N-1 新 revision 缺 companion 时 pre-Verify 失败关闭" \
-        "得到 '$after_n_minus_pre'"
-    ( cd "$TMP" && node "$BUNDLE" set t8-smoke related_files current-after-n1 ) >/dev/null 2>&1
-    after_n_minus_current="$(cd "$TMP" && node "$BUNDLE" get t8-smoke related_files 2>/dev/null)"
+    ( cd "$TMP" && node "$BUNDLE" set "$n_minus_change" related_files current-after-n1 ) >/dev/null 2>&1
+    after_n_minus_current="$(cd "$TMP" && node "$BUNDLE" get "$n_minus_change" related_files 2>/dev/null)"
     [ "$after_n_minus_current" = "current-after-n1" ] \
-      && ok "bundle: 当前 runtime 可接续 N-1 stale anchor 后 mutation" \
+      && ok "bundle: 当前 runtime 可接续 N-1 V1/V2 snapshot 后 mutation" \
       || bad "bundle: 当前 runtime 可接续 N-1 stale anchor 后 mutation" \
         "得到 '$after_n_minus_current'"
   else
-    printf 'info - 真实上一发行版 CLI 未安装；已执行可离线冻结严格读取器\n'
+    bad "bundle: 固定公开 N-1 CLI 存在" "$N_MINUS_CLI"
   fi
 fi
 

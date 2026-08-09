@@ -68,10 +68,11 @@ export function parseDefaultWorkflow(yamlText) {
   const lines = yamlText.split('\n')
   const nameMatch = /^name:\s*(\S+)\s*$/.exec(lines[0] ?? '')
   if (!nameMatch) fail('第一行必须是 "name: <name>"')
-  if ((lines[1] ?? '').trim() !== 'steps:') fail('第二行必须是 "steps:"')
+  const stepsIndex = lines.findIndex((line, index) => index > 0 && line.trim() === 'steps:' && indentOf(line) === 0)
+  if (stepsIndex < 0) fail('缺顶层 "steps:"')
 
   const steps = []
-  let i = 2
+  let i = stepsIndex + 1
   while (i < lines.length) {
     const line = lines[i] ?? ''
     if (line.trim() === '') { i++; continue }

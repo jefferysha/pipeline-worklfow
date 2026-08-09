@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { LOCK_OWNER_FILE } from './lock.js'
 import { readTaskPlanForChange } from './task-plan-store.js'
 
 const CHILD_SOURCE = `
@@ -156,7 +157,10 @@ describe('TaskPlan store cross-process CAS', () => {
       await writeFile(barrier, 'go\n', 'utf8')
       expect(await crashing.exit).toBe(17)
       await expect(readTaskPlanForChange(root)).resolves.toMatchObject({ revision_id: 'revision-1' })
-      expect(await readFile(join(root, '.pipeline.lock', 'owner'), 'utf8')).toMatch(/^\d+\./u)
+      expect(JSON.parse(await readFile(
+        join(root, '.pipeline.lock', LOCK_OWNER_FILE),
+        'utf8',
+      ))).toMatchObject({ version: 1, pid: expect.any(Number) })
 
       const recovery = runChild(script, root, 'revision-crash', barrier, 'recover')
       await recovery.ready

@@ -3,9 +3,13 @@ import type { WorkflowIR } from './ir.js'
 import type {
   WorkflowDecompositionPolicyV1,
   WorkflowInteractionPolicyV1,
+  WorkflowReviewBudgetPolicyV1,
 } from './types.js'
 
-export type LegacyWorkflowIR = Omit<WorkflowIR, 'decomposition' | 'interaction'>
+export type LegacyWorkflowIR = Omit<WorkflowIR, 'decomposition' | 'interaction' | 'reviewBudget'>
+export type WorkflowIRV3 = Omit<WorkflowIR, 'reviewBudget'> & {
+  readonly reviewBudget?: WorkflowReviewBudgetPolicyV1
+}
 
 interface WorkflowPlanSnapshotBase {
   readonly workflowId: string
@@ -26,10 +30,12 @@ export interface WorkflowPlanSnapshotV2 extends WorkflowPlanSnapshotBase {
 
 export interface WorkflowPlanSnapshotV3 extends WorkflowPlanSnapshotBase {
   readonly version: 3
-  readonly workflow: WorkflowIR
+  readonly workflow: WorkflowIRV3
   readonly documentPolicy: DocumentGovernancePolicy | null
   readonly decomposition: WorkflowDecompositionPolicyV1
   readonly interaction: WorkflowInteractionPolicyV1
+  /** Added compatibly to V3; absence means the finite product default for pre-policy snapshots. */
+  readonly reviewBudget?: WorkflowReviewBudgetPolicyV1
 }
 
 export type WorkflowPlanSnapshot = WorkflowPlanSnapshotV1 | WorkflowPlanSnapshotV2 | WorkflowPlanSnapshotV3

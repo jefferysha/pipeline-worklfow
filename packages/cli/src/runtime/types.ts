@@ -4,18 +4,54 @@ export type NativeRuntimeHost = 'codex' | 'claude'
 
 export type RuntimePaths = ProductPaths
 
+export interface TrustedPathProof {
+  readonly path: string
+  readonly dev: number
+  readonly ino: number
+  readonly mode: number
+  readonly uid: number
+  readonly size: number
+}
+
+export interface TrustedExecutableProof {
+  readonly version: 1
+  readonly platform: NodeJS.Platform
+  readonly requestedPath: string
+  readonly executable: TrustedPathProof
+  readonly parents: readonly TrustedPathProof[]
+  readonly sha256: string
+}
+
 export interface RuntimeReleaseSource {
   readonly host: NativeRuntimeHost | 'adapter' | 'manual'
   readonly pluginVersion: string
 }
 
-export interface RuntimeReleaseManifest {
+export interface RuntimeStableReleaseTarget {
+  readonly version: string
+  readonly tag: string
+  readonly commit: string
+}
+
+export interface RuntimeReleaseManifestV1 {
   readonly version: 1
   readonly releaseId: string
   readonly payloadDigest: string
   readonly createdAt: string
   readonly source: RuntimeReleaseSource
 }
+
+export interface RuntimeReleaseManifestV2 {
+  readonly version: 2
+  readonly releaseId: string
+  readonly payloadDigest: string
+  readonly createdAt: string
+  readonly source: RuntimeReleaseSource
+  /** Immutable native provenance; absent only for low-level/manual/adapter activations. */
+  readonly stableTarget?: RuntimeStableReleaseTarget
+}
+
+export type RuntimeReleaseManifest = RuntimeReleaseManifestV1 | RuntimeReleaseManifestV2
 
 export interface RuntimeSelection {
   readonly version: 1
@@ -41,8 +77,10 @@ export interface RuntimeAuditEntry {
   readonly version: 1
   readonly at: string
   readonly kind:
+    | 'activation-prepared'
     | 'activated'
     | 'activation-rejected'
+    | 'rollback-prepared'
     | 'rolled-back'
     | 'rollback-rejected'
     | 'update-rejected'
@@ -60,6 +98,8 @@ export interface RuntimeActivation {
   readonly launcherSnapshot?: RuntimeLauncherSnapshot
   /** Exact launcher state written by this activation; compensation uses it as a CAS ownership proof. */
   readonly launcherCommitted?: RuntimeLauncherSnapshot
+  /** Selection committed, but the terminal audit append still requires durable recovery. */
+  readonly auditPending?: true
 }
 
 export interface RuntimeInspection {
@@ -69,6 +109,10 @@ export interface RuntimeInspection {
   readonly activeValid: boolean
   readonly previousValid: boolean
   readonly lastAudit: RuntimeAuditEntry | null
+  /** True when audit.jsonl is present but cannot be consumed as one complete append-only log. */
+  readonly auditCorrupt?: boolean
+  /** The latest prepared audit matches committed state but its terminal event could not be appended. */
+  readonly auditPending?: boolean
 }
 
 export class RuntimeFailure extends Error {

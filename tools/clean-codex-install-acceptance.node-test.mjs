@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer as createHttpServer } from 'node:http'
 import { createConnection, createServer } from 'node:net'
@@ -15,9 +16,11 @@ import {
   assertSameDashboardIdentity,
   assertSupportedAcceptancePlatform,
   commandResultError,
+  cleanupIsolatedDashboardAfterFailure,
   dashboardIdentityMatches,
   fetchWithTimeout,
   hasExactLocalTenonMarketplace,
+  isolatedAcceptanceStateScopeId,
   parseJson,
   preserveOwnedDashboardIdentity,
   publicInstallUrl,
@@ -51,6 +54,7 @@ test('clean-install auth guidance requires every supported login route and statu
 
 const identity = {
   ok: true,
+  version: '1.0.2',
   releaseId: `sha256-${'a'.repeat(64)}`,
   transactionId: 'transaction-1',
   stateScopeId: `sha256-v1-${'b'.repeat(64)}`,
@@ -100,22 +104,23 @@ test('dashboard identity requires exact release, transaction, state scope, and p
 test('Dashboard health rejects zero, negative, and unsafe PIDs before cleanup can signal them', () => {
   for (const pid of [0, -1, Number.MAX_SAFE_INTEGER + 1]) {
     assert.throws(
-      () => assertDashboardHealthIdentity({ ...identity, pid }, identity.releaseId),
+      () => assertDashboardHealthIdentity({ ...identity, pid }, identity.releaseId, '1.0.2'),
       /does not match the active managed release/,
     )
   }
-  assert.doesNotThrow(() => assertDashboardHealthIdentity(identity, identity.releaseId))
+  assert.doesNotThrow(() => assertDashboardHealthIdentity(identity, identity.releaseId, '1.0.2'))
 })
 
 test('Dashboard health requires canonical nonempty state-scope and transaction identities', () => {
   for (const health of [
+    { ...identity, version: '1.0.1' },
     { ...identity, stateScopeId: '' },
     { ...identity, stateScopeId: `sha256-v1-${'g'.repeat(64)}` },
     { ...identity, transactionId: '' },
     { ...identity, transactionId: 'contains whitespace' },
   ]) {
     assert.throws(
-      () => assertDashboardHealthIdentity(health, identity.releaseId),
+      () => assertDashboardHealthIdentity(health, identity.releaseId, '1.0.2'),
       /does not match the active managed release/,
     )
   }
@@ -123,7 +128,7 @@ test('Dashboard health requires canonical nonempty state-scope and transaction i
 
 test('external JSON object boundaries reject null and arrays with stable errors', () => {
   assert.throws(
-    () => assertDashboardHealthIdentity(null, identity.releaseId),
+    () => assertDashboardHealthIdentity(null, identity.releaseId, '1.0.2'),
     /Dashboard health must be a non-null JSON object/,
   )
   assert.throws(
@@ -383,11 +388,14 @@ test('non-success health responses preserve HTTP status as the timeout cause', a
   }
 })
 
-test('public install URL is pinned to an explicit safe ref', () => {
+test('public install URL accepts only a complete stable release tag', () => {
   assert.equal(
-    publicInstallUrl('0123456789abcdef0123456789abcdef01234567'),
-    'https://raw.githubusercontent.com/jefferysha/tenon/0123456789abcdef0123456789abcdef01234567/install.sh',
+    publicInstallUrl('v1.2.3'),
+    'https://raw.githubusercontent.com/jefferysha/tenon/v1.2.3/install.sh',
   )
+  assert.throws(() => publicInstallUrl('main'), /invalid public install ref/)
+  assert.throws(() => publicInstallUrl('0123456789abcdef0123456789abcdef01234567'), /invalid public install ref/)
+  assert.throws(() => publicInstallUrl('v1.2.3-rc.1'), /invalid public install ref/)
   assert.throws(() => publicInstallUrl('../main'), /invalid public install ref/)
 })
 
@@ -414,9 +422,11 @@ test('positive health timeout preserves the final connection error as cause', as
 test('verified Dashboard ownership is registered before a later HTML identity failure', async () => {
   const root = await mkdtemp(join(tmpdir(), 'tenon-dashboard-registration-'))
   const launcher = join(root, '.local', 'bin', 'tenon')
+  const runtimeHome = join(root, 'runtime')
   const releaseId = `sha256-${'d'.repeat(64)}`
   const health = {
     ok: true,
+    version: '1.0.2',
     releaseId,
     stateScopeId: `sha256-v1-${'e'.repeat(64)}`,
     transactionId: 'transaction-registration',
@@ -439,7 +449,13 @@ test('verified Dashboard ownership is registered before a later HTML identity fa
         + 'if [ "$1" = "runtime" ]; then\n'
         + `  printf '%s\\n' '${JSON.stringify({
           activeValid: true,
-          active: { releaseId },
+          active: {
+            version: 2,
+            releaseId,
+            payloadDigest: 'd'.repeat(64),
+            source: { host: 'codex', pluginVersion: '1.0.2' },
+            stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'c'.repeat(40) },
+          },
           selection: { activeRelease: releaseId },
         })}'\n`
         + 'else\n'
@@ -458,7 +474,7 @@ test('verified Dashboard ownership is registered before a later HTML identity fa
     let registered = null
     await assert.rejects(
       assertInstalledRuntime(
-        { ...process.env, HOME: root },
+        { ...process.env, HOME: root, TENON_RUNTIME_HOME: runtimeHome },
         root,
         address.port,
         (current) => { registered = current },
@@ -468,6 +484,65 @@ test('verified Dashboard ownership is registered before a later HTML identity fa
     assert.deepEqual(registered, health)
   } finally {
     await new Promise((resolve) => server.close(resolve))
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('failure cleanup discovers and stops an isolated Dashboard before ownership registration', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'tenon-dashboard-late-cleanup-'))
+  const runtimeHome = join(root, 'runtime')
+  const releaseId = `sha256-${'f'.repeat(64)}`
+  const releaseRoot = join(runtimeHome, 'data', 'releases', releaseId)
+  const probe = createServer()
+  await new Promise((resolve, reject) => {
+    probe.once('error', reject)
+    probe.listen(0, '127.0.0.1', resolve)
+  })
+  const address = probe.address()
+  assert.notEqual(address, null)
+  assert.equal(typeof address, 'object')
+  const port = address.port
+  await new Promise((resolve) => probe.close(resolve))
+  const env = { ...process.env, TENON_RUNTIME_HOME: runtimeHome }
+  const stateScopeId = isolatedAcceptanceStateScopeId(env)
+  await mkdir(releaseRoot, { recursive: true })
+  await writeFile(join(releaseRoot, 'release.json'), JSON.stringify({
+    version: 1,
+    releaseId,
+    source: { host: 'codex', pluginVersion: '1.0.2' },
+  }))
+  const serverSource = [
+    "const http = require('node:http')",
+    "const health = JSON.parse(process.env.HEALTH)",
+    "health.pid = process.pid",
+    "http.createServer((req, res) => {",
+    "res.writeHead(200, {'content-type':'application/json'})",
+    "res.end(JSON.stringify(health))",
+    `}).listen(${port}, '127.0.0.1')`,
+  ].join(';')
+  const child = spawn(process.execPath, ['-e', serverSource], {
+    env: {
+      ...process.env,
+      HEALTH: JSON.stringify({
+        ok: true,
+        version: '1.0.2',
+        releaseId,
+        stateScopeId,
+        transactionId: 'transaction-late-cleanup',
+      }),
+    },
+    stdio: 'ignore',
+  })
+  try {
+    const health = await waitForHealth(port)
+    assert.equal(health.pid, child.pid)
+    const recovered = await cleanupIsolatedDashboardAfterFailure(env, port, null)
+    assert.deepEqual(recovered, health)
+    await assertProcessReapedWithClosedPort(child.pid, port)
+  } finally {
+    try { process.kill(child.pid, 'SIGKILL') } catch (error) {
+      if (error.code !== 'ESRCH') throw error
+    }
     await rm(root, { recursive: true, force: true })
   }
 })

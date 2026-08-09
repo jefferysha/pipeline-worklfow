@@ -45,6 +45,7 @@ describe('decodeWorkflowDefinition', () => {
       ask_when: [],
     })
     expect(decoded?.interaction).toEqual({ version: 'v1', mode: 'interactive' })
+    expect(decoded?.reviewBudget).toEqual({ version: 'v1', max_attempts: 2 })
   })
 
   it('preserves the complete decomposition and interaction policy without coupling them', () => {
@@ -61,6 +62,7 @@ describe('decodeWorkflowDefinition', () => {
         ask_when: ['hard-boundary', 'missing-authorization'],
       },
       interaction: { version: 'v1', mode: 'afk' },
+      reviewBudget: { version: 'v1', max_attempts: 4 },
       steps: [step],
     })
 
@@ -75,6 +77,44 @@ describe('decodeWorkflowDefinition', () => {
       ask_when: ['hard-boundary', 'missing-authorization'],
     })
     expect(decoded?.interaction).toEqual({ version: 'v1', mode: 'afk' })
+    expect(decoded?.reviewBudget).toEqual({ version: 'v1', max_attempts: 4 })
+  })
+
+  it('preserves explicit Review lanes and classifies third-party Skills without name inference', () => {
+    const decoded = decodeWorkflowDefinition({
+      name: 'review-contract',
+      reviewBudget: { version: 'v1', max_attempts: 3 },
+      steps: [{
+        ...step,
+        id: 'verify',
+        gate: 'review',
+        reviewLanes: ['standards', 'e2e'],
+        skills: [
+          { id: 'acme-quality-gate', kind: 'review', review_lane: 'standards' },
+          { id: 'e2e-looking-work', kind: 'work' },
+        ],
+      }],
+    })
+
+    expect(decoded?.steps[0]).toMatchObject({
+      reviewLanes: ['standards', 'e2e'],
+      skills: [
+        { id: 'acme-quality-gate', kind: 'review', review_lane: 'standards' },
+        { id: 'e2e-looking-work', kind: 'work' },
+      ],
+    })
+    expect(decodeWorkflowDefinition({
+      name: 'undeclared-lane',
+      steps: [{
+        ...step,
+        reviewLanes: ['e2e'],
+        skills: [{ id: 'acme-quality-gate', kind: 'review', review_lane: 'standards' }],
+      }],
+    })).toBeNull()
+    expect(decodeWorkflowDefinition({
+      name: 'name-is-not-a-contract',
+      steps: [{ ...step, skills: [{ id: 'code-review' }] }],
+    })?.steps[0]?.skills).toEqual([{ id: 'code-review' }])
   })
 
   it('fills omitted v1 policy fields while rejecting unknown keys, duplicate conditions, and invalid limits', () => {
@@ -112,6 +152,14 @@ describe('decodeWorkflowDefinition', () => {
       interaction: { mode: 'interactive' },
       steps: [step],
     })).toBeNull()
+    for (const reviewBudget of [
+      { max_attempts: 2 },
+      { version: 'v1', max_attempts: 0 },
+      { version: 'v1', max_attempts: 21 },
+      { version: 'v1', max_attempts: 2, infinite: true },
+    ]) {
+      expect(decodeWorkflowDefinition({ name: 'invalid-review-budget', reviewBudget, steps: [step] })).toBeNull()
+    }
   })
 
   it('accepts each supported document contract mode independently', () => {

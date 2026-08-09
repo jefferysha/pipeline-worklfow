@@ -2,6 +2,8 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
+  chmod,
+  cp,
   lstat,
   mkdtemp,
   mkdir,
@@ -9,6 +11,7 @@ import {
   readdir,
   readlink,
   rm,
+  writeFile,
 } from 'node:fs/promises'
 import { createConnection, createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -17,7 +20,7 @@ import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
 
 export function publicInstallUrl(ref) {
-  if (!/^(?:main|v[0-9]+\.[0-9]+\.[0-9]+(?:[-.][A-Za-z0-9.]+)?|[0-9a-f]{40})$/.test(ref)) {
+  if (!/^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)$/.test(ref)) {
     throw new Error(`invalid public install ref: ${ref}`)
   }
   return `https://raw.githubusercontent.com/jefferysha/tenon/${ref}/install.sh`
@@ -91,10 +94,11 @@ export function requireJsonObject(value, label) {
   return value
 }
 
-export function assertDashboardHealthIdentity(health, activeRelease) {
+export function assertDashboardHealthIdentity(health, activeRelease, expectedVersion) {
   requireJsonObject(health, 'Dashboard health')
   if (health.ok !== true
     || health.releaseId !== activeRelease
+    || health.version !== expectedVersion
     || typeof health.stateScopeId !== 'string'
     || !/^sha256-v1-[a-f0-9]{64}$/.test(health.stateScopeId)
     || typeof health.transactionId !== 'string'
@@ -103,6 +107,24 @@ export function assertDashboardHealthIdentity(health, activeRelease) {
     || health.pid <= 0) {
     throw new Error('Dashboard health identity does not match the active managed release')
   }
+}
+
+export function isolatedAcceptanceStateScopeId(env) {
+  let stateRoot
+  if (typeof env.TENON_RUNTIME_ROOTS === 'string') {
+    const roots = requireJsonObject(parseJson(env.TENON_RUNTIME_ROOTS, 'TENON_RUNTIME_ROOTS'), 'TENON_RUNTIME_ROOTS')
+    stateRoot = roots.stateRoot
+  } else if (typeof env.TENON_RUNTIME_HOME === 'string') {
+    stateRoot = join(env.TENON_RUNTIME_HOME, 'state')
+  }
+  if (typeof stateRoot !== 'string' || !isAbsolute(stateRoot)) {
+    throw new Error('isolated Dashboard cleanup requires an absolute Tenon state root')
+  }
+  const digest = createHash('sha256')
+    .update('tenon:machine-state-scope:v1\0')
+    .update(resolve(stateRoot))
+    .digest('hex')
+  return `sha256-v1-${digest}`
 }
 
 export function assertCodexDiscovery(discovery) {
@@ -500,38 +522,115 @@ async function inventory(env, cwd) {
   return parsed
 }
 
-async function installLocal(repoRoot, env, cwd) {
-  const marketplaceInventory = parseJson((await runCommand(
-    'codex',
-    ['plugin', 'marketplace', 'list', '--json'],
-    { cwd, env, timeoutMs: 30_000 },
-  )).stdout, 'codex marketplace list')
-  if (!hasExactLocalTenonMarketplace(marketplaceInventory, repoRoot)) {
-    await runCommand(
-      'codex',
-      ['plugin', 'marketplace', 'add', repoRoot],
-      { cwd, env, timeoutMs: 60_000 },
-    )
+async function installLocal(repoRoot, env, cwd, version) {
+  return runCommand('bash', [join(repoRoot, 'install.sh'), '--codex', '--ref', `v${version}`], {
+    cwd,
+    env,
+    timeoutMs: 180_000,
+  })
+}
+
+const LOCAL_RELEASE_ENTRIES = [
+  '.agents/plugins/marketplace.json',
+  '.claude-plugin/marketplace.json',
+  '.claude-plugin/plugin.json',
+  '.codex-plugin/plugin.json',
+  'adapters',
+  'hooks',
+  'packages/cli/dist/tenon.mjs',
+  'packages/dashboard-app/dist',
+  'packages/server/dist/dashboard.mjs',
+  'runtime/tenon-bootstrap.mjs',
+  'skills',
+  'templates',
+  'tools/verify-skills.sh',
+]
+
+async function createIsolatedReleaseRepository(repoRoot, fixture, env, version) {
+  const releaseWork = join(fixture, 'release-work')
+  const releaseBare = join(fixture, 'release.git')
+  await mkdir(releaseWork)
+  for (const entry of LOCAL_RELEASE_ENTRIES) {
+    await cp(join(repoRoot, entry), join(releaseWork, entry), {
+      recursive: true,
+      preserveTimestamps: false,
+    })
   }
-  const before = parseJson((await runCommand(
-    'codex',
-    ['plugin', 'list', '--json'],
-    { cwd, env, timeoutMs: 30_000 },
-  )).stdout, 'codex plugin list')
-  if (installedTenonRoot(before) === null) {
-    await runCommand(
-      'codex',
-      ['plugin', 'add', 'tenon@tenon', '--json'],
-      { cwd, env, timeoutMs: 60_000 },
-    )
+  const git = (args) => runCommand('git', args, {
+    cwd: releaseWork,
+    env,
+    timeoutMs: 60_000,
+  })
+  await git(['init', '--quiet'])
+  await git(['config', 'user.name', 'Tenon clean-install acceptance'])
+  await git(['config', 'user.email', 'acceptance@invalid.example'])
+  await git(['add', '--all'])
+  await git(['commit', '--quiet', '-m', `fixture v${version}`])
+  // A lightweight tag makes the local GitHub ref fixture resolve directly to a commit object.
+  await git(['tag', `v${version}`])
+  const targetCommit = (await git(['rev-parse', 'HEAD'])).stdout.trim()
+  if (!/^[a-f0-9]{40}$/u.test(targetCommit)) {
+    throw new Error('acceptance release fixture did not produce a Git commit identity')
   }
-  const current = await inventory(env, cwd)
-  const root = installedTenonRoot(current)
-  return runCommand(
-    process.execPath,
-    [join(root, 'packages/cli/dist/tenon.mjs'), 'setup', '--codex', '--yes'],
-    { cwd, env, timeoutMs: 120_000 },
+  await git(['clone', '--quiet', '--bare', releaseWork, releaseBare])
+
+  const rewriteKey = `url.file://${releaseBare}.insteadOf`
+  await git(['config', '--global', 'protocol.file.allow', 'always'])
+  await git(['config', '--global', '--add', rewriteKey, 'https://github.com/jefferysha/tenon.git'])
+  await git(['config', '--global', '--add', rewriteKey, 'https://github.com/jefferysha/tenon'])
+
+  const realGit = (await runCommand('which', ['git'], {
+    cwd: releaseWork,
+    env: process.env,
+    timeoutMs: 10_000,
+  })).stdout.trim()
+  if (!isAbsolute(realGit)) throw new Error('acceptance could not resolve the real Git executable')
+  const fixtureBin = join(env.HOME, '.local', 'bin')
+  await mkdir(fixtureBin, { recursive: true })
+  const gitWrapper = join(fixtureBin, 'git')
+  await writeFile(
+    gitWrapper,
+    '#!/bin/sh\n'
+      + 'if [ "$1" = "-C" ] && [ "$3" = "remote" ] && [ "$4" = "get-url" ] && [ "$5" = "origin" ]; then\n'
+      + '  export GIT_CONFIG_GLOBAL=/dev/null\n'
+      + `  exec ${JSON.stringify(realGit)} "$@"\n`
+      + 'fi\n'
+      + `exec ${JSON.stringify(realGit)} "$@"\n`,
+    'utf8',
   )
+  await chmod(gitWrapper, 0o755)
+
+  const realCurl = (await runCommand('which', ['curl'], {
+    cwd: releaseWork,
+    env: process.env,
+    timeoutMs: 10_000,
+  })).stdout.trim()
+  if (!isAbsolute(realCurl)) throw new Error('acceptance could not resolve the real curl executable')
+  const curlWrapper = join(fixtureBin, 'curl')
+  const tag = `v${version}`
+  const releaseUrl = `https://api.github.com/repos/jefferysha/tenon/releases/tags/${tag}`
+  const refUrl = `https://api.github.com/repos/jefferysha/tenon/git/ref/tags/${tag}`
+  const releaseJson = JSON.stringify({
+    tag_name: tag,
+    draft: false,
+    prerelease: false,
+    html_url: `https://github.com/jefferysha/tenon/releases/tag/${tag}`,
+    published_at: '2026-08-09T00:00:00Z',
+  })
+  const refJson = JSON.stringify({
+    ref: `refs/tags/${tag}`,
+    object: { type: 'commit', sha: targetCommit },
+  })
+  await writeFile(
+    curlWrapper,
+    '#!/bin/sh\n'
+      + 'url=""\nfor arg do url="$arg"; done\n'
+      + `if [ "$url" = ${JSON.stringify(releaseUrl)} ]; then printf '%s\\n' ${JSON.stringify(releaseJson)}; exit 0; fi\n`
+      + `if [ "$url" = ${JSON.stringify(refUrl)} ]; then printf '%s\\n' ${JSON.stringify(refJson)}; exit 0; fi\n`
+      + `exec ${JSON.stringify(realCurl)} "$@"\n`,
+    'utf8',
+  )
+  await chmod(curlWrapper, 0o755)
 }
 
 async function installPublic(env, cwd, ref) {
@@ -560,10 +659,22 @@ export async function assertInstalledRuntime(
     ['runtime', 'status', '--json'],
     { cwd, env, timeoutMs: 30_000 },
   )).stdout, 'tenon runtime status'), 'tenon runtime status')
-  const activeRelease = runtime.active?.releaseId ?? runtime.selection?.activeRelease
+  const active = requireJsonObject(runtime.active, 'tenon runtime status active release')
+  const activeRelease = active.releaseId
   if (runtime.activeValid !== true
     || typeof activeRelease !== 'string'
-    || activeRelease !== runtime.selection?.activeRelease) {
+    || activeRelease !== runtime.selection?.activeRelease
+    || active.version !== 2
+    || !/^sha256-[a-f0-9]{64}$/u.test(activeRelease)
+    || typeof active.payloadDigest !== 'string'
+    || !/^[a-f0-9]{64}$/u.test(active.payloadDigest)
+    || active.source?.host !== 'codex'
+    || typeof active.source?.pluginVersion !== 'string'
+    || !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(active.source.pluginVersion)
+    || active.stableTarget?.version !== active.source.pluginVersion
+    || active.stableTarget?.tag !== `v${active.source.pluginVersion}`
+    || typeof active.stableTarget?.commit !== 'string'
+    || !/^[a-f0-9]{40}$/u.test(active.stableTarget.commit)) {
     throw new Error('managed runtime is not active and verified')
   }
   const doctor = requireJsonObject(parseJson((await runCommand(
@@ -574,7 +685,7 @@ export async function assertInstalledRuntime(
   if (doctor.summary?.red !== 0) throw new Error(`doctor reported ${doctor.summary?.red} red checks`)
 
   const health = await waitForHealth(port)
-  assertDashboardHealthIdentity(health, activeRelease)
+  assertDashboardHealthIdentity(health, activeRelease, active.source.pluginVersion)
   registerOwnedHealth(health)
   const dashboardUrl = `http://127.0.0.1:${port}/`
   const { response: htmlResponse, body: html } = await fetchWithTimeout(
@@ -614,6 +725,41 @@ async function stopOwnedDashboard(port, expected) {
   }
   process.kill(expected.pid, 'SIGTERM')
   await waitForHealth(port, false)
+}
+
+async function recoverIsolatedDashboardOwnership(env, port) {
+  if (!await portAcceptsConnections(port)) return null
+  const health = await waitForHealth(port, true, {
+    overallTimeoutMs: 2_000,
+    requestTimeoutMs: 500,
+  })
+  if (health?.stateScopeId !== isolatedAcceptanceStateScopeId(env)) {
+    throw new Error('isolated Dashboard cleanup refused a listener from another state scope')
+  }
+  const runtimeHome = env.TENON_RUNTIME_HOME
+  if (typeof runtimeHome !== 'string' || !isAbsolute(runtimeHome)) {
+    throw new Error('isolated Dashboard cleanup requires TENON_RUNTIME_HOME')
+  }
+  if (typeof health.releaseId !== 'string') {
+    throw new Error('isolated Dashboard cleanup health is missing release identity')
+  }
+  const manifest = requireJsonObject(parseJson(await readFile(
+    join(runtimeHome, 'data', 'releases', health.releaseId, 'release.json'),
+    'utf8',
+  ), 'cleanup runtime release manifest'), 'cleanup runtime release manifest')
+  if (manifest.releaseId !== health.releaseId
+    || typeof manifest.source?.pluginVersion !== 'string') {
+    throw new Error('isolated Dashboard cleanup release manifest does not match health')
+  }
+  assertDashboardHealthIdentity(health, health.releaseId, manifest.source.pluginVersion)
+  return health
+}
+
+export async function cleanupIsolatedDashboardAfterFailure(env, port, ownedHealth) {
+  const expected = ownedHealth ?? await recoverIsolatedDashboardOwnership(env, port)
+  if (expected === null) return null
+  await stopOwnedDashboard(port, expected)
+  return expected
 }
 
 function pathIsWithin(candidate, root) {
@@ -828,19 +974,24 @@ export function assertSupportedAcceptancePlatform(platform = process.platform) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
+  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
   const modeIndex = argv.indexOf('--mode')
   const mode = modeIndex === -1 ? 'local' : argv[modeIndex + 1]
   if (mode !== 'local' && mode !== 'public') {
     throw new Error('usage: clean-codex-install-acceptance.mjs --mode local|public')
   }
   const publicRefIndex = argv.indexOf('--public-ref')
-  const publicRef = publicRefIndex === -1 ? 'main' : argv[publicRefIndex + 1]
+  const packageVersion = requireJsonObject(
+    JSON.parse(await readFile(join(repoRoot, 'package.json'), 'utf8')),
+    'root package manifest',
+  ).version
+  if (typeof packageVersion !== 'string') throw new Error('root package version is invalid')
+  const publicRef = publicRefIndex === -1 ? `v${packageVersion}` : argv[publicRefIndex + 1]
   if (typeof publicRef !== 'string' || publicRef === '') {
     throw new Error('--public-ref requires a value')
   }
   if (mode === 'public') publicInstallUrl(publicRef)
   assertSupportedAcceptancePlatform()
-  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
   const externalBefore = await snapshotExternalTenonState(process.env)
   let fixture = null
   let port = null
@@ -868,8 +1019,11 @@ export async function main(argv = process.argv.slice(2)) {
       LANG: process.env.LANG ?? 'C.UTF-8',
       CI: '1',
     }
+    if (mode === 'local') {
+      await createIsolatedReleaseRepository(repoRoot, fixture, env, packageVersion)
+    }
     const install = mode === 'local'
-      ? () => installLocal(repoRoot, env, work)
+      ? () => installLocal(repoRoot, env, work, packageVersion)
       : () => installPublic(env, work, publicRef)
     installationStarted = true
     const firstInstall = await install()
@@ -910,22 +1064,45 @@ export async function main(argv = process.argv.slice(2)) {
       throw new Error('content-addressed release changed across identical installation')
     }
     await runCodexDiscovery(env, work)
+    let final = second
+    if (mode === 'public') {
+      const launcher = join(home, '.local', 'bin', 'tenon')
+      await runCommand(launcher, ['update', '--codex'], {
+        cwd: work,
+        env,
+        timeoutMs: 180_000,
+      })
+      final = await assertInstalledRuntime(
+        env,
+        work,
+        port,
+        registerOwnedHealth,
+      )
+      assertSameDashboardIdentity(second.health, final.health)
+      if (final.activeRelease !== second.activeRelease) {
+        throw new Error('same-version public update changed the content-addressed release')
+      }
+      await runCodexDiscovery(env, work)
+    }
     await stopOwnedDashboard(port, ownedHealth)
     cleanupComplete = true
     successPayload = {
       ok: true,
       mode,
       ...(mode === 'public' ? { publicRef } : {}),
-      releaseId: second.activeRelease,
+      releaseId: final.activeRelease,
       dashboardPort: port,
       repeatedDashboardPid: second.health.pid,
+      ...(mode === 'public' ? { updateDashboardPid: final.health.pid } : {}),
       hookTrust: 'untrusted',
     }
   } finally {
     if (!installationStarted && ownedHealth === null) cleanupComplete = true
-    if (!cleanupComplete && ownedHealth !== null && port !== null) {
+    if (!cleanupComplete && port !== null && fixture !== null) {
       try {
-        await stopOwnedDashboard(port, ownedHealth)
+        await cleanupIsolatedDashboardAfterFailure({
+          TENON_RUNTIME_HOME: join(fixture, 'runtime'),
+        }, port, ownedHealth)
         cleanupComplete = true
       } catch (error) {
         process.stderr.write(`[clean-install] ${error.message}\n`)

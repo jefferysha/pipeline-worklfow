@@ -392,6 +392,26 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
     nativeRuntimeHost: async () => 'claude',
     codexAuthStatus: async () => ({ state: 'authenticated' }),
     runVerifySkills: async () => ({ code: 0, output: '[verify-skills] OK' }),
+    productIdentity: async () => {
+      const releaseId = `sha256-${'a'.repeat(64)}`
+      return {
+        state: 'native' as const,
+        expectedVersion: '1.0.2',
+        host: 'claude' as const,
+        hostPluginVersion: '1.0.2',
+        hostPluginRoot: '/native/tenon',
+        stableTargetTag: 'v1.0.2',
+        stableTargetCommit: 'a'.repeat(40),
+        hostTargetExact: true,
+        hostPayloadDigest: 'b'.repeat(64),
+        runtimePluginVersion: '1.0.2',
+        runtimeReleaseId: releaseId,
+        runtimePayloadDigest: 'b'.repeat(64),
+        payloadDigestExact: true,
+        dashboardServerVersion: '1.0.2',
+        dashboardReleaseId: releaseId,
+      }
+    },
     // 默认 registry 全部 bundled，空的宿主级扫描仍是 packaged workflow 的双绿基线。
     installedSkillNames: () => new Set(),
     // Codex normal-chat 就绪面：缺省 fixture 代表安装器已投递完整 contract skills。

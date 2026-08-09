@@ -2,6 +2,7 @@ import { useRef, type FormEvent, type KeyboardEvent } from 'react'
 import {
   DEFAULT_WB_DECOMPOSITION_POLICY,
   DEFAULT_WB_INTERACTION_POLICY,
+  DEFAULT_WB_REVIEW_BUDGET_POLICY,
   type WbDecompositionAskWhen,
   type WbDecompositionAutoWhen,
   type WbDecompositionMode,
@@ -80,12 +81,14 @@ export function WorkflowPolicyEditor(props: WorkflowPolicyEditorProps): JSX.Elem
   const definition = props.definition
   const decomposition = currentDecomposition(definition)
   const interaction = definition.interaction ?? DEFAULT_WB_INTERACTION_POLICY
+  const reviewBudget = definition.reviewBudget ?? DEFAULT_WB_REVIEW_BUDGET_POLICY
 
   function changeDecomposition(patch: Partial<WbDecompositionPolicy>): void {
     props.onChange({
       ...definition,
       decomposition: { ...decomposition, ...patch },
       interaction: { ...interaction },
+      reviewBudget: { ...reviewBudget },
     })
   }
 
@@ -198,6 +201,23 @@ export function WorkflowPolicyEditor(props: WorkflowPolicyEditorProps): JSX.Elem
               </select>
             </label>
             <p className="mt-3 mb-0 rounded-lg border border-border bg-card px-3 py-2.5 text-[11.5px] leading-5 text-text-3">{t('workbench.policy_interaction_afk_note')}</p>
+            <div className="mt-4 border-t border-border pt-4">
+              <h3 className="mt-0 mb-1 text-sm font-extrabold text-text">{t('workbench.policy_review_budget')}</h3>
+              <p className="mt-0 mb-3 text-[12px] leading-5 text-text-3">{t('workbench.policy_review_budget_desc')}</p>
+              <label className={LABEL}>{t('workbench.policy_review_max_attempts')}
+                <input className={CONTROL} type="number" min={1} max={20} step={1} value={reviewBudget.max_attempts} aria-label={t('workbench.policy_review_max_attempts')} onChange={(event) => {
+                  const value = event.currentTarget.valueAsNumber
+                  if (Number.isInteger(value) && value >= 1 && value <= 20) {
+                    props.onChange({
+                      ...definition,
+                      decomposition: { ...decomposition },
+                      interaction: { ...interaction },
+                      reviewBudget: { version: 'v1', max_attempts: value },
+                    })
+                  }
+                }} />
+              </label>
+            </div>
           </fieldset>
         </div>
         {!props.readonly && <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-3">

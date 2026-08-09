@@ -13,6 +13,12 @@ Tenon-owned project files.
 
 ## Update
 
+If the installed launcher is the published v1.0.1 release, first run the
+immutable `v1.0.2/install.sh` one-liner once. This is the explicit legacy
+bridge; v1.0.1 cannot safely self-rebind a version tag in one old-updater
+invocation. The command below is the single routine update path from v1.0.2
+onward.
+
 Immediate native-host update:
 
 ```bash

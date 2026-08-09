@@ -13,7 +13,8 @@ import type {
 import type { FieldName } from '../types.js'
 import type { TrackPredicate } from './predicates.js'
 import { parseDocumentContract, type WorkflowParseCursor as Cursor } from './parse-document-contract.js'
-import { parseDecompositionPolicy, parseInteractionPolicy } from './parse-policy.js'
+import { parseDecompositionPolicy, parseInteractionPolicy, parseReviewBudgetPolicy } from './parse-policy.js'
+import { parseSkillRefs } from './parse-skill-refs.js'
 
 function parseInlineList(raw: string): string[] {
   const trimmed = raw.trim()
@@ -48,28 +49,6 @@ function parsePromptBlock(cur: Cursor, keyIndent: number): string {
   return out.join('\n')
 }
 
-function parseSkillsBlock(cur: Cursor, baseIndent: number): SkillRef[] {
-  const skills: SkillRef[] = []
-  while (cur.i < cur.lines.length) {
-    const line = cur.lines[cur.i] ?? ''
-    if (line.trim() === '' ) { cur.i++; continue }
-    if (indentOf(line) < baseIndent) break
-    const idMatch = /^\s*-\s+id:\s*(\S+)\s*$/.exec(line)
-    if (!idMatch) break
-    const id = idMatch[1] ?? ''
-    cur.i++
-    let depends_on: string[] | undefined
-    const next = cur.lines[cur.i] ?? ''
-    const depMatch = /^\s*depends_on:\s*(\[.*\])\s*$/.exec(next)
-    if (depMatch && indentOf(next) > baseIndent) {
-      depends_on = parseInlineList(depMatch[1] ?? '')
-      cur.i++
-    }
-    skills.push(depends_on ? { id, depends_on } : { id })
-  }
-  return skills
-}
-
 function parseFieldRefBlock(cur: Cursor, baseIndent: number): FieldRef[] {
   const refs: FieldRef[] = []
   while (cur.i < cur.lines.length) {
@@ -88,9 +67,7 @@ function parseFieldRefBlock(cur: Cursor, baseIndent: number): FieldRef[] {
   return refs
 }
 
-/** guard/edge-action 的 track 条件块（G2 P2）：`when:` 下唯一一行 `track_in: [..]` 或
- *  `track_not_in: [..]`（YAML 侧 snake_case，对齐全仓「YAML snake_case → TS kebab kind」惯例，
- *  见 tracks/types.ts L76）。谓词行缩进必须深于 `when:` 键，否则 fail-loud。 */
+/** Parse the closed track predicate nested under a guard or edge action. */
 function parseWhenBlock(cur: Cursor, whenIndent: number): TrackPredicate {
   while (cur.i < cur.lines.length && (cur.lines[cur.i] ?? '').trim() === '') cur.i++
   const line = cur.lines[cur.i] ?? ''
@@ -103,10 +80,7 @@ function parseWhenBlock(cur: Cursor, whenIndent: number): TrackPredicate {
   return { kind: m[1] === 'track_in' ? 'track-in' : 'track-not-in', values: parseInlineList(m[2] ?? '') }
 }
 
-/** 显式 artifact 声明块（G2 P4）：每项 `- field: X` 后跟 `type: file_path`、`producer_policy: <token>`
- *  与可选 `required_when:` 块（复用 parseWhenBlock，YAML snake_case → TS kebab kind）。type 只支持
- *  file_path，缺 type/producer_policy 或出现未知子字段行 → fail-loud；field/producer_policy 闭集的深
- *  校验留 compileWorkflow（parse 只做语法层构造，同 guard field 的 as FieldName 惯例）。 */
+/** Parse explicit file artifacts; semantic field/policy checks stay in compileWorkflow. */
 function parseArtifactsBlock(cur: Cursor, baseIndent: number): WorkflowArtifactConfig[] {
   const arts: WorkflowArtifactConfig[] = []
   while (cur.i < cur.lines.length) {
@@ -149,8 +123,7 @@ interface GuardFields {
   when?: TrackPredicate
 }
 
-/** guard 项的 sub-field 读取（缩进深于 `- type:` 行的 n/field/value/values/when），到下一 guard
- *  项或退出块为止；未知 sub-field 行 fail-loud（定义层现在是闭集，不静默吞）。 */
+/** Read the closed sub-fields nested below one guard entry. */
 function parseGuardEntry(cur: Cursor, type: string, itemIndent: number): WorkflowGuardConfig {
   const f: GuardFields = {}
   while (cur.i < cur.lines.length) {
@@ -160,9 +133,7 @@ function parseGuardEntry(cur: Cursor, type: string, itemIndent: number): Workflo
     let m: RegExpExecArray | null
     if ((m = /^\s*n:\s*(\d+)\s*$/.exec(line))) { f.n = Number(m[1]); cur.i++; continue }
     if ((m = /^\s*field:\s*(\S+)\s*$/.exec(line))) { f.field = m[1]; cur.i++; continue }
-    // value 允许内部空格（field-equals 可比对含空格的字段值，如 'needs review'）——用 (.+?) 而非
-    // (\S+)，否则 serialize 写出的含空格 value 会成为 parse 读不回的行（往返破坏）。首尾空白按全仓
-    // 窄解析器惯例 trim（无引号语义）；逗号仍受 [a,b] 内联列表分隔约束，同 depends_on/scope。
+    // value permits internal spaces so serializer output remains parseable.
     if ((m = /^\s*value:\s*(.+?)\s*$/.exec(line))) { f.value = m[1]; cur.i++; continue }
     if ((m = /^\s*values:\s*(\[.*\])\s*$/.exec(line))) { f.values = parseInlineList(m[1] ?? ''); cur.i++; continue }
     if (/^\s*when:\s*$/.test(line)) { const wi = indentOf(line); cur.i++; f.when = parseWhenBlock(cur, wi); continue }
@@ -176,19 +147,14 @@ function requireGuardField(f: GuardFields, type: string): FieldName {
   return f.field as FieldName // FIELD_ORDER 闭集校验在 compileWorkflow，parse 只做语法层构造
 }
 
-/** parse 读到的是 YAML 扁平子字段（n/field/value/values；when 对所有变体恒可选，不在此表）。
- *  与定义层 GUARD_DATA_KEYS（types.ts，附加字段校验单一真相源）逐键一致，唯 file-exists 的叶子在
- *  YAML 里写作扁平 `field:`（parseGuardEntry 桥接成 path.field），故把定义层的 'path' 折叠成 'field'。
- *  共用同一张表 → parse 的早期报错与 compile 的纵深防线不再各持一份会漂移的白名单（阻断 3）。 */
+/** YAML flattens file-exists path.field to field; other guard keys share the definition table. */
 const GUARD_FLAT_FIELDS: Record<string, readonly string[]> = Object.fromEntries(
   Object.entries(GUARD_DATA_KEYS).map(([type, keys]) => [type, keys.map((k) => (k === 'path' ? 'field' : k))]),
 )
 
-/** 出现该变体不认识的附加子字段 → fail-loud（对齐 parseGuardEntry 未知字段行的错误风格）。
- *  未知 type 不在表里（返回 undefined）→ 不在此报，留给 buildGuard 的 default 报「未知 guard type」。 */
+/** Reject extra fields for known variants; buildGuard reports unknown variants. */
 function rejectExtraGuardFields(type: string, f: GuardFields): void {
-  // hasOwnProperty（非直接下标）：未知 type（含原型链上的 'toString' 等）→ 返回，交 buildGuard 的
-  // switch default 报「未知 guard type」，不把继承成员误当允许键表。
+  // Own-key lookup keeps prototype members from becoming guard variants.
   if (!Object.prototype.hasOwnProperty.call(GUARD_FLAT_FIELDS, type)) return
   const allowed = GUARD_FLAT_FIELDS[type]!
   for (const key of ['n', 'field', 'value', 'values'] as const) {
@@ -199,8 +165,7 @@ function rejectExtraGuardFields(type: string, f: GuardFields): void {
   }
 }
 
-/** 由 type + 已读 sub-field 构造定义层 guard；缺必填 sub-field / 未知 type / 附加字段 → fail-loud。
- *  field 位一律 as FieldName（真实闭集由 compileWorkflow 深校验）。 */
+/** Construct a definition guard; compileWorkflow performs the semantic field closure. */
 function buildGuard(type: string, f: GuardFields): WorkflowGuardConfig {
   rejectExtraGuardFields(type, f)
   const cond: WorkflowConditional = f.when ? { when: f.when } : {}
@@ -322,6 +287,7 @@ function parseStep(cur: Cursor): StepDef {
   let label = ''
   let gate: GateKind = null
   let prompt: string | undefined
+  let reviewLanes: string[] | undefined
   let skills: SkillRef[] = []
   let inputs: FieldRef[] = []
   let outputs: FieldRef[] = []
@@ -348,8 +314,20 @@ function parseStep(cur: Cursor): StepDef {
       prompt = parsePromptBlock(cur, keyIndent)
       continue
     }
+    const reviewLanesMatch = /^\s*review_lanes:\s*(\[.*\])\s*$/.exec(line)
+    if (reviewLanesMatch) {
+      if (reviewLanes !== undefined) throw new Error(`workflow 解析错误：step '${id}' 重复声明 review_lanes`)
+      const rawLanes = reviewLanesMatch[1] ?? ''
+      const inner = /^\[(.*)\]$/.exec(rawLanes)?.[1] ?? ''
+      if (inner.trim() !== '' && inner.split(',').some((lane) => lane.trim() === '')) {
+        throw new Error(`workflow 解析错误：step '${id}' review_lanes 含空 lane`)
+      }
+      reviewLanes = parseInlineList(rawLanes)
+      cur.i++
+      continue
+    }
     if (/^\s*skills:\s*\[\]\s*$/.test(line)) { skills = []; cur.i++; continue }
-    if (/^\s*skills:\s*$/.test(line)) { cur.i++; skills = parseSkillsBlock(cur, baseIndent); continue }
+    if (/^\s*skills:\s*$/.test(line)) { cur.i++; skills = parseSkillRefs(cur, baseIndent); continue }
     if (/^\s*inputs:\s*\[\]\s*$/.test(line)) { inputs = []; cur.i++; continue }
     if (/^\s*inputs:\s*$/.test(line)) { cur.i++; inputs = parseFieldRefBlock(cur, baseIndent); continue }
     if (/^\s*outputs:\s*\[\]\s*$/.test(line)) { outputs = []; cur.i++; continue }
@@ -366,6 +344,7 @@ function parseStep(cur: Cursor): StepDef {
   return {
     id, label, gate, skills, inputs, outputs, guards, transitions,
     ...(prompt !== undefined ? { prompt } : {}),
+    ...(reviewLanes !== undefined ? { reviewLanes } : {}),
     ...(artifacts !== undefined ? { artifacts } : {}),
   }
 }
@@ -379,6 +358,7 @@ export function parseWorkflow(content: string): WorkflowDef {
   let documentContract: WorkflowDocumentContractV1 | undefined
   let decomposition: WorkflowDef['decomposition']
   let interaction: WorkflowDef['interaction']
+  let reviewBudget: WorkflowDef['reviewBudget']
   while ((lines[stepLine] ?? '').trim() !== 'steps:') {
     const line = lines[stepLine] ?? ''
     const contractLine = /^openspec_contract:\s*(\S+)\s*$/.exec(line)
@@ -412,6 +392,13 @@ export function parseWorkflow(content: string): WorkflowDef {
       stepLine = cur.i
       continue
     }
+    if (line.trim() === 'review_budget:') {
+      if (reviewBudget !== undefined) throw new Error('workflow 解析错误：review_budget 重复声明')
+      const cur: Cursor = { lines, i: stepLine + 1 }
+      reviewBudget = parseReviewBudgetPolicy(cur)
+      stepLine = cur.i
+      continue
+    }
     throw new Error("workflow 解析错误：name 后必须是 'steps:'、policies、'openspec_contract: required' 或 document_contract")
   }
   if (openspecContract && documentContract) {
@@ -434,6 +421,7 @@ export function parseWorkflow(content: string): WorkflowDef {
     name: nameMatch[1] ?? '',
     ...(decomposition ? { decomposition } : {}),
     ...(interaction ? { interaction } : {}),
+    ...(reviewBudget ? { reviewBudget } : {}),
     ...(openspecContract ? { openspecContract } : {}),
     ...(documentContract ? { documentContract } : {}),
     steps,

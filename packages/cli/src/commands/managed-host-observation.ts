@@ -1,35 +1,31 @@
-import { isAbsolute, join, normalize } from 'node:path'
+import { join } from 'node:path'
 import { ManagedRuntimeIndeterminateError } from '../runtime/installer.js'
+import { PAYLOAD_ENTRIES } from '../runtime/release-store-codecs.js'
+import { decodePluginManifestVersion } from '../runtime/plugin-manifest-version.js'
 import {
-  TENON_MARKETPLACE_NAME,
   TENON_MARKETPLACE_SOURCE,
-  TENON_PLUGIN_NAME,
+  TENON_RELEASE_VERSION,
   type NativePipelineHost,
 } from './plugin-host.js'
 import type { SetupEnv } from './setupEnvironment.js'
 import { equivalentNativeHostDesired } from './managed-host-desired-identity.js'
-
-interface TenonMarketplaceState {
-  readonly root: string
-  readonly source: string
-  readonly sourceType: string
-  readonly head: string | null
-}
-
-interface TenonPluginState {
-  readonly id: string
-  readonly version: string
-  readonly root: string
-}
-
-interface NativeHostObservation {
-  readonly version: 1
-  readonly host: NativePipelineHost
-  readonly marketplace: TenonMarketplaceState | null
-  readonly plugin: TenonPluginState | null
-}
+import { resolveStableTagTarget, type StableReleaseTarget } from './stable-release.js'
+import {
+  decodeNativeHostObservation,
+  observeNativeHost,
+  parseManagedHostJson,
+  type NativeHostObservation,
+  type TenonMarketplaceState,
+} from './managed-host-state.js'
+export { observeNativeHost } from './managed-host-state.js'
 
 type NativeHostDesired =
+  | {
+      readonly version: 1
+      readonly kind: 'plugin-absent' | 'marketplace-absent'
+      readonly targetVersion: string
+      readonly targetCommit: string
+    }
   | {
       readonly version: 1
       readonly kind: 'marketplace-present'
@@ -37,6 +33,7 @@ type NativeHostDesired =
       readonly root: string | null
       readonly sourceType: string
       readonly head: string
+      readonly ref: string
     }
   | {
       readonly version: 1
@@ -52,159 +49,15 @@ type NativeHostDesired =
       readonly pluginVersion: string
     }
 
-function parseJson(text: string, label: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    throw new ManagedRuntimeIndeterminateError(`${label} 不是合法 JSON`)
-  }
-}
-
-function commandJson(env: SetupEnv, cmd: string, args: string[], label: string): unknown {
-  const result = env.runCommand(cmd, args)
-  if (result.code !== 0) {
-    throw new ManagedRuntimeIndeterminateError(
-      `${label} 读取失败：${result.stderr.trim() || `退出码 ${result.code}`}`,
-    )
-  }
-  return parseJson(result.stdout, label)
-}
-
-function marketplaceState(
-  env: SetupEnv,
-  host: NativePipelineHost,
-  value: unknown,
-): TenonMarketplaceState | null {
-  const entries = host === 'codex'
-    ? (typeof value === 'object'
-        && value !== null
-        && !Array.isArray(value)
-        && Array.isArray((value as { marketplaces?: unknown }).marketplaces)
-      ? (value as { marketplaces: unknown[] }).marketplaces
-      : null)
-    : (Array.isArray(value) ? value : null)
-  if (entries === null) {
-    throw new ManagedRuntimeIndeterminateError(`${host} marketplace inventory schema 非法`)
-  }
-  const matches: TenonMarketplaceState[] = []
-  for (const entry of entries) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-      throw new ManagedRuntimeIndeterminateError(`${host} marketplace inventory entry 非法`)
-    }
-    const item = entry as Record<string, unknown>
-    if (item.name !== TENON_MARKETPLACE_NAME) continue
-    const root = host === 'codex' ? item.root : item.installLocation
-    const sourceRecord = host === 'codex' && typeof item.marketplaceSource === 'object'
-      && item.marketplaceSource !== null
-      ? item.marketplaceSource as Record<string, unknown>
-      : null
-    const source = host === 'codex' ? sourceRecord?.source : item.repo
-    const sourceType = host === 'codex' ? sourceRecord?.sourceType : item.source
-    if (typeof root !== 'string'
-      || !isAbsolute(root)
-      || normalize(root) !== root
-      || typeof source !== 'string'
-      || source === ''
-      || typeof sourceType !== 'string'
-      || sourceType === '') {
-      throw new ManagedRuntimeIndeterminateError(`${host} tenon marketplace identity 不完整`)
-    }
-    const headResult = env.runCommand('git', ['-C', root, 'rev-parse', 'HEAD'])
-    const head = headResult.code === 0 && /^[a-f0-9]{40}$/.test(headResult.stdout.trim())
-      ? headResult.stdout.trim()
-      : null
-    matches.push({ root, source, sourceType, head })
-  }
-  if (matches.length > 1) {
-    throw new ManagedRuntimeIndeterminateError(`${host} tenon marketplace identity 重复`)
-  }
-  return matches[0] ?? null
-}
-
-function pluginState(host: NativePipelineHost, value: unknown): TenonPluginState | null {
-  const entries = host === 'codex'
-    ? (typeof value === 'object'
-        && value !== null
-        && !Array.isArray(value)
-        && Array.isArray((value as { installed?: unknown }).installed)
-      ? (value as { installed: unknown[] }).installed
-      : null)
-    : (Array.isArray(value) ? value : null)
-  if (entries === null) throw new ManagedRuntimeIndeterminateError(`${host} plugin inventory schema 非法`)
-  const expectedId = `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`
-  const matches: TenonPluginState[] = []
-  for (const entry of entries) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-      throw new ManagedRuntimeIndeterminateError(`${host} plugin inventory entry 非法`)
-    }
-    const item = entry as Record<string, unknown>
-    const id = host === 'codex' ? item.pluginId : item.id
-    if (id !== expectedId) continue
-    if (item.enabled !== undefined && typeof item.enabled !== 'boolean') {
-      throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin enabled 状态非法`)
-    }
-    if (item.enabled === false) {
-      throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin identity 未启用`)
-    }
-    const root = host === 'codex'
-      && typeof item.source === 'object'
-      && item.source !== null
-      ? (item.source as Record<string, unknown>).path
-      : item.installPath
-    if (typeof item.version !== 'string'
-      || typeof root !== 'string'
-      || !isAbsolute(root)
-      || normalize(root) !== root) {
-      throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin identity 不完整`)
-    }
-    matches.push({ id, version: item.version, root })
-  }
-  if (matches.length > 1) {
-    throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin identity 重复`)
-  }
-  return matches[0] ?? null
-}
-
-export function observeNativeHost(
-  env: SetupEnv,
-  host: NativePipelineHost,
-): string {
-  const marketplace = marketplaceState(
-    env,
-    host,
-    commandJson(env, host, ['plugin', 'marketplace', 'list', '--json'], `${host} marketplace inventory`),
-  )
-  const plugin = pluginState(
-    host,
-    commandJson(env, host, ['plugin', 'list', '--json'], `${host} plugin inventory`),
-  )
-  return JSON.stringify({ version: 1, host, marketplace, plugin } satisfies NativeHostObservation)
-}
-
-function decodeObservation(value: string): NativeHostObservation {
-  const parsed = parseJson(value, 'managed host observation')
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new ManagedRuntimeIndeterminateError('managed host observation schema 非法')
-  }
-  return parsed as NativeHostObservation
-}
-
 function pluginVersionAtMarketplace(env: SetupEnv, marketplace: TenonMarketplaceState): string {
-  const candidates = [
-    join(marketplace.root, '.codex-plugin', 'plugin.json'),
-    join(marketplace.root, '.claude-plugin', 'plugin.json'),
-    join(marketplace.root, 'package.json'),
-  ]
-  for (const path of candidates) {
-    const text = env.readText(path)
-    if (text === undefined) continue
-    const value = parseJson(text, path)
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)
-      && typeof (value as { version?: unknown }).version === 'string') {
-      return (value as { version: string }).version
-    }
+  const decoded = decodePluginManifestVersion({
+    codex: env.readText(join(marketplace.root, '.codex-plugin', 'plugin.json')),
+    claude: env.readText(join(marketplace.root, '.claude-plugin', 'plugin.json')),
+  })
+  if (!decoded.ok) {
+    throw new ManagedRuntimeIndeterminateError(`无法从 tenon marketplace 解析目标 plugin version：${decoded.detail}`)
   }
-  throw new ManagedRuntimeIndeterminateError('无法从 tenon marketplace 解析目标 plugin version')
+  return decoded.version
 }
 
 function remoteMainHead(env: SetupEnv): string {
@@ -237,6 +90,47 @@ function isCanonicalRemoteMarketplace(
   return result.code === 0 && isCanonicalMarketplaceSource(result.stdout.trim())
 }
 
+function pluginPayloadMatchesMarketplace(
+  env: SetupEnv,
+  marketplaceRoot: string,
+  pluginRoot: string,
+): boolean {
+  if (marketplaceRoot === pluginRoot) return true
+  return PAYLOAD_ENTRIES.every((entry) => {
+    const result = env.runCommand('git', [
+      'diff',
+      '--no-index',
+      '--quiet',
+      '--',
+      join(marketplaceRoot, entry),
+      join(pluginRoot, entry),
+    ])
+    return result.code === 0
+  })
+}
+
+/** Read-only proof used by update idempotence before deciding whether any host mutation is needed. */
+export function nativeHostMatchesStableTarget(
+  env: SetupEnv,
+  host: NativePipelineHost,
+  target: StableReleaseTarget,
+): boolean {
+  const current = decodeNativeHostObservation(observeNativeHost(env, host))
+  return current.marketplace !== null
+    && current.plugin !== null
+    && current.marketplace.head === target.commit
+    && current.marketplace.ref === target.tag
+    && current.marketplace.clean
+    && current.plugin.enabled
+    && current.plugin.version === target.version
+    && pluginVersionAtMarketplace(env, {
+      ...current.marketplace,
+      root: current.plugin.root,
+    }) === target.version
+    && pluginPayloadMatchesMarketplace(env, current.marketplace.root, current.plugin.root)
+    && isCanonicalRemoteMarketplace(env, host, current.marketplace)
+}
+
 function hasMarketplaceIdentity(
   current: TenonMarketplaceState | null,
   expected: TenonMarketplaceState,
@@ -251,21 +145,49 @@ export function desiredNativeHostPostcondition(
   env: SetupEnv,
   host: NativePipelineHost,
   stepId: string,
+  target?: StableReleaseTarget,
 ): {
   readonly serialized: string
   isEquivalentDesired(persistedDesired: string): boolean
   isDesired(observation: string): boolean
+  isCompletedCompatible?(observation: string): boolean
 } {
-  const before = decodeObservation(observeNativeHost(env, host))
+  const before = decodeNativeHostObservation(observeNativeHost(env, host))
   let desired: NativeHostDesired
-  if (stepId === 'marketplace-register') {
+  if (stepId === 'plugin-remove') {
+    if (target === undefined) {
+      throw new ManagedRuntimeIndeterminateError('plugin remove 缺少冻结稳定版本目标')
+    }
+    desired = {
+      version: 1,
+      kind: 'plugin-absent',
+      targetVersion: target.version,
+      targetCommit: target.commit,
+    }
+  } else if (stepId === 'marketplace-remove') {
+    if (target === undefined) {
+      throw new ManagedRuntimeIndeterminateError('marketplace remove 缺少冻结稳定版本目标')
+    }
+    // On a fresh transaction the preceding plugin-remove checkpoint already proves absence.
+    // During recovery, however, a later completed plugin-install may legitimately make the plugin
+    // present again. Keep the desired identity derivable so the runner can validate the persisted
+    // completed checkpoint with isCompletedCompatible instead of failing before reconciliation.
+    desired = {
+      version: 1,
+      kind: 'marketplace-absent',
+      targetVersion: target.version,
+      targetCommit: target.commit,
+    }
+  } else if (stepId === 'marketplace-register') {
+    const stableTarget = target ?? resolveStableTagTarget(env, TENON_RELEASE_VERSION)
     desired = {
       version: 1,
       kind: 'marketplace-present',
       source: TENON_MARKETPLACE_SOURCE,
       root: before.marketplace?.root ?? null,
       sourceType: host === 'codex' ? 'git' : 'github',
-      head: remoteMainHead(env),
+      head: stableTarget.commit,
+      ref: stableTarget.tag,
     }
   } else if (stepId === 'marketplace-refresh') {
     if (before.marketplace === null) {
@@ -295,22 +217,37 @@ export function desiredNativeHostPostcondition(
       kind: 'plugin-version',
       marketplace: before.marketplace,
       pluginRoot: before.plugin?.root ?? (host === 'codex' ? before.marketplace.root : null),
-      pluginVersion: pluginVersionAtMarketplace(env, before.marketplace),
+      pluginVersion: target?.version ?? pluginVersionAtMarketplace(env, before.marketplace),
     }
   }
   const serialized = JSON.stringify(desired)
+  const matchesFrozenMarketplace = (
+    current: NativeHostObservation,
+    frozen: { readonly targetCommit: string; readonly targetVersion: string },
+  ): boolean => current.marketplace !== null
+    && current.marketplace.head === frozen.targetCommit
+    && current.marketplace.ref === `v${frozen.targetVersion}`
+    && current.marketplace.clean
+    && isCanonicalMarketplaceSource(current.marketplace.source)
+    && isCanonicalRemoteMarketplace(env, host, current.marketplace)
   return {
     serialized,
     isEquivalentDesired(persistedDesired) {
       return equivalentNativeHostDesired(persistedDesired, serialized)
     },
     isDesired(observation) {
-      const current = decodeObservation(observation)
+    const current = decodeNativeHostObservation(observation)
+      if (desired.kind === 'plugin-absent') return current.plugin === null
+      if (desired.kind === 'marketplace-absent') {
+        return current.marketplace === null && current.plugin === null
+      }
       if (desired.kind === 'marketplace-present') {
         return current.marketplace !== null
           && isCanonicalMarketplaceSource(current.marketplace.source)
           && isCanonicalRemoteMarketplace(env, host, current.marketplace)
           && current.marketplace.head === desired.head
+          && current.marketplace.ref === desired.ref
+          && current.marketplace.clean
           && (desired.root === null || current.marketplace.root === desired.root)
           && current.marketplace.sourceType === desired.sourceType
       }
@@ -320,9 +257,32 @@ export function desiredNativeHostPostcondition(
           ? current.marketplace.head === desired.marketplace.head
           : current.marketplace.head === desired.head
       }
+      if (desired.kind !== 'plugin-version') return false
       return hasMarketplaceIdentity(current.marketplace, desired.marketplace)
+        && current.marketplace.head === desired.marketplace.head
+        && current.marketplace.ref === desired.marketplace.ref
+        && current.marketplace.clean === desired.marketplace.clean
         && (desired.pluginRoot === null || current.plugin?.root === desired.pluginRoot)
+        && current.plugin?.enabled === true
         && current.plugin?.version === desired.pluginVersion
     },
+    ...(desired.kind !== 'plugin-absent' && desired.kind !== 'marketplace-absent'
+      ? {}
+      : {
+          isCompletedCompatible(observation: string) {
+            const current = decodeNativeHostObservation(observation)
+            if (desired.kind === 'plugin-absent') {
+              return current.plugin === null
+                || (matchesFrozenMarketplace(current, desired)
+                  && current.plugin.enabled
+                  && current.plugin.version === desired.targetVersion)
+            }
+            return (current.marketplace === null && current.plugin === null)
+              || (matchesFrozenMarketplace(current, desired)
+                && (current.plugin === null
+                  || (current.plugin.enabled
+                    && current.plugin.version === desired.targetVersion)))
+          },
+        }),
   }
 }

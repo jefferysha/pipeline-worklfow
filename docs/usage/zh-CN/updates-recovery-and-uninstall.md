@@ -18,6 +18,10 @@ Tenon 把插件 release 与项目 Change 分离。更新切换已验证的不可
 
 ### 1. 更新指定宿主
 
+若已安装 launcher 是公开的 v1.0.1，先一次性运行不可变的 `v1.0.2/install.sh` 一行命令完成 legacy
+bridge；v1.0.1 无法在一次旧 updater 调用中安全自重绑版本标签。从 v1.0.2 起，下面这条命令就是
+唯一的常规一键更新入口。
+
 ```bash
 tenon update --codex
 ```
@@ -87,13 +91,16 @@ tenon document status <change>
 
 只有明确选择 Change 才恢复。多个候选不能按 mtime 猜测；独立新目标应创建新 Change。
 
-### 5. 卸载宿主集成
+### 5. 卸载 Codex 宿主集成
 
 ```bash
-tenon uninstall --codex
+codex plugin remove tenon@tenon --json
+codex plugin marketplace remove tenon --json
 ```
 
-卸载 scrubber 只删除自己拥有且未被用户修改的资产。项目内 Change、Archive、OpenSpec、ADR 和用户自定义 Workflow 默认保留。
+以上命令只删除 Codex 的 Tenon 插件登记和 Marketplace 登记。项目内 Change、Archive、OpenSpec、ADR 和用户自定义 Workflow 默认保留。
+
+`tenon uninstall --yes` 是项目资产 scrubber，不是宿主插件卸载命令；它只删除当前项目中由 Tenon 管理且未被用户修改的资产。
 
 ## 更新不应修改什么
 

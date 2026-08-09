@@ -29,7 +29,8 @@ describe('program —— commander 装配与 exit code 逐格对齐', () => {
     const deps = makeDeps()
     expect(await run(deps, ['update', '--codex', '--dry-run'])).toBe(0)
     const out = deps.outLines.join('\n')
-    expect(out).toContain('codex plugin marketplace upgrade tenon --json')
+    expect(out).toContain('codex plugin marketplace add jefferysha/tenon --ref <latest-stable> --json')
+    expect(out).not.toContain('--ref main')
     expect(out).toContain('未刷新 marketplace')
   })
 

@@ -1,3 +1,6 @@
+import { isAbsolute, normalize } from 'node:path'
+import { stableTagForVersion, type StableReleaseTarget } from './stable-release.js'
+
 /**
  * Host selection shared by setup and update.
  *
@@ -29,6 +32,8 @@ export type RemovableHostPluginScope = Exclude<HostPluginScope, 'managed'>
 export const TENON_MARKETPLACE_SOURCE = 'jefferysha/tenon'
 export const TENON_MARKETPLACE_NAME = 'tenon'
 export const TENON_PLUGIN_NAME = 'tenon'
+/** Compiled release projection; identity gates keep it equal to every package/plugin manifest. */
+export const TENON_RELEASE_VERSION = '1.0.2'
 
 export interface HostCommandPlanItem {
   readonly cmd: string
@@ -39,6 +44,7 @@ export interface ParsedHostPluginInventory {
   readonly enabledIds: ReadonlySet<string>
   readonly enabledScopes: ReadonlyMap<string, ReadonlySet<HostPluginScope>>
   readonly tenonRoot: string | null
+  readonly tenonVersion: string | null
 }
 
 /**
@@ -69,6 +75,7 @@ export function parseHostPluginInventory(
   const scopes = new Map<string, Set<HostPluginScope>>()
   const seenRegistrations = new Set<string>()
   let tenonRoot: string | null = null
+  let tenonVersion: string | null = null
   for (const entry of entries) {
     if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return null
     const item = entry as {
@@ -122,6 +129,9 @@ export function parseHostPluginInventory(
     ) {
       if (tenonRoot !== null) return null
       tenonRoot = item.source.path
+      tenonVersion = typeof (entry as { version?: unknown }).version === 'string'
+        ? (entry as { version: string }).version
+        : null
     }
     if (
       enabled
@@ -131,9 +141,12 @@ export function parseHostPluginInventory(
     ) {
       if (tenonRoot !== null) return null
       tenonRoot = item.installPath
+      tenonVersion = typeof (entry as { version?: unknown }).version === 'string'
+        ? (entry as { version: string }).version
+        : null
     }
   }
-  return { enabledIds: ids, enabledScopes: scopes, tenonRoot }
+  return { enabledIds: ids, enabledScopes: scopes, tenonRoot, tenonVersion }
 }
 
 /** Enabled plugin ids as reported by the host-owned inventory. Invalid inventory is not trusted. */
@@ -191,33 +204,64 @@ export function hostFlag(host: PipelineHost): `--${PipelineHost}` {
  * layouts are private implementation details, so callers must take the resolved installation root
  * from the host rather than assemble a path under ~/.codex or ~/.claude themselves.
  */
-export function nativeInstallPlan(host: NativePipelineHost): readonly HostCommandPlanItem[] {
+export function nativeInstallPlan(
+  host: NativePipelineHost,
+  releaseVersion = TENON_RELEASE_VERSION,
+): readonly HostCommandPlanItem[] {
   if (host === 'codex') {
+    const releaseTag = stableTagForVersion(releaseVersion)
     return [
-      { cmd: 'codex', args: ['plugin', 'marketplace', 'add', TENON_MARKETPLACE_SOURCE, '--ref', 'main'] },
+      {
+        cmd: 'codex',
+        args: [
+          'plugin', 'marketplace', 'add', TENON_MARKETPLACE_SOURCE,
+          '--ref', releaseTag, '--json',
+        ],
+      },
       { cmd: 'codex', args: ['plugin', 'add', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, '--json'] },
       { cmd: 'codex', args: ['plugin', 'list', '--json'] },
     ]
   }
+  const releaseTag = stableTagForVersion(releaseVersion)
   return [
-    { cmd: 'claude', args: ['plugin', 'marketplace', 'add', TENON_MARKETPLACE_SOURCE] },
+    { cmd: 'claude', args: ['plugin', 'marketplace', 'add', `${TENON_MARKETPLACE_SOURCE}@${releaseTag}`] },
     { cmd: 'claude', args: ['plugin', 'install', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
     { cmd: 'claude', args: ['plugin', 'list', '--json'] },
   ]
 }
 
 /** Refresh and reinstall the released plugin using only the selected native host's public CLI. */
-export function nativeUpdatePlan(host: NativePipelineHost): readonly HostCommandPlanItem[] {
+export function nativeUpdatePlan(
+  host: NativePipelineHost,
+  target?: StableReleaseTarget,
+): readonly HostCommandPlanItem[] {
+  if (target === undefined) throw new Error(`${host} update plan requires a frozen stable Release target`)
   if (host === 'codex') {
     return [
-      { cmd: 'codex', args: ['plugin', 'marketplace', 'upgrade', TENON_MARKETPLACE_NAME, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'remove', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, '--json'] },
+      { cmd: 'codex', args: ['plugin', 'marketplace', 'remove', TENON_MARKETPLACE_NAME, '--json'] },
+      {
+        cmd: 'codex',
+        args: [
+          'plugin', 'marketplace', 'add', TENON_MARKETPLACE_SOURCE,
+          '--ref', target.tag, '--json',
+        ],
+      },
       { cmd: 'codex', args: ['plugin', 'add', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, '--json'] },
       { cmd: 'codex', args: ['plugin', 'list', '--json'] },
     ]
   }
   return [
-    { cmd: 'claude', args: ['plugin', 'marketplace', 'update', TENON_MARKETPLACE_NAME] },
-    { cmd: 'claude', args: ['plugin', 'update', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
+    {
+      cmd: 'claude',
+      args: ['plugin', 'uninstall', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`, '--scope', 'user'],
+    },
+    { cmd: 'claude', args: ['plugin', 'marketplace', 'remove', TENON_MARKETPLACE_NAME] },
+    {
+      cmd: 'claude',
+      args: ['plugin', 'marketplace', 'add', `${TENON_MARKETPLACE_SOURCE}@${target.tag}`],
+    },
+    { cmd: 'claude', args: ['plugin', 'install', `${TENON_PLUGIN_NAME}@${TENON_MARKETPLACE_NAME}`] },
     { cmd: 'claude', args: ['plugin', 'list', '--json'] },
   ]
 }
@@ -226,4 +270,3 @@ export function nativeUpdatePlan(host: NativePipelineHost): readonly HostCommand
 export function installedPipelineRoot(host: NativePipelineHost, stdout: string): string | null {
   return parseHostPluginInventory(host, stdout)?.tenonRoot ?? null
 }
-import { isAbsolute, normalize } from 'node:path'

@@ -5,10 +5,13 @@ import type {
   LegacyProjectRegistryMigrationResult,
 } from '../migration/legacy-project-registry.js'
 import type { NativeHostCommandEnvironment } from './native-host-command-binding.js'
+import type { CandidatePayloadIdentity } from '../runtime/release-store.js'
 
 export interface SetupEnv extends NativeHostCommandEnvironment {
   homeDir(): string
   runtimeEnv(): NonNullable<ProductPathInput['env']>
+  /** Browser policy only; absence preserves compatibility for injected test/adapter environments. */
+  isInteractive?(): boolean
   pluginRoot(): string | null
   selfPath(): string
   pathExists(path: string): boolean
@@ -20,10 +23,15 @@ export interface SetupEnv extends NativeHostCommandEnvironment {
   mkdirp(dir: string): void
   /** Generic PATH discovery preserves project-local tool directories. */
   commandExists(name: string): boolean
-  codexAuthStatus(codexExecutable?: string): Promise<CodexAuthStatus>
+  codexAuthStatus(
+    codexExecutable?: string,
+    commandBinding?: import('./native-host-command-binding.js').NativeHostCommandBinding,
+  ): Promise<CodexAuthStatus>
   listDir(dir: string): string[]
   writeText(path: string, text: string): void
   writeTextAtomic(path: string, text: string): void
+  /** Test/adapter seam; production leaves this absent and uses the trusted Bash payload verifier. */
+  inspectCandidatePayload?(root: string): Promise<CandidatePayloadIdentity>
   migrateProjectRegistry?(
     input: LegacyProjectRegistryMigrationInput,
   ): Promise<LegacyProjectRegistryMigrationResult>

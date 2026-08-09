@@ -41,6 +41,7 @@ const SETUP_ONLY_PRODUCT_STEP_IDS = [
 const BASE_NOTICES = [
   'host-plan.notice.read-only-generation',
   'host-plan.notice.manual-command-has-effects',
+  'host-plan.notice.dashboard-readiness',
 ] as const
 
 function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
@@ -200,13 +201,25 @@ interface ExpectedStep {
   readonly args?: readonly string[]
 }
 
+/** Release projection validated against package/plugin manifests by the product identity gate. */
+export const HOST_PLAN_RELEASE_TAG = 'v1.0.2'
+const LATEST_STABLE_TAG = '<latest-stable>'
+
 function nativeCommandSteps(host: 'codex' | 'claude', operation: HostOperation): readonly ExpectedStep[] {
   if (host === 'codex' && operation === 'setup') {
     return [
+      { id: 'plugin-remove', executable: 'codex', args: ['plugin', 'remove', 'tenon@tenon', '--json'] },
+      {
+        id: 'marketplace-remove',
+        executable: 'codex',
+        args: ['plugin', 'marketplace', 'remove', 'tenon', '--json'],
+      },
       {
         id: 'marketplace-register',
         executable: 'codex',
-        args: ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'main'],
+        args: [
+          'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', HOST_PLAN_RELEASE_TAG, '--json',
+        ],
       },
       { id: 'plugin-install', executable: 'codex', args: ['plugin', 'add', 'tenon@tenon', '--json'] },
       { id: 'plugin-inventory', executable: 'codex', args: ['plugin', 'list', '--json'] },
@@ -214,21 +227,39 @@ function nativeCommandSteps(host: 'codex' | 'claude', operation: HostOperation):
   }
   if (host === 'codex') {
     return [
+      { id: 'plugin-remove', executable: 'codex', args: ['plugin', 'remove', 'tenon@tenon', '--json'] },
       {
-        id: 'marketplace-refresh',
+        id: 'marketplace-remove',
         executable: 'codex',
-        args: ['plugin', 'marketplace', 'upgrade', 'tenon', '--json'],
+        args: ['plugin', 'marketplace', 'remove', 'tenon', '--json'],
       },
-      { id: 'plugin-update', executable: 'codex', args: ['plugin', 'add', 'tenon@tenon', '--json'] },
+      {
+        id: 'marketplace-register',
+        executable: 'codex',
+        args: [
+          'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', LATEST_STABLE_TAG, '--json',
+        ],
+      },
+      { id: 'plugin-install', executable: 'codex', args: ['plugin', 'add', 'tenon@tenon', '--json'] },
       { id: 'plugin-inventory', executable: 'codex', args: ['plugin', 'list', '--json'] },
     ]
   }
   if (operation === 'setup') {
     return [
       {
+        id: 'plugin-remove',
+        executable: 'claude',
+        args: ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user'],
+      },
+      {
+        id: 'marketplace-remove',
+        executable: 'claude',
+        args: ['plugin', 'marketplace', 'remove', 'tenon'],
+      },
+      {
         id: 'marketplace-register',
         executable: 'claude',
-        args: ['plugin', 'marketplace', 'add', 'jefferysha/tenon'],
+        args: ['plugin', 'marketplace', 'add', `jefferysha/tenon@${HOST_PLAN_RELEASE_TAG}`],
       },
       { id: 'plugin-install', executable: 'claude', args: ['plugin', 'install', 'tenon@tenon'] },
       { id: 'plugin-inventory', executable: 'claude', args: ['plugin', 'list', '--json'] },
@@ -236,11 +267,21 @@ function nativeCommandSteps(host: 'codex' | 'claude', operation: HostOperation):
   }
   return [
     {
-      id: 'marketplace-refresh',
+      id: 'plugin-remove',
       executable: 'claude',
-      args: ['plugin', 'marketplace', 'update', 'tenon'],
+      args: ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user'],
     },
-    { id: 'plugin-update', executable: 'claude', args: ['plugin', 'update', 'tenon@tenon'] },
+    {
+      id: 'marketplace-remove',
+      executable: 'claude',
+      args: ['plugin', 'marketplace', 'remove', 'tenon'],
+    },
+    {
+      id: 'marketplace-register',
+      executable: 'claude',
+      args: ['plugin', 'marketplace', 'add', `jefferysha/tenon@${LATEST_STABLE_TAG}`],
+    },
+    { id: 'plugin-install', executable: 'claude', args: ['plugin', 'install', 'tenon@tenon'] },
     { id: 'plugin-inventory', executable: 'claude', args: ['plugin', 'list', '--json'] },
   ]
 }
@@ -253,6 +294,7 @@ function expectedSteps(host: HostTarget, operation: HostOperation, command: Host
     : [
         { id: 'package-assets' },
         { id: 'managed-runtime' },
+        { id: 'dashboard-readiness' },
         { id: 'adapter-deploy', executable: command.executable, args: command.args },
         ...(operation === 'setup'
           ? [{ id: 'bundled-skills' }, { id: 'runtime-readiness' }]
@@ -260,8 +302,11 @@ function expectedSteps(host: HostTarget, operation: HostOperation, command: Host
       ]
   return host.kind === 'native'
     ? [
+        { id: operation === 'setup' ? 'stable-release-target' : 'stable-release-resolve' },
         ...operationSteps,
+        { id: 'candidate-validation' },
         { id: 'managed-runtime' },
+        { id: 'dashboard-readiness' },
         ...(host.id === 'codex'
           ? [{ id: 'codex-auth-status', executable: 'codex', args: ['login', 'status'] }]
           : []),
@@ -314,11 +359,20 @@ export function decodeHostTargetPlan(value: unknown): HostTargetPlan | null {
     }
   }
 
-  const expectedNotices = host.id === 'codex'
-    ? [...BASE_NOTICES, 'host-plan.notice.codex-auth-guidance']
-    : host.kind === 'native'
-      ? BASE_NOTICES
-    : [...BASE_NOTICES, 'host-plan.notice.current-project-target']
+  const expectedNotices = [
+    ...BASE_NOTICES,
+    ...(value.operation === 'setup'
+      ? [
+          'host-plan.notice.first-setup-browser',
+          ...(host.kind === 'native' ? ['host-plan.notice.setup-rebind-conditional'] : []),
+        ]
+      : []),
+    ...(host.kind === 'native' && value.operation === 'update'
+      ? ['host-plan.notice.update-target-frozen-at-execution']
+      : []),
+    ...(host.id === 'codex' ? ['host-plan.notice.codex-auth-guidance'] : []),
+    ...(host.kind === 'native' ? [] : ['host-plan.notice.current-project-target']),
+  ]
   if (!arraysEqual(value.notices, expectedNotices)) return null
   return {
     schema_version: HOST_PLAN_SCHEMA_VERSION,

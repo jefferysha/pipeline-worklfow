@@ -11,7 +11,11 @@ import type {
   ReleasedDashboardSession,
   ReleasedDashboardStarter,
 } from './dashboard.js'
-import { sameManagedDashboardIdentity } from './managed-dashboard-identity.js'
+import {
+  assertManagedDashboardPort,
+  sameManagedDashboardCoordinates,
+  sameManagedDashboardIdentity,
+} from './managed-dashboard-identity.js'
 
 type DashboardFailure = {
   readonly ok: false
@@ -39,6 +43,8 @@ export async function coordinateReleaseDashboard(
   openBrowser: boolean,
   dashboardPort: number,
   starter: ReleasedDashboardStarter | undefined,
+  trustedNodePath?: string,
+  verifyTrustedNode?: () => void,
 ): Promise<DashboardCoordination> {
   let journal = initialJournal
   if (journal.dashboardPort !== undefined && journal.dashboardPort !== dashboardPort) {
@@ -75,23 +81,54 @@ export async function coordinateReleaseDashboard(
     const inspectOptions: ReleasedDashboardOptions = {
       openBrowser: false,
       port: dashboardPort,
+      expectedServerVersion: activation.release.source.pluginVersion,
     }
     if (journal.phase === 'dashboard-ready' || journal.phase === 'evidence-committed') {
       if (journal.dashboard === undefined) {
         throw new ManagedRuntimeIndeterminateError('Dashboard journal 缺少 durable ownership')
       }
-      assertDashboardPort(journal.dashboard, dashboardPort, 'durable Dashboard')
-      if (journal.dashboardBefore !== undefined) {
-        assertDashboardPort(journal.dashboardBefore, dashboardPort, 'preexisting Dashboard')
+      let durableDashboard = journal.dashboard
+      if (durableDashboard.serverVersion !== ''
+        && durableDashboard.serverVersion !== activation.release.source.pluginVersion) {
+        throw new ManagedRuntimeIndeterminateError(
+          `durable Dashboard server version ${durableDashboard.serverVersion} `
+          + `与 active release ${activation.release.source.pluginVersion} 不一致`,
+        )
       }
-      if (journal.dashboard.owner === 'preexisting') {
+      if (durableDashboard.serverVersion === '') {
+        const current = await starter.inspect(deps, inspectOptions)
+        if (current === null
+          || current.serverVersion !== activation.release.source.pluginVersion
+          || !sameManagedDashboardCoordinates(current, durableDashboard)) {
+          throw new ManagedRuntimeIndeterminateError(
+            'legacy durable Dashboard identity 无法从目标 release health 精确补证',
+          )
+        }
+        const upgradedBefore = journal.dashboardBefore?.serverVersion === ''
+          && sameManagedDashboardCoordinates(current, journal.dashboardBefore)
+          ? { ...journal.dashboardBefore, serverVersion: current.serverVersion }
+          : journal.dashboardBefore
+        durableDashboard = { ...durableDashboard, serverVersion: current.serverVersion }
+        journal = {
+          ...journal,
+          dashboard: durableDashboard,
+          ...(upgradedBefore === undefined ? {} : { dashboardBefore: upgradedBefore }),
+          updatedAt: deps.clock(),
+        }
+        await transaction.journal.write(journal)
+      }
+      assertManagedDashboardPort(durableDashboard, dashboardPort, 'durable Dashboard')
+      if (journal.dashboardBefore !== undefined) {
+        assertManagedDashboardPort(journal.dashboardBefore, dashboardPort, 'preexisting Dashboard')
+      }
+      if (durableDashboard.owner === 'preexisting') {
         const current = await starter.inspect(deps, {
           openBrowser: false,
           port: dashboardPort,
         })
-        if (current === null || !sameManagedDashboardIdentity(current, journal.dashboard)) {
+        if (current === null || !sameManagedDashboardIdentity(current, durableDashboard)) {
           throw new ManagedRuntimeIndeterminateError(
-            `journal 中的 preexisting Dashboard pid=${journal.dashboard.pid} 已消失或身份变化`,
+            `journal 中的 preexisting Dashboard pid=${durableDashboard.pid} 已消失或身份变化`,
           )
         }
         return {
@@ -101,20 +138,20 @@ export async function coordinateReleaseDashboard(
           dashboardOwner: 'preexisting',
         }
       }
-      if (journal.dashboard.transactionId !== journal.transactionId) {
+      if (durableDashboard.transactionId !== journal.transactionId) {
         throw new ManagedRuntimeIndeterminateError(
           'Dashboard journal 不是当前 release transaction 的精确 ownership',
         )
       }
-      const adopted = await starter.adopt(deps, journal.dashboard)
+      const adopted = await starter.adopt(deps, durableDashboard)
       if (adopted === null) {
         throw new ManagedRuntimeIndeterminateError(
-          `无法收养 journal 中的 Dashboard pid=${journal.dashboard.pid}`,
+          `无法收养 journal 中的 Dashboard pid=${durableDashboard.pid}`,
         )
       }
-      if (!sameManagedDashboardIdentity(adopted.ownership, journal.dashboard)) {
+      if (!sameManagedDashboardIdentity(adopted.ownership, durableDashboard)) {
         throw new ManagedRuntimeIndeterminateError(
-          `收养结果与 journal Dashboard pid=${journal.dashboard.pid} 身份不一致`,
+          `收养结果与 journal Dashboard pid=${durableDashboard.pid} 身份不一致`,
         )
       }
       return {
@@ -122,7 +159,7 @@ export async function coordinateReleaseDashboard(
         journal,
         dashboardFailure: '',
         candidateDashboard: adopted,
-        dashboardOwner: journal.dashboard.owner,
+        dashboardOwner: durableDashboard.owner,
       }
     }
 
@@ -131,7 +168,7 @@ export async function coordinateReleaseDashboard(
         ?? (journal.dashboardBeforeAbsent === true
           ? null
           : await starter.inspect(deps, inspectOptions))
-      if (before !== null) assertDashboardPort(before, dashboardPort, 'initial Dashboard probe')
+      if (before !== null) assertManagedDashboardPort(before, dashboardPort, 'initial Dashboard probe')
       journal = {
         ...journal,
         phase: 'starting-dashboard',
@@ -143,13 +180,19 @@ export async function coordinateReleaseDashboard(
     }
     let current = await starter.inspect(deps, inspectOptions)
     const previousRelease = journal.activationCheckpoint?.selection.activeRelease
+    const latePreviousFromRetiredLegacy = current !== null
+      && journal.dashboardBeforeAbsent === true
+      && current.transactionId === journal.transactionId
+      && current.releaseId === previousRelease
+      && current.serverVersion !== ''
     if (current !== null
       && previousRelease !== null
       && previousRelease !== undefined
       && previousRelease !== activation.release.releaseId
       && current.releaseId === previousRelease
-      && journal.dashboardBefore !== undefined
-      && sameManagedDashboardIdentity(current, journal.dashboardBefore)) {
+      && ((journal.dashboardBefore !== undefined
+        && sameManagedDashboardIdentity(current, journal.dashboardBefore))
+        || latePreviousFromRetiredLegacy)) {
       const previousIdentity = current
       const previousSession = await starter.adopt(deps, previousIdentity)
       if (
@@ -177,15 +220,76 @@ export async function coordinateReleaseDashboard(
       }
       current = null
     }
+    const wrongVersionPreexisting = journal.dashboardBeforeRetiring === true || (current !== null
+      && journal.dashboardBefore !== undefined
+      && sameManagedDashboardIdentity(current, journal.dashboardBefore)
+      && (current.releaseId !== activation.release.releaseId
+        || current.serverVersion !== activation.release.source.pluginVersion))
+    if (wrongVersionPreexisting) {
+      const previousIdentity = journal.dashboardBefore
+      if (previousIdentity === undefined) {
+        throw new ManagedRuntimeIndeterminateError('错误版本 Dashboard 缺少 activation 前冻结 identity')
+      }
+      if (journal.dashboardBeforeRetiring !== true) {
+        journal = {
+          ...journal,
+          dashboardBeforeRetiring: true,
+          updatedAt: deps.clock(),
+        }
+        await transaction.journal.write(journal)
+      }
+      if (current !== null) {
+        if (!sameManagedDashboardIdentity(current, previousIdentity)) {
+          throw new ManagedRuntimeIndeterminateError(
+            `待退休 Dashboard pid=${previousIdentity.pid} 已被未知 listener 替换；未发送信号`,
+          )
+        }
+        const previousSession = await starter.adopt(deps, previousIdentity)
+        if (previousSession === null
+          || !sameManagedDashboardIdentity(previousSession.ownership, previousIdentity)) {
+          throw new ManagedRuntimeIndeterminateError(
+            `错误版本 Dashboard pid=${previousIdentity.pid} 无法按冻结 identity 精确收养`,
+          )
+        }
+        const stopped = await previousSession.stop()
+        if (stopped.state === 'indeterminate') {
+          return {
+            ok: false,
+            state: 'indeterminate',
+            detail: `错误版本 Dashboard pid=${previousIdentity.pid} 终止状态无法确认：${stopped.detail}`,
+          }
+        }
+      }
+      const afterStop = await starter.inspect(deps, inspectOptions)
+      if (afterStop !== null) {
+        throw new ManagedRuntimeIndeterminateError(
+          `错误版本 Dashboard pid=${previousIdentity.pid} 报告 stopped 后端口仍被占用`,
+        )
+      }
+      const {
+        dashboardBefore: _retiredDashboard,
+        dashboardBeforeRetiring: _retirementMarker,
+        ...retiredJournal
+      } = journal
+      journal = {
+        ...retiredJournal,
+        dashboardBeforeAbsent: true,
+        updatedAt: deps.clock(),
+      }
+      await transaction.journal.write(journal)
+      current = null
+    }
     const currentOwned = current !== null
       && current.transactionId === journal.transactionId
       && current.releaseId === activation.release.releaseId
+      && current.serverVersion === activation.release.source.pluginVersion
       && current.port === dashboardPort
     if (current !== null
       && current.port === dashboardPort
       && current.transactionId !== undefined
       && current.transactionId !== journal.transactionId
       && current.releaseId === activation.release.releaseId
+      && current.serverVersion === activation.release.source.pluginVersion
       && journal.dashboardBefore !== undefined
       && sameManagedDashboardIdentity(current, journal.dashboardBefore)) {
       journal = {
@@ -228,6 +332,9 @@ export async function coordinateReleaseDashboard(
           openBrowser,
           port: dashboardPort,
           transactionId: journal.transactionId,
+          expectedServerVersion: activation.release.source.pluginVersion,
+          ...(trustedNodePath === undefined ? {} : { trustedNodePath }),
+          ...(verifyTrustedNode === undefined ? {} : { verifyTrustedNode }),
         },
       )
     }
@@ -249,6 +356,7 @@ export async function coordinateReleaseDashboard(
     const readyIdentity = dashboardOutcome.session.ownership
     const readyIdentityValid = readyIdentity.version === 1
       && readyIdentity.releaseId === activation.release.releaseId
+      && readyIdentity.serverVersion === activation.release.source.pluginVersion
       && readyIdentity.port === dashboardPort
       && readyIdentity.transactionId === journal.transactionId
       && Number.isSafeInteger(readyIdentity.pid)
@@ -284,17 +392,5 @@ export async function coordinateReleaseDashboard(
       detail: `Dashboard starter、ownership adoption 或 journal 提交未返回可证明状态；`
         + `保留 journal 且未补偿 selection：${error instanceof Error ? error.message : String(error)}`,
     }
-  }
-}
-
-function assertDashboardPort(
-  identity: NonNullable<ManagedReleaseJournalRecord['dashboardBefore']>,
-  expectedPort: number,
-  label: string,
-): void {
-  if (identity.port !== expectedPort) {
-    throw new ManagedRuntimeIndeterminateError(
-      `${label} port=${identity.port} 与 frozen dashboardPort=${expectedPort} 不一致`,
-    )
   }
 }

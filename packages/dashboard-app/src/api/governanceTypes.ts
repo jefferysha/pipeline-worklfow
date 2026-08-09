@@ -42,6 +42,8 @@ export interface WbFieldRef {
 
 export interface WbSkillRef {
   id: string
+  kind?: 'work' | 'review'
+  review_lane?: string
   depends_on?: string[]
 }
 
@@ -88,6 +90,7 @@ export interface WbStepDef {
   label: string
   gate: 'review' | 'confirm' | null
   prompt?: string
+  reviewLanes?: string[]
   skills: WbSkillRef[]
   inputs: WbFieldRef[]
   outputs: WbFieldRef[]
@@ -133,6 +136,11 @@ export interface WbInteractionPolicy {
   mode: WbInteractionMode
 }
 
+export interface WbReviewBudgetPolicy {
+  version: 'v1'
+  max_attempts: number
+}
+
 export const DEFAULT_WB_DECOMPOSITION_POLICY: WbDecompositionPolicy = {
   version: 'v1',
   mode: 'off',
@@ -149,6 +157,11 @@ export const DEFAULT_WB_INTERACTION_POLICY: WbInteractionPolicy = {
   mode: 'interactive',
 }
 
+export const DEFAULT_WB_REVIEW_BUDGET_POLICY: WbReviewBudgetPolicy = {
+  version: 'v1',
+  max_attempts: 2,
+}
+
 export interface WbWorkflowDef {
   name: string
   openspecContract?: 'required'
@@ -157,6 +170,8 @@ export interface WbWorkflowDef {
   decomposition?: WbDecompositionPolicy
   /** Omitted only by pre-policy in-memory fixtures; HTTP decoding always projects safe v1 defaults. */
   interaction?: WbInteractionPolicy
+  /** Omitted only by pre-policy in-memory fixtures; HTTP decoding always projects a finite v1 budget. */
+  reviewBudget?: WbReviewBudgetPolicy
   steps: WbStepDef[]
 }
 

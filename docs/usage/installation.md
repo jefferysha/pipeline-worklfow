@@ -20,26 +20,40 @@ Tenon does not require users to install mandatory Skills one by one.
 New users install the complete Codex plugin without cloning the repository:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --codex
 ```
 
 For Claude:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --claude
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --claude
 ```
 
 Preview the complete Codex Marketplace and packaged setup plan without invoking
 the host or writing user/project state:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/main/install.sh | bash -s -- --codex --dry-run
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --codex --dry-run
 ```
 
+The versioned script installs only prebuilt assets from the immutable stable
+`v1.0.2` release. It never clones or compiles the source repository.
 The bootstrap adds the selected native marketplace plugin, resolves the install
 root from the host's own inventory, and invokes the same
 `tenon setup --<host>` operation. Tenon does not guess private host
 cache locations.
+
+For an existing published `v1.0.1` installation, run the versioned
+`v1.0.2/install.sh` command above once as the migration bridge. The v1.0.1
+launcher dispatches its old updater only once and cannot safely rebind the new
+release tag in that same invocation. From v1.0.2 onward, every routine upgrade
+is one `tenon update --codex` (or `--claude`) command and uses a stable release
+tag as its delivery identity.
+
+Setup always starts the packaged Dashboard and waits for readiness. Piped/CI
+installs do not open a browser; they print the verified local URL and
+`tenon dashboard --open`. An interactive first setup may open the browser.
+Manual and automatic updates keep it closed while preserving readiness.
 
 ### Codex authentication
 
@@ -76,13 +90,15 @@ second runtime or installer transaction.
 
 Setup validates the complete package, publishes an immutable managed release,
 creates stable `tenon` and `tenon-hook` launchers, starts the packaged
-Dashboard, and opens it after its health check succeeds.
+Dashboard, and waits for its health check. Piped/CI installation prints the
+verified URL and `tenon dashboard --open` without opening a browser; only an
+interactive first setup may request automatic browser opening.
 
 The published commands are tested at two levels. CI installs a pinned real Codex CLI and
-registers the current checkout as a clean local Marketplace. The read-only release-candidate workflow derives the
-exact checked-out commit, downloads that commit's `install.sh`, and passes the same immutable
-`--ref <commit>` to the Marketplace bootstrap in a separate temporary `HOME`, `CODEX_HOME`,
-`TENON_RUNTIME_HOME`, and Dashboard port. Both paths verify the stable launcher, doctor, managed
+builds an isolated Git mirror from the exact candidate checkout, tags that mirror with the same
+stable release version, and runs the versioned installer against it in a separate temporary
+`HOME`, `CODEX_HOME`, `TENON_RUNTIME_HOME`, and Dashboard port. After the immutable public tag is
+created, the public acceptance downloads only that tag's `install.sh`. Both paths verify the stable launcher, doctor, managed
 runtime, Dashboard API and HTML identity, a new Codex app-server's plugin/Skill/hook discovery,
 and a second identical installation that keeps the same release and listener.
 

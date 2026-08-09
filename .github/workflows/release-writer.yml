@@ -10,7 +10,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: release-candidate-writer
+  group: stable-release-${{ github.event.repository.full_name }}
   cancel-in-progress: false
 
 jobs:

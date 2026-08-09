@@ -7,7 +7,7 @@ import {
 } from './host-target-plan.js'
 import {
   TENON_HOSTS,
-  nativeInstallPlan,
+  TENON_RELEASE_VERSION,
   nativeUpdatePlan,
 } from './plugin-host.js'
 
@@ -41,6 +41,12 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
   })
 
   test('native setup/update 逐项复用现有 host command plan，并按真实外层流程追加产品与 Codex 认证步骤', () => {
+    const previewTarget = { version: '<latest-stable>', tag: '<latest-stable>', commit: '0'.repeat(40) }
+    const setupTarget = {
+      version: TENON_RELEASE_VERSION,
+      tag: `v${TENON_RELEASE_VERSION}`,
+      commit: '0'.repeat(40),
+    }
     const setup = createHostTargetPlan('codex', 'setup')
     const codexUpdate = createHostTargetPlan('codex', 'update')
     const update = createHostTargetPlan('claude', 'update')
@@ -51,22 +57,23 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
       args: ['setup', '--codex'],
       display: 'tenon setup --codex',
     })
-    expect(setup.steps.slice(0, nativeInstallPlan('codex').length).map(({ command }) => command)).toEqual(
-      nativeInstallPlan('codex').map(({ cmd, args }) => ({
+    expect(setup.steps.slice(1, 1 + nativeUpdatePlan('codex', setupTarget).length).map(({ command }) => command)).toEqual(
+      nativeUpdatePlan('codex', setupTarget).map(({ cmd, args }) => ({
         executable: cmd,
         args: [...args],
         display: [cmd, ...args].join(' '),
       })),
     )
-    expect(update.steps.slice(0, nativeUpdatePlan('claude').length).map(({ command }) => command)).toEqual(
-      nativeUpdatePlan('claude').map(({ cmd, args }) => ({
+    expect(update.steps.slice(1, 1 + nativeUpdatePlan('claude', previewTarget).length).map(({ command }) => command)).toEqual(
+      nativeUpdatePlan('claude', previewTarget).map(({ cmd, args }) => ({
         executable: cmd,
         args: [...args],
         display: [cmd, ...args].join(' '),
       })),
     )
-    expect(setup.steps.slice(-4)).toEqual([
+    expect(setup.steps.slice(-5)).toEqual([
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      { id: 'dashboard-readiness', label: 'host-plan.step.dashboard-readiness', command: null },
       {
         id: 'codex-auth-status',
         label: 'host-plan.step.codex-auth-status',
@@ -79,8 +86,9 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
       { id: 'bundled-skills', label: 'host-plan.step.bundled-skills', command: null },
       { id: 'runtime-readiness', label: 'host-plan.step.runtime-readiness', command: null },
     ])
-    expect(codexUpdate.steps.slice(-2)).toEqual([
+    expect(codexUpdate.steps.slice(-3)).toEqual([
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      { id: 'dashboard-readiness', label: 'host-plan.step.dashboard-readiness', command: null },
       {
         id: 'codex-auth-status',
         label: 'host-plan.step.codex-auth-status',
@@ -91,9 +99,24 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
         },
       },
     ])
+    expect(codexUpdate.steps[0]).toEqual({
+      id: 'stable-release-resolve',
+      label: 'host-plan.step.stable-release-resolve',
+      command: null,
+    })
+    expect(codexUpdate.steps.at(-4)).toEqual({
+      id: 'candidate-validation',
+      label: 'host-plan.step.candidate-validation',
+      command: null,
+    })
     expect(codexUpdate.notices).toContain('host-plan.notice.codex-auth-guidance')
-    expect(update.steps.slice(nativeUpdatePlan('claude').length)).toEqual([
+    expect(codexUpdate.notices).toContain('host-plan.notice.update-target-frozen-at-execution')
+    expect(setup.notices).toContain('host-plan.notice.first-setup-browser')
+    expect(setup.notices).toContain('host-plan.notice.setup-rebind-conditional')
+    expect(update.steps.slice(1 + nativeUpdatePlan('claude', previewTarget).length)).toEqual([
+      { id: 'candidate-validation', label: 'host-plan.step.candidate-validation', command: null },
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      { id: 'dashboard-readiness', label: 'host-plan.step.dashboard-readiness', command: null },
     ])
     expect(update.notices).not.toContain('host-plan.notice.codex-auth-guidance')
   })
@@ -114,12 +137,14 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
       notices: [
         'host-plan.notice.read-only-generation',
         'host-plan.notice.manual-command-has-effects',
+        'host-plan.notice.dashboard-readiness',
         'host-plan.notice.current-project-target',
       ],
     })
     expect(setup.steps.map(({ id }) => id)).toEqual([
       'package-assets',
       'managed-runtime',
+      'dashboard-readiness',
       'adapter-deploy',
       'bundled-skills',
       'runtime-readiness',
@@ -127,6 +152,7 @@ describe('host-target-plan —— 稳定、白名单且零副作用的宿主计�
     expect(update.steps).toEqual([
       { id: 'package-assets', label: 'host-plan.step.package-assets', command: null },
       { id: 'managed-runtime', label: 'host-plan.step.managed-runtime', command: null },
+      { id: 'dashboard-readiness', label: 'host-plan.step.dashboard-readiness', command: null },
       {
         id: 'adapter-deploy',
         label: 'host-plan.step.adapter-deploy',

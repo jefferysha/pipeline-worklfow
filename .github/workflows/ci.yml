@@ -7,6 +7,25 @@ on:
     branches: [main]
 
 jobs:
+  windows-native-trust:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact lockfile
+        run: npm ci
+      - name: Build kernel dependency used by CLI trust probes
+        run: npx tsc -p packages/kernel/tsconfig.json
+      - name: Real Windows native executable and batch interpreter trust
+        run: >-
+          npx vitest run
+          packages/cli/src/commands/native-host-command-binding.test.ts
+          packages/cli/src/commands/doctor-product-identity.test.ts
+
   verify:
     # ubuntu-latest ships docker preinstalled — required for the automation/tap docker-backed
     # integration tests (they honest-skip without it; running here means they run for real).
@@ -74,8 +93,11 @@ jobs:
       - name: 校验入库完整插件 runtime 与当前 src 一致 (release freshness)
         run: git diff --exit-code -- packages/cli/dist/tenon.mjs packages/server/dist/dashboard.mjs packages/dashboard-app/dist
 
-      - name: Install pinned Codex CLI for clean-install acceptance
-        run: npm install --global @openai/codex@0.144.1
+      - name: Prepare pinned Codex and Node in a trusted acceptance root
+        shell: bash
+        run: |
+          trusted_bin="$(bash tools/prepare-trusted-codex-acceptance.sh "$RUNNER_TEMP/tenon-codex-acceptance")"
+          echo "$trusted_bin" >> "$GITHUB_PATH"
 
       - name: Real clean Codex install from current checkout
         run: npm run test:clean-install
@@ -156,7 +178,7 @@ jobs:
         run: |
           set -euo pipefail
           meta=tools/fixtures/n-minus-one-release.json
-          release="$(node -p "require('./$meta').releaseId + ' plugin@' + require('./$meta').pluginVersion")"
+          release="$(node -p "require('./$meta').tag + ' plugin@' + require('./$meta').pluginVersion + ' commit@' + require('./$meta').gitCommit")"
           output="$RUNNER_TEMP/pipeline-n-minus-one"
           bash tools/prepare-n-minus-one-release.sh "$output"
           echo "TENON_N_MINUS_ONE_PAYLOAD=$output/payload" >> "$GITHUB_ENV"

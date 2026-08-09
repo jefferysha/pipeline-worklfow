@@ -217,7 +217,8 @@ export function WorkbenchView({ root, onToggleError, snapshot = null, onDirtyCha
   const policyDirty = !readonlyWf && def !== null
     && defBaselineRef.current !== null
     && (JSON.stringify(def.decomposition) !== JSON.stringify(defBaselineRef.current.decomposition)
-      || JSON.stringify(def.interaction) !== JSON.stringify(defBaselineRef.current.interaction))
+      || JSON.stringify(def.interaction) !== JSON.stringify(defBaselineRef.current.interaction)
+      || JSON.stringify(def.reviewBudget) !== JSON.stringify(defBaselineRef.current.reviewBudget))
   const workflowCreateDirty = workflowCreateMode !== null && workflowDraftName !== workflowDraftBaseline.current
   const { setSourceDirty } = useWorkbenchDirtyState({
     localDirty: dirty || workflowCreateDirty || addStageDraftDirty || promptSkipDirty,
