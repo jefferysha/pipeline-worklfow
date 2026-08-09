@@ -1047,6 +1047,56 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect((await createStateStore().read(dir)).fields.build_sha).toBe('null')
     })
 
+    test('governed custom rollback inherits fixed lifecycle when YAML omits mark-verification-failed', async () => {
+      const root = await freshRepoRoot()
+      const deps = makeDeps()
+      const wf: WorkflowDef = {
+        name: 'governed-rollback',
+        openspecContract: 'required',
+        steps: [
+          {
+            id: 'build', label: '', gate: null, skills: [], inputs: [],
+            outputs: [{ field: 'build_sha', type: 'string' }], guards: [],
+            transitions: [{ event: 'complete', to: 'verify' }],
+          },
+          {
+            id: 'verify', label: '', gate: 'review', skills: [],
+            inputs: [{ field: 'build_sha', type: 'string' }], outputs: [], guards: [],
+            // Deliberately omit the rollback action: document governance supplies it.
+            transitions: [{ event: 'reject', to: 'build' }],
+          },
+        ],
+      }
+      const { changeDir: dir } = await deps.runRepository.initChange({
+        repoRoot: root, name: 'demo', track: 'backend', reviewSeed: 'pending', preset: 'full', clock: FIXED_CLOCK,
+        initialWorkflow: { workflow: 'governed-rollback', phase: 'verify' },
+      })
+      await createStateStore().setMany(dir, {
+        build_sha: 'malformed-legacy-value',
+        review_gate_phase: 'verify', review_gate_status: 'approved', review_gate_event: 'reject',
+        review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
+      })
+      let assessorCalls = 0
+      const result = await createTransitionApplication(deps).execute({
+        root, changeDir: dir, changeName: 'demo', event: 'reject',
+        context: {
+          assessBuildRevision: async () => {
+            assessorCalls += 1
+            return { trusted: false as const, blocker: makeBuildRevisionBlocker('revision-stale') }
+          },
+        },
+        loadWorkflow: (name) => name === 'governed-rollback' ? compileWorkflow(wf) : null,
+      })
+
+      expect(result.kind).toBe('applied')
+      expect(assessorCalls).toBe(0)
+      const state = await createStateStore().read(dir)
+      expect(state.fields.phase).toBe('build')
+      expect(state.fields.build_sha).toBe('null')
+      expect(state.fields.verify_result).toBe('fail')
+      expect(state.fields.pre_verify_review_result).toBe('pending')
+    })
+
     test('edge guard field-equals 真拦截/放行：branch_status≠handled → step-guard-failed 零写盘；=handled → applied', async () => {
       const root = await freshRepoRoot()
       const deps = makeDeps()

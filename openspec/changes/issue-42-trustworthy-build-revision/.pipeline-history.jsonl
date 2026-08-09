@@ -49,3 +49,37 @@
 {"ts":"2026-08-09T18:18:18Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
 {"ts":"2026-08-09T18:23:23Z","kind":"set","field":"pre_verify_review_result","to":"pending"}
 {"ts":"2026-08-09T18:28:52Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-09T18:30:16Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T18:30:16Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T18:30:16Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"5c081457-f8b1-4a92-97d8-6489ee8e0844"}
+{"ts":"2026-08-09T18:41:01Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-10-issue-42-trustworthy-build-revision-verify-attempt-1.md"}
+{"ts":"2026-08-09T18:41:01Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T18:41:01Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion e9974d7e-2344-4219-950b-35662fe5c703 4"}
+{"ts":"2026-08-09T18:41:02Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-08-09T18:41:02Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-08-09T18:41:09Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-09T18:41:09Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T16:19:13Z authority_host_session=019fe750-2347-75b0-bec1-1ee937ec614d"}
+{"ts":"2026-08-09T18:41:10Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"3a3b7d61-e5d9-494b-8dd4-ee4f558877fd"}
+{"ts":"2026-08-09T18:58:30Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe750-2347-75b0-bec1-1ee937ec614d"}
+{"ts":"2026-08-09T18:58:39Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T18:58:39Z","kind":"tool","raw":"CodexSkillReadBinding: writing-plans e9974d7e-2344-4219-950b-35662fe5c703 5"}
+{"ts":"2026-08-09T18:59:29Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T18:59:29Z","kind":"transition","from":"build","to":"spec","raw":"requirements-changed","transitionRecordId":"d88e2957-46c0-4c61-be8e-bd2043071b8a"}
+{"ts":"2026-08-09T18:59:59Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe750-2347-75b0-bec1-1ee937ec614d"}
+{"ts":"2026-08-09T19:00:06Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-09T19:00:06Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-propose e9974d7e-2344-4219-950b-35662fe5c703 6"}
+{"ts":"2026-08-09T19:00:13Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-09T19:00:13Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-propose e9974d7e-2344-4219-950b-35662fe5c703 6"}
+{"ts":"2026-08-09T19:00:19Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-09T19:00:19Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-propose e9974d7e-2344-4219-950b-35662fe5c703 6"}
+{"ts":"2026-08-09T19:00:28Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T19:00:28Z","kind":"tool","raw":"CodexSkillReadBinding: writing-plans e9974d7e-2344-4219-950b-35662fe5c703 6"}
+{"ts":"2026-08-09T19:00:28Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T19:00:28Z","kind":"tool","raw":"CodexSkillReadBinding: writing-plans e9974d7e-2344-4219-950b-35662fe5c703 6"}
+{"ts":"2026-08-09T19:00:39Z","kind":"tool","raw":"CodexSkillRead: tenon-spec"}
+{"ts":"2026-08-09T19:00:39Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-spec e9974d7e-2344-4219-950b-35662fe5c703 6"}
+{"ts":"2026-08-09T19:00:45Z","kind":"tool","raw":"review:request phase=spec event=spec-complete"}
+{"ts":"2026-08-09T19:00:45Z","kind":"tool","raw":"review:delegated-ack phase=spec event=spec-complete authority_issued_at=2026-08-09T18:59:59Z authority_host_session=019fe750-2347-75b0-bec1-1ee937ec614d"}
+{"ts":"2026-08-09T19:00:45Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"d797bbf5-314b-4853-89d7-04a684422bf7"}
+{"ts":"2026-08-09T19:00:57Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe750-2347-75b0-bec1-1ee937ec614d"}
+{"ts":"2026-08-09T19:01:26Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readFile, rm, truncate, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { classifyTaskPlanProjectionForChange, publishTaskPlanRevision } from '@tenon/kernel'
+import {
+  classifyTaskPlanProjectionForChange,
+  createBuildRevisionToken,
+  makeBuildRevisionBlocker,
+  publishTaskPlanRevision,
+} from '@tenon/kernel'
 import type { GuardResult, PipelineState, TaskPlanRevisionV1 } from '@tenon/kernel'
 import type { GuardFileContext } from '../deps.js'
 import { cmdCheck } from './check.js'
@@ -196,13 +201,15 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     }
   })
 
-  test('真实 check 仅对真正缺失 canonical current 保留 legacy tasks absence', async () => {
+  test('真实 check 非 Verify phase 对真正缺失 canonical current 保留 legacy tasks absence', async () => {
     const root = await mkdtemp(join(tmpdir(), 'check-legacy-absence-'))
     await mkdir(join(root, 'openspec', 'changes', 'demo'), { recursive: true })
     let receivedCanonicalStatus = false
     const deps = makeDeps({
       cwd: root,
-      state: mockState({ phase: 'verify', track: 'backend' }),
+      // Verify now always runs the typed revision barrier; this legacy tasks absence assertion
+      // belongs to a non-Verify phase and preserves the old projection compatibility seam.
+      state: mockState({ phase: 'build', track: 'backend' }),
       guardCtx: makeGuardCtx(root),
     })
     deps.flow.guardCheck = spy((_state: PipelineState, context): GuardResult => {
@@ -396,6 +403,81 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     expect(code).toBe(0)
     expect(deps.flow.guardCheck.calls).toHaveLength(1)
     expect(deps.outLines).toEqual(['[CHECK] demo (phase=build)', '  [PASS] 所有检查通过'])
+  })
+
+  test('Verify default check：旧 guard 绿灯也必须评估 null build_sha，typed blocker exit 2 且 assessor 恰一次', async () => {
+    const deps = makeDeps({
+      state: mockState({
+        phase: 'verify', track: 'backend', verification_report: 'docs/v.md',
+        branch_status: 'handled', agent_review_result: 'pass', codex_review_result: 'pass',
+        isolation: 'branch', build_sha: 'null',
+      }),
+    })
+    let calls = 0
+    deps.assessBuildRevision = async (request) => {
+      calls += 1
+      return { trusted: false, blocker: makeBuildRevisionBlocker('null', request.stateHash) }
+    }
+    expect(await cmdCheck(deps, 'demo')).toBe(2)
+    expect(calls).toBe(1)
+    expect(deps.outLines[1]).toMatch(
+      /^  \[FAIL\] verify-build-revision-untrusted reason=null remediation=return-to-build-and-capture-current-revision stateHash=sha256:[a-f0-9]{64}$/,
+    )
+  })
+
+  test('Verify default check：typed assessor 通过时保留 legacy PASS，且恰评估一次', async () => {
+    const deps = makeDeps({
+      state: mockState({
+        phase: 'verify', track: 'backend', verification_report: 'docs/v.md',
+        branch_status: 'handled', agent_review_result: 'pass', codex_review_result: 'pass',
+        isolation: 'branch', build_sha: 'build:v1:git:candidate',
+      }),
+    })
+    let calls = 0
+    deps.assessBuildRevision = async () => {
+      calls += 1
+      return {
+        trusted: true as const,
+        token: createBuildRevisionToken('git', 'a'.repeat(40), {
+          repository: '/repo.git', worktree: '/repo\\0/worktree',
+        }),
+      }
+    }
+    expect(await cmdCheck(deps, 'demo')).toBe(0)
+    expect(calls).toBe(1)
+    expect(deps.outLines).toContain('  [PASS] 所有检查通过')
+  })
+
+  test('非 Verify default check 不调用 revision assessor', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'build', track: 'backend', build_sha: 'null' }) })
+    let calls = 0
+    deps.assessBuildRevision = async () => {
+      calls += 1
+      throw new Error('must not be called')
+    }
+    expect(await cmdCheck(deps, 'demo')).toBe(0)
+    expect(calls).toBe(0)
+  })
+
+  test('Verify default check assessor 异常映射 evaluation-error 且 exit 2', async () => {
+    const deps = makeDeps({
+      state: mockState({
+        phase: 'verify', track: 'backend', verification_report: 'docs/v.md',
+        branch_status: 'handled', agent_review_result: 'pass', codex_review_result: 'pass',
+        isolation: 'branch', build_sha: 'build:v1:git:candidate',
+      }),
+    })
+    let calls = 0
+    deps.assessBuildRevision = async () => {
+      calls += 1
+      throw new Error('/private/raw/path')
+    }
+    expect(await cmdCheck(deps, 'demo')).toBe(2)
+    expect(calls).toBe(1)
+    expect(deps.outLines.join('\n')).toContain(
+      'verify-build-revision-untrusted reason=evaluation-error remediation=return-to-build-and-capture-current-revision',
+    )
+    expect(deps.outLines.join('\n')).not.toContain('/private/raw/path')
   })
 })
 

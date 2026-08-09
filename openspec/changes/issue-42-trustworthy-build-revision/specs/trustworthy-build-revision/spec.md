@@ -155,4 +155,3 @@ Guard/rejection observability MUST 只发 stable code、closed reason、remediat
 - **WHEN** 一个短 Workflow 从未声明 `build_sha` input
 - **THEN** #42 不自动制造不存在的 Verify phase
 - **AND** 该 Workflow 的既有合法边保持不变。
-

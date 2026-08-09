@@ -110,7 +110,7 @@ export async function readinessByTransition(
               transition.to,
             )
             const target = plan.workflow.steps.find((candidate) => candidate.id === transition.to)
-            const semantic = semanticRevisionLifecyclePolicy(step, transition, target)
+            const semantic = semanticRevisionLifecyclePolicy(step, transition, target, fixed?.actions)
             return mergeLifecycleGuards(
               mergeLifecycleGuards([...step.guards, ...transition.guards], fixed?.guards),
               semantic?.guards,

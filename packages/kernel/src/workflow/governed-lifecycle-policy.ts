@@ -55,11 +55,13 @@ export function semanticRevisionLifecyclePolicy(
   from: StepIR,
   edge: StepTransitionIR,
   to: StepIR | undefined,
+  inheritedActions: readonly ActionConfig[] = [],
 ): GovernedLifecyclePolicy | undefined {
   const outputsBuildSha = from.outputs.some((output) => output.field === 'build_sha')
   const currentStepInputsBuildSha = from.inputs.some((input) => input.field === 'build_sha')
   const targetStepInputsBuildSha = to?.inputs.some((input) => input.field === 'build_sha') ?? false
-  const rollback = edge.actions.some((action) => action.type === 'mark-verification-failed')
+  const rollback = [...edge.actions, ...inheritedActions]
+    .some((action) => action.type === 'mark-verification-failed')
   // Capture belongs to the Build -> Verify-like entry edge: the source step must declare the
   // output and the target must declare the input.  A trust guard belongs to the Verify-like
   // source step itself and therefore applies to every non-rollback exit from that step.  Keeping

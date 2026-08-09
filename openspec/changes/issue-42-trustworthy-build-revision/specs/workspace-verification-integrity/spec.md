@@ -48,4 +48,3 @@ identity probe MUST 使用物理 Git common directory 与当前 worktree top-lev
 - **WHEN** blocker 被投影到 CLI/API/SSE/Dashboard
 - **THEN** 只包含 SHA-256 摘要
 - **AND** 不包含 Git common directory、top-level 或 Git directory 原文。
-

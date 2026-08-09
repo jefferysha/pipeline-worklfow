@@ -27,7 +27,7 @@
 import type { FieldName, PipelineState } from '../types.js'
 import type { EventName, TransitionContext } from './transition-table.js'
 import type { ActionConfig, CompiledGuardConfig, GuardInput } from '../workflow/ir.js'
-import { evaluateGuards, type GuardEvaluation } from '../workflow/guard-handlers.js'
+import { evaluateGuards, type EvaluateGuardsOptions, type GuardEvaluation } from '../workflow/guard-handlers.js'
 import { safeRevisionHash } from '../workflow/build-revision.js'
 import type { BuildRevisionBlocker } from '../workflow/build-revision.js'
 import { NON_PM, NON_PM_OR_FREE } from '../workflow/predicates.js'
@@ -250,6 +250,7 @@ export async function evaluateDefaultEventPreconditions(
   event: EventName,
   state: PipelineState,
   ctx?: TransitionContext,
+  options?: EvaluateGuardsOptions,
 ): Promise<DefaultPreconditionResult | null> {
   const policy = DEFAULT_EVENT_POLICY[event]
   if (policy.guards.length === 0) return null
@@ -268,7 +269,7 @@ export async function evaluateDefaultEventPreconditions(
     assessBuildRevision: ctx?.assessBuildRevision,
     currentStep: fieldStr(state, 'phase'),
   }
-  const evaluations = await evaluateGuards(policy.guards, input)
+  const evaluations = await evaluateGuards(policy.guards, input, options)
   const failed = evaluations.find((e) => e.decision.kind === 'failed')
   if (!failed) return null
   const blockers = evaluations.flatMap((evaluation) =>

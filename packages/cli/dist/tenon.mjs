@@ -17255,7 +17255,7 @@ function renderPreconditionViolation(event, failure, track) {
   }
   throw new Error(`renderPreconditionViolation: \u672A\u8986\u76D6\u7684 (event=${event}, guardType=${guard.type})`);
 }
-async function evaluateDefaultEventPreconditions(event, state, ctx) {
+async function evaluateDefaultEventPreconditions(event, state, ctx, options) {
   const policy2 = DEFAULT_EVENT_POLICY[event];
   if (policy2.guards.length === 0)
     return null;
@@ -17272,7 +17272,7 @@ async function evaluateDefaultEventPreconditions(event, state, ctx) {
     assessBuildRevision: ctx?.assessBuildRevision,
     currentStep: fieldStr(state, "phase")
   };
-  const evaluations = await evaluateGuards(policy2.guards, input);
+  const evaluations = await evaluateGuards(policy2.guards, input, options);
   const failed = evaluations.find((e) => e.decision.kind === "failed");
   if (!failed)
     return null;
@@ -17400,11 +17400,11 @@ function mergeLifecycleActions(declared, required2) {
     return declared;
   return [...declared, ...required2.filter((candidate) => !declared.some((action) => action.type === candidate.type))];
 }
-function semanticRevisionLifecyclePolicy(from, edge, to) {
+function semanticRevisionLifecyclePolicy(from, edge, to, inheritedActions = []) {
   const outputsBuildSha = from.outputs.some((output) => output.field === "build_sha");
   const currentStepInputsBuildSha = from.inputs.some((input) => input.field === "build_sha");
   const targetStepInputsBuildSha = to?.inputs.some((input) => input.field === "build_sha") ?? false;
-  const rollback = edge.actions.some((action) => action.type === "mark-verification-failed");
+  const rollback = [...edge.actions, ...inheritedActions].some((action) => action.type === "mark-verification-failed");
   const actions = outputsBuildSha && targetStepInputsBuildSha ? [{ type: "freeze-build-sha" }] : [];
   const guards = currentStepInputsBuildSha && !rollback ? [{ type: "build-head-unchanged", field: "build_sha" }] : [];
   if (actions.length === 0 && guards.length === 0)
@@ -27905,7 +27905,7 @@ async function planCustomTransition(state, effectivePlan, command2, clock) {
   const governed = documentPolicy !== void 0;
   const fixedLifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
   const targetStep = edgeBeforePlan === void 0 ? void 0 : resolveStep(planningIr, edgeBeforePlan.to);
-  const semanticLifecycle = currentBeforePlan && edgeBeforePlan ? semanticRevisionLifecyclePolicy(currentBeforePlan, edgeBeforePlan, targetStep ?? void 0) : void 0;
+  const semanticLifecycle = currentBeforePlan && edgeBeforePlan ? semanticRevisionLifecyclePolicy(currentBeforePlan, edgeBeforePlan, targetStep ?? void 0, fixedLifecycle?.actions) : void 0;
   const lifecycle = fixedLifecycle === void 0 ? semanticLifecycle : semanticLifecycle === void 0 ? fixedLifecycle : {
     guards: mergeLifecycleGuards(fixedLifecycle.guards, semanticLifecycle.guards),
     actions: mergeLifecycleActions(fixedLifecycle.actions, semanticLifecycle.actions)
@@ -39475,7 +39475,44 @@ function effectiveWorkflowForState(deps, state) {
   }, track, state.runMetadata?.workflowPlanSnapshot);
 }
 
+// packages/cli/src/commands/buildRevisionAssessor.ts
+function resolveBuildRevisionAssessor(deps, changeName, changeDir2) {
+  if (deps.assessBuildRevision !== void 0) return deps.assessBuildRevision;
+  return async (request) => {
+    const identity2 = deps.buildRevisionIdentity === void 0 ? await probeBuildRevisionIdentity(deps.cwd) : await deps.buildRevisionIdentity();
+    const observe = async () => {
+      const kind = request.isolation === "in-place" ? "workspace" : "git";
+      const revision = kind === "workspace" ? await deps.workspaceFingerprint?.(changeName) ?? "" : await deps.gitHeadSha?.() ?? "";
+      if (!identity2) throw new Error("build revision identity unavailable");
+      return { kind, revision, identity: identity2 };
+    };
+    const provenance = async () => {
+      const validated = await readValidatedTransitionHead(changeDir2);
+      if (!validated) return void 0;
+      const { current, record: record7 } = validated;
+      const stateBuildSha = current.state.fields.build_sha;
+      return {
+        currentStep: String(current.state.fields.phase ?? ""),
+        stateHash: safeRevisionHash(current.state.fields),
+        stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(",") : stateBuildSha,
+        recordTo: record7.to,
+        buildShaEffects: record7.effects.filter((effect) => effect.field === "build_sha").map((effect) => typeof effect.to === "string" ? effect.to : "")
+      };
+    };
+    return assessBuildRevisionTrust({ ...request, observe, provenance });
+  };
+}
+
 // packages/cli/src/commands/check.ts
+function renderBuildRevisionBlocker(blocker) {
+  return [
+    blocker.code,
+    `reason=${blocker.reason}`,
+    `remediation=${blocker.remediation}`,
+    ...blocker.stateHash === void 0 ? [] : [`stateHash=${blocker.stateHash}`],
+    ...blocker.revisionHash === void 0 ? [] : [`revisionHash=${blocker.revisionHash}`]
+  ].join(" ");
+}
 async function cmdCheck(deps, name2) {
   if (!isValidChangeName(name2)) {
     deps.io.err(`ERROR: change-name \u975E\u6CD5: '${name2}' (\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _)`);
@@ -39537,6 +39574,15 @@ async function cmdCheck(deps, name2) {
       canonicalTasksProjectionStatus: ({ changeDirRel, tasksMarkdown }) => changeDirRel === fileContext?.changeDirRel && tasksMarkdown === guardedTasksSource ? canonicalTasksProjectionStatus : "invalid"
     }
   });
+  const workspaceFingerprint = deps.workspaceFingerprint;
+  const revisionResult = str(state.fields.phase) === "verify" ? await evaluateDefaultEventPreconditions("verify-pass", state, {
+    fileExists: fileContext?.fileExists,
+    gitHeadSha: deps.gitHeadSha,
+    workspaceFingerprint: workspaceFingerprint === void 0 ? void 0 : () => workspaceFingerprint(name2),
+    assessBuildRevision: resolveBuildRevisionAssessor(deps, name2, dir)
+  }, { stopOnFirstFailure: false }) : null;
+  const revisionBlocker = revisionResult?.blockers?.find((candidate) => candidate.code === "verify-build-revision-untrusted");
+  const revisionFailures = revisionBlocker === void 0 ? [] : [renderBuildRevisionBlocker(revisionBlocker)];
   const migration = str(state.fields.phase) === "ship" ? await evaluateSpecMigrationEvidence(deps.cwd, dir, name2) : void 0;
   let documents;
   try {
@@ -39549,11 +39595,14 @@ async function cmdCheck(deps, name2) {
   for (const warning of result.warnings ?? []) {
     deps.io.out(`  [WARN] ${warning}`);
   }
-  if (result.pass && (documents?.pass ?? true) && migration?.kind !== "invalid") {
+  if (result.pass && revisionFailures.length === 0 && (documents?.pass ?? true) && migration?.kind !== "invalid") {
     deps.io.out("  [PASS] \u6240\u6709\u68C0\u67E5\u901A\u8FC7");
     return 0;
   }
   for (const failure of result.failures) {
+    deps.io.out(`  [FAIL] ${failure}`);
+  }
+  for (const failure of revisionFailures) {
     deps.io.out(`  [FAIL] ${failure}`);
   }
   for (const blocker of documents?.blockers ?? []) {
@@ -39562,7 +39611,7 @@ async function cmdCheck(deps, name2) {
   if (migration?.kind === "invalid") {
     deps.io.out(`  [FAIL] migration: ${migration.reason}`);
   }
-  const total = result.failures.length + (documents?.blockers.length ?? 0) + (migration?.kind === "invalid" ? 1 : 0);
+  const total = result.failures.length + revisionFailures.length + (documents?.blockers.length ?? 0) + (migration?.kind === "invalid" ? 1 : 0);
   deps.io.out(`  [FAIL] \u5171 ${total} \u9879\u672A\u901A\u8FC7`);
   return 2;
 }
@@ -39594,29 +39643,7 @@ async function checkGraphWorkflow(deps, name2, dir, state, plan) {
       return fingerprint ? fingerprint(name2) : Promise.reject(new Error("workspace fingerprint capability unavailable"));
     }) : void 0,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name2),
-    assessBuildRevision: deps.assessBuildRevision ?? (async (request) => {
-      const identity2 = deps.buildRevisionIdentity === void 0 ? await probeBuildRevisionIdentity(deps.cwd) : await deps.buildRevisionIdentity();
-      const observe = async () => {
-        const kind = request.isolation === "in-place" ? "workspace" : "git";
-        const revision = kind === "workspace" ? await deps.workspaceFingerprint?.(name2) ?? "" : await deps.gitHeadSha?.() ?? "";
-        if (!identity2) throw new Error("build revision identity unavailable");
-        return { kind, revision, identity: identity2 };
-      };
-      const provenance = async () => {
-        const validated = await readValidatedTransitionHead(dir);
-        if (!validated) return void 0;
-        const { current, record: record7 } = validated;
-        const stateBuildSha = current.state.fields.build_sha;
-        return {
-          currentStep: String(current.state.fields.phase ?? ""),
-          stateHash: safeRevisionHash(current.state.fields),
-          stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(",") : stateBuildSha,
-          recordTo: record7.to,
-          buildShaEffects: record7.effects.filter((effect) => effect.field === "build_sha").map((effect) => typeof effect.to === "string" ? effect.to : "")
-        };
-      };
-      return assessBuildRevisionTrust({ ...request, observe, provenance });
-    })
+    assessBuildRevision: resolveBuildRevisionAssessor(deps, name2, dir)
   });
   const migration = str(state.fields.phase) === "ship" && plan.capabilities.documents.governed ? await evaluateSpecMigrationEvidence(deps.cwd, dir, name2) : void 0;
   let documents;
@@ -46588,29 +46615,7 @@ async function cmdTransition(deps, name2, event) {
       return fingerprint ? fingerprint(name2) : Promise.reject(new Error("workspace fingerprint capability unavailable"));
     }) : void 0,
     captureBuildRevision: deps.captureBuildRevision,
-    assessBuildRevision: deps.assessBuildRevision === void 0 ? async (request) => {
-      const identity2 = deps.buildRevisionIdentity === void 0 ? await probeBuildRevisionIdentity(deps.cwd) : await deps.buildRevisionIdentity();
-      const observe = async () => {
-        const kind = request.isolation === "in-place" ? "workspace" : "git";
-        const revision = kind === "workspace" ? await deps.workspaceFingerprint?.(name2) ?? "" : await deps.gitHeadSha?.() ?? "";
-        if (!identity2) throw new Error("build revision identity unavailable");
-        return { kind, revision, identity: identity2 };
-      };
-      const provenance = async () => {
-        const validated = await readValidatedTransitionHead(dir);
-        if (!validated) return void 0;
-        const { current, record: record7 } = validated;
-        const stateBuildSha = current.state.fields.build_sha;
-        return {
-          currentStep: String(current.state.fields.phase ?? ""),
-          stateHash: safeRevisionHash(current.state.fields),
-          stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(",") : stateBuildSha,
-          recordTo: record7.to,
-          buildShaEffects: record7.effects.filter((effect) => effect.field === "build_sha").map((effect) => typeof effect.to === "string" ? effect.to : "")
-        };
-      };
-      return assessBuildRevisionTrust({ ...request, observe, provenance });
-    } : deps.assessBuildRevision,
+    assessBuildRevision: resolveBuildRevisionAssessor(deps, name2, dir),
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name2),
     ...guardContext === void 0 ? {} : { tasksThroughPhase: async (phase) => {
       const bounded = tasksPath === void 0 ? void 0 : guardContext.readFileBounded?.(tasksPath, tasksByteLimit);

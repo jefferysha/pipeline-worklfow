@@ -212,7 +212,12 @@ async function planCustomTransition(
     ? undefined
     : resolveStep(planningIr, edgeBeforePlan.to)
   const semanticLifecycle = currentBeforePlan && edgeBeforePlan
-    ? semanticRevisionLifecyclePolicy(currentBeforePlan, edgeBeforePlan, targetStep ?? undefined)
+    ? semanticRevisionLifecyclePolicy(
+        currentBeforePlan,
+        edgeBeforePlan,
+        targetStep ?? undefined,
+        fixedLifecycle?.actions,
+      )
     : undefined
   const lifecycle = fixedLifecycle === undefined
     ? semanticLifecycle

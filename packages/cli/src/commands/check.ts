@@ -13,15 +13,12 @@ import {
   evaluateDocumentEvidence,
   evaluateSpecMigrationEvidence,
   evaluateWorkflowIrStepGuards,
+  evaluateDefaultEventPreconditions,
   classifyTaskPlanProjectionForChange,
   isDocumentContractPhase,
   isDocumentPolicyStep,
   resolveStep,
   resolveWorkflowName,
-  assessBuildRevisionTrust,
-  probeBuildRevisionIdentity,
-  readValidatedTransitionHead,
-  safeRevisionHash,
   TASK_PLAN_CURRENT_FILE,
   TASK_PLAN_LIMITS,
   TASK_PLAN_STATE_DIR,
@@ -31,11 +28,23 @@ import type {
   DocumentGovernancePolicy,
   EffectiveWorkflowPlan,
   PipelineState,
+  BuildRevisionBlocker,
 } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { display, str } from '../render.js'
 import { effectiveWorkflowForState } from './effective-workflow.js'
+import { resolveBuildRevisionAssessor } from './buildRevisionAssessor.js'
+
+function renderBuildRevisionBlocker(blocker: BuildRevisionBlocker): string {
+  return [
+    blocker.code,
+    `reason=${blocker.reason}`,
+    `remediation=${blocker.remediation}`,
+    ...(blocker.stateHash === undefined ? [] : [`stateHash=${blocker.stateHash}`]),
+    ...(blocker.revisionHash === undefined ? [] : [`revisionHash=${blocker.revisionHash}`]),
+  ].join(' ')
+}
 
 export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   if (!isValidChangeName(name)) {
@@ -137,8 +146,28 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
             changeDirRel === fileContext?.changeDirRel && tasksMarkdown === guardedTasksSource
               ? canonicalTasksProjectionStatus
               : 'invalid',
-        }),
+      }),
   })
+  // Verify preview must expose the exact typed revision barrier used by verify-pass transition.
+  // Evaluate all guards here so a stale/missing build token cannot be hidden behind an older
+  // legacy guard failure; only the revision blocker is rendered below because flow.guardCheck
+  // remains the compatibility source for the other checks.
+  const workspaceFingerprint = deps.workspaceFingerprint
+  const revisionResult = str(state.fields.phase) === 'verify'
+    ? await evaluateDefaultEventPreconditions('verify-pass', state, {
+        fileExists: fileContext?.fileExists,
+        gitHeadSha: deps.gitHeadSha,
+        workspaceFingerprint: workspaceFingerprint === undefined
+          ? undefined
+          : () => workspaceFingerprint(name),
+        assessBuildRevision: resolveBuildRevisionAssessor(deps, name, dir),
+      }, { stopOnFirstFailure: false })
+    : null
+  const revisionBlocker = revisionResult?.blockers?.find((candidate) =>
+    candidate.code === 'verify-build-revision-untrusted')
+  const revisionFailures = revisionBlocker === undefined
+    ? []
+    : [renderBuildRevisionBlocker(revisionBlocker)]
   const migration = str(state.fields.phase) === 'ship'
     ? await evaluateSpecMigrationEvidence(deps.cwd, dir, name)
     : undefined
@@ -153,11 +182,14 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   for (const warning of result.warnings ?? []) {
     deps.io.out(`  [WARN] ${warning}`)
   }
-  if (result.pass && (documents?.pass ?? true) && migration?.kind !== 'invalid') {
+  if (result.pass && revisionFailures.length === 0 && (documents?.pass ?? true) && migration?.kind !== 'invalid') {
     deps.io.out('  [PASS] 所有检查通过')
     return 0
   }
   for (const failure of result.failures) {
+    deps.io.out(`  [FAIL] ${failure}`)
+  }
+  for (const failure of revisionFailures) {
     deps.io.out(`  [FAIL] ${failure}`)
   }
   for (const blocker of documents?.blockers ?? []) {
@@ -167,6 +199,7 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
     deps.io.out(`  [FAIL] migration: ${migration.reason}`)
   }
   const total = result.failures.length
+    + revisionFailures.length
     + (documents?.blockers.length ?? 0)
     + (migration?.kind === 'invalid' ? 1 : 0)
   deps.io.out(`  [FAIL] 共 ${total} 项未通过`)
@@ -228,35 +261,7 @@ async function checkGraphWorkflow(
         })
       : undefined,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name),
-    assessBuildRevision: deps.assessBuildRevision ?? (async (request) => {
-      const identity = deps.buildRevisionIdentity === undefined
-        ? await probeBuildRevisionIdentity(deps.cwd)
-        : await deps.buildRevisionIdentity()
-      const observe = async () => {
-        const kind = request.isolation === 'in-place' ? 'workspace' as const : 'git' as const
-        const revision = kind === 'workspace'
-          ? await deps.workspaceFingerprint?.(name) ?? ''
-          : await deps.gitHeadSha?.() ?? ''
-        if (!identity) throw new Error('build revision identity unavailable')
-        return { kind, revision, identity }
-      }
-      const provenance = async () => {
-        const validated = await readValidatedTransitionHead(dir)
-        if (!validated) return undefined
-        const { current, record } = validated
-        const stateBuildSha = current.state.fields.build_sha
-        return {
-          currentStep: String(current.state.fields.phase ?? ''),
-          stateHash: safeRevisionHash(current.state.fields),
-          stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(',') : stateBuildSha,
-          recordTo: record.to,
-          buildShaEffects: record.effects
-            .filter((effect) => effect.field === 'build_sha')
-            .map((effect) => typeof effect.to === 'string' ? effect.to : ''),
-        }
-      }
-      return assessBuildRevisionTrust({ ...request, observe, provenance })
-    }),
+    assessBuildRevision: resolveBuildRevisionAssessor(deps, name, dir),
   })
   const migration = str(state.fields.phase) === 'ship'
     && plan.capabilities.documents.governed

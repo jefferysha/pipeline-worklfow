@@ -103,4 +103,3 @@ CLI/server/SSE/AFK/Dashboard 使用同一 code/remediation。Issue #42 Acceptanc
 - 实现未进入 Ship 前，可在同一分支移除 token/DTO 代码并回到旧行为；不得改写 canonical evidence。
 - 发布后的兼容回滚是旧 runtime 安全拒绝新 token；不能通过把 token 截成裸 SHA 恢复。
 - AFK blocker 只改变 untrusted admission 的 merged→paused；合法 boundary-verified path 不变。
-

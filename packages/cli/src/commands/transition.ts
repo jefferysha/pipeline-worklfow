@@ -53,14 +53,14 @@ import {
   compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
   loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack, resolveRequiredSkillSlots,
   TASK_PLAN_CURRENT_FILE, TASK_PLAN_LIMITS, TASK_PLAN_STATE_DIR,
-  taskPlanTasksThroughPhaseForChange, assessBuildRevisionTrust, probeBuildRevisionIdentity,
-  readValidatedTransitionHead, safeRevisionHash,
+  taskPlanTasksThroughPhaseForChange,
 } from '@tenon/kernel'
-import { evaluateSpecMigrationEvidence, type BuildRevisionAssessment, type TransitionContext } from '@tenon/kernel'
+import { evaluateSpecMigrationEvidence, type TransitionContext } from '@tenon/kernel'
 import { enqueueAfterSpecComplete } from '@tenon/automation'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
+import { resolveBuildRevisionAssessor } from './buildRevisionAssessor.js'
 
 function canonicalPipelineSkillId(skillId: string): string {
   return skillId.startsWith('tenon:') ? skillId.slice('tenon:'.length) : skillId
@@ -95,37 +95,7 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
       })
       : undefined,
     captureBuildRevision: deps.captureBuildRevision,
-    assessBuildRevision: deps.assessBuildRevision === undefined
-      ? async (request): Promise<BuildRevisionAssessment> => {
-          const identity = deps.buildRevisionIdentity === undefined
-            ? await probeBuildRevisionIdentity(deps.cwd)
-            : await deps.buildRevisionIdentity()
-          const observe = async () => {
-            const kind = request.isolation === 'in-place' ? 'workspace' as const : 'git' as const
-            const revision = kind === 'workspace'
-              ? await deps.workspaceFingerprint?.(name) ?? ''
-              : await deps.gitHeadSha?.() ?? ''
-            if (!identity) throw new Error('build revision identity unavailable')
-            return { kind, revision, identity }
-          }
-          const provenance = async () => {
-            const validated = await readValidatedTransitionHead(dir)
-            if (!validated) return undefined
-            const { current, record } = validated
-            const stateBuildSha = current.state.fields.build_sha
-            return {
-              currentStep: String(current.state.fields.phase ?? ''),
-              stateHash: safeRevisionHash(current.state.fields),
-              stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(',') : stateBuildSha,
-              recordTo: record.to,
-              buildShaEffects: record.effects
-                .filter((effect) => effect.field === 'build_sha')
-                .map((effect) => typeof effect.to === 'string' ? effect.to : ''),
-            }
-          }
-          return assessBuildRevisionTrust({ ...request, observe, provenance })
-        }
-      : deps.assessBuildRevision,
+    assessBuildRevision: resolveBuildRevisionAssessor(deps, name, dir),
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name),
     ...(guardContext === undefined
       ? {}

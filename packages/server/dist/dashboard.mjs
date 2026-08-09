@@ -12992,7 +12992,7 @@ function renderPreconditionViolation(event, failure6, track) {
   }
   throw new Error(`renderPreconditionViolation: \u672A\u8986\u76D6\u7684 (event=${event}, guardType=${guard.type})`);
 }
-async function evaluateDefaultEventPreconditions(event, state, ctx) {
+async function evaluateDefaultEventPreconditions(event, state, ctx, options) {
   const policy2 = DEFAULT_EVENT_POLICY[event];
   if (policy2.guards.length === 0)
     return null;
@@ -13009,7 +13009,7 @@ async function evaluateDefaultEventPreconditions(event, state, ctx) {
     assessBuildRevision: ctx?.assessBuildRevision,
     currentStep: fieldStr(state, "phase")
   };
-  const evaluations = await evaluateGuards(policy2.guards, input);
+  const evaluations = await evaluateGuards(policy2.guards, input, options);
   const failed = evaluations.find((e) => e.decision.kind === "failed");
   if (!failed)
     return null;
@@ -13142,11 +13142,11 @@ function mergeLifecycleActions(declared, required2) {
     return declared;
   return [...declared, ...required2.filter((candidate) => !declared.some((action) => action.type === candidate.type))];
 }
-function semanticRevisionLifecyclePolicy(from, edge2, to) {
+function semanticRevisionLifecyclePolicy(from, edge2, to, inheritedActions = []) {
   const outputsBuildSha = from.outputs.some((output) => output.field === "build_sha");
   const currentStepInputsBuildSha = from.inputs.some((input) => input.field === "build_sha");
   const targetStepInputsBuildSha = to?.inputs.some((input) => input.field === "build_sha") ?? false;
-  const rollback = edge2.actions.some((action) => action.type === "mark-verification-failed");
+  const rollback = [...edge2.actions, ...inheritedActions].some((action) => action.type === "mark-verification-failed");
   const actions = outputsBuildSha && targetStepInputsBuildSha ? [{ type: "freeze-build-sha" }] : [];
   const guards = currentStepInputsBuildSha && !rollback ? [{ type: "build-head-unchanged", field: "build_sha" }] : [];
   if (actions.length === 0 && guards.length === 0)
@@ -20752,7 +20752,7 @@ async function readinessByTransition(plan, state, context) {
     const guards = plan.executionModel === "phase-manifest" ? defaultEventGuards(transition.event) : (() => {
       const fixed = governedLifecyclePolicy(plan.capabilities.documents.policy !== void 0, step.id, transition.to);
       const target = plan.workflow.steps.find((candidate) => candidate.id === transition.to);
-      const semantic = semanticRevisionLifecyclePolicy(step, transition, target);
+      const semantic = semanticRevisionLifecyclePolicy(step, transition, target, fixed?.actions);
       return mergeLifecycleGuards(mergeLifecycleGuards([...step.guards, ...transition.guards], fixed?.guards), semantic?.guards);
     })();
     const evaluations = [];
@@ -21053,7 +21053,7 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
   const governed = documentPolicy !== void 0;
   const fixedLifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
   const targetStep = edgeBeforePlan === void 0 ? void 0 : resolveStep(planningIr, edgeBeforePlan.to);
-  const semanticLifecycle = currentBeforePlan && edgeBeforePlan ? semanticRevisionLifecyclePolicy(currentBeforePlan, edgeBeforePlan, targetStep ?? void 0) : void 0;
+  const semanticLifecycle = currentBeforePlan && edgeBeforePlan ? semanticRevisionLifecyclePolicy(currentBeforePlan, edgeBeforePlan, targetStep ?? void 0, fixedLifecycle?.actions) : void 0;
   const lifecycle = fixedLifecycle === void 0 ? semanticLifecycle : semanticLifecycle === void 0 ? fixedLifecycle : {
     guards: mergeLifecycleGuards(fixedLifecycle.guards, semanticLifecycle.guards),
     actions: mergeLifecycleActions(fixedLifecycle.actions, semanticLifecycle.actions)

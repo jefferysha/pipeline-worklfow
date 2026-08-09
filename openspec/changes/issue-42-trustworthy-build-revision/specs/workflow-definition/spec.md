@@ -45,4 +45,3 @@ lifecycle，不得只依赖 `build`、`verify`、`ship` 固定 step id。显式�
 - **WHEN** 合法历史 plan 在新 runtime 中恢复且 Verify-like step 输入 `build_sha`
 - **THEN** revision trust 不因 definition 文件或 snapshot 版本较旧而绕过
 - **AND** plan 文件与 fingerprint 不被原地修改。
-

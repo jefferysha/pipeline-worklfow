@@ -35,6 +35,14 @@ function governedWorkflow(): WorkflowDef {
       {
         id: 'verify', label: 'Verify', gate: 'review', skills: [],
         inputs: [{ field: 'build_sha', type: 'string' }], outputs: [], guards: [],
+        transitions: [
+          { event: 'accept', to: 'ship' },
+          // Governed rollback is inherited even when a custom YAML omits the action.
+          { event: 'reject', to: 'build' },
+        ],
+      },
+      {
+        id: 'ship', label: 'Ship', gate: null, skills: [], inputs: [], outputs: [], guards: [],
         transitions: [],
       },
     ],
@@ -79,5 +87,35 @@ describe('governed custom lifecycle 单一政策', () => {
         expected: ['pass'],
       }],
     })
+  })
+
+  test('governed custom rollback 未声明 action 仍不注入 revision guard', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'tenon-governed-rollback-readiness-'))
+    roots.push(root)
+    const fields = emptyFields()
+    Object.assign(fields, {
+      phase: 'verify',
+      track: 'backend',
+      isolation: 'in-place',
+      build_sha: 'malformed-legacy-value',
+      review_gate_phase: 'verify',
+      review_gate_status: 'approved',
+      review_gate_event: 'reject',
+    })
+    const plan = effectiveWorkflowPlanFromIr(
+      'governed',
+      compileWorkflow(governedWorkflow()),
+    )
+
+    const readiness = await readinessByTransition(plan, {
+      fields,
+      opaqueTail: '',
+    }, { changeDirAbs: root })
+
+    expect(readiness.verify?.reject).toEqual({ ready: true, blockers: [] })
+    expect(readiness.verify?.accept?.ready).toBe(false)
+    expect(readiness.verify?.accept?.blockers).toContainEqual(
+      expect.objectContaining({ code: 'verify-build-revision-untrusted' }),
+    )
   })
 })
