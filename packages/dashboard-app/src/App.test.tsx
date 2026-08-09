@@ -377,7 +377,12 @@ describe('App Workbench 未保存草稿离开守卫', () => {
     stubEditableWorkbench({ preserveLocation: true })
     render(<App />)
     fireEvent.click(await screen.findByTestId('project-row-repo'))
-    expect(await screen.findByTestId('progress-view')).toBeInTheDocument()
+    await waitFor(() => {
+      const search = new URLSearchParams(window.location.search)
+      expect(search.get('view')).toBe('progress')
+      expect(search.get('root')).toBe('/repo')
+    }, { timeout: 5_000 })
+    expect(await screen.findByTestId('progress-view', {}, { timeout: 5_000 })).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('nav-workbench'))
     await screen.findByTestId('wb-step-draft')
     await waitFor(() => expect(screen.getByTestId('wb-lane-name-draft').tagName).toBe('BUTTON'))
