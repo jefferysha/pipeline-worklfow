@@ -30,10 +30,10 @@
 
 ## 验证
 
-- [ ] 根代理在正式 Review 前穷尽 diff、契约、生成物和定向测试检查。
-- [ ] 对同一冻结候选执行正式 Review（hard cap 2），修复发现后才允许第二次；E2E/测试不计 Review。
-- [ ] 在稳定产品候选上只运行一次风险匹配的完整测试/build/architecture/comments/bundle/oracle/OpenSpec 门。
-- [ ] 登记 verification report；若 2/2 仍失败，保留证据并以 blocked 收口。
+- [x] 根代理在正式 Review 前穷尽 diff、契约、生成物和定向测试检查。
+- [x] 对同一冻结候选执行正式 Review（hard cap 2），修复发现后才允许第二次；E2E/测试不计 Review。
+- [x] 在稳定产品候选上只运行一次风险匹配的完整测试/build/architecture/comments/bundle/oracle/OpenSpec 门。
+- [x] 登记 verification report；若 2/2 仍失败，保留证据并以 blocked 收口。
 
 ## 交付
 

@@ -41,6 +41,12 @@
           "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
           "readAt": "2026-08-09T20:45:04Z",
           "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cf76a33ef35fa7e7075b888ad11650a9359bf34738c6f767ab55eff19c80bac1",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
         }
       ]
     },
@@ -82,6 +88,12 @@
           "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
           "readAt": "2026-08-09T20:45:04Z",
           "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f229a7579d20828ad51c8a8a84713d2cb3a9a4fb267dfd24d92ac1e39c210bdc",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
         }
       ]
     },
@@ -111,6 +123,12 @@
           "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
           "readAt": "2026-08-09T20:45:04Z",
           "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f304a9a044cdf3e95e4db2e637e44a590eda49e578955445018fadbcd791b588",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
         }
       ]
     },
@@ -140,6 +158,12 @@
           "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
           "readAt": "2026-08-09T20:45:04Z",
           "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5d48cd50e7ce2655ec82a3f19a957c13cf554be3a0b65385733084b0f11161d3",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
         }
       ]
     },
@@ -163,6 +187,12 @@
           "sha256": "5b6123611033f7c89693bad424c0e446e67eefb8a5397a34c45ad0d2b147d678",
           "readAt": "2026-08-09T20:45:04Z",
           "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "5b6123611033f7c89693bad424c0e446e67eefb8a5397a34c45ad0d2b147d678",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
         }
       ]
     },
@@ -186,6 +216,12 @@
           "sha256": "1db727c3bd5ebdafcf5e947d4a81c33befd1e45674f7d4caff765ee7fdfbb31d",
           "readAt": "2026-08-09T20:45:04Z",
           "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1db727c3bd5ebdafcf5e947d4a81c33befd1e45674f7d4caff765ee7fdfbb31d",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
         }
       ]
     },
@@ -209,6 +245,12 @@
           "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
           "readAt": "2026-08-09T20:45:04Z",
           "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
         }
       ]
     },
@@ -232,29 +274,51 @@
           "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
           "readAt": "2026-08-09T20:45:04Z",
           "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "298f68c79444b73a3dd444878be1dd34804c1b8c72e322a19a3685ac0e73b0ed",
+          "readAt": "2026-08-09T20:45:37Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
         }
       ]
     },
     {
-      "kind": "tasks",
-      "path": "openspec/changes/issue-66-interaction-remediation/tasks.md",
-      "sha256": "3ee50d0a0936b319d40c566812725de6e7ef7fbd5f01341d7fd125b106e72f30",
-      "producer": "tenon-build",
-      "recordedAt": "2026-08-09T20:44:32Z",
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-10-issue-66-interaction-remediation-verify.md",
+      "sha256": "e127b95a8bbabb60ec9c9b3cc6c6dcdcdd0e614f6a54d2f07b894f544c78abf6",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-09T21:28:35Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-fd75c3b92e5d4fe14f08eda1e7ddd8425878661b4f73c69f0c61b19e9979736e",
-        "evidenceScope": "build",
+        "confirmationInvocationId": "invocation-b61d9f968f940f15a8b5094b54123679b17cbf6903f6777c2f4a73e5757e92dd",
+        "evidenceScope": "verify",
         "stepVisit": {
           "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
-          "transitionSequence": 5
+          "transitionSequence": 6
+        }
+      },
+      "reads": []
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/issue-66-interaction-remediation/tasks.md",
+      "sha256": "ae840bd32c5c1051b65f5da955ff47f7debc8623310358e57cdd403ef9cbd6b3",
+      "producer": "tenon-verify",
+      "recordedAt": "2026-08-09T21:30:23Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-2d1d3fa0275ea70ee9ba2c154eb1101ac05637bf70dec3fc0819ba875b0139da",
+        "evidenceScope": "verify",
+        "stepVisit": {
+          "runId": "8a27f53e-17d9-4479-814e-a6006a88a00a",
+          "transitionSequence": 6
         }
       },
       "reads": [
         {
-          "phase": "build",
-          "sha256": "3ee50d0a0936b319d40c566812725de6e7ef7fbd5f01341d7fd125b106e72f30",
-          "readAt": "2026-08-09T20:45:04Z",
-          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",5]"
+          "phase": "verify",
+          "sha256": "ae840bd32c5c1051b65f5da955ff47f7debc8623310358e57cdd403ef9cbd6b3",
+          "readAt": "2026-08-09T21:30:41Z",
+          "visitId": "[\"8a27f53e-17d9-4479-814e-a6006a88a00a\",6]"
         }
       ]
     }
