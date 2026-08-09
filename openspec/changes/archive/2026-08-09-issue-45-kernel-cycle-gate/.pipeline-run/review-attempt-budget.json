@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+  "workflowFingerprint": "0fea7ee8cdbe4adf1ddbc8a2022968d0774d138173319e89e1834f2b65be961c",
+  "scopes": [
+    {
+      "scope": "verify",
+      "defaultMaxAttempts": 2,
+      "override": {
+        "maxAttempts": 2,
+        "setAt": "2026-08-09T17:05:47Z"
+      },
+      "used": 2,
+      "active": null,
+      "completed": [
+        {
+          "attemptId": "237e06f7-22b9-4de3-a556-6088b7eb2590",
+          "sequence": 1,
+          "candidateFingerprint": "workspace:sha256:0987cc063027c92d018046ecf6fa96955b0f6718f9d7ed8f22eb7ef39a51eaba",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T17:05:54Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "fail",
+              "reportPath": "openspec/changes/issue-45-kernel-cycle-gate/.pipeline-run/review-attempt-reports/237e06f7-22b9-4de3-a556-6088b7eb2590.standards.report",
+              "reportDigest": "sha256:341cf68413c67aa456f1ac5e7e08cf2391a621eaae440bf07e99f36324364bf6",
+              "recordedAt": "2026-08-09T17:09:57Z"
+            },
+            {
+              "lane": "spec",
+              "result": "fail",
+              "reportPath": "openspec/changes/issue-45-kernel-cycle-gate/.pipeline-run/review-attempt-reports/237e06f7-22b9-4de3-a556-6088b7eb2590.spec.report",
+              "reportDigest": "sha256:341cf68413c67aa456f1ac5e7e08cf2391a621eaae440bf07e99f36324364bf6",
+              "recordedAt": "2026-08-09T17:09:57Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-45-kernel-cycle-gate/.pipeline-run/review-attempt-reports/237e06f7-22b9-4de3-a556-6088b7eb2590.e2e.report",
+              "reportDigest": "sha256:341cf68413c67aa456f1ac5e7e08cf2391a621eaae440bf07e99f36324364bf6",
+              "recordedAt": "2026-08-09T17:09:58Z"
+            }
+          ],
+          "completedAt": "2026-08-09T17:10:03Z",
+          "result": "fail",
+          "reportPath": "openspec/changes/issue-45-kernel-cycle-gate/.pipeline-run/review-attempt-reports/237e06f7-22b9-4de3-a556-6088b7eb2590.aggregate.report",
+          "reportDigest": "sha256:33fcd972b91bbfe275a092d6cf135a7193c2c66887ee11dc45dcaff25206e64f"
+        },
+        {
+          "attemptId": "8827248c-3e17-4d6d-8491-e92750f4d533",
+          "sequence": 2,
+          "candidateFingerprint": "workspace:sha256:afb2bb7343ea8ea61814b78ff5c3128f631435bb2bd8b553b789aea9585ce30a",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T17:15:18Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-45-kernel-cycle-gate/.pipeline-run/review-attempt-reports/8827248c-3e17-4d6d-8491-e92750f4d533.standards.report",
+              "reportDigest": "sha256:80bf2d53b5ddae8826573928c30e69452fd4960bf31b39c616083fc2e0508d5f",
+              "recordedAt": "2026-08-09T17:39:39Z"
+            },
+            {
+              "lane": "spec",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-45-kernel-cycle-gate/.pipeline-run/review-attempt-reports/8827248c-3e17-4d6d-8491-e92750f4d533.spec.report",
+              "reportDigest": "sha256:80bf2d53b5ddae8826573928c30e69452fd4960bf31b39c616083fc2e0508d5f",
+              "recordedAt": "2026-08-09T17:39:39Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-45-kernel-cycle-gate/.pipeline-run/review-attempt-reports/8827248c-3e17-4d6d-8491-e92750f4d533.e2e.report",
+              "reportDigest": "sha256:80bf2d53b5ddae8826573928c30e69452fd4960bf31b39c616083fc2e0508d5f",
+              "recordedAt": "2026-08-09T17:39:40Z"
+            }
+          ],
+          "completedAt": "2026-08-09T17:39:40Z",
+          "result": "pass",
+          "reportPath": "openspec/changes/issue-45-kernel-cycle-gate/.pipeline-run/review-attempt-reports/8827248c-3e17-4d6d-8491-e92750f4d533.aggregate.report",
+          "reportDigest": "sha256:09f81468bdea28c3a0b2acd35e3df377bbbdf1cd90e7745b004e8423dfb0a671"
+        }
+      ]
+    }
+  ]
+}

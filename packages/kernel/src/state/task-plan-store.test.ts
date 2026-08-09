@@ -9,10 +9,10 @@ import {
   TASK_PLAN_STATE_DIR,
   TaskPlanRevisionConflictError,
   TaskPlanStateCorruptError,
-  publishTaskPlanRevision,
   readTaskPlanForChange,
   taskPlanTasksThroughPhaseForChange,
 } from './task-plan-store.js'
+import { publishTaskPlanRevision } from '../task-plan/publication.js'
 import { withTaskPlanPublicationFaultForTest } from './task-plan-publication-test-harness.js'
 
 function plan(overrides: Partial<TaskPlanRevisionV1> = {}): TaskPlanRevisionV1 {

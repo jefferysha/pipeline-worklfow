@@ -4505,6 +4505,38 @@ import { isAbsolute as isAbsolute3, join as join13, relative as relative3, resol
 // packages/kernel/dist/state/document-ledger.js
 import { join as join11 } from "node:path";
 
+// packages/kernel/dist/workflow/document-contract-model.js
+var DOCUMENT_CONTRACT_PHASES = [
+  "open",
+  "explore",
+  "spec",
+  "build",
+  "verify",
+  "ship",
+  "archive"
+];
+var DOCUMENT_KINDS = [
+  "proposal",
+  "openspec-design",
+  "tasks",
+  "superpower-design",
+  "adr",
+  "delta-spec",
+  "superpower-plan",
+  "plan",
+  "verification-report",
+  "applied-spec"
+];
+function includes(values, value) {
+  return values.includes(value);
+}
+function isDocumentContractPhase(value) {
+  return includes(DOCUMENT_CONTRACT_PHASES, value);
+}
+function isDocumentKind(value) {
+  return includes(DOCUMENT_KINDS, value);
+}
+
 // packages/kernel/dist/workflow/document-contract-validation.js
 var CANONICAL_TRANSITIONS = {
   open: ["explore"],
@@ -4703,27 +4735,6 @@ function validateOpenSpecContractWorkflow(workflow) {
 }
 
 // packages/kernel/dist/workflow/document-contract.js
-var DOCUMENT_CONTRACT_PHASES = [
-  "open",
-  "explore",
-  "spec",
-  "build",
-  "verify",
-  "ship",
-  "archive"
-];
-var DOCUMENT_KINDS = [
-  "proposal",
-  "openspec-design",
-  "tasks",
-  "superpower-design",
-  "adr",
-  "delta-spec",
-  "superpower-plan",
-  "plan",
-  "verification-report",
-  "applied-spec"
-];
 var OUTPUTS_BY_PHASE = {
   open: [
     { kind: "proposal", producerCandidates: ["openspec-propose", "opsx:propose"] },
@@ -4841,15 +4852,6 @@ var LEGACY_DOCUMENT_GOVERNANCE_POLICY = {
   mutableByStep: MUTABLE_RECORDS_BY_PHASE,
   readsByStep: READS_BY_PHASE
 };
-function includes(values, value) {
-  return values.includes(value);
-}
-function isDocumentContractPhase(value) {
-  return includes(DOCUMENT_CONTRACT_PHASES, value);
-}
-function isDocumentKind(value) {
-  return includes(DOCUMENT_KINDS, value);
-}
 function documentGovernancePolicy(workflowName, workflow) {
   if (workflowName === "default" || workflow?.openspecContract === "required") {
     return LEGACY_DOCUMENT_GOVERNANCE_POLICY;
@@ -4979,11 +4981,19 @@ function shouldEnforceDocumentPolicyOnTransition(policy2, from, to) {
   return !(fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex);
 }
 
-// packages/kernel/dist/state/document-producer-invocation.js
+// packages/kernel/dist/state/document-step-visit.js
+async function currentDocumentStepVisitId(changeDir) {
+  const metadata = (await readCurrentRunRevision(changeDir))?.state.runMetadata;
+  if (metadata === void 0)
+    throw new DocumentLedgerError("\u7F3A\u5C11 canonical WorkflowRun visit identity\uFF1B\u65E7 Change \u5FC5\u987B\u5148\u901A\u8FC7\u53D7\u63A7 state mutation \u5EFA\u7ACB run identity\uFF0C\u518D\u91CD\u65B0\u8BFB\u53D6 document");
+  return JSON.stringify([metadata.runId, metadata.transitionSequence]);
+}
+
+// packages/kernel/dist/state/document-producer-invocation-model.js
 function object(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : void 0;
 }
-function parseDocumentProducerInvocation(value, recordIndex) {
+function parseDocumentProducerInvocation(value, recordIndex, error2) {
   if (value === void 0)
     return void 0;
   const item2 = object(value);
@@ -4993,19 +5003,13 @@ function parseDocumentProducerInvocation(value, recordIndex) {
   const runId = stepVisit?.runId;
   const transitionSequence = stepVisit?.transitionSequence;
   if (item2 === void 0 || Object.keys(item2).length !== 3 || stepVisit === void 0 || Object.keys(stepVisit).length !== 2 || typeof confirmationInvocationId2 !== "string" || !/^invocation-[a-f0-9]{64}$/u.test(confirmationInvocationId2) || typeof evidenceScope !== "string" || !/^[A-Za-z0-9_-]+$/u.test(evidenceScope) || typeof runId !== "string" || runId === "" || !Number.isSafeInteger(transitionSequence) || transitionSequence < 0) {
-    throw new DocumentLedgerError(`document ledger records[${recordIndex}].producerInvocation \u975E\u6CD5`);
+    throw error2(`document ledger records[${recordIndex}].producerInvocation \u975E\u6CD5`);
   }
   return {
     confirmationInvocationId: confirmationInvocationId2,
     evidenceScope,
     stepVisit: { runId, transitionSequence }
   };
-}
-async function currentDocumentStepVisitId(changeDir) {
-  const metadata = (await readCurrentRunRevision(changeDir))?.state.runMetadata;
-  if (metadata === void 0)
-    throw new DocumentLedgerError("\u7F3A\u5C11 canonical WorkflowRun visit identity\uFF1B\u65E7 Change \u5FC5\u987B\u5148\u901A\u8FC7\u53D7\u63A7 state mutation \u5EFA\u7ACB run identity\uFF0C\u518D\u91CD\u65B0\u8BFB\u53D6 document");
-  return JSON.stringify([metadata.runId, metadata.transitionSequence]);
 }
 
 // packages/kernel/dist/state/document-ledger.js
@@ -5068,7 +5072,7 @@ function parseRecord2(value, index) {
   }
   if (!recordedAt)
     throw new DocumentLedgerError(`document ledger records[${index}].recordedAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32`);
-  const producerInvocation = parseDocumentProducerInvocation(item2.producerInvocation, index);
+  const producerInvocation = parseDocumentProducerInvocation(item2.producerInvocation, index, (message) => new DocumentLedgerError(message));
   if (!Array.isArray(item2.reads))
     throw new DocumentLedgerError(`document ledger records[${index}].reads \u5FC5\u987B\u662F\u6570\u7EC4`);
   const reads = item2.reads.map((receipt, receiptIndex) => parseReceipt(receipt, index, receiptIndex));

@@ -18,7 +18,8 @@ import { recordHostSkillInvocationInteraction } from './interaction-command.js'
 import { recordNativeDocumentSkillConfirmation } from './document-confirmation.js'
 import { emptyFields } from '../state/parse.js'
 import { publishInitialRunRevision } from '../state/run-revision-store.js'
-import { publishTaskPlanRevision } from '../state/task-plan-store.js'
+import { TaskPlanRevisionConflictError } from '../state/task-plan-store.js'
+import { publishTaskPlanRevision } from '../task-plan/publication.js'
 import type { TaskPlanRevisionV1 } from '../task-plan/index.js'
 
 const roots: string[] = []
@@ -115,6 +116,32 @@ describe('SkillInvocationEvidence repository', () => {
         skill: { id: 'task-planner', version: 'task-plan/v1' },
       })],
     })
+  })
+
+  it('records a failed native Task Planner invocation when state CAS rejects after begin', async () => {
+    const { changeDir } = await fixture()
+    const revision: TaskPlanRevisionV1 = {
+      schema_version: 'task-plan/v1', plan_id: 'plan-1', revision_id: 'revision-2', revision_number: 2,
+      status: 'frozen', created_at: '2026-08-03T00:00:01.000Z',
+      requirements: [{ id: 'req-1', title: 'Evidence' }],
+      acceptance_criteria: [{ id: 'acc-1', title: 'Bound' }],
+      groups: [{ id: 'group-1', title: 'Build', parent_id: null, work_item_ids: ['work-item-1'] }],
+      work_items: [{
+        id: 'work-item-1', title: 'Implement evidence', group_id: 'group-1',
+        requirement_refs: ['req-1'], acceptance_refs: ['acc-1'], depends_on: [], resource_claims: [],
+        expected_outputs: [], validators: [],
+      }],
+    }
+    await expect(publishTaskPlanRevision(changeDir, revision, {
+      expected_current_revision_id: 'wrong-current-revision',
+    })).rejects.toBeInstanceOf(TaskPlanRevisionConflictError)
+
+    const evidence = await readPersistedSkillInvocationEvidence(changeDir)
+    const taskPlannerItems = evidence.items.filter((item) => item.skill.version === 'task-plan/v1')
+    expect(taskPlannerItems).toHaveLength(2)
+    expect(taskPlannerItems[0]).toMatchObject({ status: 'failed' })
+    expect(taskPlannerItems[0]).not.toMatchObject({ status: 'completed' })
+    expect(taskPlannerItems[1]).toMatchObject({ status: 'completed' })
   })
 
   it('serializes exact replays and exposes incomplete honestly', async () => {
