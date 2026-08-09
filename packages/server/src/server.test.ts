@@ -806,7 +806,7 @@ describe('GET /api/snapshot —— 聚合注册 Project 的真 .pipeline.yaml', 
 
 describe('GET /api/change/:name/run-detail —— canonical Run + ledger 审计真相源', () => {
   it('返回 revision/TransitionRecord 因果链，并关联 provider usage + structured verification terminal', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const advanced = await reqPost(h.port, `/api/change/${h.name}/transition`, {
       root: h.root,
       event: 'open-complete',
