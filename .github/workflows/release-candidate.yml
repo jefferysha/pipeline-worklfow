@@ -152,7 +152,8 @@ jobs:
 
       - name: Real clean Codex install from candidate checkout
         run: |
-          npm install --global @openai/codex@0.144.1
+          trusted_bin="$(bash tools/prepare-trusted-codex-acceptance.sh "$RUNNER_TEMP/tenon-codex-acceptance")"
+          export PATH="$trusted_bin:$PATH"
           npm run test:clean-install
 
       - name: Re-prove main identity immediately before approval
