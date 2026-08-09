@@ -62,6 +62,23 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
     expect(deps.errLines).toContain('[TRANSITION] demo: open -> explore')
   })
 
+  test('无 interaction projection port 时，unbound approved receipt 仍拒绝 canonical transition', async () => {
+    const deps = makeDeps({ state: approvedReviewState({ phase: 'explore', design_doc: 'docs/d.md' }) })
+    deps.interaction = undefined
+    Reflect.deleteProperty(deps, 'reviewGateBinding')
+    deps.guardCtx = (name) => ({
+      changeDirRel: `openspec/changes/${name}`,
+      fileExists: () => true,
+      fileNonempty: () => true,
+      readFile: () => undefined,
+      dirExists: () => false,
+      changeArchived: () => false,
+      automationRunner: false,
+    })
+    expect(await cmdTransition(deps, 'demo', 'explore-complete')).toBe(2)
+    expect(deps.store.write.calls).toHaveLength(0)
+  })
+
   test('事件映射目标相位并透传注入时钟给 flow.transition', async () => {
     // PM 保持原流程的 legacy plan artifact 豁免；本测只关注边映射。
     const deps = makeDeps({ state: approvedReviewState({ phase: 'spec', track: 'pm', plan: 'null' }) })

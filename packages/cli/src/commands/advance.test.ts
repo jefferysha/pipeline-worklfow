@@ -107,6 +107,9 @@ function makeAdv(opts: {
   const deps = {
     store,
     runRepo: mockWorkflowRunRepository(store, () => FIXED_CLOCK),
+    // These fast tests use an isolated approved-receipt fixture; opt into the trusted
+    // verifier explicitly instead of weakening production's fail-closed default.
+    reviewGateBinding: async () => true,
     flow,
     resolver: testEffectiveSkillResolver,
     // cmdCheck 的 default 路径从 effective registry 取 coverageProfile；测试显式注入内建 registry，
@@ -452,6 +455,9 @@ describe('advance —— 非 default workflow（自定义 step 图，快速回�
     const deps = {
       store,
       runRepo: mockWorkflowRunRepository(store, () => FIXED_CLOCK),
+      // The fixture below models an already-approved receipt; keep that trust explicit
+      // while production wiring remains fail-closed when no verifier is provided.
+      reviewGateBinding: async () => true,
       flow: mockFlow(),
       cwd: root,
       io: { out: (l: string) => out.push(l), err: (l: string) => err.push(l) },

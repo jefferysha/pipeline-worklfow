@@ -124,6 +124,9 @@ const WORKFLOW_IDENTITY_COMPAT = new Map([
   ['packages/kernel/src/workflow/validate.ts', [
     { code: "options.origin === 'default'", reason: 'explicit compiler-origin validation mode' },
   ]],
+  ['packages/kernel/src/workflow/identifier.ts', [
+    { code: "return value === 'default'", reason: 'central reserved built-in workflow identity helper' },
+  ]],
   ['packages/server/src/serverPostChangesRoutes.ts', [
     { code: "if (workflowId !== 'default')", reason: 'change creation compatibility adapter resolves graph start step' },
   ]],
@@ -203,6 +206,17 @@ function unapprovedIdentityComparisons(lines, allowedSites) {
   return unapproved
 }
 
+function hasInteractionReverseDependency(code) {
+  return /from\s+['"](?:@tenon\/(?:cli|server|channel)|(?:\.\.\/)+(?:cli|server|channel)(?:\/|['"]))/u.test(code)
+}
+
+if (!hasInteractionReverseDependency("import { cmd } from '@tenon/cli';")) {
+  throw new Error('architecture checker self-test failed to detect interaction reverse dependency')
+}
+if (hasInteractionReverseDependency("import { codec } from '../workflow/codec.js';")) {
+  throw new Error('architecture checker self-test falsely rejected kernel workflow dependency')
+}
+
 const allowanceSelfTest = unapprovedIdentityComparisons(
   ["if (id === 'default') return true", "if (id === 'default') return true"],
   [{ code: "id === 'default'", reason: 'one reviewed occurrence' }],
@@ -218,6 +232,7 @@ const DOMAIN_DIRS = [
   'packages/kernel/src/tracks/',
   'packages/kernel/src/triage/',
   'packages/kernel/src/verification/',
+  'packages/kernel/src/interaction/',
 ]
 
 const DOMAIN_INFRASTRUCTURE = new Set([
@@ -347,6 +362,10 @@ for (const path of production) {
     && !DOMAIN_INFRASTRUCTURE.has(rel)
     && /from ['"]node:/.test(code)) {
     failures.push(`${rel}: configured domain module imports Node infrastructure API (.agent-rules/BACKEND.md)`)
+  }
+
+  if (rel.startsWith('packages/kernel/src/interaction/') && hasInteractionReverseDependency(code)) {
+    failures.push(`${rel}: interaction domain must not import CLI/server/channel adapters (.agent-rules/BACKEND.md)`)
   }
 
   if (/\b(?:as\s+any|:\s*any\b|<any>)/.test(code)) {

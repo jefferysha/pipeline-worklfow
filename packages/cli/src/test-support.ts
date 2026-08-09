@@ -382,7 +382,9 @@ export function mockDoctorProbes(overrides: Partial<DoctorProbes> = {}): DoctorP
   return {
     nodeVersion: () => 'v22.5.0',
     gitAvailable: async () => true,
-    pluginRoot: '/plugin',
+    // Keep the default probe rooted at the checked-out fixture so strict canonical provenance
+    // loading exercises the real v3 registry instead of a generic cwd fallback.
+    pluginRoot: process.cwd(),
     manifestError: () => null,
     fileExists: () => true,
     fileExecutable: () => true,
@@ -507,6 +509,10 @@ export function makeDeps(o: MakeDepsOpts = {}): TestDeps {
   const emptyConfig: ProjectTrackConfig = { version: 1 }
   const deps: TestDeps = {
     store,
+    // Mock states intentionally do not materialize the real binding sidecar. Keep this explicit
+    // trusted verifier for legacy unit fixtures; tests that exercise production fail-closed
+    // behavior remove the property and use cmdTransition's real reader.
+    reviewGateBinding: async () => true,
     runRepo: mockWorkflowRunRepository(store),
     // R3：无记忆化（每次 fresh load）。单测 cwd 无 tracks.yaml → 内建 Track，恒新鲜。
     loadRegistry: () => loadTrackRegistry(o.cwd ?? '/repo', trackCtx),

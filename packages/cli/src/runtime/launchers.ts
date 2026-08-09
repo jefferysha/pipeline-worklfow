@@ -2,13 +2,13 @@ import { chmod, link, lstat, mkdir, readFile, rename, rm, writeFile } from 'node
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { serializeProductRootContract } from '@tenon/kernel'
+import { nodeIdentityGuard } from './stable-launcher-node-guard.js'
 import type {
   RuntimeLauncherFileSnapshot,
   RuntimeLauncherSnapshot,
   RuntimePaths,
   TrustedExecutableProof,
 } from './types.js'
-import { nodeIdentityGuard } from './stable-launcher-node-guard.js'
 export interface StableLauncherPaths {
   readonly tenon: string
   readonly hook: string
@@ -43,6 +43,7 @@ export TENON_RUNTIME_ROOTS=${shellQuote(rootContract)}
 export TENON_RUNTIME_DATA_ROOT=${shellQuote(paths.dataRoot)}
 export TENON_RUNTIME_STATE_ROOT=${shellQuote(paths.stateRoot)}
 export TENON_RUNTIME_CONFIG_ROOT=${shellQuote(paths.configRoot)}
+export TENON_NODE_PATH=${shellQuote(nodeExecutable)}
 [ -f ${shellQuote(bootstrap)} ] || { ${missing}; }
 ${nodeIdentityGuard(nodeProof)}
 exec ${shellQuote(nodeExecutable)} ${shellQuote(bootstrap)} ${mode} "$@"
@@ -156,7 +157,6 @@ function sameLauncherFile(
 ): boolean {
   return left.path === right.path && sameLauncherState(left.state, right.state, compareMode)
 }
-
 /**
  * Prove a crash-interrupted launcher publication belongs solely to this installer transaction.
  * Each file must still be either its exact checkpoint state or the committed content. Committed

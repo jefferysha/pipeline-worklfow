@@ -37,10 +37,10 @@ import { cmdTask } from './commands/task.js'
 import { cmdUninstall } from './commands/uninstall.js'
 import { cmdList, cmdStatus } from './commands/status.js'
 import { cmdTransition } from './commands/transition.js'
-import { cmdReview } from './commands/review.js'
 import { cmdInternalSkillGate } from './commands/internalSkillGate.js'
 import { cmdInternalConstraintGate } from './commands/internalConstraintGate.js'
 import { cmdInternalCodexJsonl } from './commands/internalCodexJsonl.js'
+import { cmdInternalSkillProvenance } from './commands/internal-skill-provenance.js'
 import { cmdMigrateWorkflow } from './commands/migrateWorkflow.js'
 import { cmdStateProjection } from './commands/state-projection.js'
 import { cmdTriage, type TriageCommandRuntime } from './commands/triage.js'
@@ -49,7 +49,7 @@ import { registerInstallCommands } from './program-install.js'
 import { registerTrackCommands } from './program-tracks.js'
 import { registerHandoffCommand, registerWorkflowCommands } from './program-workflows.js'
 import { registerSkillInvocationInternalCommands } from './program-skill-invocations.js'
-import { registerAutomatedReviewCommands } from './program-review.js'
+import { registerReviewCommands } from './program-review.js'
 import { LOOPS_HELP } from './program-help.js'
 export { CliExit } from './program-exit.js'
 
@@ -167,15 +167,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .description('状态机转换（stdout 无输出，[TRANSITION] 走 stderr；非法/未知事件 exit 1）')
     .action(async (name: string, event: string) => bail(await cmdTransition(deps, name, event)))
 
-  program
-    .command('review <sub> [name]')
-    .description('review 出口确认：request <change> --event <event>（请求 review）/ acknowledge <change> [--delegated]（写精确 receipt）')
-    .option('--event <event>', 'request 时绑定的确切 transition event；多出口 review step 必填')
-    .option('--delegated', '仅用户已明确委托当前 Change 连续执行时，按该委托写审计化 review receipt')
-    .action(async (sub: string, name: string | undefined, opts: { event?: string; delegated?: boolean }) =>
-      bail(await cmdReview(deps, sub, name, opts)))
-
-  registerAutomatedReviewCommands(program, deps)
+  registerReviewCommands(program, deps)
 
   program
     .command('check <name>')
@@ -358,6 +350,15 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .description('[内部] 解析 host-owned codex exec --json 事件（usage|transitions）')
     .action(async (mode: string, jsonlPath: string) =>
       bail(await cmdInternalCodexJsonl(deps, mode, jsonlPath)))
+
+  program
+    .command('internal-skill-provenance <mode>', { hidden: true })
+    .description('[内部] canonical Skill provenance verify|sync（供 bundled verifier 使用）')
+    .option('--root <path>', '插件/release root')
+    .option('--json', '输出结构化 findings')
+    .option('--quiet', '成功时不输出')
+    .action(async (mode: string, opts: { root?: string; json?: boolean; quiet?: boolean }) =>
+      bail(await cmdInternalSkillProvenance(deps, mode, opts)))
 
   registerSkillInvocationInternalCommands(program, deps)
 

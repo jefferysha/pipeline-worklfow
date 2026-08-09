@@ -4,6 +4,18 @@
  */
 export { atomicWriteFile, createStateStore, StateProjectionDriftError, STATE_FILE_NAME } from './store.js'
 export {
+  appendInteractionEventUnderLock,
+  createInteractionEventRecorder,
+  createInteractionEventStore,
+  interactionProjectionPath,
+  readInteractionProjection,
+  InteractionProjectionError,
+  INTERACTION_MAX_BYTES,
+  INTERACTION_MAX_EVENTS,
+  INTERACTION_MAX_LINE_BYTES,
+} from './interaction-event-store.js'
+export type { InteractionEventStore, InteractionProjectionReadResult } from './interaction-event-store.js'
+export {
   createReviewAttemptBudgetStore,
   ReviewAttemptBudgetError,
 } from './review-attempt-budget.js'
@@ -49,7 +61,7 @@ export type {
 } from './document-ledger.js'
 export { currentDocumentStepVisitId } from './document-step-visit.js'
 export { evaluateDocumentEvidence } from './document-evidence.js'
-export { decodeUtf8Text } from './document-path.js'
+export { decodeUtf8Text, readBoundedRegularFile, readBoundedFileHandle } from './document-path.js'
 export type {
   DocumentEvidenceItem, DocumentEvidenceItemStatus, DocumentEvidenceReport, DocumentEvidenceScope,
 } from './document-evidence.js'
@@ -80,6 +92,15 @@ export {
   reviewGatePendingFor, reviewGateRequestPatch, reviewGateStatus, REVIEW_GATE_APPROVED, REVIEW_GATE_PENDING,
 } from './review-gate.js'
 export type { ReviewGateStatus } from './review-gate.js'
+export {
+  REVIEW_GATE_BINDING_FILE,
+  readReviewGateBinding,
+  reviewGateBindingForState,
+  reviewGateBindingMatches,
+  reviewGateDecisionStateDigest,
+  writeReviewGateBindingUnderLock,
+} from './review-gate-binding.js'
+export type { ReviewGateBinding } from './review-gate-binding.js'
 export { applyBreadcrumbTail } from './transitionTail.js'
 export type { BreadcrumbTailArgs, TailWriteOutcome } from './transitionTail.js'
 // WorkflowRun 持久化提交接缝（W1 第二增量，2026-07-16 codex 范围评估）

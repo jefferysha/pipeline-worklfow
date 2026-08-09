@@ -6,7 +6,10 @@
  */
 import {
   parseSkillSources,
+  parseSkillProvenanceRegistry,
   SkillSourcesError,
+  SkillProvenanceRegistryError,
+  type SkillProvenanceRegistry,
   type SkillSourceDefinition,
   type SkillTier,
   type SkillTool,
@@ -16,8 +19,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export { parseSkillSources, SkillSourcesError }
+export { parseSkillProvenanceRegistry, SkillProvenanceRegistryError }
 export type { SkillTier, SkillTool }
 export type SkillSource = SkillSourceDefinition
+
+export type CanonicalSkillProvenanceResult =
+  | { ok: true; registry: SkillProvenanceRegistry; sources: SkillSource[] }
+  | { ok: false; error: string; category?: string }
 
 function defaultRegistryPath(): string {
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'templates', 'skill-sources.yaml')
@@ -48,5 +56,41 @@ export function loadSkillSources(path?: string): SkillSourcesResult {
     return { ok: true, sources: parseSkillSources(text) }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/** Strict loader used by canonical install/verify/doctor/bundle paths. */
+export function loadCanonicalSkillSources(path?: string): SkillSourcesResult {
+  let text: string
+  try {
+    text = readFileSync(path ?? defaultRegistryPath(), 'utf8')
+  } catch (e) {
+    return { ok: false, error: `读取 canonical registry 失败: ${e instanceof Error ? e.message : String(e)}` }
+  }
+  try {
+    const registry = parseSkillProvenanceRegistry(text)
+    return { ok: true, sources: [...registry.skills] }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/** Strict loader retaining schema metadata for bundle/provenance-aware consumers. */
+export function loadCanonicalSkillProvenance(path?: string): CanonicalSkillProvenanceResult {
+  let text: string
+  try {
+    text = readFileSync(path ?? defaultRegistryPath(), 'utf8')
+  } catch (e) {
+    return { ok: false, error: `读取 canonical registry 失败: ${e instanceof Error ? e.message : String(e)}` }
+  }
+  try {
+    const registry = parseSkillProvenanceRegistry(text)
+    return { ok: true, registry, sources: [...registry.skills] }
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+      category: e instanceof SkillProvenanceRegistryError ? e.category : undefined,
+    }
   }
 }

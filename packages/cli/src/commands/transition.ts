@@ -52,6 +52,7 @@
 import {
   compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
   loadRegistry, loadWorkflow, nodeLoopIoStrict, requireTrack, resolveRequiredSkillSlots,
+  readReviewGateBinding, reviewGateBindingMatches,
   TASK_PLAN_CURRENT_FILE, TASK_PLAN_LIMITS, TASK_PLAN_STATE_DIR,
   taskPlanTasksThroughPhaseForChange,
 } from '@tenon/kernel'
@@ -118,6 +119,13 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
   // transition 写入，而由 phase 完成后的 `tenon review request` 专职写入。
   const app = createTransitionApplication({
     runRepository: deps.runRepo,
+    interaction: deps.interaction,
+    // Canonical review authorization is always bound to the sidecar digest. The interaction
+    // projection remains optional and must never decide whether a transition is allowed.
+    reviewGateBinding: deps.reviewGateBinding ?? (async ({ changeDir, state, phase, event }) => {
+      const binding = await readReviewGateBinding(changeDir)
+      return reviewGateBindingMatches(binding, state, phase, event)
+    }),
     flow: deps.flow,
     clock: deps.clock,
     history: deps.history,
@@ -185,6 +193,9 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
                   break
                 case 'history':
                   deps.io.err(`WARN: history 写入失败: ${errMsg(w.cause)}`)
+                  break
+                case 'interaction':
+                  deps.io.err(`WARN: ${w.code} interaction projection 写入失败（canonical 已提交）: ${errMsg(w.cause)}`)
                   break
               }
               break

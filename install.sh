@@ -962,7 +962,8 @@ if [ "$MARKETPLACE_ROOT" != "$ROOT" ]; then
     }
   done
 fi
-run_bash "$ROOT/tools/verify-skills.sh" --quiet --root "$ROOT"
+verify_tool NODE || { echo "install.sh: trusted node executable identity changed before verify-skills; refusing spawn." >&2; exit 126; }
+run_bash "$ROOT/tools/verify-skills.sh" --quiet --root "$ROOT" --node "$NODE_BIN"
 
 if [ "$INSTALL_PHASE" = marketplace-registered ]; then
   advance_installer_phase marketplace-registered plugin-installed

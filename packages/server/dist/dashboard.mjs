@@ -640,9 +640,9 @@ var IllegalTransitionError = class extends Error {
 var QuoteGateError = class extends Error {
   field;
   reason;
-  constructor(field, reason) {
-    super(`quote gate rejected write to ${field}: ${reason}`);
-    this.field = field;
+  constructor(field2, reason) {
+    super(`quote gate rejected write to ${field2}: ${reason}`);
+    this.field = field2;
     this.reason = reason;
   }
 };
@@ -2241,9 +2241,9 @@ function io(value, path7) {
     throw new DecodeFailure("limit-exceeded", `${path7}.fields`);
   }
   const names = /* @__PURE__ */ new Set();
-  const fields = item2.fields.map((field, index) => {
+  const fields = item2.fields.map((field2, index) => {
     const fieldPath = `${path7}.fields[${index}]`;
-    const entry = record2(field, fieldPath);
+    const entry = record2(field2, fieldPath);
     closed2(entry, ["name", "classification", "digest", "validator"], fieldPath);
     const name = id(entry.name, `${fieldPath}.name`);
     if (names.has(name))
@@ -2454,10 +2454,10 @@ function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 function publicFields(fields) {
-  return fields.map((field) => ({
-    name: field.name,
-    classification: field.classification,
-    validator: { ...field.validator }
+  return fields.map((field2) => ({
+    name: field2.name,
+    classification: field2.classification,
+    validator: { ...field2.validator }
   }));
 }
 function assertSubject(first, event) {
@@ -2566,7 +2566,7 @@ function projectSkillInvocationEvents(events2) {
       if (intents.size >= SKILL_INVOCATION_LIMITS.maxArtifacts) {
         throw new SkillInvocationEvidenceConflictError("invocation artifact budget exceeded");
       }
-      if (!terminal.payload.output.fields.some((field) => field.name === event.payload.output_id)) {
+      if (!terminal.payload.output.fields.some((field2) => field2.name === event.payload.output_id)) {
         throw new SkillInvocationEvidenceConflictError("artifact intent must reference a declared output");
       }
       if ([...intents.values()].some((intent) => intent.output_id === event.payload.output_id)) {
@@ -3009,17 +3009,17 @@ function fieldValueEqual(a, b) {
 function diffFieldsToEffects(before, after) {
   const effects = [];
   const fields = /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)]);
-  for (const field of fields) {
-    const from = before[field] ?? "";
-    const to = after[field] ?? "";
+  for (const field2 of fields) {
+    const from = before[field2] ?? "";
+    const to = after[field2] ?? "";
     if (!fieldValueEqual(from, to)) {
-      effects.push({ kind: "state-field-change", field, from, to });
+      effects.push({ kind: "state-field-change", field: field2, from, to });
     }
   }
   return effects;
 }
 function diffWireFieldsToEffects(before, after) {
-  return diffFieldsToEffects(before, after).filter(({ field }) => field !== PRE_VERIFY_REVIEW_FIELD);
+  return diffFieldsToEffects(before, after).filter(({ field: field2 }) => field2 !== PRE_VERIFY_REVIEW_FIELD);
 }
 
 // packages/kernel/dist/state/run-revision-codec.js
@@ -3147,9 +3147,9 @@ function attachWorkflowGovernanceBinding(metadata, binding) {
     ["documentGovernanceFingerprint", metadata.documentGovernanceFingerprint, binding.document_governance_fingerprint],
     ["workflowPlanFingerprint", metadata.workflowPlanFingerprint, binding.workflow_plan_fingerprint]
   ];
-  for (const [field, canonical, sidecar] of asserted) {
+  for (const [field2, canonical, sidecar] of asserted) {
     if (canonical !== void 0 && sidecar !== void 0 && canonical !== sidecar) {
-      throw new Error(`workflow governance binding \u4E0E legacy canonical ${field} \u4E0D\u4E00\u81F4`);
+      throw new Error(`workflow governance binding \u4E0E legacy canonical ${field2} \u4E0D\u4E00\u81F4`);
     }
   }
   return {
@@ -3240,8 +3240,8 @@ ${logical.opaqueTail}`
 function rollbackCompatibleState(revision) {
   return withoutPreVerifyReviewField(revision.state, revision.revision, revision.revisionId);
 }
-function stringField(fields, field) {
-  const value = fields[field];
+function stringField(fields, field2) {
+  const value = fields[field2];
   return Array.isArray(value) ? value.join(",") : value;
 }
 function hookStateFor(state) {
@@ -3304,36 +3304,36 @@ function canonicalState(value, opts = {}) {
   }
   const rawFields = ownRecord(raw.fields);
   const rawKeys = rawFields ? Object.keys(rawFields) : [];
-  const missing4 = rawFields ? FIELD_ORDER.filter((field) => !Object.prototype.hasOwnProperty.call(rawFields, field)) : [];
-  const missingReviewGateFields = REVIEW_GATE_FIELDS.filter((field) => missing4.includes(field));
+  const missing4 = rawFields ? FIELD_ORDER.filter((field2) => !Object.prototype.hasOwnProperty.call(rawFields, field2)) : [];
+  const missingReviewGateFields = REVIEW_GATE_FIELDS.filter((field2) => missing4.includes(field2));
   const isCompleteReviewGateOmission = missingReviewGateFields.length === REVIEW_GATE_FIELDS.length;
-  const isEmptyFourFieldReceiptWithoutEvent = missingReviewGateFields.length === 1 && missingReviewGateFields[0] === "review_gate_event" && REVIEW_GATE_FIELDS.filter((field) => field !== "review_gate_event").every((field) => rawFields?.[field] === "");
+  const isEmptyFourFieldReceiptWithoutEvent = missingReviewGateFields.length === 1 && missingReviewGateFields[0] === "review_gate_event" && REVIEW_GATE_FIELDS.filter((field2) => field2 !== "review_gate_event").every((field2) => rawFields?.[field2] === "");
   const legacyReviewGateDefaults = opts.allowLegacyFieldOmissions === true && (isCompleteReviewGateOmission || isEmptyFourFieldReceiptWithoutEvent) ? new Set(missingReviewGateFields) : /* @__PURE__ */ new Set();
   const legacyPreVerifyDefault = opts.allowLegacyFieldOmissions === true && missing4.includes(PRE_VERIFY_REVIEW_FIELD) ? /* @__PURE__ */ new Set([PRE_VERIFY_REVIEW_FIELD]) : /* @__PURE__ */ new Set();
   const allowedLegacyDefaults = /* @__PURE__ */ new Set([
     ...legacyReviewGateDefaults,
     ...legacyPreVerifyDefault
   ]);
-  if (!rawFields || rawKeys.some((key) => !FIELD_SET.has(key)) || missing4.some((field) => !allowedLegacyDefaults.has(field))) {
+  if (!rawFields || rawKeys.some((key) => !FIELD_SET.has(key)) || missing4.some((field2) => !allowedLegacyDefaults.has(field2))) {
     throw new RunStateCorruptError("canonical state.fields \u4E0D\u662F FIELD_ORDER \u95ED\u96C6");
   }
   const fields = {};
-  for (const field of FIELD_ORDER) {
-    if (legacyReviewGateDefaults.has(field)) {
-      fields[field] = REVIEW_GATE_FIELD_DEFAULTS[field];
+  for (const field2 of FIELD_ORDER) {
+    if (legacyReviewGateDefaults.has(field2)) {
+      fields[field2] = REVIEW_GATE_FIELD_DEFAULTS[field2];
       continue;
     }
-    if (legacyPreVerifyDefault.has(field)) {
-      fields[field] = PRE_VERIFY_REVIEW_DEFAULT;
+    if (legacyPreVerifyDefault.has(field2)) {
+      fields[field2] = PRE_VERIFY_REVIEW_DEFAULT;
       continue;
     }
-    const fieldValue = rawFields[field];
+    const fieldValue = rawFields[field2];
     if (typeof fieldValue === "string") {
-      fields[field] = fieldValue;
-    } else if (LIST_FIELD_SET.has(field) && Array.isArray(fieldValue) && fieldValue.every((item2) => typeof item2 === "string")) {
-      fields[field] = [...fieldValue];
+      fields[field2] = fieldValue;
+    } else if (LIST_FIELD_SET.has(field2) && Array.isArray(fieldValue) && fieldValue.every((item2) => typeof item2 === "string")) {
+      fields[field2] = [...fieldValue];
     } else {
-      throw new RunStateCorruptError(`canonical state.fields.${field} \u7C7B\u578B\u975E\u6CD5`);
+      throw new RunStateCorruptError(`canonical state.fields.${field2} \u7C7B\u578B\u975E\u6CD5`);
     }
   }
   if (typeof raw.opaqueTail !== "string")
@@ -3349,17 +3349,17 @@ function canonicalEffect(value, index) {
   if (!raw || Object.keys(raw).sort().join(",") !== "field,from,kind,to" || raw.kind !== "state-field-change" || typeof raw.field !== "string" || !FIELD_SET.has(raw.field)) {
     throw new RunStateCorruptError(`canonical mutation.effects[${index}] shape \u975E\u6CD5`);
   }
-  const field = raw.field;
+  const field2 = raw.field;
   const valueAt = (candidate, side) => {
     if (typeof candidate === "string")
       return candidate;
-    if (LIST_FIELD_SET.has(field) && Array.isArray(candidate) && candidate.every((item2) => typeof item2 === "string"))
+    if (LIST_FIELD_SET.has(field2) && Array.isArray(candidate) && candidate.every((item2) => typeof item2 === "string"))
       return [...candidate];
     throw new RunStateCorruptError(`canonical mutation.effects[${index}].${side} \u7C7B\u578B\u975E\u6CD5`);
   };
   return {
     kind: "state-field-change",
-    field,
+    field: field2,
     from: valueAt(raw.from, "from"),
     to: valueAt(raw.to, "to")
   };
@@ -7900,19 +7900,19 @@ function emptyFields() {
   }
   return fields;
 }
-function quoteGate(field, value) {
+function quoteGate(field2, value) {
   if (value.includes("\n") || value.includes("\r")) {
-    throw new QuoteGateError(field, "value contains a newline/carriage return (would inject fake fields)");
+    throw new QuoteGateError(field2, "value contains a newline/carriage return (would inject fake fields)");
   }
   if (value.includes(": ")) {
-    throw new QuoteGateError(field, 'value contains ": " (would break YAML parsing)');
+    throw new QuoteGateError(field2, 'value contains ": " (would break YAML parsing)');
   }
   if (value.includes(" #")) {
-    throw new QuoteGateError(field, 'value contains " #" (would be eaten as an inline comment)');
+    throw new QuoteGateError(field2, 'value contains " #" (would be eaten as an inline comment)');
   }
   const first = value.charAt(0);
   if (first === '"' || first === "'") {
-    throw new QuoteGateError(field, "value starts with a quote (would break YAML parsing)");
+    throw new QuoteGateError(field2, "value starts with a quote (would break YAML parsing)");
   }
 }
 function parsePipeline(content) {
@@ -7927,24 +7927,24 @@ function parsePipeline(content) {
     const key = m[1] ?? "";
     if (!KNOWN_FIELDS.has(key))
       break;
-    const field = key;
+    const field2 = key;
     const rest = (m[2] ?? "").trim();
     i++;
-    if (LIST_FIELD_SET2.has(field)) {
+    if (LIST_FIELD_SET2.has(field2)) {
       if (rest === "") {
         const items = [];
         while (i < lines.length && (lines[i] ?? "").startsWith(LIST_ITEM_PREFIX)) {
           items.push(unquoteScalar((lines[i] ?? "").slice(LIST_ITEM_PREFIX.length).trim()));
           i++;
         }
-        fields[field] = items;
+        fields[field2] = items;
       } else if (rest === "[]") {
-        fields[field] = [];
+        fields[field2] = [];
       } else {
-        fields[field] = unquoteScalar(rest);
+        fields[field2] = unquoteScalar(rest);
       }
     } else {
-      fields[field] = unquoteScalar(rest);
+      fields[field2] = unquoteScalar(rest);
     }
   }
   const { metadata, consumedLines } = parseRunMetadataLines(lines.slice(i));
@@ -7960,29 +7960,29 @@ function parsePipeline(content) {
 }
 function serializePipeline(state, options = {}) {
   const out = [];
-  const hasReviewGateReceipt = REVIEW_GATE_FIELDS.some((field) => {
-    const value = state.fields[field];
+  const hasReviewGateReceipt = REVIEW_GATE_FIELDS.some((field2) => {
+    const value = state.fields[field2];
     return Array.isArray(value) ? value.length > 0 : value !== "";
   });
-  for (const field of FIELD_ORDER) {
-    if (field === PRE_VERIFY_REVIEW_FIELD && options.omitPreVerifyReview === true)
+  for (const field2 of FIELD_ORDER) {
+    if (field2 === PRE_VERIFY_REVIEW_FIELD && options.omitPreVerifyReview === true)
       continue;
-    if (REVIEW_GATE_FIELD_SET.has(field) && !hasReviewGateReceipt)
+    if (REVIEW_GATE_FIELD_SET.has(field2) && !hasReviewGateReceipt)
       continue;
-    const value = state.fields[field] ?? "";
+    const value = state.fields[field2] ?? "";
     if (Array.isArray(value)) {
       for (const item2 of value)
-        quoteGate(field, item2);
+        quoteGate(field2, item2);
       if (value.length === 0) {
-        out.push(`${field}: []`);
+        out.push(`${field2}: []`);
       } else {
-        out.push(`${field}:`);
+        out.push(`${field2}:`);
         for (const item2 of value)
           out.push(`${LIST_ITEM_PREFIX}${item2}`);
       }
     } else {
-      quoteGate(field, value);
-      out.push(`${field}: ${value === "" ? '""' : value}`);
+      quoteGate(field2, value);
+      out.push(`${field2}: ${value === "" ? '""' : value}`);
     }
   }
   out.push(...serializeRunMetadataLines(state.runMetadata));
@@ -8161,11 +8161,11 @@ function knownField(value, path7) {
   return value;
 }
 function scalarField(value, path7) {
-  const field = knownField(value, path7);
-  if (LIST_FIELD_SET3.has(field)) {
-    compileError(path7, `'${field}' \u662F\u5217\u8868\u5B57\u6BB5\uFF08../types.ts LIST_FIELDS\uFF09\uFF0Cscalar guard \u4E0D\u5B9A\u4E49\u5217\u8868\u8BED\u4E49`);
+  const field2 = knownField(value, path7);
+  if (LIST_FIELD_SET3.has(field2)) {
+    compileError(path7, `'${field2}' \u662F\u5217\u8868\u5B57\u6BB5\uFF08../types.ts LIST_FIELDS\uFF09\uFF0Cscalar guard \u4E0D\u5B9A\u4E49\u5217\u8868\u8BED\u4E49`);
   }
-  return field;
+  return field2;
 }
 function compileWhen(value, path7) {
   if (value === void 0)
@@ -8208,9 +8208,9 @@ function compileGuard(raw, path7, outputs2) {
       if (target.kind !== "field") {
         compileError(`${path7}.path.kind`, `\u5FC5\u987B\u662F 'field'\uFF08\u5B9E\u9645 ${JSON.stringify(target.kind)}\uFF09`);
       }
-      const field = scalarField(target.field, `${path7}.path.field`);
+      const field2 = scalarField(target.field, `${path7}.path.field`);
       rejectExtraKeys(target, PATH_ALLOWED_KEYS, `${path7}.path`);
-      return [withWhen({ type: "file-exists", path: { kind: "field", field } }, when)];
+      return [withWhen({ type: "file-exists", path: { kind: "field", field: field2 } }, when)];
     }
     case "field-equals": {
       const value = record5.value;
@@ -8640,8 +8640,8 @@ function compileFieldRef(raw, path7) {
   if (type !== "string" && type !== "file_path" && type !== "boolean") {
     compileError2(`${path7}.type`, `\u5FC5\u987B\u662F ${FIELD_TYPES.join(" | ")}\uFF08\u5B9E\u9645 ${JSON.stringify(type)}\uFF09`);
   }
-  const field = nonemptyString(rec.field, `${path7}.field`);
-  return { field, type };
+  const field2 = nonemptyString(rec.field, `${path7}.field`);
+  return { field: field2, type };
 }
 function compileReviewLanes(raw, path7) {
   if (raw === void 0)
@@ -8705,16 +8705,16 @@ function compileArtifact(raw, path7, outputs2, allowedPolicies) {
     }
   }
   const producerPolicy = rec.producerPolicy ?? "effective-step-skills";
-  const field = knownField2(rec.field, `${path7}.field`);
-  const ref = outputs2.find((o) => o.field === field);
+  const field2 = knownField2(rec.field, `${path7}.field`);
+  const ref = outputs2.find((o) => o.field === field2);
   if (!ref) {
-    compileError2(`${path7}.field`, `artifact \u53EA\u80FD\u6302\u5728\u672C step outputs \u58F0\u660E\u7684\u5B57\u6BB5\u4E0A\uFF08'${field}' \u4E0D\u5728 outputs \u91CC\uFF09`);
+    compileError2(`${path7}.field`, `artifact \u53EA\u80FD\u6302\u5728\u672C step outputs \u58F0\u660E\u7684\u5B57\u6BB5\u4E0A\uFF08'${field2}' \u4E0D\u5728 outputs \u91CC\uFF09`);
   }
   if (ref.type !== "file_path") {
-    compileError2(`${path7}.field`, `artifact \u53EA\u8BB8\u6302 type:'file_path' \u7684 FieldRef\uFF08'${field}' \u58F0\u660E\u4E3A '${ref.type}'\uFF09`);
+    compileError2(`${path7}.field`, `artifact \u53EA\u8BB8\u6302 type:'file_path' \u7684 FieldRef\uFF08'${field2}' \u58F0\u660E\u4E3A '${ref.type}'\uFF09`);
   }
   const requiredWhen = compileWhen(rec.requiredWhen, `${path7}.requiredWhen`);
-  const base = { kind: "file", field, producerPolicy };
+  const base = { kind: "file", field: field2, producerPolicy };
   return requiredWhen === void 0 ? base : { ...base, requiredWhen };
 }
 function compileArtifacts(rawExplicit, path7, outputs2, outputsPath, allowedPolicies) {
@@ -8724,11 +8724,11 @@ function compileArtifacts(rawExplicit, path7, outputs2, outputsPath, allowedPoli
       return;
     if (!KNOWN_FIELDS3.has(o.field))
       return;
-    const field = o.field;
-    if (byField.has(field)) {
-      compileError2(`${outputsPath}[${j}].field`, `'${field}' \u91CD\u590D\u58F0\u660E\uFF08\u540C field \u7684 file_path output \u5DF2\u5728\u524D\u9762\u51FA\u73B0\uFF09`);
+    const field2 = o.field;
+    if (byField.has(field2)) {
+      compileError2(`${outputsPath}[${j}].field`, `'${field2}' \u91CD\u590D\u58F0\u660E\uFF08\u540C field \u7684 file_path output \u5DF2\u5728\u524D\u9762\u51FA\u73B0\uFF09`);
     }
-    byField.set(field, { kind: "file", field, producerPolicy: "effective-step-skills" });
+    byField.set(field2, { kind: "file", field: field2, producerPolicy: "effective-step-skills" });
   });
   if (rawExplicit !== void 0) {
     const seen = /* @__PURE__ */ new Set();
@@ -9056,22 +9056,22 @@ function parsePolicyBlock(cur, key, allowedKeys) {
     const match = /^\s{2}([a-z_]+):\s*(.*?)\s*$/.exec(line);
     if (!match)
       throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key} \u51FA\u73B0\u672A\u77E5\u5B57\u6BB5\u884C '${line.trim()}'`);
-    const field = match[1] ?? "";
+    const field2 = match[1] ?? "";
     const raw = match[2] ?? "";
-    if (!allowedKeys.includes(field))
-      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key} \u672A\u77E5\u5B57\u6BB5 '${field}'`);
-    if (Object.hasOwn(result, field))
-      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field} \u91CD\u590D\u58F0\u660E`);
+    if (!allowedKeys.includes(field2))
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key} \u672A\u77E5\u5B57\u6BB5 '${field2}'`);
+    if (Object.hasOwn(result, field2))
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field2} \u91CD\u590D\u58F0\u660E`);
     if (raw === "")
-      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field} \u7F3A\u503C`);
-    if (field === "auto_when" || field === "ask_when")
-      result[field] = inlineList(raw);
-    else if (field === "max_items" || field === "max_depth" || field === "max_attempts") {
+      throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field2} \u7F3A\u503C`);
+    if (field2 === "auto_when" || field2 === "ask_when")
+      result[field2] = inlineList(raw);
+    else if (field2 === "max_items" || field2 === "max_depth" || field2 === "max_attempts") {
       if (!/^-?\d+$/.test(raw))
-        throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field} \u5FC5\u987B\u662F\u6574\u6570`);
-      result[field] = Number(raw);
+        throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field2} \u5FC5\u987B\u662F\u6574\u6570`);
+      result[field2] = Number(raw);
     } else
-      result[field] = raw;
+      result[field2] = raw;
     cur.i++;
   }
   return result;
@@ -9290,8 +9290,8 @@ function parseArtifactsBlock(cur, baseIndent) {
       throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1Aartifact '${fieldMatch[1]}' \u7F3A type`);
     if (producerPolicy === void 0)
       throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1Aartifact '${fieldMatch[1]}' \u7F3A producer_policy`);
-    const field = fieldMatch[1];
-    arts.push(requiredWhen === void 0 ? { field, type, producerPolicy } : { field, type, producerPolicy, requiredWhen });
+    const field2 = fieldMatch[1];
+    arts.push(requiredWhen === void 0 ? { field: field2, type, producerPolicy } : { field: field2, type, producerPolicy, requiredWhen });
   }
   return arts;
 }
@@ -9717,6 +9717,15 @@ function parseWorkflow(content) {
   };
 }
 
+// packages/kernel/dist/workflow/identifier.js
+var WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u;
+function isValidWorkflowName(value) {
+  return WORKFLOW_NAME_RE.test(value);
+}
+function isDefaultWorkflowName(value) {
+  return value === "default";
+}
+
 // packages/kernel/dist/workflow/validate.js
 function detectCycle(skillIds, dependsOn) {
   const WHITE = 0, GRAY = 1, BLACK = 2;
@@ -9741,13 +9750,12 @@ function detectCycle(skillIds, dependsOn) {
   return errors;
 }
 var IDENT_RE = /^[a-zA-Z0-9_-]+$/;
-var WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u;
 var SKILL_IDENT_RE = /^[a-zA-Z0-9_-]+(?::[a-zA-Z0-9_-]+)*$/;
 function validateWorkflow(wf, options = {}) {
   const errors = [];
   const producedByEarlierStep = /* @__PURE__ */ new Set();
   const allStepIds = new Set(wf.steps.map((s) => s.id));
-  if (!WORKFLOW_NAME_RE.test(wf.name)) {
+  if (!isValidWorkflowName(wf.name)) {
     errors.push(`workflow name '${wf.name}' \u542B\u975E\u6CD5\u5B57\u7B26\uFF08\u5141\u8BB8\u4E2D\u6587\u3001\u5B57\u6BCD\u3001\u6570\u5B57\u3001- \u4E0E _\uFF1B\u4E0D\u5141\u8BB8\u7A7A\u683C\u3001\u70B9\u6216\u8DEF\u5F84\u7B26\u53F7\uFF09`);
   }
   wf.steps.forEach((step) => {
@@ -10943,12 +10951,12 @@ function stateFilePath(changeDir) {
   return path4.join(changeDir, STATE_FILE_NAME);
 }
 var atomicWriteFile = atomicReplaceFile;
-function gateValue(field, value) {
+function gateValue(field2, value) {
   if (Array.isArray(value)) {
     for (const item2 of value)
-      quoteGate(field, item2);
+      quoteGate(field2, item2);
   } else {
-    quoteGate(field, value);
+    quoteGate(field2, value);
   }
 }
 function stateWithoutProjection(state) {
@@ -10984,11 +10992,11 @@ function isPreciseLegacyFieldProjection(raw, parsed, current) {
       return false;
     seen.add(key);
   }
-  const omitsCompleteReviewGate = REVIEW_GATE_FIELDS.every((field) => !seen.has(field));
+  const omitsCompleteReviewGate = REVIEW_GATE_FIELDS.every((field2) => !seen.has(field2));
   const omitsPreVerifyReview = !seen.has(PRE_VERIFY_REVIEW_FIELD);
   if (!omitsCompleteReviewGate && !omitsPreVerifyReview)
     return false;
-  return FIELD_ORDER.every((field) => seen.has(field) || omitsCompleteReviewGate && REVIEW_GATE_FIELD_SET2.has(field) || omitsPreVerifyReview && field === PRE_VERIFY_REVIEW_FIELD);
+  return FIELD_ORDER.every((field2) => seen.has(field2) || omitsCompleteReviewGate && REVIEW_GATE_FIELD_SET2.has(field2) || omitsPreVerifyReview && field2 === PRE_VERIFY_REVIEW_FIELD);
 }
 async function inspectProjectionAgainst(changeDir, current) {
   if (current === void 0)
@@ -11093,44 +11101,44 @@ var FsStateStore = class {
       return { projection: { status: "pending", error: error2 } };
     }
   }
-  async get(changeDir, field) {
+  async get(changeDir, field2) {
     const state = await this.read(changeDir);
-    return state.fields[field];
+    return state.fields[field2];
   }
-  async set(changeDir, field, value) {
-    await this.setMany(changeDir, { [field]: value }, "set");
+  async set(changeDir, field2, value) {
+    await this.setMany(changeDir, { [field2]: value }, "set");
   }
   async setMany(changeDir, kv, mutationKind = "set-many") {
     const entries = Object.entries(kv).filter((e) => e[1] !== void 0);
-    for (const [field, value] of entries)
-      gateValue(field, value);
+    for (const [field2, value] of entries)
+      gateValue(field2, value);
     if (entries.length === 0)
       return;
     await withLock(changeDir, async () => {
       const state = await this.read(changeDir);
-      for (const [field, value] of entries)
-        state.fields[field] = value;
+      for (const [field2, value] of entries)
+        state.fields[field2] = value;
       await this.writeUnderLock(changeDir, state, { kind: mutationKind });
     });
   }
-  async cas(changeDir, field, expect, next) {
-    quoteGate(field, next);
+  async cas(changeDir, field2, expect, next) {
+    quoteGate(field2, next);
     return withLock(changeDir, async () => {
       const state = await this.read(changeDir);
-      if (state.fields[field] !== expect)
+      if (state.fields[field2] !== expect)
         return false;
-      state.fields[field] = next;
+      state.fields[field2] = next;
       await this.writeUnderLock(changeDir, state, { kind: "cas" });
       return true;
     });
   }
-  async casMany(changeDir, field, expects, kv) {
+  async casMany(changeDir, field2, expects, kv) {
     const entries = Object.entries(kv).filter((e) => e[1] !== void 0);
     for (const [entryField, value] of entries)
       gateValue(entryField, value);
     return withLock(changeDir, async () => {
       const state = await this.read(changeDir);
-      const observed = state.fields[field];
+      const observed = state.fields[field2];
       if (typeof observed !== "string" || !expects.includes(observed))
         return false;
       for (const [entryField, value] of entries)
@@ -11243,6 +11251,205 @@ var FsStateStore = class {
 function createStateStore(options = {}) {
   return new FsStateStore(options);
 }
+
+// packages/kernel/dist/interaction/contract.js
+var INTERACTION_PROJECTION_WRITE_FAILED = "interaction-projection-write-failed";
+function stableInteractionStringify(value) {
+  if (value === void 0)
+    return "null";
+  if (value === null || typeof value !== "object")
+    return JSON.stringify(value);
+  if (Array.isArray(value))
+    return `[${value.map(stableInteractionStringify).join(",")}]`;
+  const record5 = value;
+  const keys = Object.keys(record5).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableInteractionStringify(record5[key])}`).join(",")}}`;
+}
+function interactionJourneyId(input) {
+  return `sha256:${sha256Hex2(stableInteractionStringify(input))}`;
+}
+function sha256Hex2(value) {
+  const bytes = new TextEncoder().encode(value);
+  const words = new Uint32Array(64);
+  const state = new Uint32Array([
+    1779033703,
+    3144134277,
+    1013904242,
+    2773480762,
+    1359893119,
+    2600822924,
+    528734635,
+    1541459225
+  ]);
+  const constants19 = [
+    1116352408,
+    1899447441,
+    3049323471,
+    3921009573,
+    961987163,
+    1508970993,
+    2453635748,
+    2870763221,
+    3624381080,
+    310598401,
+    607225278,
+    1426881987,
+    1925078388,
+    2162078206,
+    2614888103,
+    3248222580,
+    3835390401,
+    4022224774,
+    264347078,
+    604807628,
+    770255983,
+    1249150122,
+    1555081692,
+    1996064986,
+    2554220882,
+    2821834349,
+    2952996808,
+    3210313671,
+    3336571891,
+    3584528711,
+    113926993,
+    338241895,
+    666307205,
+    773529912,
+    1294757372,
+    1396182291,
+    1695183700,
+    1986661051,
+    2177026350,
+    2456956037,
+    2730485921,
+    2820302411,
+    3259730800,
+    3345764771,
+    3516065817,
+    3600352804,
+    4094571909,
+    275423344,
+    430227734,
+    506948616,
+    659060556,
+    883997877,
+    958139571,
+    1322822218,
+    1537002063,
+    1747873779,
+    1955562222,
+    2024104815,
+    2227730452,
+    2361852424,
+    2428436474,
+    2756734187,
+    3204031479,
+    3329325298
+  ];
+  const bitLength = bytes.length * 8;
+  const paddedLength = bytes.length + 9 + 63 >> 6 << 6;
+  const padded = new Uint8Array(paddedLength);
+  padded.set(bytes);
+  padded[bytes.length] = 128;
+  const high = Math.floor(bitLength / 4294967296);
+  const low = bitLength >>> 0;
+  padded[padded.length - 8] = high >>> 24;
+  padded[padded.length - 7] = high >>> 16;
+  padded[padded.length - 6] = high >>> 8;
+  padded[padded.length - 5] = high;
+  padded[padded.length - 4] = low >>> 24;
+  padded[padded.length - 3] = low >>> 16;
+  padded[padded.length - 2] = low >>> 8;
+  padded[padded.length - 1] = low;
+  const rotr = (x, n) => x >>> n | x << 32 - n;
+  for (let offset = 0; offset < padded.length; offset += 64) {
+    for (let index = 0; index < 16; index += 1) {
+      const at = offset + index * 4;
+      words[index] = (padded[at] ?? 0) << 24 | (padded[at + 1] ?? 0) << 16 | (padded[at + 2] ?? 0) << 8 | (padded[at + 3] ?? 0);
+    }
+    for (let index = 16; index < 64; index += 1) {
+      const value2 = words[index - 15] ?? 0;
+      const sigma0 = rotr(value2, 7) ^ rotr(value2, 18) ^ value2 >>> 3;
+      const prior = words[index - 2] ?? 0;
+      const sigma1 = rotr(prior, 17) ^ rotr(prior, 19) ^ prior >>> 10;
+      words[index] = (words[index - 16] ?? 0) + sigma0 + (words[index - 7] ?? 0) + sigma1 >>> 0;
+    }
+    let a = state[0] ?? 0;
+    let b = state[1] ?? 0;
+    let c = state[2] ?? 0;
+    let d = state[3] ?? 0;
+    let e = state[4] ?? 0;
+    let f = state[5] ?? 0;
+    let g = state[6] ?? 0;
+    let h = state[7] ?? 0;
+    for (let index = 0; index < 64; index += 1) {
+      const sum1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+      const choose = e & f ^ ~e & g;
+      const temp1 = h + sum1 + choose + (constants19[index] ?? 0) + (words[index] ?? 0) >>> 0;
+      const sum0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+      const majority = a & b ^ a & c ^ b & c;
+      const temp2 = sum0 + majority >>> 0;
+      h = g;
+      g = f;
+      f = e;
+      e = d + temp1 >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = temp1 + temp2 >>> 0;
+    }
+    state[0] = (state[0] ?? 0) + a >>> 0;
+    state[1] = (state[1] ?? 0) + b >>> 0;
+    state[2] = (state[2] ?? 0) + c >>> 0;
+    state[3] = (state[3] ?? 0) + d >>> 0;
+    state[4] = (state[4] ?? 0) + e >>> 0;
+    state[5] = (state[5] ?? 0) + f >>> 0;
+    state[6] = (state[6] ?? 0) + g >>> 0;
+    state[7] = (state[7] ?? 0) + h >>> 0;
+  }
+  return Array.from(state, (word) => word.toString(16).padStart(8, "0")).join("");
+}
+
+// packages/kernel/dist/interaction/codec.js
+var EVENT_KEYS = [
+  "schema",
+  "event_id",
+  "sequence",
+  "previous_event_hash",
+  "journey_id",
+  "occurred_at",
+  "change",
+  "run_id",
+  "workflow",
+  "workflow_hash",
+  "origin_step_visit",
+  "step_visit",
+  "state_before_hash",
+  "state_after_hash",
+  "actor",
+  "surface",
+  "execution_mode",
+  "workflow_mode",
+  "track",
+  "track_kind",
+  "pipeline_stage",
+  "control_stage",
+  "event",
+  "reason_code",
+  "trigger_code",
+  "effect_code",
+  "result",
+  "outcome_code",
+  "duration_ms"
+];
+var VISIT_KEYS = ["run_id", "step", "transition_sequence"];
+var EVENT_KEY_SET = new Set(EVENT_KEYS);
+var VISIT_KEY_SET = new Set(VISIT_KEYS);
+
+// packages/kernel/dist/state/interaction-event-store.js
+var INTERACTION_MAX_BYTES = 1024 * 1024;
+var INTERACTION_MAX_LINE_BYTES = 64 * 1024;
 
 // packages/kernel/dist/state/review-attempt-budget-io.js
 var MAX_STATE_BYTES = 1024 * 1024;
@@ -12102,8 +12309,8 @@ function createBreadcrumbWriter() {
 // packages/kernel/dist/state/review-gate.js
 var REVIEW_GATE_PENDING = "pending";
 var REVIEW_GATE_APPROVED = "approved";
-function scalar(state, field) {
-  const value = state.fields[field];
+function scalar(state, field2) {
+  const value = state.fields[field2];
   return Array.isArray(value) ? value.join(",") : value ?? "";
 }
 function reviewGateStatus(state) {
@@ -12128,6 +12335,9 @@ function clearReviewGatePatch() {
     review_acknowledged_at: ""
   };
 }
+
+// packages/kernel/dist/state/review-gate-binding.js
+var MAX_REVIEW_GATE_BINDING_BYTES = 16 * 1024;
 
 // packages/kernel/dist/state/transitionTail.js
 async function applyBreadcrumbTail(port, args) {
@@ -13543,10 +13753,10 @@ var FsWorkflowRunRepository = class {
           ["documentGovernanceFingerprint", documentGovernanceFingerprint2],
           ["workflowPlanFingerprint", workflowPlanFingerprint]
         ];
-        for (const [field, expected] of asserted) {
-          const observed = existing[field];
+        for (const [field2, expected] of asserted) {
+          const observed = existing[field2];
           if (observed !== void 0 && expected !== void 0 && observed !== expected) {
-            throw new Error(`establishRun \u62D2\u7EDD\u8986\u76D6\u5DF2\u6709 ${field}\uFF1Aobserved='${observed}' expected='${expected}'`);
+            throw new Error(`establishRun \u62D2\u7EDD\u8986\u76D6\u5DF2\u6709 ${field2}\uFF1Aobserved='${observed}' expected='${expected}'`);
           }
         }
         const metadata2 = {
@@ -16388,19 +16598,19 @@ function boundedSessionParams(projectId, limit) {
 function hasMoreSessionRows(db, projectId, offset) {
   return db.prepare("SELECT 1 AS present FROM session WHERE project_id = ? LIMIT 1 OFFSET ?").get(projectId, offset) !== void 0;
 }
-function sessionFieldBytes(row, field) {
-  return typeof row[field] === "string" ? Buffer.byteLength(row[field]) : 0;
+function sessionFieldBytes(row, field2) {
+  return typeof row[field2] === "string" ? Buffer.byteLength(row[field2]) : 0;
 }
-function sessionFieldTruncated(row, field) {
-  const fullBytes = row[`${field}_full_bytes`];
-  return typeof fullBytes === "number" && fullBytes > SQLITE_SESSION_FIELD_LIMITS[field];
+function sessionFieldTruncated(row, field2) {
+  const fullBytes = row[`${field2}_full_bytes`];
+  return typeof fullBytes === "number" && fullBytes > SQLITE_SESSION_FIELD_LIMITS[field2];
 }
 function accountSessionRow(fs, row, f, source, budget) {
   const returnedBytes = SQLITE_SESSION_FIXED_BYTES + sessionFieldBytes(row, "id") + sessionFieldBytes(row, "directory") + sessionFieldBytes(row, "title") + sessionFieldBytes(row, "parent_id");
   budget.consume(returnedBytes);
   source.bytesRead += returnedBytes;
   const sessionFields = Object.keys(SQLITE_SESSION_FIELD_LIMITS);
-  const truncatedFields = sessionFields.filter((field) => sessionFieldTruncated(row, field));
+  const truncatedFields = sessionFields.filter((field2) => sessionFieldTruncated(row, field2));
   if (truncatedFields.length > 0) {
     budget.noteSourceTruncated();
     source.truncated = true;
@@ -16708,7 +16918,7 @@ function readBoundedSqliteRows(fs, db, query, source) {
     if (next.done)
       break;
     const row = next.value;
-    const relationBytes = query.relationFields.reduce((total, field) => total + (typeof row[field] === "string" ? Buffer.byteLength(row[field]) : 0), 0);
+    const relationBytes = query.relationFields.reduce((total, field2) => total + (typeof row[field2] === "string" ? Buffer.byteLength(row[field2]) : 0), 0);
     const returnedDataBytes = typeof row.data === "string" ? Buffer.byteLength(row.data) : 0;
     const returnedBytes = relationBytes + returnedDataBytes;
     if (budget.perSourceBytes - source.bytesRead < returnedBytes || budget.remainingBytes() < returnedBytes) {
@@ -16721,7 +16931,7 @@ function readBoundedSqliteRows(fs, db, query, source) {
     }
     budget.consume(returnedBytes);
     source.bytesRead += returnedBytes;
-    const relationTruncated = query.relationFields.some((field) => typeof row[`${field}_full_bytes`] === "number" && Number(row[`${field}_full_bytes`]) > SQLITE_RELATION_ID_BYTES);
+    const relationTruncated = query.relationFields.some((field2) => typeof row[`${field2}_full_bytes`] === "number" && Number(row[`${field2}_full_bytes`]) > SQLITE_RELATION_ID_BYTES);
     const dataTruncated = typeof row.full_bytes === "number" && row.full_bytes > rowBytes;
     if (relationTruncated || dataTruncated) {
       budget.noteSourceTruncated();
@@ -18944,46 +19154,46 @@ function bareRoundtrips(s) {
   return data.k === s;
 }
 var ITEM_KEY_LIKE_RE = /^[A-Za-z_][\w.-]*:(\s|$)/;
-function formatString(s, field, asSeqItem) {
+function formatString(s, field2, asSeqItem) {
   if (CONTROL_CHAR_RE.test(s))
-    throw new PatchError(`\u5B57\u6BB5 '${field}' \u542B\u6362\u884C/\u63A7\u5236\u5B57\u7B26\uFF0C\u65E0\u6CD5\u5199\u56DE loops.yaml`);
+    throw new PatchError(`\u5B57\u6BB5 '${field2}' \u542B\u6362\u884C/\u63A7\u5236\u5B57\u7B26\uFF0C\u65E0\u6CD5\u5199\u56DE loops.yaml`);
   if (bareRoundtrips(s) && !(asSeqItem && ITEM_KEY_LIKE_RE.test(s)))
     return s;
   if (s.includes('"'))
-    throw new PatchError(`\u5B57\u6BB5 '${field}' \u542B\u53CC\u5F15\u53F7\uFF0C\u7A84 YAML \u65E0\u8F6C\u4E49\u8BED\u4E49\uFF0C\u65E0\u6CD5\u5B89\u5168\u5199\u56DE`);
+    throw new PatchError(`\u5B57\u6BB5 '${field2}' \u542B\u53CC\u5F15\u53F7\uFF0C\u7A84 YAML \u65E0\u8F6C\u4E49\u8BED\u4E49\uFF0C\u65E0\u6CD5\u5B89\u5168\u5199\u56DE`);
   return `"${s}"`;
 }
-function formatScalar(v, field) {
+function formatScalar(v, field2) {
   if (v === null)
     return "null";
   if (typeof v === "number") {
     if (!Number.isFinite(v))
-      throw new PatchError(`\u5B57\u6BB5 '${field}' \u987B\u4E3A\u6709\u9650\u6570\u5B57`);
+      throw new PatchError(`\u5B57\u6BB5 '${field2}' \u987B\u4E3A\u6709\u9650\u6570\u5B57`);
     return String(v);
   }
-  return formatString(v, field, false);
+  return formatString(v, field2, false);
 }
-function findFieldLine(lines, from, to, indent, field) {
-  const re = new RegExp(`^\\s{${indent}}${field}:(\\s|$)`);
+function findFieldLine(lines, from, to, indent, field2) {
+  const re = new RegExp(`^\\s{${indent}}${field2}:(\\s|$)`);
   for (let i = from; i < to; i++) {
     if (re.test(required(lines[i])))
       return i;
   }
   return -1;
 }
-function patchTopScalar(lines, block, field, value) {
-  const rendered = `${" ".repeat(block.fieldIndent)}${field}: ${formatScalar(value, field)}`;
-  const at = findFieldLine(lines, block.start + 1, block.end, block.fieldIndent, field);
+function patchTopScalar(lines, block, field2, value) {
+  const rendered = `${" ".repeat(block.fieldIndent)}${field2}: ${formatScalar(value, field2)}`;
+  const at = findFieldLine(lines, block.start + 1, block.end, block.fieldIndent, field2);
   if (at !== -1) {
     lines[at] = rendered;
   } else {
     lines.splice(insertPointAtBlockEnd(lines, block.start, block.end), 0, rendered);
   }
 }
-function patchBudgetScalar(lines, block, field, value) {
+function patchBudgetScalar(lines, block, field2, value) {
   const budgetAt = findFieldLine(lines, block.start + 1, block.end, block.fieldIndent, "budget");
   if (budgetAt === -1)
-    throw new PatchError(`loop \u5757\u5185\u672A\u627E\u5230 budget: \u884C\uFF0C\u65E0\u6CD5 patch '${field}'`);
+    throw new PatchError(`loop \u5757\u5185\u672A\u627E\u5230 budget: \u884C\uFF0C\u65E0\u6CD5 patch '${field2}'`);
   let subEnd = block.end;
   for (let i = budgetAt + 1; i < block.end; i++) {
     const line = required(lines[i]);
@@ -19001,18 +19211,18 @@ function patchBudgetScalar(lines, block, field, value) {
       break;
     }
   }
-  const rendered = `${" ".repeat(childIndent)}${field}: ${formatScalar(value, field)}`;
-  const at = findFieldLine(lines, budgetAt + 1, subEnd, childIndent, field);
+  const rendered = `${" ".repeat(childIndent)}${field2}: ${formatScalar(value, field2)}`;
+  const at = findFieldLine(lines, budgetAt + 1, subEnd, childIndent, field2);
   if (at !== -1) {
     lines[at] = rendered;
   } else {
     lines.splice(insertPointAtBlockEnd(lines, budgetAt, subEnd), 0, rendered);
   }
 }
-function patchArray(lines, block, field, values) {
+function patchArray(lines, block, field2, values) {
   const pad = " ".repeat(block.fieldIndent);
-  const rendered = values.length === 0 ? [`${pad}${field}: []`] : [`${pad}${field}:`, ...values.map((v) => `${pad}  - ${formatString(v, field, true)}`)];
-  const at = findFieldLine(lines, block.start + 1, block.end, block.fieldIndent, field);
+  const rendered = values.length === 0 ? [`${pad}${field2}: []`] : [`${pad}${field2}:`, ...values.map((v) => `${pad}  - ${formatString(v, field2, true)}`)];
+  const at = findFieldLine(lines, block.start + 1, block.end, block.fieldIndent, field2);
   if (at === -1) {
     lines.splice(insertPointAtBlockEnd(lines, block.start, block.end), 0, ...rendered);
     return;
@@ -19031,22 +19241,22 @@ function patchArray(lines, block, field, values) {
     extentEnd--;
   lines.splice(at, extentEnd - at, ...rendered);
 }
-function checkedValue(field, value) {
-  if (PATCHABLE_ARRAY_FIELDS.includes(field)) {
+function checkedValue(field2, value) {
+  if (PATCHABLE_ARRAY_FIELDS.includes(field2)) {
     if (!Array.isArray(value) || value.some((v) => typeof v !== "string")) {
-      throw new PatchError(`\u5B57\u6BB5 '${field}' \u987B\u4E3A\u5B57\u7B26\u4E32\u6570\u7EC4`);
+      throw new PatchError(`\u5B57\u6BB5 '${field2}' \u987B\u4E3A\u5B57\u7B26\u4E32\u6570\u7EC4`);
     }
     return value;
   }
-  if (PATCHABLE_BUDGET_FIELDS.includes(field) && field !== "on_exceed") {
+  if (PATCHABLE_BUDGET_FIELDS.includes(field2) && field2 !== "on_exceed") {
     if (typeof value !== "number")
-      throw new PatchError(`\u5B57\u6BB5 '${field}' \u987B\u4E3A\u6570\u5B57`);
+      throw new PatchError(`\u5B57\u6BB5 '${field2}' \u987B\u4E3A\u6570\u5B57`);
     return value;
   }
-  if ((field === "change_prefix" || field === "skill_bundle_id") && value === null)
+  if ((field2 === "change_prefix" || field2 === "skill_bundle_id") && value === null)
     return null;
   if (typeof value !== "string")
-    throw new PatchError(`\u5B57\u6BB5 '${field}' \u987B\u4E3A\u5B57\u7B26\u4E32`);
+    throw new PatchError(`\u5B57\u6BB5 '${field2}' \u987B\u4E3A\u5B57\u7B26\u4E32`);
   return value;
 }
 function updateLoopInYaml(text3, loopId, patch) {
@@ -19054,26 +19264,26 @@ function updateLoopInYaml(text3, loopId, patch) {
     const fields = Object.keys(patch);
     if (fields.length === 0)
       throw new PatchError("patch \u4E3A\u7A7A\uFF08\u65E0\u5B57\u6BB5\u53EF\u6539\uFF09");
-    for (const field of fields) {
-      if (field === "autonomy_level") {
+    for (const field2 of fields) {
+      if (field2 === "autonomy_level") {
         throw new PatchError("autonomy_level \u4E0D\u7ECF\u672C\u624B\u672F\uFF08\u5347\u964D\u6863\u8D70\u6BD5\u4E1A\u5236\u88C1\u51B3\uFF1AapplyLevelChange / POST /api/loops/level\uFF09");
       }
-      if (!ALL_PATCHABLE.includes(field)) {
-        throw new PatchError(`\u5B57\u6BB5 '${field}' \u4E0D\u53EF patch\uFF08\u53EF\u6539\uFF1A${ALL_PATCHABLE.join(" / ")}\uFF09`);
+      if (!ALL_PATCHABLE.includes(field2)) {
+        throw new PatchError(`\u5B57\u6BB5 '${field2}' \u4E0D\u53EF patch\uFF08\u53EF\u6539\uFF1A${ALL_PATCHABLE.join(" / ")}\uFF09`);
       }
     }
     const lines = text3.split("\n");
-    for (const field of fields) {
+    for (const field2 of fields) {
       const block = locateLoop(lines, loopId);
       if (block === null)
         throw new PatchError(`loop '${loopId}' \u672A\u5728 loops.yaml \u627E\u5230\uFF08\u672C\u624B\u672F\u4E0D\u65B0\u5EFA loop\uFF09`);
-      const value = checkedValue(field, patch[field]);
-      if (PATCHABLE_ARRAY_FIELDS.includes(field)) {
-        patchArray(lines, block, field, value);
-      } else if (PATCHABLE_BUDGET_FIELDS.includes(field)) {
-        patchBudgetScalar(lines, block, field, value);
+      const value = checkedValue(field2, patch[field2]);
+      if (PATCHABLE_ARRAY_FIELDS.includes(field2)) {
+        patchArray(lines, block, field2, value);
+      } else if (PATCHABLE_BUDGET_FIELDS.includes(field2)) {
+        patchBudgetScalar(lines, block, field2, value);
       } else {
-        patchTopScalar(lines, block, field, value);
+        patchTopScalar(lines, block, field2, value);
       }
     }
     return { text: lines.join("\n"), error: null };
@@ -20317,12 +20527,23 @@ var SkillSourcesError = class extends Error {
     this.name = "SkillSourcesError";
   }
 };
+var SKILL_PROVENANCE_ERROR_CATEGORIES = [
+  "unsupported-registry-version",
+  "unknown-source-kind",
+  "invalid-source-ref",
+  "missing-distributed-skill",
+  "unregistered-distributed-skill",
+  "duplicate-distributed-source",
+  "content-hash-mismatch",
+  "coordinate-mismatch",
+  "legacy-provenance-source"
+];
 function stripComment2(line) {
   const t = line.trimStart();
   if (t.startsWith("#"))
     return "";
   const m = line.match(/^(.*?)\s#/);
-  return (m ? m[1] : line).trimEnd();
+  return (m ? required(m[1]) : line).trimEnd();
 }
 function splitTopLevel(s, sep15) {
   const out = [];
@@ -20968,6 +21189,82 @@ async function applyActions(actions, input) {
   return { patch, signals };
 }
 
+// packages/kernel/dist/workflow/interaction-effect.js
+function field(state, name) {
+  const value = state.fields[name];
+  return Array.isArray(value) ? value.join(",") : value ?? "";
+}
+function trackKind(track) {
+  if (track === "free")
+    return "free";
+  if (["chat", "simple", "pm", "frontend", "backend"].includes(track))
+    return "built-in";
+  return "custom";
+}
+function pipelineStage(step) {
+  return ["open", "explore", "spec", "build", "verify", "ship", "archive"].includes(step) ? step : "custom";
+}
+function createInteractionEffectDraft(input) {
+  const workflowHash = input.workflowRun.workflowPlanFingerprint;
+  const afterMetadata = input.after.state.runMetadata;
+  if (workflowHash === void 0 || afterMetadata === void 0 || afterMetadata.runId === void 0 || afterMetadata.transitionSequence === void 0) {
+    throw new Error("interaction projection \u7F3A canonical run/workflow/state anchor");
+  }
+  const requestedAt = field(input.before.state, "review_requested_at") || input.before.mutation.observedAt;
+  const originStepVisit = {
+    runId: input.workflowRun.id,
+    transitionSequence: input.workflowRun.transitionSequence,
+    step: input.from
+  };
+  return {
+    journeyId: interactionJourneyId({
+      change: input.changeName,
+      runId: input.workflowRun.id,
+      originStepVisit,
+      reviewEvent: input.reviewEvent,
+      requestedAt
+    }),
+    occurredAt: input.after.mutation.observedAt,
+    change: input.changeName,
+    runId: input.workflowRun.id,
+    workflow: input.workflowRun.workflowId,
+    workflowHash,
+    originStepVisit,
+    stepVisit: {
+      runId: afterMetadata.runId,
+      transitionSequence: afterMetadata.transitionSequence,
+      step: input.to
+    },
+    stateBeforeHash: input.before.stateDigest,
+    stateAfterHash: input.after.stateDigest,
+    actor: "agent",
+    surface: "cli",
+    executionMode: "interactive",
+    workflowMode: isDefaultWorkflowName(input.workflowRun.workflowId) ? "default" : "custom",
+    track: input.track,
+    trackKind: trackKind(input.track),
+    pipelineStage: pipelineStage(input.from),
+    controlStage: "execution",
+    event: "review.effect-applied",
+    reasonCode: "effect.applied",
+    triggerCode: "transition.approved",
+    effectCode: "transition.applied",
+    result: "success",
+    outcomeCode: "review.effect-applied",
+    durationMs: 0
+  };
+}
+async function recordInteractionEffectUnderLock(input) {
+  await input.recorder.recordUnderLock(input.changeDir, createInteractionEffectDraft(input));
+}
+async function emitInteractionEffectUnderLock(input) {
+  const after = await input.readAfter();
+  if (input.before === void 0 || after === void 0) {
+    throw new Error("interaction projection \u7F3A canonical run/workflow/state anchor");
+  }
+  await recordInteractionEffectUnderLock({ ...input, before: input.before, after });
+}
+
 // packages/kernel/dist/workflow/transition-application.js
 function isRejection(x) {
   return "kind" in x;
@@ -21144,6 +21441,7 @@ function createTransitionApplication(deps) {
   return {
     async execute(command) {
       return deps.runRepository.transact(command.changeDir, async (tx) => {
+        const beforeInteractionRevision = deps.interaction === void 0 ? void 0 : await readCurrentRunRevision(command.changeDir);
         const workflowName = tx.run.workflowId;
         let effectivePlan;
         try {
@@ -21223,7 +21521,14 @@ function createTransitionApplication(deps) {
             return { kind: "document-evidence-failed", phase: prepared.from, blockers: evidence.blockers };
           }
         }
-        if (prepared.requiresReviewApproval && command.humanReviewApproved !== true && !reviewGateApprovedFor(tx.state, prepared.from, command.event)) {
+        const receiptApproved = reviewGateApprovedFor(tx.state, prepared.from, command.event);
+        const bindingApproved = receiptApproved && deps.reviewGateBinding !== void 0 ? await deps.reviewGateBinding({
+          changeDir: command.changeDir,
+          state: tx.state,
+          phase: prepared.from,
+          event: command.event
+        }) : receiptApproved;
+        if (prepared.requiresReviewApproval && command.humanReviewApproved !== true && !bindingApproved) {
           return { kind: "review-approval-required", phase: prepared.from, event: command.event };
         }
         const { record: record5, projection } = await tx.commit({ ...prepared.nextFields, ...clearReviewGatePatch() }, {
@@ -21238,6 +21543,29 @@ function createTransitionApplication(deps) {
             projection: "state-yaml",
             cause: projection.error
           });
+        }
+        if (deps.interaction !== void 0 && receiptApproved && bindingApproved) {
+          try {
+            await emitInteractionEffectUnderLock({
+              recorder: deps.interaction,
+              changeDir: command.changeDir,
+              changeName: command.changeName,
+              reviewEvent: command.event,
+              from: prepared.from,
+              to: prepared.to,
+              track: fieldStr4(tx.state.fields.track),
+              workflowRun: tx.run,
+              before: beforeInteractionRevision,
+              readAfter: () => readCurrentRunRevision(command.changeDir)
+            });
+          } catch (error2) {
+            warnings.push({
+              kind: "projection-write-failed",
+              projection: "interaction",
+              code: INTERACTION_PROJECTION_WRITE_FAILED,
+              cause: error2
+            });
+          }
         }
         if (prepared.governedDocumentContract) {
           const breadcrumbTail = await applyBreadcrumbTail(deps.breadcrumb, { changeDir: command.changeDir, name: command.changeName, to: prepared.to });
@@ -21393,16 +21721,16 @@ var SkillContentInvalidError = class extends Error {
   _tag = "SkillContentInvalidError";
 };
 var EXEC_BITS = 73;
-function sha256Hex2(data) {
+function sha256Hex3(data) {
   return createHash19("sha256").update(data).digest("hex");
 }
-var EMPTY_FILE_SHA256 = sha256Hex2(Buffer.alloc(0));
+var EMPTY_FILE_SHA256 = sha256Hex3(Buffer.alloc(0));
 function byRelativePath(a, b) {
   return a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0;
 }
 function aggregateHash(entries) {
   const canonical = entries.map((e) => [e.relativePath, e.sha256, e.executable]);
-  return sha256Hex2(JSON.stringify(canonical));
+  return sha256Hex3(JSON.stringify(canonical));
 }
 function assertSafeSkillId(skillId) {
   if (!isPathSafeSkillId(skillId)) {
@@ -21511,7 +21839,7 @@ async function buildCanonicalManifest(skillId, sourceDir, hooks = {}) {
     const executable = (mode & EXEC_BITS) !== 0;
     if (relPath === "SKILL.md")
       skillDocContent = Buffer.from(content);
-    entries.push({ relativePath: relPath, sha256: sha256Hex2(content), executable });
+    entries.push({ relativePath: relPath, sha256: sha256Hex3(content), executable });
     if (hooks.onFile)
       await hooks.onFile(relPath, content, executable);
   };
@@ -22113,6 +22441,9 @@ async function evaluateSkillBundleWiring(loop, deps, resolutionInputs) {
   }
   return { status: "ready", bundleId, reason: null };
 }
+
+// packages/automation/dist/skills/skill-provenance.js
+var CATEGORY_ORDER = new Map(SKILL_PROVENANCE_ERROR_CATEGORIES.map((category, index) => [category, index]));
 
 // packages/automation/dist/starters/wiring.js
 function invalidReport(starterId, reason, loopId = null) {
@@ -23063,11 +23394,11 @@ function validateStateWorkflowText(text3, change) {
   for (const line of text3.split(/\r?\n/)) {
     const match = /^([A-Za-z0-9_]+):(.*)$/.exec(line);
     if (!match) continue;
-    const field = match[1];
+    const field2 = match[1];
     const scalar5 = match[2];
-    if (field === void 0 || scalar5 === void 0) continue;
-    counts.set(field, (counts.get(field) ?? 0) + 1);
-    if (field === "workflow") workflowValues.push(unquoteScalar(scalar5.trim()));
+    if (field2 === void 0 || scalar5 === void 0) continue;
+    counts.set(field2, (counts.get(field2) ?? 0) + 1);
+    if (field2 === "workflow") workflowValues.push(unquoteScalar(scalar5.trim()));
   }
   for (const required2 of ["track", "phase"]) {
     if (counts.get(required2) !== 1) {
@@ -23078,7 +23409,7 @@ function validateStateWorkflowText(text3, change) {
   if (workflowCount > 1) throw new Error(`state.workflow \u91CD\u590D\uFF08${workflowCount} \u6B21\uFF09`);
   const state = parsePipeline(text3);
   const knownFields = new Set(FIELD_ORDER);
-  const hiddenKnownFields = state.opaqueTail.split(/\r?\n/).map((line) => /^([A-Za-z0-9_]+):/.exec(line)?.[1]).filter((field) => field !== void 0 && knownFields.has(field));
+  const hiddenKnownFields = state.opaqueTail.split(/\r?\n/).map((line) => /^([A-Za-z0-9_]+):/.exec(line)?.[1]).filter((field2) => field2 !== void 0 && knownFields.has(field2));
   if (hiddenKnownFields.length > 0) {
     throw new Error(`state parser \u5728\u5DF2\u77E5\u5B57\u6BB5\u524D\u63D0\u524D\u505C\u6B62\uFF1BopaqueTail \u9690\u85CF\u5B57\u6BB5: ${hiddenKnownFields.join(", ")}`);
   }
@@ -24696,11 +25027,11 @@ function projectEntry(record5, sequence) {
 function saturatingAdd(total, value) {
   return total > Number.MAX_SAFE_INTEGER - value ? Number.MAX_SAFE_INTEGER : total + value;
 }
-function sumActual(entries, field) {
+function sumActual(entries, field2) {
   let total = 0;
   let found = false;
   for (const entry of entries) {
-    const value = entry[field];
+    const value = entry[field2];
     if (value === null) continue;
     found = true;
     total = saturatingAdd(total, value);
@@ -25822,7 +26153,7 @@ function isStarter(loop) {
 function requiresStarterActivationValidation(previous, candidate, patch) {
   if (!isStarter(candidate) || candidate?.status !== "active") return false;
   if (previous?.status !== "active") return true;
-  return Object.keys(patch).some((field) => STARTER_EXECUTION_FIELDS.has(field));
+  return Object.keys(patch).some((field2) => STARTER_EXECUTION_FIELDS.has(field2));
 }
 async function applyLoopsUpdate(root, id2, patch, deps = {}) {
   const snap0 = await readRegistrySnapshot(root);
@@ -28709,17 +29040,17 @@ function buildOrchestrationGraph(input) {
     "agent_review_result",
     "codex_review_result"
   ];
-  for (const field of reviewFields) {
-    const status2 = valueOf(change, field);
+  for (const field2 of reviewFields) {
+    const status2 = valueOf(change, field2);
     if (status2 === "") continue;
     assertCapacity(nodes.length + 1, edges.length + 1);
-    const id2 = `review:${field}`;
+    const id2 = `review:${field2}`;
     nodes.push({
       id: id2,
       kind: "review",
-      label: field,
+      label: field2,
       status: status2,
-      metadata: [{ key: "field", value: field }]
+      metadata: [{ key: "field", value: field2 }]
     });
     const target = phaseIds.has("phase:verify") ? "phase:verify" : changeId;
     edges.push(edge("reviews", id2, target, "reviews"));
@@ -30044,8 +30375,8 @@ function parseBody(value) {
     }
   };
 }
-function errorField(error2, field) {
-  return typeof error2 === "object" && error2 !== null ? Reflect.get(error2, field) : void 0;
+function errorField(error2, field2) {
+  return typeof error2 === "object" && error2 !== null ? Reflect.get(error2, field2) : void 0;
 }
 async function resolveTaskRunOperation(path7, body, deps) {
   const match = /^\/api\/task-runs\/([^/]+)\/operations$/.exec(path7);
@@ -30987,17 +31318,17 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     const body = raw;
     const root = typeof body.root === "string" ? body.root : "";
     const change = typeof body.change === "string" ? body.change.trim() : "";
-    const field = typeof body.field === "string" ? body.field.trim() : "";
+    const field2 = typeof body.field === "string" ? body.field.trim() : "";
     const artifactPath = typeof body.path === "string" ? body.path : "";
     const producer = typeof body.producer === "string" ? body.producer.trim() : "";
-    if (!/^[a-zA-Z0-9_-]+$/.test(change) || field === "" || artifactPath === "" || producer === "") {
+    if (!/^[a-zA-Z0-9_-]+$/.test(change) || field2 === "" || artifactPath === "" || producer === "") {
       return sendJson(res, 400, { ok: false, error: "change/field/path/producer \u5747\u4E3A\u5FC5\u586B\u4E14 change \u540D\u987B\u5408\u6CD5" });
     }
     return executeOperation(res, root, [
       "artifact",
       "register",
       change,
-      field,
+      field2,
       artifactPath,
       "--producer",
       producer

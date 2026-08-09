@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+  "workflowFingerprint": "0fea7ee8cdbe4adf1ddbc8a2022968d0774d138173319e89e1834f2b65be961c",
+  "scopes": [
+    {
+      "scope": "verify",
+      "defaultMaxAttempts": 2,
+      "override": null,
+      "used": 1,
+      "active": null,
+      "completed": [
+        {
+          "attemptId": "d375c9f9-2502-4812-ae06-948665a89bb8",
+          "sequence": 1,
+          "candidateFingerprint": "workspace:sha256:fa5a1f6b63a962ca94d7d8a1e368c3759e18ff10750ca804fb69a4da6fb31872",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T20:26:53Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-63-node-provenance-remediation/.pipeline-run/review-attempt-reports/d375c9f9-2502-4812-ae06-948665a89bb8.standards.report",
+              "reportDigest": "sha256:099080a94eab5ed222ee69052d2bd4d7f4875dc68c9bf0f3af8dc3570ca79851",
+              "recordedAt": "2026-08-09T20:50:05Z"
+            },
+            {
+              "lane": "spec",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-63-node-provenance-remediation/.pipeline-run/review-attempt-reports/d375c9f9-2502-4812-ae06-948665a89bb8.spec.report",
+              "reportDigest": "sha256:099080a94eab5ed222ee69052d2bd4d7f4875dc68c9bf0f3af8dc3570ca79851",
+              "recordedAt": "2026-08-09T20:50:12Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-63-node-provenance-remediation/.pipeline-run/review-attempt-reports/d375c9f9-2502-4812-ae06-948665a89bb8.e2e.report",
+              "reportDigest": "sha256:099080a94eab5ed222ee69052d2bd4d7f4875dc68c9bf0f3af8dc3570ca79851",
+              "recordedAt": "2026-08-09T20:50:15Z"
+            }
+          ],
+          "completedAt": "2026-08-09T20:50:19Z",
+          "result": "pass",
+          "reportPath": "openspec/changes/issue-63-node-provenance-remediation/.pipeline-run/review-attempt-reports/d375c9f9-2502-4812-ae06-948665a89bb8.aggregate.report",
+          "reportDigest": "sha256:003bc86d835952342423b9c5332c62cb98de7717f18283c5640ef878fe68775a"
+        }
+      ]
+    }
+  ]
+}

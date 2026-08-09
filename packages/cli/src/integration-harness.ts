@@ -19,6 +19,7 @@ import {
   createEffectiveSkillResolver,
   completedWorkflowSkillsSinceStepEntry,
   createFlowEngine,
+  createInteractionEventRecorder,
   createHistoryWriter,
   createStateStore,
   createTransitionRecordStore,
@@ -307,6 +308,7 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     withRegistryLock: (cb) => withTrackRegistryLock(cwd, trackCtx, cb),
     mutateRegistry: (cb) => mutateTrackRegistry(cwd, trackCtx, cb),
     flow: createFlowEngine(manifest),
+    interaction: createInteractionEventRecorder(),
     // T-R6：镜像生产装配，每次解析 default artifact 都 fresh-load effective registry。
     resolver: createEffectiveSkillResolver({
       registry: () => loadTrackRegistry(cwd, trackCtx),
@@ -374,7 +376,9 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
       codexAuthStatus: async () => ({ state: 'authenticated' }),
       runVerifySkills: async () => {
         try {
-          const output = execFileSync('bash', [join(REPO_ROOT, 'tools', 'verify-skills.sh')], { encoding: 'utf8' })
+          const output = execFileSync('bash', [
+            join(REPO_ROOT, 'tools', 'verify-skills.sh'), '--node', process.execPath,
+          ], { encoding: 'utf8' })
           return { code: 0, output }
         } catch (e) {
           const er = e as { status?: number; stdout?: string; stderr?: string }

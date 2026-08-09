@@ -1,0 +1,84 @@
+{
+  "schema": "tenon-interaction-event/v1",
+  "fixture_id": "projection-loss",
+  "events": [
+    {
+      "schema": "tenon-interaction-event/v1",
+      "event_id": "sha256:eb9a1a65c77a0bfb5cfdc826caa4cf5f5f391dd2f2ab1654bce43a73a3075d2f",
+      "sequence": 1,
+      "previous_event_hash": null,
+      "journey_id": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "occurred_at": "2026-08-10T00:00:00.000Z",
+      "change": "fixture-demo",
+      "run_id": "run-fixture",
+      "workflow": "default",
+      "workflow_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "origin_step_visit": {
+        "run_id": "run-fixture",
+        "transition_sequence": 0,
+        "step": "verify"
+      },
+      "step_visit": {
+        "run_id": "run-fixture",
+        "transition_sequence": 0,
+        "step": "verify"
+      },
+      "state_before_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "state_after_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "actor": "human",
+      "surface": "cli",
+      "execution_mode": "interactive",
+      "workflow_mode": "default",
+      "track": "backend",
+      "track_kind": "built-in",
+      "pipeline_stage": "verify",
+      "control_stage": "verification",
+      "event": "review.requested",
+      "reason_code": "review.required",
+      "trigger_code": "review.exit-requested",
+      "effect_code": "review-gate.pending",
+      "result": "success",
+      "outcome_code": "review.requested",
+      "duration_ms": 0
+    },
+    {
+      "schema": "tenon-interaction-event/v1",
+      "event_id": "sha256:7883a01961331b982a353a7ed59422ec8e3104b420063ac6705c54cf738a1fb2",
+      "sequence": 3,
+      "previous_event_hash": "sha256:f398e28b64fb8be7986a1932bc9e21d63ca5e50b357a4695d7955eb396e7c630",
+      "journey_id": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "occurred_at": "2026-08-10T00:00:01.000Z",
+      "change": "fixture-demo",
+      "run_id": "run-fixture",
+      "workflow": "default",
+      "workflow_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "origin_step_visit": {
+        "run_id": "run-fixture",
+        "transition_sequence": 0,
+        "step": "verify"
+      },
+      "step_visit": {
+        "run_id": "run-fixture",
+        "transition_sequence": 0,
+        "step": "verify"
+      },
+      "state_before_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "state_after_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "actor": "human",
+      "surface": "cli",
+      "execution_mode": "interactive",
+      "workflow_mode": "default",
+      "track": "backend",
+      "track_kind": "built-in",
+      "pipeline_stage": "verify",
+      "control_stage": "verification",
+      "event": "review.acknowledged",
+      "reason_code": "decision.accepted",
+      "trigger_code": "review.acknowledge",
+      "effect_code": "review-gate.approved",
+      "result": "success",
+      "outcome_code": "review.acknowledged",
+      "duration_ms": 10
+    }
+  ]
+}

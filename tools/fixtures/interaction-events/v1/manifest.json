@@ -1,0 +1,21 @@
+{
+  "schema": "tenon-interaction-event/v1",
+  "dimensions": {
+    "executionMode": ["interactive", "afk"],
+    "workflowMode": ["default", "custom"],
+    "trackKind": ["built-in", "free", "custom"],
+    "pipelineStage": ["open", "explore", "spec", "build", "verify", "ship", "archive", "custom"],
+    "controlStage": ["assessment", "admission", "execution", "verification", "correction", "revalidation", "exact-resume"],
+    "surface": ["plugin-chat", "cli", "api-sse", "dashboard"]
+  },
+  "fixtures": [
+    {"id": "positive", "mode": "measurement", "file": "positive.json", "expected": {"valid": true, "diagnostics": []}},
+    {"id": "stale-decision", "mode": "measurement", "file": "stale-decision.json", "expected": {"valid": true, "diagnostics": []}},
+    {"id": "repeated-prompt", "mode": "measurement", "file": "repeated-prompt.json", "expected": {"valid": true, "diagnostics": []}},
+    {"id": "failure", "mode": "measurement", "file": "failure.json", "expected": {"valid": true, "diagnostics": []}},
+    {"id": "resume", "mode": "measurement", "file": "resume.json", "expected": {"valid": true, "diagnostics": []}},
+    {"id": "projection-loss", "mode": "negative-control", "file": "projection-loss.json", "expected": {"valid": false, "diagnostics": ["sequence-gap", "incomplete-success-journey"]}},
+    {"id": "malformed-order", "mode": "negative-control", "file": "malformed-order.json", "expected": {"valid": false, "diagnostics": ["malformed-order", "incomplete-success-journey"]}},
+    {"id": "wrong-resume", "mode": "negative-control", "file": "wrong-resume.json", "expected": {"valid": false, "diagnostics": ["invalid-resume", "incomplete-success-journey"]}}
+  ]
+}

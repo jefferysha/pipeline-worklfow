@@ -282,6 +282,29 @@ bash tools/verify-skills.sh
 bash tools/test-bundle.sh
 ```
 
+### Bundled Skill provenance
+
+`templates/skill-sources.yaml` is the one tracked provenance registry for every
+distributed Skill. It is schema v3 (`hash_algorithm: tree-sha256-v1`): each
+entry declares `source_kind: bundled`, a normalized `source_ref`, the
+canonical `sha256:` content hash, and an immutable coordinate containing the
+same identity and digest. The historical `skills-lock.json` is removed and
+must not be reintroduced.
+
+After changing a bundled Skill, refresh the registry explicitly and inspect
+the diff:
+
+```bash
+npm run sync:skill-provenance
+bash tools/verify-skills.sh --quiet --root "$PWD"
+```
+
+The hidden packaged command `tenon internal-skill-provenance verify|sync
+--root <path> [--json]` is the implementation behind these checks. `verify`
+is read-only; `sync` computes all entries before atomically replacing the
+registry. Setup, doctor, release candidates, and bundled lookup fail closed on
+an invalid registry, missing/extra Skill, legacy lock, or content drift.
+
 修改契约、生成资产、adapters、hooks 或分发文件前，请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 项目状态与社区

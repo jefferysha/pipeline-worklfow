@@ -48,14 +48,22 @@ describe('release payload subprocess boundary', () => {
     const frozenBash = '/trusted/frozen/bash'
     let nodeProofs = 0
     const nodeSpawns: Array<{ readonly file: string; readonly proof: number }> = []
+    let verifierArgs: readonly string[] | undefined
+    const events: string[] = []
 
     await inspectCandidatePayload(process.cwd(), {
       nodePath: frozenNode,
       bashPath: frozenBash,
-      verifyNode: () => { nodeProofs += 1 },
+      verifyBash: () => { events.push('bash-proof') },
+      verifyNode: () => { nodeProofs += 1; events.push('node-proof') },
       runner: {
-        run: async (file) => {
+        run: async (file, args) => {
+          if (file === frozenBash && args.some((arg) => arg.endsWith('verify-skills.sh'))) {
+            events.push('verifier-spawn')
+            verifierArgs = args
+          }
           if (file === frozenNode || file === process.execPath) {
+            events.push('node-spawn')
             nodeSpawns.push({ file, proof: nodeProofs })
           }
           return { code: 0, stdout: '', stderr: '' }
@@ -65,6 +73,8 @@ describe('release payload subprocess boundary', () => {
 
     expect(nodeSpawns).toHaveLength(4)
     expect(nodeSpawns.every(({ file }) => file === frozenNode)).toBe(true)
-    expect(nodeSpawns.map(({ proof }) => proof)).toEqual([1, 2, 3, 4])
+    expect(nodeSpawns.map(({ proof }) => proof)).toEqual([2, 3, 4, 5])
+    expect(events.slice(0, 3)).toEqual(['bash-proof', 'node-proof', 'verifier-spawn'])
+    expect(verifierArgs).toEqual(expect.arrayContaining(['--node', frozenNode]))
   }, 30_000)
 })

@@ -11,10 +11,12 @@ import {
 import { type SetupEnv } from './setup.js'
 import { nativeHostCommandBinding } from './native-host-command-binding.js'
 import { cmdUpdate, nativeUpdatePlan } from './update.js'
+import { verifyUpdatedRoot } from './update-candidate-verification.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import { expectedStableLaunchers } from '../runtime/launchers.js'
 import type { RuntimeInstaller } from '../runtime/installer.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
+import type { TrustedExecutable } from './trusted-executable.js'
 
 interface Calls {
   readonly exec: Array<readonly [string, readonly string[]]>
@@ -34,6 +36,21 @@ interface DashboardCalls {
     readonly transactionId?: string
     readonly expectedServerVersion?: string
   }]>
+}
+
+function fakeTrustedExecutable(
+  executable: string,
+  verify: () => boolean = () => true,
+): TrustedExecutable {
+  return {
+    executable,
+    requestedPath: executable,
+    proof: {} as TrustedExecutable['proof'],
+    verify,
+    assert: () => {
+      if (!verify()) throw new Error(`trusted executable drifted: ${executable}`)
+    },
+  }
 }
 
 function fakeRuntimeInstaller(
@@ -489,6 +506,71 @@ describe('native plugin update plans', () => {
   })
 })
 
+describe('caller-level update provenance replay', () => {
+  test('verifyUpdatedRoot replays frozen Bash and Node before the verifier spawn', () => {
+    const deps = makeDeps()
+    const root = '/new/tenon'
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return true
+    })
+    const { env, calls } = updateEnv(() => ({ code: 0, stdout: '', stderr: '' }))
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    env.runTrustedLifecycleCommand = (command, args) => {
+      events.push('spawn')
+      expect(command).toBe('bash')
+      expect(args).toEqual([
+        join(root, 'tools', 'verify-skills.sh'),
+        '--quiet',
+        '--root',
+        root,
+        '--node',
+        frozenNode.executable,
+      ])
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(verifyUpdatedRoot(deps, env, root, STABLE_TARGET.version)).toBe(true)
+    expect(events).toEqual(['bash-proof', 'node-proof', 'spawn'])
+    expect(calls.exec).toEqual([])
+    expect(calls.writes).toEqual([])
+  })
+
+  test('verifyUpdatedRoot fails closed on Node drift without a verifier runner', () => {
+    const deps = makeDeps()
+    const root = '/new/tenon'
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return false
+    })
+    const { env, calls } = updateEnv(() => ({ code: 0, stdout: '', stderr: '' }))
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    let runnerCalls = 0
+    env.runTrustedLifecycleCommand = () => {
+      runnerCalls += 1
+      events.push('spawn')
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(verifyUpdatedRoot(deps, env, root, STABLE_TARGET.version)).toBe(false)
+    expect(events).toEqual(['bash-proof', 'node-proof'])
+    expect(runnerCalls).toBe(0)
+    expect(calls.exec).toEqual([])
+    expect(calls.writes).toEqual([])
+    expect(deps.errLines.join('\n')).toContain('新插件资产校验失败')
+  })
+})
+
 describe('tenon update', () => {
   test('requires exactly one host selector', () => {
     const deps = makeDeps()
@@ -664,7 +746,7 @@ describe('tenon update', () => {
       ['git', '-C /new/tenon ls-files --others --exclude-standard'],
       ['codex', 'plugin list --json'],
       ['git', '-C /new/tenon remote get-url origin'],
-      ['bash', '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon'],
+      ['bash', `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`],
       ['codex', 'plugin marketplace list --json'],
       ['git', '-C /new/tenon rev-parse HEAD'],
       ['git', '-C /new/tenon diff --quiet HEAD --'],
@@ -1026,7 +1108,7 @@ describe('tenon update', () => {
       'codex plugin add tenon@tenon --json',
     ])
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon')).toBe(true)
+      && args.join(' ') === `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`)).toBe(true)
     expect(runtime.calls.activations).toEqual([['/new/tenon', 'codex', '/home/update-test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'b'.repeat(64)}/payload`,
@@ -1143,7 +1225,7 @@ describe('tenon update', () => {
       'claude plugin install tenon@tenon',
     ])
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon')).toBe(true)
+      && args.join(' ') === `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`)).toBe(true)
   })
 
   test('update 发现冲突登记时只记录 cleanup-pending，当前会话不提前删除旧入口', async () => {
@@ -1629,7 +1711,7 @@ describe('tenon update', () => {
       'codex plugin add tenon@tenon --json',
     ])
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon')).toBe(true)
+      && args.join(' ') === `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`)).toBe(true)
     expect(runtime.calls.activations).toEqual([['/new/tenon', 'codex', '/home/update-test']])
     expect(deps.outLines.join('\n')).toContain('v1.2.3')
     expect(deps.outLines.join('\n')).toContain('tenon doctor')
@@ -1708,7 +1790,7 @@ describe('tenon update', () => {
       'codex plugin add tenon@tenon --json',
     ])
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon')).toBe(true)
+      && args.join(' ') === `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`)).toBe(true)
     expect(runtime.calls.activations).toEqual([['/new/tenon', 'codex', '/home/update-test']])
   })
 })

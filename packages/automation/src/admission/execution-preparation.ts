@@ -56,6 +56,9 @@ function skillErrorReason(e: unknown): PreparationFailureReason | undefined {
     case 'SkillContentInvalidError': return 'skill-bundle-content-invalid'
     case 'SkillContentAccessError': return 'skill-bundle-content-invalid'
     case 'SkillContentSourceAmbiguousError': return 'skill-bundle-source-ambiguous'
+    // Canonical bundled provenance failures are corruption of the selected source, never a
+    // candidate miss. Keep the locator package out of admission's dependency graph and map by tag.
+    case 'SkillProvenanceLocatorError': return 'skill-bundle-content-invalid'
     case 'SkillSnapshotSourceUnstableError': return 'skill-bundle-source-unstable'
     case 'SkillSnapshotIoError': return 'skill-bundle-snapshot-io'
     case 'SkillSnapshotCorruptError': return 'skill-bundle-snapshot-corrupt'

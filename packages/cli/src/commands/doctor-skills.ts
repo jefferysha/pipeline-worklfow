@@ -5,7 +5,7 @@ import {
   LEGACY_PLUGIN_IDENTITY,
   TENON_PLUGIN_IDENTITY,
 } from '../migration/legacy-tenon-migration.js'
-import { readSkillSources, type SkillSource } from '../skillSources.js'
+import { loadCanonicalSkillSources, type SkillSource } from '../skillSources.js'
 import { green, yellow, red, type DoctorCheck } from './doctor-check.js'
 
 function skillInPlace(
@@ -50,41 +50,12 @@ function collectMissingSkills(
   return missing
 }
 
-export function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
-  const tables = p.manifestSkills()
-  if (tables === null) {
-    return [
-      yellow(
-        'skills:mandatory',
-        'manifest 不可用——无法核强制技能齐全度（不误报 green）',
-        '先修复 asset:manifest（templates/manifest.yaml）后重跑 tenon doctor',
-      ),
-      yellow(
-        'skills:recommended',
-        'manifest 不可用——无法核推荐技能齐全度',
-        '先修复 asset:manifest 后重跑 tenon doctor',
-      ),
-    ]
-  }
-  const registryPath = join(p.pluginRoot, 'templates', 'skill-sources.yaml')
-  const registry = p.fileExists(registryPath) ? readSkillSources() : []
-  if (registry.length === 0) {
-    return [
-      yellow(
-        'skills:mandatory',
-        'registry 未就绪（templates/skill-sources.yaml 缺失/空）——无法核强制技能齐全度（不误报 green）',
-        '确认插件安装完整（skill-sources.yaml 应随插件分发）后重跑 tenon doctor',
-      ),
-      yellow(
-        'skills:recommended',
-        'registry 未就绪（templates/skill-sources.yaml 缺失/空）——无法核推荐技能齐全度',
-        '确认插件安装完整后重跑 tenon doctor',
-      ),
-    ]
-  }
-
+function evaluateSkillChecks(
+  tables: { mandatory: SkillTable; recommended: SkillTable },
+  registry: SkillSource[],
+  installed: ReadonlySet<string>,
+): [DoctorCheck, DoctorCheck] {
   const byToken = new Map(registry.map((source) => [source.token, source]))
-  const installed = p.installedSkillNames()
   const mandatoryMissing = collectMissingSkills(tables.mandatory, byToken, installed)
   const recommendedMissing = collectMissingSkills(tables.recommended, byToken, installed)
   const mandatory = mandatoryMissing.length === 0
@@ -102,6 +73,59 @@ export function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
         '安装或随自定义插件打包这些推荐技能（默认 pipeline 不会下载第三方技能）',
       )
   return [mandatory, recommended]
+}
+
+export function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
+  const tables = p.manifestSkills()
+  if (tables === null) {
+    return [
+      yellow(
+        'skills:mandatory',
+        'manifest 不可用——无法核强制技能齐全度（不误报 green）',
+        '先修复 asset:manifest（templates/manifest.yaml）后重跑 tenon doctor',
+      ),
+      yellow(
+        'skills:recommended',
+        'manifest 不可用——无法核推荐技能齐全度',
+        '先修复 asset:manifest 后重跑 tenon doctor',
+      ),
+    ]
+  }
+  const registryPath = join(p.pluginRoot, 'templates', 'skill-sources.yaml')
+  const registryResult = p.fileExists(registryPath)
+    ? loadCanonicalSkillSources(registryPath)
+    : { ok: false as const, error: 'registry 缺失' }
+  if (!registryResult.ok && p.fileExists(registryPath)) {
+    return [
+      red(
+        'skills:mandatory',
+        `canonical registry 无效（${registryResult.error}）——严格 provenance 校验失败`,
+        `修复 ${registryPath} 后重跑 tenon doctor；bash ${join(p.pluginRoot, 'tools', 'verify-skills.sh')} 可查看 category`,
+      ),
+      red(
+        'skills:recommended',
+        `canonical registry 无效（${registryResult.error}）——严格 provenance 校验失败`,
+        `修复 ${registryPath} 后重跑 tenon doctor；bash ${join(p.pluginRoot, 'tools', 'verify-skills.sh')} 可查看 category`,
+      ),
+    ]
+  }
+  const registry = registryResult.ok ? registryResult.sources : []
+  if (registry.length === 0) {
+    return [
+      yellow(
+        'skills:mandatory',
+        'registry 未就绪（templates/skill-sources.yaml 缺失/空）——无法核强制技能齐全度（不误报 green）',
+        '确认插件安装完整（skill-sources.yaml 应随插件分发）后重跑 tenon doctor',
+      ),
+      yellow(
+        'skills:recommended',
+        'registry 未就绪（templates/skill-sources.yaml 缺失/空）——无法核推荐技能齐全度',
+        '确认插件安装完整后重跑 tenon doctor',
+      ),
+    ]
+  }
+
+  return evaluateSkillChecks(tables, registry, p.installedSkillNames())
 }
 
 const CODEX_PROJECT_CONTRACT_SKILLS = [

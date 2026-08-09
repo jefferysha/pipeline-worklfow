@@ -23,6 +23,19 @@ tenon dashboard --open
 
 ## Change 与状态
 
+### Interaction observability
+
+```text
+tenon interaction scorecard <fixture-dir> --json
+```
+
+该只读命令重放 tracked v1 JSON fixtures，输出确定性的
+tenon-interaction-scorecard/v1 JSON：三项固定指标、completeness、accepted stale、
+same-state repeats、invalid resumes、diagnostics 及 unclassified extension codes。
+存在时每个 Change 的 projection 是普通非 symlink 文件 .pipeline-interactions.jsonl；
+projection 写失败只在 canonical 成功后 warning，不改变 canonical state。闭合 codec
+拒绝 prompt、token、credential 与 artifact 字段。
+
 ```bash
 tenon init <name> --track <track> --preset <preset>
 tenon init <name> --track frontend --preset full --document-locale zh-CN

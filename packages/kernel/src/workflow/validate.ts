@@ -1,5 +1,6 @@
 import { compileDefaultWorkflow, compileWorkflow } from './compile.js'
 import { validateOpenSpecContractWorkflow } from './document-contract.js'
+import { isValidWorkflowName } from './identifier.js'
 import type { WorkflowDef } from './types.js'
 
 function detectCycle(skillIds: string[], dependsOn: Map<string, string[]>): string[] {
@@ -29,8 +30,6 @@ function detectCycle(skillIds: string[], dependsOn: Map<string, string[]>): stri
 // 「保存成功、下次打不开」（如含空格）。与 dashboard 客户端表单、server 路由层 name 校验
 // 同一条规则；此处是绕过 UI 直调已鉴权 HTTP 时的唯一服务端后盾。
 const IDENT_RE = /^[a-zA-Z0-9_-]+$/
-// Workflow 是用户可见名称；允许 Unicode 字母/数字，但仍拒绝空白、点与路径分隔符。
-const WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u
 /**
  * skill id 允许命名空间冒号（插件 skill 如 `superpowers:brainstorming`、`commit-commands:commit`）。
  * skill-tracker.sh 落的是命名空间全名、internal-skill-gate 按全名匹配 step.skills[].id——workflow 必须能
@@ -48,7 +47,7 @@ export function validateWorkflow(
   const producedByEarlierStep = new Set<string>()
   const allStepIds = new Set(wf.steps.map((s) => s.id))
 
-  if (!WORKFLOW_NAME_RE.test(wf.name)) {
+  if (!isValidWorkflowName(wf.name)) {
     errors.push(`workflow name '${wf.name}' 含非法字符（允许中文、字母、数字、- 与 _；不允许空格、点或路径符号）`)
   }
 

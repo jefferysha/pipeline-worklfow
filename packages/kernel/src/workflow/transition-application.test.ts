@@ -16,6 +16,8 @@ import { compileAutomationPolicySnapshot } from '../loops/automation-policy.js'
 import type { LoopEntry } from '../loops/types.js'
 import { createTransitionApplication } from './transition-application.js'
 import type { TransitionApplicationDeps } from './transition-application.js'
+import type { TransitionApplicationDeps, TransitionApplicationWarning } from './transition-application.js'
+import { INTERACTION_PROJECTION_WRITE_FAILED } from '../interaction/contract.js'
 import { compileWorkflow } from './compile.js'
 import { compileEffectiveWorkflowPlan, documentGovernanceFingerprint } from './effective-plan.js'
 import type { WorkflowDef } from './types.js'
@@ -467,6 +469,43 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(state.fields.phase).toBe('build')
       expect(state.runMetadata?.transitionSequence).toBe(0)
       expect(deps.historyEntries).toEqual([])
+    })
+
+    test('approved transition remains applied when interaction effect projection fails', async () => {
+      const root = await freshRepoRoot()
+      const interaction = {
+        recordUnderLock: async (): Promise<never> => {
+          throw new Error('interaction projection disk full')
+        },
+      }
+      const deps = makeDeps({ interaction })
+      const dir = await initChange(deps, root, 'demo')
+      await createStateStore().setMany(dir, {
+        phase: 'explore',
+        design_doc: 'openspec/changes/demo/design.md',
+        review_gate_phase: 'explore',
+        review_gate_status: 'approved',
+        review_gate_event: 'explore-complete',
+        review_requested_at: FIXED_CLOCK(),
+        review_acknowledged_at: FIXED_CLOCK(),
+      })
+      const result = await createTransitionApplication(deps).execute({
+        root,
+        changeDir: dir,
+        changeName: 'demo',
+        event: 'explore-complete',
+        context: { fileExists: () => true },
+        loadWorkflow: NEVER_FOUND_WORKFLOW,
+      })
+      expect(result.kind).toBe('applied')
+      if (result.kind !== 'applied') return
+      expect(result.warnings).toContainEqual({
+        kind: 'projection-write-failed',
+        projection: 'interaction',
+        code: INTERACTION_PROJECTION_WRITE_FAILED,
+        cause: expect.any(Error),
+      })
+      expect((await createStateStore().read(dir)).fields.phase).toBe('spec')
     })
 
     test('requirements-changed：即使上游文档已 stale 也可从 build 受控回退 spec，零伪造 receipt', async () => {
