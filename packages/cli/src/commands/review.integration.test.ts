@@ -1,7 +1,7 @@
 import { readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { REVIEW_MARKER_PROTOCOL } from '@tenon/kernel'
+import { readInteractionProjection, REVIEW_MARKER_PROTOCOL } from '@tenon/kernel'
 import { freshHarness, type Harness } from '../integration-harness.js'
 
 describe('真实 e2e —— review exit receipt（default workflow）', () => {
@@ -66,6 +66,83 @@ describe('真实 e2e —— review exit receipt（default workflow）', () => {
     } finally {
       await rm(h2.cwd, { recursive: true, force: true })
     }
+  })
+
+  test('exact review journey projects ordered request, acknowledgement, effect and valid resume', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
+    expect(await h.run(['session', 'activate', 'demo'])).toBe(0)
+
+    const projection = await readInteractionProjection(join(h.cwd, 'openspec/changes/demo'))
+    expect(projection.kind).toBe('valid')
+    if (projection.kind !== 'valid') return
+    expect(projection.events.map((event) => event.event + '/' + event.result)).toEqual([
+      'review.requested/success',
+      'review.acknowledged/success',
+      'review.effect-applied/success',
+      'resume.validated/success',
+    ])
+    const [request, acknowledgement, effect, resume] = projection.events
+    expect(request?.journeyId).toBe(acknowledgement?.journeyId)
+    expect(acknowledgement?.journeyId).toBe(effect?.journeyId)
+    expect(effect?.journeyId).toBe(resume?.journeyId)
+    expect(acknowledgement?.stateBeforeHash).toBe(request?.stateAfterHash)
+    expect(effect?.stateBeforeHash).toBe(acknowledgement?.stateAfterHash)
+    expect(resume?.stateBeforeHash).toBe(effect?.stateAfterHash)
+    expect(resume?.stateAfterHash).toBe(effect?.stateAfterHash)
+    expect(request?.originStepVisit).toEqual(acknowledgement?.originStepVisit)
+    expect(acknowledgement?.originStepVisit).toEqual(effect?.originStepVisit)
+    expect(resume?.originStepVisit).toEqual(effect?.originStepVisit)
+    expect(projection.events.map((event) => event.sequence)).toEqual([1, 2, 3, 4])
+  })
+
+  test('same-state repeat emits suppressed prompt without a second interruption', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    const projection = await readInteractionProjection(join(h.cwd, 'openspec/changes/demo'))
+    expect(projection.kind).toBe('valid')
+    if (projection.kind !== 'valid') return
+    expect(projection.events.map((event) => event.event)).toEqual([
+      'review.requested',
+      'review.prompt-suppressed',
+    ])
+    expect(projection.events[1]?.result).toBe('suppressed')
+  })
+
+  test('stale projection does not change canonical acknowledgement', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['set', 'demo', 'scope', 'changed-before-ack.ts'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.read('demo')).toMatch(/^review_gate_status: approved$/m)
+  })
+
+  test('missing interaction projection does not change canonical acknowledgement', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    await rm(join(h.cwd, 'openspec/changes/demo/.pipeline-interactions.jsonl'), { force: true })
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.read('demo')).toMatch(/^review_gate_status: approved$/m)
+  })
+
+  test('corrupt interaction projection does not change canonical acknowledgement', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    await writeFile(join(h.cwd, 'openspec/changes/demo/.pipeline-interactions.jsonl'), 'not-json\n', 'utf8')
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.read('demo')).toMatch(/^review_gate_status: approved$/m)
+    expect(h.err.join('\n')).toContain('interaction-projection-write-failed')
+  })
+
+  test('resume with a changed canonical state is rejected and remains non-terminal', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
+    expect(await h.run(['set', 'demo', 'scope', 'touched.ts'])).toBe(0)
+    expect(await h.run(['session', 'activate', 'demo'])).toBe(0)
+    const projection = await readInteractionProjection(join(h.cwd, 'openspec/changes/demo'))
+    expect(projection.kind).toBe('valid')
+    if (projection.kind !== 'valid') return
+    expect(projection.events.at(-1)?.event).toBe('resume.validated')
+    expect(projection.events.at(-1)?.result).toBe('rejected')
   })
 
   test('delegated acknowledge requires a current Change-bound user authority and records that source', async () => {

@@ -115,6 +115,7 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
   // transition 写入，而由 phase 完成后的 `tenon review request` 专职写入。
   const app = createTransitionApplication({
     runRepository: deps.runRepo,
+    interaction: deps.interaction,
     flow: deps.flow,
     clock: deps.clock,
     history: deps.history,
@@ -180,6 +181,9 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
                   break
                 case 'history':
                   deps.io.err(`WARN: history 写入失败: ${errMsg(w.cause)}`)
+                  break
+                case 'interaction':
+                  deps.io.err(`WARN: ${w.code} interaction projection 写入失败（canonical 已提交）: ${errMsg(w.cause)}`)
                   break
               }
               break

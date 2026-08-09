@@ -4,6 +4,18 @@
  */
 export { atomicWriteFile, createStateStore, StateProjectionDriftError, STATE_FILE_NAME } from './store.js'
 export {
+  appendInteractionEventUnderLock,
+  createInteractionEventRecorder,
+  createInteractionEventStore,
+  interactionProjectionPath,
+  readInteractionProjection,
+  InteractionProjectionError,
+  INTERACTION_MAX_BYTES,
+  INTERACTION_MAX_EVENTS,
+  INTERACTION_MAX_LINE_BYTES,
+} from './interaction-event-store.js'
+export type { InteractionEventStore, InteractionProjectionReadResult } from './interaction-event-store.js'
+export {
   createReviewAttemptBudgetStore,
   ReviewAttemptBudgetError,
 } from './review-attempt-budget.js'
@@ -49,7 +61,7 @@ export type {
 } from './document-ledger.js'
 export { currentDocumentStepVisitId } from './document-step-visit.js'
 export { evaluateDocumentEvidence } from './document-evidence.js'
-export { decodeUtf8Text } from './document-path.js'
+export { decodeUtf8Text, readBoundedRegularFile, readBoundedFileHandle } from './document-path.js'
 export type {
   DocumentEvidenceItem, DocumentEvidenceItemStatus, DocumentEvidenceReport, DocumentEvidenceScope,
 } from './document-evidence.js'

@@ -87,6 +87,24 @@
 
 ## 真实证据链（三道，收编门必过）
 
+## 2026-08-10 · Issue #46 interaction observability evidence
+
+- Focused kernel/CLI Vitest is real source execution: 7 files, 45 tests passed.
+  Coverage includes closed/privacy codec and matrix round-trip, deterministic replay,
+  projection sequence/hash/truncation/symlink failures, scorecard denominator guards,
+  unknown-code unclassified handling, and scorecard CLI path/error sanitisation.
+- Tracked fixture replay is deterministic through the built CLI bundle:
+  tenon interaction scorecard tools/fixtures/interaction-events/v1 --json.
+  It reports governedCompletionRate 0.6, humanInterruptionsPerVerifiedCompletion
+  1.6666666666666667, medianTimeToValidResumeMs 4000, eventCompleteness 1,
+  acceptedStaleDecisions 0, sameStateRepeatedPrompts 0, invalidResumes 1; projection-loss,
+  malformed-order, and wrong-resume remain negative controls with sequence-gap,
+  malformed-order, invalid-resume, and incomplete-success-journey diagnostics.
+- npm run build -- --pretty false and npm run check:architecture both passed after npm ci.
+  The CLI dist artifact was regenerated through the bundle target. Full repository tests,
+  browser acceptance, and final release gates were not run in this worker lane; the root
+  agent owns those final checks.
+
 | 层 | 文件 | 真实性 | 驱动什么 |
 |---|---|---|---|
 | **真 fs 集成** | `packages/cli/src/integration.test.ts` | 🟢 真 | `buildProgram` + 真 `createStateStore/createFlowEngine/loadManifest/createHistoryWriter` + 真临时目录，断言真实落盘的 .pipeline.yaml/JSONL/marker 字节；真子进程跑 dist bundle --help |

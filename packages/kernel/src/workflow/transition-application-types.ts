@@ -7,9 +7,13 @@ import type { DocumentContractPhase, DocumentGovernancePolicy } from './document
 import type { TransitionRecord, WorkflowRunRepository } from './run-types.js'
 import type { EffectiveWorkflowPlan } from './effective-plan.js'
 import type { TrackDefinition } from '../tracks/types.js'
+import type { InteractionEventRecorder } from '../interaction/ports.js'
+import { INTERACTION_PROJECTION_WRITE_FAILED } from '../interaction/contract.js'
 
 export interface TransitionApplicationDeps {
   runRepository: WorkflowRunRepository
+  /** Best-effort interaction projection emitter; it never participates in canonical decisions. */
+  interaction?: InteractionEventRecorder
   flow: FlowEngine
   clock: () => string
   history?: HistoryWriter
@@ -47,6 +51,12 @@ export type TransitionApplicationWarning =
   | {
       readonly kind: 'projection-write-failed'
       readonly projection: 'state-yaml' | 'breadcrumb' | 'history'
+      readonly cause: unknown
+    }
+  | {
+      readonly kind: 'projection-write-failed'
+      readonly projection: 'interaction'
+      readonly code: typeof INTERACTION_PROJECTION_WRITE_FAILED
       readonly cause: unknown
     }
 

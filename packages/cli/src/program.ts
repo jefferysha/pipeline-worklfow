@@ -38,6 +38,7 @@ import { cmdUninstall } from './commands/uninstall.js'
 import { cmdList, cmdStatus } from './commands/status.js'
 import { cmdTransition } from './commands/transition.js'
 import { cmdReview } from './commands/review.js'
+import { cmdInteraction } from './commands/interaction.js'
 import { cmdInternalSkillGate } from './commands/internalSkillGate.js'
 import { cmdInternalConstraintGate } from './commands/internalConstraintGate.js'
 import { cmdInternalCodexJsonl } from './commands/internalCodexJsonl.js'
@@ -174,6 +175,13 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .option('--delegated', '仅用户已明确委托当前 Change 连续执行时，按该委托写审计化 review receipt')
     .action(async (sub: string, name: string | undefined, opts: { event?: string; delegated?: boolean }) =>
       bail(await cmdReview(deps, sub, name, opts)))
+
+  program
+    .command('interaction <sub> [args...]')
+    .description('interaction scorecard：读取有界、非 symlink 的 benchmark fixtures 并输出确定性 JSON')
+    .option('--json', 'JSON 输出（scorecard 必须显式指定）')
+    .action(async (sub: string, args: string[], opts: { json?: boolean }) =>
+      bail(await cmdInteraction(deps, sub, args, opts)))
 
   registerAutomatedReviewCommands(program, deps)
 

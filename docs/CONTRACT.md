@@ -314,7 +314,45 @@ get/set/transition 的 stdout 与 exit code 以 **golden-oracle 双跑逐字一�
   `Accept-Encoding` 协商 gzip，返回 `Vary: Accept-Encoding` 并遵守显式 `gzip;q=0`；
   原始与 gzip 响应字节均由真实 HTTP 测试校验。
 
-### 3.3 Skill Invocation evidence v1
+### 3.3 Interaction observability v1
+
+Issue #46 adds an optional, derived interaction projection for each Change:
+openspec/changes/<name>/.pipeline-interactions.jsonl. Canonical
+RunRevision, exact review receipts, transition effects, and session binding
+remain the source of truth; this JSONL is never read by guards,
+authorization, transition, or resume decisions. An older Change with no file
+keeps its existing canonical behavior.
+
+Each line is a closed tenon-interaction-event/v1 envelope. The wire keys are
+snake_case and include a deterministic event_id, sequence/hash-chain fields,
+Change/run/workflow identity and plan fingerprint, origin and current step
+visits, canonical state-before/state-after digests, actor/surface, execution
+and comparison dimensions, stable event/result semantics, namespaced
+reason/trigger/effect/outcome codes, and duration. Prompt text, token,
+credential, artifact body, URL, session id, and arbitrary metadata are not
+valid fields; the codec rejects unknown keys. Unknown namespaced codes
+round-trip into unclassified_codes and are never inferred as success. Extension
+codes are ASCII namespaced identifiers of at most 128 characters.
+
+The public writer port is `recordUnderLock`; callers invoke it only while
+holding the existing Change lock. The adapter appends through `appendUnderLock`
+without re-entering the lock. A regular non-symlink reader enforces bounded bytes/lines, sequence starting at
+1, exact UTF-8 previous-line hashes, and trailing newlines. Missing, valid,
+and corrupt projections are distinct. Projection write failures carry the
+stable `interaction-projection-write-failed` warning code after a canonical
+commit, never a rollback. Missing projections remain explicitly unavailable
+(`projection-unavailable`) rather than empty.
+
+Deterministic local benchmark: tenon interaction scorecard <fixture-dir> --json.
+It emits tenon-interaction-scorecard/v1, stable fixture ids, the three fixed
+metrics (zero denominators are null), event completeness, stale/repeat/resume
+guardrails, diagnostic counts, and sorted unclassified_codes. Tracked v1
+matrix, measurement fixtures, and negative controls live under
+tools/fixtures/interaction-events/v1/; negative controls never enter product
+metric denominators. Manifest fixture ids are closed ASCII identifiers of at
+most 64 characters, and a manifest contains at most 256 fixtures.
+
+### 3.4 Skill Invocation evidence v1
 
 - **canonical ledger**：每个 Change 的 `.pipeline-skill-invocations.jsonl` 是
   `skill-invocation-evidence/v1` 唯一真相源；history 只能由 completed event 单向生成兼容行，

@@ -19,6 +19,7 @@ import {
   reviewGatePendingFor,
   reviewGateRequestPatch,
   reviewGateStatus,
+  readCurrentRunRevision,
 } from '@tenon/kernel'
 import type { PipelineState } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
@@ -27,6 +28,8 @@ import { readDelegatedReviewAuthority, type ContinuousAuthority } from '../conti
 import { cmdCheck } from './check.js'
 import { recordHistory } from './fields.js'
 import { effectiveWorkflowForState } from './effective-workflow.js'
+import { createInteractionCapture } from '../interaction-emitter.js'
+import { INTERACTION_PROJECTION_WRITE_FAILED } from '@tenon/kernel'
 
 type ReviewStep = {
   readonly phase: string
@@ -164,7 +167,6 @@ async function checkReviewRequestReadiness(
   // re-evaluate under its own lock. This keeps an agent from freezing knowingly incomplete output.
   return cmdCheck(deps, name)
 }
-
 async function clearMarker(deps: CliDeps): Promise<boolean> {
   if (!deps.clearReviewMarker) return true
   try {
@@ -175,7 +177,6 @@ async function clearMarker(deps: CliDeps): Promise<boolean> {
     return false
   }
 }
-
 export async function cmdReview(
   deps: CliDeps,
   sub: string,
@@ -191,6 +192,9 @@ export async function cmdReview(
     return 1
   }
   const dir = changeDir(deps.cwd, name)
+  const interaction = deps.interaction === undefined
+    ? undefined
+    : createInteractionCapture(deps.interaction, deps.clock)
   try {
     if (sub === 'request') {
       if (opts.delegated === true) {
@@ -211,6 +215,7 @@ export async function cmdReview(
       } | undefined
       await deps.store.withLock(dir, async () => {
         const state = await deps.store.read(dir)
+        const beforeRevision = interaction === undefined ? undefined : await readCurrentRunRevision(dir)
         const step = resolveReviewStep(deps, state)
         const lockedEvent = resolveReviewEvent(step, opts.event)
         if (step.phase !== preflightStep.phase || lockedEvent !== event) {
@@ -229,6 +234,25 @@ export async function cmdReview(
           requested = {
             phase: step.phase, event, requestedAt: existingAt || deps.clock(), alreadyPending: true, replacedReceipt: false,
           }
+          if (interaction !== undefined && beforeRevision !== undefined) {
+            try {
+              await interaction.recordReviewRequested({
+                changeDir: dir,
+                changeName: name,
+                state,
+                revision: beforeRevision,
+                beforeRevision,
+                event,
+                requestedAt: existingAt || deps.clock(),
+                suppressed: true,
+                clock: deps.clock(),
+              })
+            } catch (error) {
+              deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection 写入失败（canonical review pending 已存在）: ${errMsg(error)}`)
+            }
+          } else if (interaction !== undefined) {
+            deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection 未写入（缺 canonical run/workflow/state anchor；canonical review pending 未改变）`)
+          }
           return
         }
         const requestedAt = deps.clock()
@@ -236,6 +260,25 @@ export async function cmdReview(
           ...state,
           fields: { ...state.fields, ...reviewGateRequestPatch(step.phase, event, requestedAt) },
         }, { kind: 'set-many' })
+        const afterRevision = interaction === undefined ? undefined : await readCurrentRunRevision(dir)
+        if (interaction !== undefined && beforeRevision !== undefined && afterRevision !== undefined) {
+          try {
+            await interaction.recordReviewRequested({
+              changeDir: dir,
+              changeName: name,
+              state: { ...state, fields: { ...state.fields, ...reviewGateRequestPatch(step.phase, event, requestedAt) } },
+              revision: afterRevision,
+              beforeRevision,
+              event,
+              requestedAt,
+              clock: requestedAt,
+            })
+          } catch (error) {
+            deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection 写入失败（canonical review request 已提交）: ${errMsg(error)}`)
+          }
+        } else if (interaction !== undefined) {
+          deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection 未写入（缺 canonical run/workflow/state anchor；canonical review request 已提交）`)
+        }
         requested = {
           phase: step.phase,
           event,
@@ -261,7 +304,6 @@ export async function cmdReview(
       )
       return markerOk ? 0 : 2
     }
-
     let acknowledged: {
       phase: string
       event: string
@@ -271,6 +313,7 @@ export async function cmdReview(
     } | undefined
     await deps.store.withLock(dir, async () => {
       const state = await deps.store.read(dir)
+      const beforeRevision = interaction === undefined ? undefined : await readCurrentRunRevision(dir)
       const step = resolveReviewStep(deps, state)
       const event = reviewGateEvent(state)
       if (event === '') {
@@ -310,6 +353,25 @@ export async function cmdReview(
         ...state,
         fields: { ...state.fields, ...reviewGateApprovalPatch(acknowledgedAt) },
       }, { kind: 'set-many' })
+      const afterRevision = interaction === undefined ? undefined : await readCurrentRunRevision(dir)
+      if (interaction !== undefined && beforeRevision !== undefined && afterRevision !== undefined) {
+        try {
+          await interaction.recordReviewAcknowledged({
+            changeDir: dir,
+            changeName: name,
+            state: { ...state, fields: { ...state.fields, ...reviewGateApprovalPatch(acknowledgedAt) } },
+            revision: afterRevision,
+            beforeRevision,
+            event,
+            requestedAt: scalar(state, 'review_requested_at'),
+            clock: acknowledgedAt,
+          })
+        } catch (error) {
+          deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection 写入失败（canonical review acknowledgement 已提交）: ${errMsg(error)}`)
+        }
+      } else if (interaction !== undefined) {
+        deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection 未写入（缺 canonical run/workflow/state anchor；canonical review acknowledgement 已提交）`)
+      }
       acknowledged = { phase: step.phase, event, acknowledgedAt, changed: true, delegatedAuthority }
     })
     if (!acknowledged) throw new Error('review acknowledgement 未产生 receipt')

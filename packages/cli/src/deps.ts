@@ -2,7 +2,7 @@
  * cli 依赖注入面 —— 命令逻辑全部是接受 CliDeps 的纯函数（CONTRACT §4 agent:cli）。
  * store/flow 按 types.ts 契约注入；测试全 mock，绝不 import kernel 实现。
  */
-import type { DocumentContractPhase, DocumentEvidenceReport, EffectiveSkillResolver, FlowEngine, GuardContext, HistoryWriter, MutationOutcome, ProjectTrackConfig, RegistrySnapshot, SkillTable, StateStore, TrackRegistry, WorkflowRunRepository } from '@tenon/kernel'
+import type { DocumentContractPhase, DocumentEvidenceReport, EffectiveSkillResolver, FlowEngine, GuardContext, HistoryWriter, InteractionEventRecorder, MutationOutcome, ProjectTrackConfig, RegistrySnapshot, SkillTable, StateStore, TrackRegistry, WorkflowRunRepository } from '@tenon/kernel'
 import type { SkillActionAuthorityResolver } from '@tenon/automation'
 import type { AfkReadiness } from './afkReadiness.js'
 import type { CodexAuthStatus } from './codexAuth.js'
@@ -152,6 +152,8 @@ export interface CliDeps {
    * 此前锁外副作用可能因并发交错产生的撕裂。cmdTransition 唯一消费方。
    */
   runRepo: WorkflowRunRepository
+  /** Optional append-only interaction projection; canonical operations never depend on it. */
+  interaction?: InteractionEventRecorder
   /** Explicit machine-readable Skill contract authority; absent means the Skill layer is missing. */
   resolveSkillActionAuthority?: SkillActionAuthorityResolver
   /**
