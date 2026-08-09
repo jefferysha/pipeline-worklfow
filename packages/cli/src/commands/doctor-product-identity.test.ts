@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import { join } from 'node:path'
 import type { RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
 import { runtimeReleaseIdV2 } from '../runtime/release-store-codecs.js'
@@ -8,6 +9,8 @@ const target = { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) }
 const source = { host: 'codex' as const, pluginVersion: target.version }
 const runtimePayloadDigest = 'b'.repeat(64)
 const releaseId = runtimeReleaseIdV2(runtimePayloadDigest, source, target)
+const marketplaceRoot = process.platform === 'win32' ? 'C:\\marketplace' : '/marketplace'
+const trustedRoot = process.platform === 'win32' ? 'C:\\trusted' : '/trusted'
 
 function probeFixture(options: {
   readonly head?: string
@@ -21,13 +24,15 @@ function probeFixture(options: {
   let head = options.head ?? target.commit
   const ref = options.ref ?? target.tag
   const candidateDigest = options.candidateDigest ?? runtimePayloadDigest
-  const homeDir = '/home/doctor-identity-test'
-  const env = { PATH: '/trusted/bin' }
+  const homeDir = process.platform === 'win32'
+    ? 'C:\\Users\\doctor-identity-test'
+    : '/home/doctor-identity-test'
+  const env = { PATH: join(trustedRoot, 'bin') }
   const paths = resolveRuntimePaths({ homeDir, env })
   let gitExact = true
   const trusted = (name: 'bash' | 'git' | 'node') => ({
-    executable: `/trusted/${name}`,
-    requestedPath: `/trusted/${name}`,
+    executable: join(trustedRoot, name),
+    requestedPath: join(trustedRoot, name),
     verify: () => {
       if (options.verificationCounts !== undefined) options.verificationCounts[name] += 1
       return name !== 'git' || gitExact
@@ -65,19 +70,19 @@ function probeFixture(options: {
     installer,
     {
       resolveHostCommand: (command) => ({
-        executable: `/trusted/${command}`,
+        executable: join(trustedRoot, command),
         verify: () => {
           if (options.verificationCounts !== undefined) options.verificationCounts.host += 1
           return true
         },
         invocation: (args) => {
           if (options.verificationCounts !== undefined) options.verificationCounts.host += 1
-          return { file: `/trusted/${command}`, args }
+          return { file: join(trustedRoot, command), args }
         },
       }),
       resolveTrustedCommand: (command) => trusted(command),
-      readText: (path) => path === '/marketplace/.codex-plugin/plugin.json'
-        || path === '/marketplace/.claude-plugin/plugin.json'
+      readText: (path) => path === join(marketplaceRoot, '.codex-plugin', 'plugin.json')
+        || path === join(marketplaceRoot, '.claude-plugin', 'plugin.json')
         ? JSON.stringify({ version: target.version })
         : undefined,
       run: (_file, args) => {
@@ -87,7 +92,7 @@ function probeFixture(options: {
             code: 0,
             stdout: JSON.stringify({ marketplaces: [{
               name: 'tenon',
-              root: '/marketplace',
+              root: marketplaceRoot,
               ref,
               marketplaceSource: { sourceType: 'git', source: 'jefferysha/tenon' },
             }] }),
@@ -101,15 +106,15 @@ function probeFixture(options: {
               pluginId: 'tenon@tenon',
               enabled: true,
               version: target.version,
-              source: { path: '/marketplace' },
+              source: { path: marketplaceRoot },
             }] }),
             stderr: '',
           }
         }
-        if (text === '-C /marketplace rev-parse HEAD') {
+        if (text === `-C ${marketplaceRoot} rev-parse HEAD`) {
           return { code: 0, stdout: `${head}\n`, stderr: '' }
         }
-        if (text === '-C /marketplace remote get-url origin') {
+        if (text === `-C ${marketplaceRoot} remote get-url origin`) {
           return { code: 0, stdout: 'https://github.com/jefferysha/tenon.git\n', stderr: '' }
         }
         if (text === `ls-remote https://github.com/jefferysha/tenon.git refs/tags/${target.tag} refs/tags/${target.tag}^{}`) {
@@ -131,8 +136,8 @@ function probeFixture(options: {
         if (/^-C .+ cat-file -t [a-f0-9]{40}$/u.test(text)) {
           return { code: 0, stdout: 'commit\n', stderr: '' }
         }
-        if (text === '-C /marketplace diff --quiet HEAD --'
-          || text === '-C /marketplace ls-files --others --exclude-standard') {
+        if (text === `-C ${marketplaceRoot} diff --quiet HEAD --`
+          || text === `-C ${marketplaceRoot} ls-files --others --exclude-standard`) {
           return { code: 0, stdout: '', stderr: '' }
         }
         return { code: 1, stdout: '', stderr: `unexpected: ${text}` }
@@ -164,7 +169,7 @@ describe('doctor native immutable product identity probe', () => {
       state: 'native',
       stableTargetTag: target.tag,
       stableTargetCommit: target.commit,
-      hostPluginRoot: '/marketplace',
+      hostPluginRoot: marketplaceRoot,
       hostTargetExact: true,
       hostPayloadDigest: runtimePayloadDigest,
       runtimePayloadDigest,

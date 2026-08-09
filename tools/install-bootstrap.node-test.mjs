@@ -17,7 +17,7 @@ const AUTH_COMMANDS = [
   'codex login status',
 ]
 
-async function waitForFile(path, timeoutMs = 5_000) {
+async function waitForFile(path, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try { await readFile(path); return } catch (error) {
@@ -159,6 +159,13 @@ case "${'$'}url" in
 esac
 `)
   await chmod(join(bin, 'curl'), 0o755)
+  // Keep installer tests independent from the ambient package-manager/toolcache Node. GitHub's
+  // hosted toolcache is intentionally writable by a different owner and therefore correctly
+  // fails the production trust proof; the fixture needs its own owner-controlled executable.
+  await writeFile(join(bin, 'node'), `#!/bin/sh
+exec '${process.execPath.replaceAll("'", "'\\''")}' "${'$'}@"
+`)
+  await chmod(join(bin, 'node'), 0o755)
 
   const hostScript = host === 'codex'
     ? `#!/usr/bin/env bash

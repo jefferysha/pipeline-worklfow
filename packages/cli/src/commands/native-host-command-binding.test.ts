@@ -184,7 +184,7 @@ describe('native lifecycle command binding', () => {
     try {
       writeFileSync(executable, '#!/bin/sh\nexit 0\n', { mode: 0o777 })
       chmodSync(executable, 0o777)
-      expect(freezeTrustedExecutable(executable)).toBeUndefined()
+      expect(freezeTrustedExecutable(executable, 'linux')).toBeUndefined()
       const windowsIdentity = freezeTrustedExecutable(executable, 'win32')
       expect(windowsIdentity).toBeDefined()
       chmodSync(bin, 0o711)
