@@ -567,14 +567,45 @@ describe('evaluateVerificationGate —— settlement 判定表（D3 消费点：
     expect(gate).toEqual({ kind: 'paused', reason: 'verification-untrusted' })
   })
 
-  it('trusted passed 但 subject SHA 与 merge candidate buildSha 不符 → paused，reason=verification-subject-mismatch（fail-closed，绝不 merge）', () => {
+  it('trusted passed 但 subject SHA 与 authoritative buildSha 不符 → paused，stable revision-stale blocker（fail-closed，绝不 merge）', () => {
     const gate = evaluateVerificationGate(gateInput({ buildSha: 'b'.repeat(40) }))
-    expect(gate).toEqual({ kind: 'paused', reason: 'verification-subject-mismatch' })
+    expect(gate).toMatchObject({
+      kind: 'paused', reason: 'verify-build-revision-untrusted',
+      blocker: {
+        code: 'verify-build-revision-untrusted',
+        reason: 'revision-stale',
+        remediation: 'return-to-build-and-capture-current-revision',
+      },
+    })
   })
 
-  it('buildSha 缺席（noop）+ verification 也缺席 → paused/verification-missing（调用方按 noop 优先级另行短路，此谓词本身不知道 noop）', () => {
+  it('authoritative buildSha 缺席（含 noop）→ stable missing blocker，verification 不能旁路', () => {
     const gate = evaluateVerificationGate(gateInput({ verification: undefined, buildSha: undefined }))
-    expect(gate).toEqual({ kind: 'paused', reason: 'verification-missing' })
+    expect(gate).toMatchObject({
+      kind: 'paused', reason: 'verify-build-revision-untrusted',
+      blocker: { code: 'verify-build-revision-untrusted', reason: 'missing' },
+    })
+  })
+
+  it.each([
+    ['missing', undefined, 'missing'],
+    ['null', null, 'null'],
+    ['ambiguous', [SHA], 'ambiguous'],
+    ['malformed', 'legacy-sha', 'malformed'],
+    ['39-char-sha', 'a'.repeat(39), 'malformed'],
+    ['41-char-sha', 'a'.repeat(41), 'malformed'],
+    ['63-char-sha', 'a'.repeat(63), 'malformed'],
+    ['65-char-sha', 'a'.repeat(65), 'malformed'],
+  ] as const)('issue #42 authoritative revision %s is stable and retry-idempotent', (_label, buildSha, reason) => {
+    const input = gateInput({ buildSha: buildSha as unknown as string, verification: undefined })
+    const first = evaluateVerificationGate(input)
+    const retry = evaluateVerificationGate(input)
+    expect(first).toEqual(retry)
+    expect(first).toMatchObject({
+      kind: 'paused', reason: 'verify-build-revision-untrusted',
+      blocker: { code: 'verify-build-revision-untrusted', reason, remediation: 'return-to-build-and-capture-current-revision' },
+    })
+    expect(JSON.stringify(first)).not.toContain('legacy-sha')
   })
 
   describe('H7-S2（r2 §3 收口）：expectedSubject 三字段比对——scheduler 绕过 lifecycle 直连时，一个"别的 change/attempt/workflow_run 的合法结果+相同 buildSha"必须被拦下，不能只比 revision SHA', () => {

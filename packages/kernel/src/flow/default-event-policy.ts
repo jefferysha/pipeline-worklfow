@@ -27,7 +27,9 @@
 import type { FieldName, PipelineState } from '../types.js'
 import type { EventName, TransitionContext } from './transition-table.js'
 import type { ActionConfig, CompiledGuardConfig, GuardInput } from '../workflow/ir.js'
-import { evaluateGuards, type GuardEvaluation } from '../workflow/guard-handlers.js'
+import { evaluateGuards, type EvaluateGuardsOptions, type GuardEvaluation } from '../workflow/guard-handlers.js'
+import { safeRevisionHash } from '../workflow/build-revision.js'
+import type { BuildRevisionBlocker } from '../workflow/build-revision.js'
 import { NON_PM, NON_PM_OR_FREE } from '../workflow/predicates.js'
 
 /** 一个 default 事件的转换政策：前置 guard（首错优先评估）+ 走边后的状态副作用 action。 */
@@ -77,13 +79,13 @@ export const DEFAULT_EVENT_POLICY = {
       { type: 'full-direct-override' },
       { type: 'field-equals', field: 'pre_verify_review_result', value: 'pass' },
     ],
-    // 老仓 L156-161：git HEAD 冻结进 build_sha（取不到 → 留原值 + WARN 信号）。
+    // Build revision capture capability writes the canonical build:v1 token; capability failure is closed.
     actions: [{ type: 'freeze-build-sha' }],
     enforceTaskExit: true,
   },
   'verify-pass': {
     // 老仓 L163-199 首错优先：verification_report 非空且文件存在 → branch_status=handled →
-    // 非 pm 轨双 review=pass → barrier（HEAD==build_sha）。
+    // 非 pm 轨双 review=pass → trustworthy build revision barrier。
     guards: [
       { type: 'file-exists', path: { kind: 'field', field: 'verification_report' } },
       { type: 'field-equals', field: 'branch_status', value: 'handled' },
@@ -162,6 +164,12 @@ export function renderPreconditionViolation(
   track: string,
 ): string[] {
   const { guard, decision } = failure
+  if (decision.kind === 'failed' && decision.blocker !== undefined) {
+    return [
+      `ERROR: ${event} revision trust blocked (code=${decision.blocker.code} reason=${decision.blocker.reason})`,
+      `  修复：${decision.blocker.remediation}`,
+    ]
+  }
   const actual = (decision.kind === 'failed' ? decision.actual : undefined) ?? ''
   switch (event) {
     case 'explore-complete':
@@ -221,13 +229,29 @@ export function renderPreconditionViolation(
 /**
  * default 轨事件前置校验（老 checkTransitionPreconditions 的 drop-in 替身，签名/语义逐字保留）：
  * 按 policy.guards 首错优先评估 typed guard，命中 failed → 渲染成老仓逐字 ERROR 行数组；全通过
- * （或全 skipped/不适用）→ null。在锁内、任何 mutation 之前由 planner 调用。
+ * （或仅有可选文件面 skipped/不适用）→ null；revision guard 缺能力永不 skipped，而是 typed
+ * blocker。在锁内、任何 mutation 之前由 planner 调用。
  */
 export async function checkDefaultEventPreconditions(
   event: EventName,
   state: PipelineState,
   ctx?: TransitionContext,
 ): Promise<string[] | null> {
+  const result = await evaluateDefaultEventPreconditions(event, state, ctx)
+  return result === null ? null : [...result.lines]
+}
+
+export interface DefaultPreconditionResult {
+  readonly lines: readonly string[]
+  readonly blockers?: readonly BuildRevisionBlocker[]
+}
+
+export async function evaluateDefaultEventPreconditions(
+  event: EventName,
+  state: PipelineState,
+  ctx?: TransitionContext,
+  options?: EvaluateGuardsOptions,
+): Promise<DefaultPreconditionResult | null> {
   const policy = DEFAULT_EVENT_POLICY[event]
   if (policy.guards.length === 0) return null
   const track = fieldStr(state, 'track')
@@ -235,14 +259,25 @@ export async function checkDefaultEventPreconditions(
   // scalar guard 对数组/undefined 边界输入逐字等价老 switch（副本入参，不污染 state / action 求值）。
   const input: GuardInput = {
     fields: normalizeDefaultGuardFields(state.fields),
+    stateHash: safeRevisionHash(state.fields),
+    rawBuildSha: state.fields.build_sha,
     track,
     fileExists: ctx?.fileExists,
     gitHeadSha: ctx?.gitHeadSha,
     workspaceFingerprint: ctx?.workspaceFingerprint,
     specMigrationStatus: ctx?.specMigrationStatus,
+    assessBuildRevision: ctx?.assessBuildRevision,
+    currentStep: fieldStr(state, 'phase'),
   }
-  const evaluations = await evaluateGuards(policy.guards, input)
+  const evaluations = await evaluateGuards(policy.guards, input, options)
   const failed = evaluations.find((e) => e.decision.kind === 'failed')
   if (!failed) return null
-  return renderPreconditionViolation(event, failed, track)
+  const blockers = evaluations.flatMap((evaluation) =>
+    evaluation.decision.kind === 'failed' && evaluation.decision.blocker !== undefined
+      ? [evaluation.decision.blocker]
+      : [])
+  return {
+    lines: renderPreconditionViolation(event, failed, track),
+    ...(blockers.length === 0 ? {} : { blockers }),
+  }
 }

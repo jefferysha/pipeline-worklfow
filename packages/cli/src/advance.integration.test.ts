@@ -11,7 +11,7 @@
 import { appendFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { freshHarness, realDeps, type Harness } from './integration-harness.js'
+import { freshHarness, realDeps, TEST_GIT_BUILD_TOKEN, type Harness } from './integration-harness.js'
 import { cmdAdvance, type AdvanceOpts } from './commands/advance.js'
 
 describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：复核相位必停）', () => {
@@ -108,7 +108,7 @@ describe('真实 e2e —— advance auto-transition 中间档（HITL 红线：�
     // .pipeline.yaml phase 真变：build → verify（真推进一步）
     expect(await phaseOf('demo')).toBe('verify')
     // build-complete 真冻结 build_sha（证真的走了 transition 事件体）
-    expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
+    expect(await h.read('demo')).toContain(`build_sha: ${TEST_GIT_BUILD_TOKEN}`)
     // 停在复核门，绝不自动跑完
     expect(r.out.some((l) => l.includes('[STOP]') && l.includes('复核相位'))).toBe(true)
     // 进入 verify 不写 marker；只有输出完成后的 review request 才能创建 v2 投影。

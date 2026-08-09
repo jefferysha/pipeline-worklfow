@@ -14,11 +14,11 @@
  * 改 ir.ts 联合，此处随之编译报错；刻意没有运行时注册/替换 API。
  */
 import { taskCount } from '../flow/guard.js'
-import { isWorkspaceBaseline } from '../workspace/fingerprint.js'
 import { matchesTrackPredicate } from './predicates.js'
 import type { FieldName } from '../types.js'
 import type { WorkflowGuardConfig } from './types.js'
 import type { CompiledGuardConfig, GuardDecision, GuardInput, OutputPresentGuard } from './ir.js'
+import { makeBuildRevisionBlocker, safeRevisionHash } from './build-revision.js'
 
 export type GuardHandler<C extends WorkflowGuardConfig> = (
   config: C,
@@ -131,38 +131,50 @@ export const GUARD_HANDLERS: GuardHandlerRegistry = Object.freeze({
     return PASSED
   },
 
-  /** 老仓 state-transition.sh verify-pass barrier（ADR 0005）：verify 审的必须是 build 冻结的基线。
-   *  IO 序镜像老代码：L149 先读 bsha，L150 gitHeadSha 注入即调用（HEAD 取值与异常都发生在
-   *  build_sha 判空之前；抛错原样上抛，老代码不 catch——build_sha 未设时同样先经历这次调用）。
-   *  `workspace:sha256:<digest>` 是 in-place 的强语义扩展：这种构建没有不可变 checkout，故改用
-   *  工作区内容基线而非同一个 Git HEAD。它走独立能力，绝不再调用 gitHeadSha。
-   *  L151 合取的三态映射：
-   *    · build_sha 未设 → passed（首个合取不成立 → 老代码放行，barrier 不适用）；
-   *    · gitHeadSha 未注入 / 注入但 trim 后空串（HEAD 不可取，非 git 仓）→ skipped
-   *      （L150 `?? ''` 与 L151 head!=='' 同归「HEAD 面不可用」，退化跳过）；
-   *    · head≠bsha → failed；相等 → passed。 */
+  /** Verify-like success barrier：只消费由 Build capture 写入的 canonical `build:v1` token。
+   *  assessor 缺失、输入不可信、物理 identity/provenance/evaluation 任一失败都返回 typed
+   *  `verify-build-revision-untrusted` blocker；不得把旧裸 SHA、workspace baseline 或缺能力
+   *  降级成 skipped/pass。in-place 仍通过 workspace assessor 求值，不读取 Git HEAD。 */
   'build-head-unchanged': async (config, input) => {
-    const bsha = scalarValue(input.fields, config.field)
-    if (isWorkspaceBaseline(bsha)) {
-      const current = input.workspaceFingerprint ? (await input.workspaceFingerprint()).trim() : undefined
-      if (current === undefined || current === '') return { kind: 'skipped', capability: 'workspaceFingerprint' }
-      if (!isWorkspaceBaseline(current)) {
-        throw new Error(`workspaceFingerprint 返回了非法基线: ${current}`)
+    // Default guard views normalize legacy scalar fields (including arrays) before dispatch.
+    // Preserve the canonical candidate at the GuardInput boundary so an array build_sha remains
+    // ambiguous instead of being joined into a malformed-looking string.
+    const buildSha = config.field === 'build_sha' && input.rawBuildSha !== undefined
+      ? input.rawBuildSha
+      : input.fields[config.field]
+    // Default guards receive a legacy scalar-normalized view; use the raw canonical state hash
+    // injected at the GuardInput boundary so valid list-valued state cannot appear stale.
+    const stateHash = input.stateHash ?? safeRevisionHash(input.fields)
+    if (!input.assessBuildRevision) {
+      return {
+        kind: 'failed',
+        guardType: 'build-head-unchanged',
+        field: config.field,
+        blocker: makeBuildRevisionBlocker('capability-unavailable', stateHash),
       }
-      if (current !== bsha) {
-        return {
-          kind: 'failed', guardType: 'build-head-unchanged', field: config.field, actual: current, expected: [bsha],
-        }
+    }
+    try {
+      const result = await input.assessBuildRevision({
+        buildSha,
+        isolation: scalarValue(input.fields, 'isolation'),
+        expectedStep: input.currentStep,
+        stateHash,
+      })
+      if (result.trusted) return PASSED
+      return {
+        kind: 'failed',
+        guardType: 'build-head-unchanged',
+        field: config.field,
+        blocker: result.blocker,
       }
-      return PASSED
+    } catch {
+      return {
+        kind: 'failed',
+        guardType: 'build-head-unchanged',
+        field: config.field,
+        blocker: makeBuildRevisionBlocker('evaluation-error', stateHash),
+      }
     }
-    const head = input.gitHeadSha ? (await input.gitHeadSha()).trim() : undefined
-    if (isUnset(bsha)) return PASSED
-    if (head === undefined || head === '') return { kind: 'skipped', capability: 'gitHeadSha' }
-    if (head !== bsha) {
-      return { kind: 'failed', guardType: 'build-head-unchanged', field: config.field, actual: head, expected: [bsha] }
-    }
-    return PASSED
   },
 
   /** Ship 迁移门禁是 fail-closed 能力：adapter 未绑定、证据损坏或目标摘要漂移都拒绝。 */

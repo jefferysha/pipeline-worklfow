@@ -1,4 +1,4 @@
-import { readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
@@ -307,6 +307,67 @@ describe('真实 e2e —— review exit receipt（default workflow）', () => {
     } finally {
       if (previousSession === undefined) delete process.env.TENON_HOST_SESSION_ID
       else process.env.TENON_HOST_SESSION_ID = previousSession
+    }
+  })
+
+  test('custom review request passes the exact event: success is revision-blocked while rollback remains requestable', async () => {
+    const local = await freshHarness()
+    try {
+      await mkdir(join(local.cwd, '.pipeline', 'workflows'), { recursive: true })
+      await writeFile(join(local.cwd, '.pipeline', 'workflows', 'custom-review.yaml'), `name: custom-review
+steps:
+  - id: implement-anything
+    label: Implement
+    gate: null
+    skills: []
+    inputs: []
+    outputs:
+      - field: build_sha
+        type: string
+    guards: []
+    transitions:
+      - event: ready
+        to: assure-anything
+  - id: assure-anything
+    label: Assure
+    gate: review
+    skills: []
+    inputs:
+      - field: build_sha
+        type: string
+    outputs: []
+    guards: []
+    transitions:
+      - event: pass
+        to: ship-anything
+      - event: rollback
+        to: implement-anything
+        actions:
+          - type: mark-verification-failed
+  - id: ship-anything
+    label: Ship
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+      await local.run(['init', 'demo', '--track', 'backend', '--preset', 'full', '--workflow', 'custom-review'])
+      await local.seedArtifact('demo', 'phase', 'assure-anything')
+      await local.seedArtifact('demo', 'isolation', 'branch')
+      await local.seedArtifact('demo', 'build_sha', 'legacy-sha')
+
+      expect(await local.run(['review', 'request', 'demo', '--event', 'pass'])).toBe(2)
+      expect(local.out.join('\n')).toContain('verify-build-revision-untrusted')
+      expect(local.out.join('\n')).not.toContain('legacy-sha')
+      expect(await local.read('demo')).not.toMatch(/^review_gate_status: pending$/m)
+
+      expect(await local.run(['review', 'request', 'demo', '--event', 'rollback'])).toBe(0)
+      expect(await local.read('demo')).toMatch(/^review_gate_event: rollback$/m)
+      expect(await local.read('demo')).toMatch(/^review_gate_status: pending$/m)
+    } finally {
+      await rm(local.cwd, { recursive: true, force: true })
     }
   })
 })

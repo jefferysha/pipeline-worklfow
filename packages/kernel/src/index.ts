@@ -16,6 +16,7 @@ export {
 export type { ProductPathInput, ProductPaths } from './product-paths.js'
 // in-place 构建不以未变化的 Git HEAD 冒充验证靶；提供内容寻址的工作区基线给 CLI/server 注入。
 export { fingerprintWorkspace, isWorkspaceBaseline, WORKSPACE_BASELINE_PREFIX } from './workspace/fingerprint.js'
+export { probeBuildRevisionIdentity } from './workspace/build-revision-identity.js'
 // Native terminal sessions are a dashboard-only liveness projection, never workflow state.
 export {
   TERMINAL_ACTIVITY_FILE, TERMINAL_ACTIVITY_PROTOCOL, TERMINAL_ACTIVITY_TTL_MS,
@@ -55,6 +56,13 @@ export {
   missingWorkflowStepSkills,
 } from './workflow/skill-evidence.js'
 export { evaluateStepGuards, evaluateWorkflowIrStepGuards } from './workflow/stepGuard.js'
+export {
+  effectiveLifecyclePolicy, governedLifecyclePolicy, isRevisionGuard,
+  mergeLifecycleActions, mergeLifecycleGuards, semanticRevisionLifecyclePolicy,
+} from './workflow/governed-lifecycle-policy.js'
+export type {
+  EffectiveLifecyclePolicy, GovernedLifecyclePolicy,
+} from './workflow/governed-lifecycle-policy.js'
 // step 编排层（Wave 2 下沉）：解析 step/找边/评 guard/算下相位的单一真相源，
 // cli transition/check 与 server transition 塌成 adapter（消息模板与错误分类学留 adapter）。
 export { applyStepTransition, firstStep, planStepTransition, resolveStep, resolveWorkflowName } from './workflow/engine.js'
@@ -147,11 +155,24 @@ export type {
   EffectiveWorkflowPlan, LegacyWorkflowIR, PersistedDocumentGovernanceBinding, WorkflowPlanSnapshot,
   WorkflowPlanSnapshotV1, WorkflowPlanSnapshotV2, WorkflowPlanSnapshotV3,
 } from './workflow/effective-plan.js'
-export type { CompiledGuardConfig, StepIR, StepTransitionIR, WorkflowIR } from './workflow/ir.js'
+export type {
+  ActionInput, CompiledGuardConfig, GuardDecision, GuardInput, StepIR, StepTransitionIR, WorkflowIR,
+} from './workflow/ir.js'
 export { readinessByTransition } from './workflow/transition-readiness.js'
 export type {
   ReadinessByTransition, TransitionReadiness, TransitionReadinessBlocker,
 } from './workflow/transition-readiness.js'
+export {
+  assessBuildRevisionTrust, createBuildRevisionToken, hashBuildRevisionIdentity,
+  isBuildRevisionBlocker, makeBuildRevisionBlocker, parseBuildRevisionToken, safeRevisionHash,
+  BUILD_REVISION_CODE, BUILD_REVISION_REASONS, BUILD_REVISION_REMEDIATION, BUILD_REVISION_TOKEN_PREFIX,
+  BuildRevisionCaptureError,
+} from './workflow/build-revision.js'
+export type {
+  BuildRevisionAssessment, BuildRevisionAssessmentRequest, BuildRevisionBlocker,
+  BuildRevisionIdentity, BuildRevisionKind, BuildRevisionObservation, BuildRevisionProvenance,
+  BuildRevisionToken,
+} from './workflow/build-revision.js'
 // default workflow artifact declaration 查询层（G2 P4/P5）：只读生成表 default-workflow.generated.ts 的
 // track-aware 查询接缝——P5 artifact register 经本 API 取 default declaration，不再读 YAML/复制字段表。
 export { defaultArtifactForField, defaultArtifactsForStep, defaultArtifactDeclaredForField } from './workflow/default-artifacts.js'

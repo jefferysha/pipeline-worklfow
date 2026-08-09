@@ -53,6 +53,7 @@
 import { createHash } from 'node:crypto'
 import {
   isTrustedPass, validateAutomationPolicySnapshot, validateVerificationResult,
+  makeBuildRevisionBlocker,
   type AutomationPolicySnapshot, type VerificationBinding, type VerificationIssuer, type VerificationResult,
 } from '@tenon/kernel'
 import type { ExecutionContext } from '../admission/execution-context.js'
@@ -192,6 +193,9 @@ export type VerificationBlockReason =
   | 'verification-subject-mismatch'
   | 'verification-binding-unresolved'
   | 'verification-policy-mismatch'
+
+export const VERIFY_BUILD_REVISION_UNTRUSTED = 'verify-build-revision-untrusted' as const
+export const VERIFY_BUILD_REVISION_REMEDIATION = 'return-to-build-and-capture-current-revision' as const
 
 /**
  * subject 归属一致性校验（H7 复审 §6）：kernel validateVerificationResult 只窄校验 raw 的形状/
@@ -380,7 +384,11 @@ export interface VerificationGateInput {
 export type VerificationGateResult =
   | { readonly kind: 'authorized' }
   | { readonly kind: 'failure' }
-  | { readonly kind: 'paused'; readonly reason: VerificationBlockReason }
+  | {
+      readonly kind: 'paused'
+      readonly reason: VerificationBlockReason | typeof VERIFY_BUILD_REVISION_UNTRUSTED
+      readonly blocker?: import('@tenon/kernel').BuildRevisionBlocker
+    }
 
 /** 仅本模块 boundary 可签发；scheduler 用它区分 lifecycle 核验事实与任意 RunChange 自报对象。 */
 const boundaryVerifiedResults = new WeakSet<object>()
@@ -391,6 +399,35 @@ export function isBoundaryVerifiedResult(value: unknown): value is VerificationR
 
 export function evaluateVerificationGate(input: VerificationGateInput): VerificationGateResult {
   const raw = input.verification
+  const authoritativeRevision: unknown = input.buildSha
+  if (authoritativeRevision === undefined || authoritativeRevision === '') {
+    return {
+      kind: 'paused',
+      reason: VERIFY_BUILD_REVISION_UNTRUSTED,
+      blocker: makeBuildRevisionBlocker('missing'),
+    }
+  }
+  if (authoritativeRevision === null || authoritativeRevision === 'null') {
+    return {
+      kind: 'paused',
+      reason: VERIFY_BUILD_REVISION_UNTRUSTED,
+      blocker: makeBuildRevisionBlocker('null'),
+    }
+  }
+  if (Array.isArray(authoritativeRevision)) {
+    return {
+      kind: 'paused',
+      reason: VERIFY_BUILD_REVISION_UNTRUSTED,
+      blocker: makeBuildRevisionBlocker('ambiguous'),
+    }
+  }
+  if (typeof authoritativeRevision !== 'string' || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(authoritativeRevision)) {
+    return {
+      kind: 'paused',
+      reason: VERIFY_BUILD_REVISION_UNTRUSTED,
+      blocker: makeBuildRevisionBlocker('malformed'),
+    }
+  }
   if (raw === undefined) return { kind: 'paused', reason: 'verification-missing' }
   // H7 复审阻断2 核心修复 + H7-S2 收口：gate 本身独立重校验完整 result，且此后只消费这次校验产出的
   // canonical 冻结副本——不再对原始 verification 做任何二次裸读（见上方函数文档「两次独立读取」的
@@ -412,9 +449,19 @@ export function evaluateVerificationGate(input: VerificationGateInput): Verifica
     canonical.subject.workflow_run_id !== input.expectedSubject.workflow_run_id
     || canonical.subject.attempt_id !== input.expectedSubject.attempt_id
     || canonical.subject.change !== input.expectedSubject.change
-    || canonical.subject.revision.sha !== input.buildSha
+    || canonical.subject.revision.sha !== authoritativeRevision
   ) {
-    return { kind: 'paused', reason: 'verification-subject-mismatch' }
+    if (canonical.subject.revision.sha !== authoritativeRevision) {
+      return {
+        kind: 'paused',
+        reason: VERIFY_BUILD_REVISION_UNTRUSTED,
+        blocker: makeBuildRevisionBlocker('revision-stale'),
+      }
+    }
+    return {
+      kind: 'paused',
+      reason: 'verification-subject-mismatch',
+    }
   }
   const expectedPolicy = automationPolicySubjectFor(input.expectedAutomationPolicy)
   const actualPolicy = canonical.automation_policy

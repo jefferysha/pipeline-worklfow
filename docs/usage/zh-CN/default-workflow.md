@@ -16,7 +16,11 @@ Default workflow 是 Tenon 的完整治理路径。每个阶段都有明确输�
 
 ## Build
 
-真实实现遵循项目规则和测试先行。每完成一个任务立即运行窄测试，再扩大验证范围。Build 完成后冻结 `build_sha`，防止 Verify 验收移动目标。
+真实实现遵循项目规则和测试先行。每完成一个任务立即运行窄测试，再扩大验证范围。Build 完成后冻结
+`build:v1:<git|workspace>:<revision_hash>:<repository_hash>:<worktree_hash>` token；它同时绑定 revision、
+物理 repository 和 worktree。旧裸 Git SHA/裸 workspace baseline 不会自动回填，必须回 Build 重新捕获。
+缺失、非法、陈旧或无法证明来源时，Verify、readiness、HTTP/SSE 与 AFK 统一返回
+`verify-build-revision-untrusted`，修复标识为 `return-to-build-and-capture-current-revision`。不要手动 `set build_sha`。
 
 ## Verify
 
@@ -45,6 +49,9 @@ Verify 对冻结的 `build_sha` 只开启一个自动 Review attempt。代码/�
 浏览器与视觉验收是同一 attempt 的不同 lane，共用次数上限；E2E 不单独再算一次 Review。
 任何 Review Skill、reviewer agent 或 E2E runner 都必须在 attempt 已激活后才能派发。
 Build 中的 TDD、单元测试、类型检查、lint 和窄集成测试属于实现反馈，不消耗 Review 次数。
+
+如果 Verify 报告构建修订不可信，沿 `verify-fail → build` 回边重新实现并运行
+`build-complete`；新的 canonical transition record 会提供 token 的来源证明。
 
 ## 阶段产物总览
 

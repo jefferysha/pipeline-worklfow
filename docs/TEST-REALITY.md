@@ -3,6 +3,38 @@
 > 向 Tenon contract 学习：`tenon-check` 跑真实工具链而非自评。本仓每条功能的收编门以**真实证据**为准。
 > 本文件登记每层测试「真 or mock」与覆盖缺口，缺口显式登记、不静默留白（2026-07-07 起维护）。
 
+## 2026-08-10 · #42 trustworthy build revision implementation checkpoint
+
+- Kernel/CLI/server source now carries the `build:v1` revision token, physical identity assessment,
+  immutable transition-head provenance, and a shared `verify-build-revision-untrusted` blocker. Missing
+  capability, malformed/legacy values, identity or revision drift, and provenance failures are fail-closed
+  before commit; default and arbitrary-step custom lifecycle paths share the capture/guard policy.
+- Automation admission and settlement map missing/invalid authoritative branch revision and revision-subject
+  drift to the same stable cause; L3 does not merge. Dashboard readiness decoding and AFK/Progress diagnosis
+  consume the stable cause/remediation without exposing raw token/path/exception data.
+- `npx tsc -b packages/kernel packages/cli packages/server packages/automation --pretty false` and
+  `npx tsc --noEmit -p packages/dashboard-app` passed after implementation. Fixed-worker targeted Vitest
+  runs covered kernel trust/action/guard/transition suites (134 tests), automation verifier/scheduler/admission
+  (279), CLI transition/check/default+custom integration (126), server snapshot/transition authority (93),
+  and Dashboard decoder/model/Progress/AFK/i18n suites (247 + 54). `npm run build` completed and refreshed
+  tracked CLI/server/dashboard bundles. Browser verification and the repository-wide final gate remain out of
+  scope for this implementation worker; this entry is not a Verify verdict.
+- Rework-specific fixed-worker runs were executed on the same checkout: review-candidate/attempt/internal-gate
+  (27/27), Dashboard decoder/model/Progress mixed-Verify readiness (147/147), physical Git identity
+  (3/3), and kernel guard/default-event plus CLI doctor (151/151). The server actual-transition contract
+  was run by name (`malformed Build revision`): 1 passed, 313 skipped; it asserted the exact 409 blocker
+  DTO and byte-for-byte canonical/record/history non-mutation, with snapshot/SSE blocker projections free of
+  raw token and path data. These are incremental evidence only; the full final gate and browser QA remain
+  intentionally unrun.
+- Final fixed-worker rerun after the lifecycle/readiness and legacy-ABI corrections: kernel trust/action/guard/
+  readiness/transition/identity set 199/199; automation verifier/revision/scheduler/admission/lifecycle set
+  227/227; CLI review/doctor/check/transition/integration set 171/171; server snapshot/authority set 79/79
+  plus the named actual-transition contract 1 passed (313 skipped); Dashboard strict decoder/model/Progress
+  set 147/147. Four-package TypeScript build, Dashboard typecheck, production `npm run build`, comments,
+  interaction-contract, default-workflow freshness, skill inventory, release-workflow checks, and
+  `git diff --check` all passed. The legacy oracle binary is unavailable in this checkout, so the updated
+  fixture was syntax-checked only; no full repository test or browser QA was run.
+
 > **当前任务口径（2026-07-20）**：本文件是追加式历史审计账，不是当前 todolist。当前任务唯一真相源为
 > `GOAL.md`（94/94 已勾选、0 未勾选）与 `BACKLOG.md`（队列空）。下方早期“待补”标题和旧测试数字保留
 > 当时语境；v3 最新 source/dist/live/真实浏览器对照见

@@ -341,14 +341,14 @@ export async function readChangeSnapshot(
         throw error
       }
     })
-    const gitHeadSha = deps.gitHeadSha
-    const workspaceFingerprint = deps.workspaceFingerprint
+    const { gitHeadSha, workspaceFingerprint } = deps
     const capabilityDeps: WorkflowSnapshotCapabilityDeps = {
       ...(deps.fileExists === undefined ? {} : { fileExists: deps.fileExists }),
       ...(gitHeadSha === undefined ? {} : { gitHeadSha: () => gitHeadSha(rootPath) }),
       ...(workspaceFingerprint === undefined
         ? {}
         : { workspaceFingerprint: () => workspaceFingerprint(rootPath, changeName) }),
+      ...(deps.assessBuildRevision === undefined ? {} : { assessBuildRevision: deps.assessBuildRevision }),
     }
     const [documents, terminalActivity, tasksProjection, workflowExecution, authority] = await Promise.all([
       documentEvidence(rootPath, changeDir, plan, phase),

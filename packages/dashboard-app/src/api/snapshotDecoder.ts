@@ -308,7 +308,35 @@ const GUARD_CAPABILITIES = new Set([
 ])
 
 function decodeTransitionReadinessBlocker(value: unknown): TransitionReadinessBlockerSnapshot | null {
-  if (!isRecord(value) || typeof value.guardType !== 'string' || !GUARD_TYPES.has(value.guardType)) return null
+  if (!isRecord(value)) return null
+  if (value.kind === 'verify-build-revision-untrusted') {
+    const reasons = new Set([
+      'missing', 'null', 'ambiguous', 'malformed', 'isolation-mismatch',
+      'capability-unavailable', 'provenance-missing', 'provenance-mismatch',
+      'state-stale', 'revision-stale', 'project-mismatch', 'worktree-mismatch',
+      'evaluation-error',
+    ])
+    if (value.code !== 'verify-build-revision-untrusted'
+      || typeof value.reason !== 'string' || !reasons.has(value.reason)
+      || value.remediation !== 'return-to-build-and-capture-current-revision'
+      || (value.stateHash !== undefined && (typeof value.stateHash !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.stateHash)))
+      || (value.revisionHash !== undefined && (typeof value.revisionHash !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.revisionHash)))
+      || !Object.keys(value).every((key) =>
+        key === 'kind' || key === 'code' || key === 'reason' || key === 'remediation'
+        || key === 'stateHash' || key === 'revisionHash')) return null
+    return {
+      kind: 'verify-build-revision-untrusted',
+      code: 'verify-build-revision-untrusted',
+      reason: value.reason as 'missing' | 'null' | 'ambiguous' | 'malformed' | 'isolation-mismatch'
+        | 'capability-unavailable' | 'provenance-missing' | 'provenance-mismatch'
+        | 'state-stale' | 'revision-stale' | 'project-mismatch' | 'worktree-mismatch'
+        | 'evaluation-error',
+      remediation: 'return-to-build-and-capture-current-revision',
+      ...(value.stateHash === undefined ? {} : { stateHash: value.stateHash }),
+      ...(value.revisionHash === undefined ? {} : { revisionHash: value.revisionHash }),
+    }
+  }
+  if (typeof value.guardType !== 'string' || !GUARD_TYPES.has(value.guardType)) return null
   if (value.kind === 'evaluation-error') {
     if ((value.capability !== undefined
         && (typeof value.capability !== 'string' || !GUARD_CAPABILITIES.has(value.capability)))

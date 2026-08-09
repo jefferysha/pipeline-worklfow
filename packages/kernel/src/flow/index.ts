@@ -15,5 +15,10 @@ export { TRANSITION_EVENTS, eventEdge } from './transition-table.js'
 export type { EventEdge, EventName, TransitionContext } from './transition-table.js'
 // default 轨事件政策（G2 P3）——前置 guard + 状态副作用迁到 typed handler：DefaultEventPolicy 表
 // + checkDefaultEventPreconditions（老 checkTransitionPreconditions 的 drop-in）+ 文案渲染。
-export { DEFAULT_EVENT_POLICY, checkDefaultEventPreconditions, renderPreconditionViolation } from './default-event-policy.js'
-export type { DefaultEventPolicy } from './default-event-policy.js'
+export {
+  DEFAULT_EVENT_POLICY,
+  checkDefaultEventPreconditions,
+  evaluateDefaultEventPreconditions,
+  renderPreconditionViolation,
+} from './default-event-policy.js'
+export type { DefaultEventPolicy, DefaultPreconditionResult } from './default-event-policy.js'

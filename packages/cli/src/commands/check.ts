@@ -13,9 +13,12 @@ import {
   evaluateDocumentEvidence,
   evaluateSpecMigrationEvidence,
   evaluateWorkflowIrStepGuards,
+  evaluateDefaultEventPreconditions,
   classifyTaskPlanProjectionForChange,
+  effectiveLifecyclePolicy,
   isDocumentContractPhase,
   isDocumentPolicyStep,
+  isRevisionGuard,
   resolveStep,
   resolveWorkflowName,
   TASK_PLAN_CURRENT_FILE,
@@ -27,13 +30,31 @@ import type {
   DocumentGovernancePolicy,
   EffectiveWorkflowPlan,
   PipelineState,
+  BuildRevisionBlocker,
 } from '@tenon/kernel'
+import type { StepIR } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { display, str } from '../render.js'
 import { effectiveWorkflowForState } from './effective-workflow.js'
+import { resolveBuildRevisionAssessor } from './buildRevisionAssessor.js'
 
-export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
+function renderBuildRevisionBlocker(blocker: BuildRevisionBlocker): string {
+  return [
+    blocker.code,
+    `reason=${blocker.reason}`,
+    `remediation=${blocker.remediation}`,
+    ...(blocker.stateHash === undefined ? [] : [`stateHash=${blocker.stateHash}`]),
+    ...(blocker.revisionHash === undefined ? [] : [`revisionHash=${blocker.revisionHash}`]),
+  ].join(' ')
+}
+
+export interface CheckOpts {
+  /** Exact custom edge to preflight (used by review request). */
+  readonly event?: string
+}
+
+export async function cmdCheck(deps: CliDeps, name: string, opts: CheckOpts = {}): Promise<number> {
   if (!isValidChangeName(name)) {
     deps.io.err(`ERROR: change-name 非法: '${name}' (仅允许 a-z A-Z 0-9 - _)`)
     return 1
@@ -60,7 +81,7 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
     return 1
   }
   if (plan.capabilities.execution.model === 'step-graph') {
-    return checkGraphWorkflow(deps, name, dir, state, plan)
+    return checkGraphWorkflow(deps, name, dir, state, plan, opts.event)
   }
 
   // ── default workflow：coverage policy 必须来自当前项目 effective registry。registry 损坏或
@@ -133,8 +154,28 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
             changeDirRel === fileContext?.changeDirRel && tasksMarkdown === guardedTasksSource
               ? canonicalTasksProjectionStatus
               : 'invalid',
-        }),
+      }),
   })
+  // Verify preview must expose the exact typed revision barrier used by verify-pass transition.
+  // Evaluate all guards here so a stale/missing build token cannot be hidden behind an older
+  // legacy guard failure; only the revision blocker is rendered below because flow.guardCheck
+  // remains the compatibility source for the other checks.
+  const workspaceFingerprint = deps.workspaceFingerprint
+  const revisionResult = str(state.fields.phase) === 'verify'
+    ? await evaluateDefaultEventPreconditions('verify-pass', state, {
+        fileExists: fileContext?.fileExists,
+        gitHeadSha: deps.gitHeadSha,
+        workspaceFingerprint: workspaceFingerprint === undefined
+          ? undefined
+          : () => workspaceFingerprint(name),
+        assessBuildRevision: resolveBuildRevisionAssessor(deps, name, dir),
+      }, { stopOnFirstFailure: false })
+    : null
+  const revisionBlocker = revisionResult?.blockers?.find((candidate) =>
+    candidate.code === 'verify-build-revision-untrusted')
+  const revisionFailures = revisionBlocker === undefined
+    ? []
+    : [renderBuildRevisionBlocker(revisionBlocker)]
   const migration = str(state.fields.phase) === 'ship'
     ? await evaluateSpecMigrationEvidence(deps.cwd, dir, name)
     : undefined
@@ -149,11 +190,14 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
   for (const warning of result.warnings ?? []) {
     deps.io.out(`  [WARN] ${warning}`)
   }
-  if (result.pass && (documents?.pass ?? true) && migration?.kind !== 'invalid') {
+  if (result.pass && revisionFailures.length === 0 && (documents?.pass ?? true) && migration?.kind !== 'invalid') {
     deps.io.out('  [PASS] 所有检查通过')
     return 0
   }
   for (const failure of result.failures) {
+    deps.io.out(`  [FAIL] ${failure}`)
+  }
+  for (const failure of revisionFailures) {
     deps.io.out(`  [FAIL] ${failure}`)
   }
   for (const blocker of documents?.blockers ?? []) {
@@ -163,6 +207,7 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
     deps.io.out(`  [FAIL] migration: ${migration.reason}`)
   }
   const total = result.failures.length
+    + revisionFailures.length
     + (documents?.blockers.length ?? 0)
     + (migration?.kind === 'invalid' ? 1 : 0)
   deps.io.out(`  [FAIL] 共 ${total} 项未通过`)
@@ -203,6 +248,7 @@ async function checkGraphWorkflow(
   dir: string,
   state: PipelineState,
   plan: EffectiveWorkflowPlan,
+  event: string | undefined,
 ): Promise<number> {
   const currentStepId = str(state.fields.phase)
   const step = resolveStep(plan.workflow, currentStepId)
@@ -210,9 +256,28 @@ async function checkGraphWorkflow(
     deps.io.err(`ERROR: step '${currentStepId}' 不在 workflow '${plan.id}' 里`)
     return 1
   }
-  // 能力注入让 file-exists/build-head-unchanged 类新 guard 在预览里也忠实评估（缺注入 = 降级
-  // skipped）；tasks-at-least/nonempty-output 只用 readText/字段面，不受此影响。
-  const result = await evaluateWorkflowIrStepGuards(state, step, {
+  let guards: StepIR['guards']
+  if (event === undefined) {
+    guards = plainGraphCheckGuards(plan, step)
+  } else {
+    const selectedEdge = step.transitions.find((transition) => transition.event === event)
+    if (selectedEdge === undefined) {
+      deps.io.err(
+        `ERROR: step '${currentStepId}' 不支持 event '${event}'；可选：${step.transitions.map((transition) => transition.event).join(', ') || '(无)'}`,
+      )
+      return 1
+    }
+    guards = effectiveLifecyclePolicy(
+      plan.capabilities.documents.governed,
+      step,
+      selectedEdge,
+      plan.workflow.steps.find((candidate) => candidate.id === selectedEdge.to),
+    ).guards
+  }
+  // 能力注入让 file-exists/build-head-unchanged 类 guard 在预览里忠实评估；revision assessor
+  // 缺失时显式 fail-closed，不把 Verify 信任面降级为 skipped。tasks-at-least/nonempty-output
+  // 只用 readText/字段面，不受此影响。
+  const result = await evaluateWorkflowIrStepGuards(state, { ...step, guards }, {
     changeDirAbs: dir,
     fileExists: deps.guardCtx?.(name)?.fileExists,
     gitHeadSha: deps.gitHeadSha,
@@ -223,6 +288,7 @@ async function checkGraphWorkflow(
         })
       : undefined,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name),
+    assessBuildRevision: resolveBuildRevisionAssessor(deps, name, dir),
   })
   const migration = str(state.fields.phase) === 'ship'
     && plan.capabilities.documents.governed
@@ -254,4 +320,34 @@ async function checkGraphWorkflow(
     + (migration?.kind === 'invalid' ? 1 : 0)
   deps.io.out(`  [FAIL] 共 ${total} 项未通过`)
   return 2
+}
+
+/**
+ * Plain custom check keeps its historical step-guard preview and only supplements the
+ * revision invariant.  Edge-specific non-revision guards are intentionally not previewed
+ * without an exact event.  A single revision guard is retained for all non-rollback exits,
+ * while rollback-only steps do not require a forward proof.
+ */
+function plainGraphCheckGuards(plan: EffectiveWorkflowPlan, step: StepIR): StepIR['guards'] {
+  const policies = step.transitions.map((transition) => effectiveLifecyclePolicy(
+    plan.capabilities.documents.governed,
+    step,
+    transition,
+    plan.workflow.steps.find((candidate) => candidate.id === transition.to),
+  ))
+  const revisionGuard = policies
+    .filter((policy) => !policy.rollback)
+    .flatMap((policy) => policy.guards)
+    .find(isRevisionGuard)
+  const nonRevision = step.guards.filter((guard) => !isRevisionGuard(guard))
+  if (revisionGuard === undefined) return nonRevision
+  const firstRevisionIndex = step.guards.findIndex(isRevisionGuard)
+  const insertionIndex = firstRevisionIndex < 0
+    ? nonRevision.length
+    : Math.min(firstRevisionIndex, nonRevision.length)
+  return [
+    ...nonRevision.slice(0, insertionIndex),
+    revisionGuard,
+    ...nonRevision.slice(insertionIndex),
+  ]
 }

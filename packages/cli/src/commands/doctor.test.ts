@@ -213,14 +213,15 @@ describe('doctor —— 统一健康面（BACKLOG #26b，GOAL B8 降级可见 / 
     expect(c.hint).toContain('22')
   })
 
-  test('env:git 黄灯：git 不可用 → 降级可见（build_sha 记空），黄灯不影响 exit 0', async () => {
+  test('env:git 红灯：git 不可用 → Build/Verify revision fail-closed，要求重新 Build', async () => {
     const deps = makeDeps({ doctor: { gitAvailable: async () => false } })
     const { code, payload } = await runJson(deps)
-    expect(code).toBe(0)
+    expect(code).toBe(1)
     const c = byId(payload, 'env:git')
-    expect(c.status).toBe('yellow')
-    expect(c.detail).toContain('build_sha')
-    expect(payload.summary.yellow).toBe(1)
+    expect(c.status).toBe('red')
+    expect(c.detail).toContain('fail-closed')
+    expect(c.hint).toContain('不得手动回填')
+    expect(payload.summary.red).toBe(1)
   })
 
   test('asset:manifest 红灯：解析失败 → red 带错误消息', async () => {

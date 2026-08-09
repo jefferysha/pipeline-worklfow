@@ -11,12 +11,20 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { readFile, rm, stat, unlink, writeFile } from 'node:fs/promises'
+import { readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises'
 import { statSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { buildProgram, CliExit } from './program.js'
-import { FIXED_CLOCK, freshHarness, realDeps, REPO_ROOT, type Harness } from './integration-harness.js'
+import { createBuildRevisionToken, probeBuildRevisionIdentity } from '@tenon/kernel'
+import {
+  FIXED_CLOCK,
+  REPO_ROOT,
+  TEST_GIT_BUILD_TOKEN,
+  freshHarness,
+  realDeps,
+  type Harness,
+} from './integration-harness.js'
 
 describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', () => {
   let h: Harness
@@ -141,7 +149,7 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     ])
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^phase: verify$/m)
-    expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
+    expect(await h.read('demo')).toContain(`build_sha: ${TEST_GIT_BUILD_TOKEN}`)
   })
 
   test('inbox 真读 canonical pending review request（--json schema）', async () => {
@@ -370,6 +378,86 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     const trans = hist.split('\n').filter((l) => l.includes('"kind":"transition"'))
     expect(trans).toHaveLength(7)
     expect(trans.some((l) => l.includes('"raw":"verify-pass"'))).toBe(true)
+  })
+
+  test('真实 CLI/default assessor 拒绝 legacy phase/build_sha backfill，即使有 approved review receipt', async () => {
+    await h.run(['init', 'backfill', '--track', 'backend', '--preset', 'full'])
+    await h.seedGovernedDocumentEvidence('backfill')
+
+    // The temporary project itself is a real Git repository. The assessor used below deliberately
+    // omits the harness identity override so transition.ts probes this physical identity.
+    execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: h.cwd })
+    execFileSync('git', ['config', 'user.email', 'tenon@test.invalid'], { cwd: h.cwd })
+    execFileSync('git', ['config', 'user.name', 'Tenon Test'], { cwd: h.cwd })
+    await writeFile(join(h.cwd, 'baseline.txt'), 'baseline\n', 'utf8')
+    execFileSync('git', ['add', 'baseline.txt'], { cwd: h.cwd })
+    execFileSync('git', ['commit', '-qm', 'baseline'], { cwd: h.cwd })
+    const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: h.cwd, encoding: 'utf8' }).trim()
+    const identity = await probeBuildRevisionIdentity(h.cwd)
+    expect(identity).toBeDefined()
+    if (!identity) throw new Error('real Git fixture identity unavailable')
+    const backfilledToken = createBuildRevisionToken('git', revision, identity).value
+
+    // Reach Verify through the legacy field writer rather than Build-complete; no Build transition
+    // record/effect is created for this token. The report is a real governed artifact, but review
+    // request must now reject the unproven token before creating any receipt.
+    expect(await h.run(['transition', 'backfill', 'open-complete'])).toBe(0)
+    await h.run(['set', 'backfill', 'phase', 'verify'])
+    await h.seedArtifact('backfill', 'verification_report', 'docs/superpowers/reports/backfill.md')
+    await h.run(['set-many', 'backfill',
+      'branch_status=handled', 'agent_review_result=pass', 'codex_review_result=pass',
+      'isolation=branch',
+      `build_sha=${backfilledToken}`,
+    ])
+    const changeDir = join(h.cwd, 'openspec', 'changes', 'backfill')
+    const recordsPath = join(changeDir, '.pipeline-transitions')
+    const recordNames = (await readdir(recordsPath).catch(() => [] as string[])).sort()
+    const before = {
+      state: await readFile(join(changeDir, '.pipeline.yaml'), 'utf8'),
+      current: await readFile(join(changeDir, '.pipeline-run', 'current.json'), 'utf8'),
+      history: await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8'),
+      records: await Promise.all(recordNames.map(async (name) => [name, await readFile(join(recordsPath, name), 'utf8')] as const)),
+    }
+    const markerPath = join(h.cwd, '.pipeline-pending-review')
+    const markerBefore = await readFile(markerPath, 'utf8').catch(() => undefined)
+
+    const out: string[] = []
+    const err: string[] = []
+    const baseDeps = realDeps(h.cwd, out, err)
+    const actualDeps = {
+      ...baseDeps,
+      buildRevisionIdentity: undefined,
+      assessBuildRevision: undefined,
+      gitHeadSha: async () => execFileSync(
+        'git', ['rev-parse', 'HEAD'], { cwd: h.cwd, encoding: 'utf8' },
+      ).trim(),
+    }
+    let exitCode = 0
+    try {
+      await buildProgram(actualDeps).parseAsync(
+        ['review', 'request', 'backfill', '--event', 'verify-pass'], { from: 'user' },
+      )
+    } catch (error) {
+      if (!(error instanceof CliExit)) throw error
+      exitCode = error.code
+    }
+    expect(exitCode).toBe(2)
+    const diagnostic = [...out, ...err].join('\n')
+    expect(diagnostic).toContain('verify-build-revision-untrusted')
+    expect(diagnostic).toMatch(/reason=provenance-(missing|mismatch)/)
+    expect(diagnostic).toContain('return-to-build-and-capture-current-revision')
+    expect(diagnostic).not.toContain(backfilledToken)
+    expect(diagnostic).not.toContain(h.cwd)
+
+    expect(await readFile(join(changeDir, '.pipeline.yaml'), 'utf8')).toBe(before.state)
+    expect(await readFile(join(changeDir, '.pipeline-run', 'current.json'), 'utf8')).toBe(before.current)
+    expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toBe(before.history)
+    const afterNames = (await readdir(recordsPath).catch(() => [] as string[])).sort()
+    expect(afterNames).toEqual(recordNames)
+    expect(await Promise.all(afterNames.map(async (name) => [name, await readFile(join(recordsPath, name), 'utf8')] as const)))
+      .toEqual(before.records)
+    const markerAfter = await readFile(markerPath, 'utf8').catch(() => undefined)
+    expect(markerAfter).toBe(markerBefore)
   })
 
   test('import 真迁移 base64 历史区（老仓 fixture）+ --strip 真清 YAML', async () => {

@@ -14,9 +14,7 @@
  *      TransitionApplication.execute()。
  *   4. 把 TransitionApplicationResult 精确映射成 HTTP code + JSON body：warnings 里的
  *      projection-write-failed 转译成对应的 stderr WARN 行（best-effort，不影响已成功的
- *      200）；build-sha-missing 这一种 warning 刻意不接——CLI 会为它发一条用户可见 WARN，
- *      server 在改用共享用例之前就不暴露这个信号，这是已披露的既有行为差异，本轮迁移原样
- *      保留、不顺带扩大 HTTP 契约（kernel transition-application.ts 头部注释同一处停止线）。
+ *      200）。revision rejection 则始终在 commit 前返回 typed 409，不写任何投影。
  * runRepository.transact() 的锁范围覆盖 execute() 整个回调（含 commit + 收尾投影），闭 TOCTOU
  * 的保证不变，只是编排主体从本文件搬进了 kernel 单一实现。
  * 老仓 dashboard 写回 run_transition 是 subprocess 跑 guard+state.sh；lite 走 kernel 直调（真改盘）。
@@ -34,7 +32,8 @@ import {
   nodeLoopIoStrict,
   resolveRequiredSkillSlots,
   stateStorageExistsSync,
-  taskPlanTasksThroughPhaseForChange,
+  taskPlanTasksThroughPhaseForChange, assessBuildRevisionTrust, createBuildRevisionToken,
+  probeBuildRevisionIdentity, readValidatedTransitionHead, safeRevisionHash,
 } from '@tenon/kernel'
 import type {
   BreadcrumbWriter, EffectiveSkillResolver, FlowEngine, HistoryWriter, StateStore, TrackDefinition,
@@ -61,10 +60,12 @@ export interface TransitionDeps {
   clock: () => string
   /** 相对项目根的文件存在谓词（事件前置校验用；缺省 = 降级跳过文件面，同 lite/GUARD-RULES §7.2）。 */
   fileExists?: (root: string, relPath: string) => boolean
-  /** `git rev-parse HEAD`（build-complete 冻结 SHA + verify-pass barrier；缺省跳过 SHA 面）。 */
+  /** `git rev-parse HEAD`（legacy observation/capture adapter；Verify assessor 缺失时 fail-closed）。 */
   gitHeadSha?: (cwd: string) => Promise<string>
   /** in-place build 的内容寻址工作区基线；缺省时 workspace barrier 降级跳过。 */
   workspaceFingerprint?: (cwd: string, changeName: string) => Promise<string>
+  captureBuildRevision?: (cwd: string, isolation: string) => Promise<string>
+  assessBuildRevision?: import('@tenon/kernel').TransitionContext['assessBuildRevision']
   /**
    * .pipeline-history.jsonl 记账（G20 / v5-T1）：转换成功后追加一行，形状对齐 CLI 侧
    * cli/commands/transition.ts 的既有口径——kind='transition' + raw=触发它的 event 名
@@ -115,9 +116,9 @@ function mapTransitionResult(name: string, event: string, result: TransitionAppl
   switch (result.kind) {
     case 'applied': {
       // warnings 逐条转译成 stderr WARN 行（best-effort 收尾失败，不影响已经成功的 200）。
-      // build-sha-missing 刻意不接：CLI 会为它发一条用户可见 WARN，server 从改用共享用例之前
-      // 就不暴露这个信号——见文件头注释，这是保留的既有行为差异，不是本轮遗漏。
       for (const warning of result.warnings) {
+        // Legacy ABI signal only: current revision capture never emits it, and server keeps the
+        // historical contract of not projecting this deprecated warning.
         if (warning.kind === 'build-sha-missing') continue
         switch (warning.projection) {
           case 'state-yaml':
@@ -147,6 +148,19 @@ function mapTransitionResult(name: string, event: string, result: TransitionAppl
       return { code: 409, body: { ok: false, error: `illegal transition: ${result.from} -> ${result.to}` } }
     case 'precondition-violated':
       return { code: 409, body: { ok: false, error: result.lines[0], detail: result.lines } }
+    case 'revision-untrusted':
+      return {
+        code: 409,
+        body: {
+          ok: false,
+          error: 'Verify build revision is not trustworthy',
+          code: result.blocker.code,
+          reason: result.blocker.reason,
+          remediation: result.blocker.remediation,
+          ...(result.blocker.stateHash === undefined ? {} : { stateHash: result.blocker.stateHash }),
+          ...(result.blocker.revisionHash === undefined ? {} : { revisionHash: result.blocker.revisionHash }),
+        },
+      }
     case 'workflow-not-found':
       return {
         code: 409,
@@ -219,12 +233,54 @@ export async function performTransition(
   const fileExists = deps.fileExists
   const gitHeadSha = deps.gitHeadSha
   const workspaceFingerprint = deps.workspaceFingerprint
+  const captureBuildRevision = deps.captureBuildRevision
+  const assessBuildRevision = deps.assessBuildRevision
   const ctx: TransitionContext = {
     fileExists: fileExists ? (p: string): boolean => fileExists(root, p) : undefined,
     gitHeadSha: gitHeadSha ? (): Promise<string> => gitHeadSha(root) : undefined,
     workspaceFingerprint: workspaceFingerprint
       ? (): Promise<string> => workspaceFingerprint(root, name)
       : undefined,
+    captureBuildRevision: captureBuildRevision
+      ? (isolation): Promise<string> => captureBuildRevision(root, isolation)
+      : async (isolation): Promise<string> => {
+          const identity = await probeBuildRevisionIdentity(root)
+          if (!identity) throw new Error('build revision identity unavailable')
+          const kind = isolation === 'in-place' ? 'workspace' as const : 'git' as const
+          const revision = kind === 'workspace'
+            ? await workspaceFingerprint?.(root, name) ?? ''
+            : await gitHeadSha?.(root) ?? ''
+          return createBuildRevisionToken(kind, revision, identity).value
+        },
+    assessBuildRevision: assessBuildRevision === undefined
+      ? async (request) => {
+          const identity = await probeBuildRevisionIdentity(root)
+          const observe = async () => {
+            const kind = request.isolation === 'in-place' ? 'workspace' as const : 'git' as const
+            const revision = kind === 'workspace'
+              ? await workspaceFingerprint?.(root, name) ?? ''
+              : await gitHeadSha?.(root) ?? ''
+            if (!identity) throw new Error('build revision identity unavailable')
+            return { kind, revision, identity }
+          }
+          const provenance = async () => {
+            const validated = await readValidatedTransitionHead(dir)
+            if (!validated) return undefined
+            const { current, record } = validated
+            const stateBuildSha = current.state.fields.build_sha
+            return {
+              currentStep: String(current.state.fields.phase ?? ''),
+              stateHash: safeRevisionHash(current.state.fields),
+              stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(',') : stateBuildSha,
+              recordTo: record.to,
+              buildShaEffects: record.effects
+                .filter((effect) => effect.field === 'build_sha')
+                .map((effect) => typeof effect.to === 'string' ? effect.to : ''),
+            }
+          }
+          return assessBuildRevisionTrust({ ...request, observe, provenance })
+        }
+      : assessBuildRevision,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(root, dir, name),
     tasksThroughPhase: (phase) => taskPlanTasksThroughPhaseForChange(dir, phase),
   }

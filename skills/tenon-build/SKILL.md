@@ -354,9 +354,11 @@ guard **只校验、不自动 transition**。校验通过后按当前 workflow �
 - `gate: review`：先 `tenon review request`，常规模式等待确认；已明确持续授权的 exact Change 在真实证据
   完成后用 `tenon review acknowledge "$TENON_CHANGE_NAME" --delegated`，再 transition。
 - `gate: confirm`：保留人为确认，不自动跨越。
-（build→verify 是 barrier：build 全 task 自测绿后 `build-complete` 由 CLI 自动冻结可复验的
-`build_sha` 入 `.pipeline.yaml`：`branch`/`worktree` 为 `git rev-parse HEAD`，`in-place` 为
-`workspace:sha256:<内容基线>`，**之后**才进 verify，见下方 HARD RULE；
+（build→verify 是 barrier：build 全 task 自测绿后 `build-complete` 由可信 capture capability
+写入 canonical `build_sha` token：`build:v1:<git|workspace>:<revision_hash>:<repository_hash>:<worktree_hash>`。
+token 只携带 domain-separated hash，不携带 raw path、prompt、credential 或裸 SHA；能力缺失、身份/来源
+不可信、异常或格式非法均 fail-closed，必须重新 build/capture，**禁止 backfill 或把旧裸 SHA/workspace
+baseline 补写成 token**，之后才进 verify，见下方 HARD RULE；
 真正"停下等用户复核"在 verify 跑完、进 ship 前的 verify-pass。）
 
 若 build 期间发现需求或设计语义已经变化，不能在本 phase 直接重登记 proposal/design 来掩盖
@@ -383,8 +385,8 @@ tenon transition "$TENON_CHANGE_NAME" requirements-changed
 2. 完成 Step 3.5 的 Build readiness 与全部适用机器门禁，写入兼容字段
    `pre_verify_review_result=pass`；之后的交付面变更会令它失效并要求重跑。
 3. 若当前已由宿主提供 branch/worktree，确保该隔离目标的 Git HEAD 就是待验收版本；**不得**为满足流程自行建分支或伪造 commit。`in-place` 则保留真实未提交工作区，不要求 commit。
-4. `tenon transition <name> build-complete` —— CLI 自动冻结 `build_sha`：branch/worktree 是 `git rev-parse HEAD`；in-place 是排除 OpenSpec、证据、依赖和缓存后的工作区内容 SHA-256。
-5. **之后**才进 verify；verify 必须读取这个冻结基线。in-place 的 verify 期间不得改实现/配置文件；`verify-pass` 会重新计算同一内容基线，漂移即拒绝。
+4. `tenon transition <name> build-complete` —— CLI 通过可信 capture 冻结 `build_sha` token（见上方 grammar），并绑定当前 Git repository/worktree identity 或 workspace content identity；任何 capture rejection 都保持 canonical state 不变。
+5. **之后**才进 verify；verify 必须读取这个冻结 token，并在 Verify 前重新评估当前 HEAD/workspace、identity、provenance 与 state digest。审查期间发生漂移会以 stable `verify-build-revision-untrusted` blocker 拒绝。
 
 不要在 build 还没自测绿 / 还没冻结基线时就发起 verify——评审移动靶在因果上不成立。
 （verify-fail 回退时 CLI 自动置 `verify_result=fail`、清空 `build_sha` 并把

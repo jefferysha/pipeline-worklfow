@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+  "workflowFingerprint": "0fea7ee8cdbe4adf1ddbc8a2022968d0774d138173319e89e1834f2b65be961c",
+  "scopes": [
+    {
+      "scope": "verify",
+      "defaultMaxAttempts": 2,
+      "override": null,
+      "used": 2,
+      "active": null,
+      "completed": [
+        {
+          "attemptId": "042624d4-32ee-4127-a54a-bdd93712f890",
+          "sequence": 1,
+          "candidateFingerprint": "workspace:sha256:f2533ea6b4c683f2ed265a6f7991b2546bd5e0b42fecc76367758eaeb9c26476",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T22:52:14Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "fail",
+              "reportPath": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/042624d4-32ee-4127-a54a-bdd93712f890.standards.report",
+              "reportDigest": "sha256:8330f1d6aaa9c971cc575d743a3a968261803c900c7a2738c6b2537add5635a4",
+              "recordedAt": "2026-08-09T22:53:28Z"
+            },
+            {
+              "lane": "spec",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/042624d4-32ee-4127-a54a-bdd93712f890.spec.report",
+              "reportDigest": "sha256:86fcbab50ef62579872371cf20588e90d65654edc538e2ea43b4b57ae826f120",
+              "recordedAt": "2026-08-09T22:53:28Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/042624d4-32ee-4127-a54a-bdd93712f890.e2e.report",
+              "reportDigest": "sha256:db92cf0532d3d42ca1e58b3c90ba834c71c54cbe7b3833268688c80132ff323b",
+              "recordedAt": "2026-08-09T22:53:28Z"
+            }
+          ],
+          "completedAt": "2026-08-09T22:53:57Z",
+          "result": "fail",
+          "reportPath": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/042624d4-32ee-4127-a54a-bdd93712f890.aggregate.report",
+          "reportDigest": "sha256:43fa9b992980d996bfaa59c19ea0d7c54a17c2b549dd2d61cbf82fd887d8bd5b"
+        },
+        {
+          "attemptId": "b6a89345-2590-4f84-8d64-7cdd9b20bd73",
+          "sequence": 2,
+          "candidateFingerprint": "workspace:sha256:c989c0f72a5ea718d936a667cb34c93feb18953b09520483eadc866e3227a64c",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T23:01:56Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/b6a89345-2590-4f84-8d64-7cdd9b20bd73.standards.report",
+              "reportDigest": "sha256:9413d7750464497f90da7db9b2d9c65911c8f654f7fd683ac6510673dcf4da68",
+              "recordedAt": "2026-08-09T23:02:58Z"
+            },
+            {
+              "lane": "spec",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/b6a89345-2590-4f84-8d64-7cdd9b20bd73.spec.report",
+              "reportDigest": "sha256:5f06f10e522f7095afa8572d5469e6f61780ba85328694a2517b0480b1de67fc",
+              "recordedAt": "2026-08-09T23:02:59Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/b6a89345-2590-4f84-8d64-7cdd9b20bd73.e2e.report",
+              "reportDigest": "sha256:3dff600edbd9cc7d6c5500cb4fee3e4ef3660c81fd851273699efdb2091c2235",
+              "recordedAt": "2026-08-09T23:02:59Z"
+            }
+          ],
+          "completedAt": "2026-08-09T23:03:00Z",
+          "result": "pass",
+          "reportPath": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/b6a89345-2590-4f84-8d64-7cdd9b20bd73.aggregate.report",
+          "reportDigest": "sha256:933970ff4acb33c113b476d39155694d6c7b45915a203457a0aa9fb5bfcf176f"
+        }
+      ]
+    }
+  ]
+}

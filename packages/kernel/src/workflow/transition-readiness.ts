@@ -1,11 +1,11 @@
 import { DEFAULT_EVENT_POLICY } from '../flow/default-event-policy.js'
 import type { EventName } from '../flow/transition-table.js'
 import type { PipelineState } from '../types.js'
+import type { BuildRevisionBlocker } from './build-revision.js'
 import type { EffectiveWorkflowPlan } from './effective-plan.js'
 import { evaluateGuards } from './guard-handlers.js'
 import {
-  governedLifecyclePolicy,
-  mergeLifecycleGuards,
+  effectiveLifecyclePolicy,
 } from './governed-lifecycle-policy.js'
 import type { CompiledGuardConfig, GuardCapability, GuardDecision } from './ir.js'
 import {
@@ -15,6 +15,7 @@ import {
 } from './stepGuard.js'
 
 export type TransitionReadinessBlocker =
+  | BuildRevisionBlocker
   | {
       readonly kind: 'guard-failed'
       readonly guardType: CompiledGuardConfig['type']
@@ -54,12 +55,21 @@ function blocker(
   decision: Exclude<GuardDecision, { readonly kind: 'passed' }>,
 ): TransitionReadinessBlocker {
   if (decision.kind === 'skipped') {
+    if (guard.type === 'build-head-unchanged') {
+      return {
+        kind: 'verify-build-revision-untrusted',
+        code: 'verify-build-revision-untrusted',
+        reason: 'capability-unavailable',
+        remediation: 'return-to-build-and-capture-current-revision',
+      }
+    }
     return {
       kind: 'capability-unavailable',
       guardType: guard.type,
       capability: decision.capability,
     }
   }
+  if (decision.blocker !== undefined) return decision.blocker
   return {
     kind: 'guard-failed',
     guardType: decision.guardType,
@@ -92,33 +102,34 @@ export async function readinessByTransition(
   const transitions = await Promise.all(step.transitions.map(async (transition) => {
       const guards = plan.executionModel === 'phase-manifest'
         ? defaultEventGuards(transition.event)
-        : mergeLifecycleGuards(
-            [...step.guards, ...transition.guards],
-            governedLifecyclePolicy(
-              plan.capabilities.documents.policy !== undefined,
-              step.id,
-              transition.to,
-            )?.guards,
-          )
+        : effectiveLifecyclePolicy(
+            plan.capabilities.documents.policy !== undefined,
+            step,
+            transition,
+            plan.workflow.steps.find((candidate) => candidate.id === transition.to),
+          ).guards
       const evaluations = []
       const errors: TransitionReadinessBlocker[] = []
       for (const guard of guards) {
         try {
           evaluations.push(...await evaluateGuards([guard], input, { stopOnFirstFailure: false }))
         } catch {
-          const fieldValue = guard.type === 'build-head-unchanged'
-            ? state.fields[guard.field]
-            : undefined
+          const fieldValue = guard.type === 'build-head-unchanged' ? state.fields[guard.field] : undefined
           const scalar = Array.isArray(fieldValue) ? fieldValue.join(',') : (fieldValue ?? '')
+          if (guard.type === 'build-head-unchanged') {
+            errors.push({
+              kind: 'verify-build-revision-untrusted',
+              code: 'verify-build-revision-untrusted',
+              reason: 'evaluation-error',
+              remediation: 'return-to-build-and-capture-current-revision',
+            })
+            continue
+          }
           const capability = guard.type === 'tasks-at-least'
             ? 'readText'
             : guard.type === 'file-exists'
               ? 'fileExists'
-              : guard.type === 'build-head-unchanged'
-                ? scalar.startsWith('workspace:sha256:')
-                  ? 'workspaceFingerprint'
-                  : 'gitHeadSha'
-                : guard.type === 'spec-migration-applied'
+              : guard.type === 'spec-migration-applied'
                   ? 'specMigrationStatus'
                   : undefined
           errors.push({

@@ -199,11 +199,17 @@
   都是同一个 Review attempt 的 lanes，不得各自计次或形成独立循环。Workflow 通过版本化
   `review_budget` 配置每个 scope 的有限上限；默认上限为 2。每轮必须完成冻结的 required lanes 并
   一次性聚合，Critical/High/Medium 全部清零才可通过。预算耗尽后停止自动 Review，等待显式人类处置。
-- **Build→Verify 可复验基线**：状态字段仍命名为 `build_sha` 以兼容既有 state ABI，但它是
-  “构建基线”而非永远的 Git SHA。`isolation=branch|worktree` 冻结 `git rev-parse HEAD`；
-  `isolation=in-place` 冻结 `workspace:sha256:<64 hex>`，即排除 `.git`、依赖、OpenSpec/文档证据、
-  pipeline 控制文件与测试缓存后的源码/配置树内容指纹。in-place 绝不要求或伪造 commit；`verify-pass`
-  在同一排除策略下重算指纹，漂移即拒绝。工作区指纹能力缺失或返回非规范值时 build-complete fail-closed。
+- **Build→Verify 可复验基线**：状态字段仍命名为 `build_sha` 以兼容既有 state ABI，但新 Build 必须写入
+  `build:v1:<git|workspace>:<revision_hash>:<repository_hash>:<worktree_hash>` typed token。三个摘要
+  是 domain-separated SHA-256；token 不含绝对路径、prompt、credential 或裸 SHA。`isolation=branch|worktree`
+  以物理 Git common-dir/worktree identity 绑定 object ID，`isolation=in-place` 绑定排除 `.git`、依赖、
+  OpenSpec/文档证据、pipeline 控制文件与测试缓存后的 `workspace:sha256:<64 hex>` 内容指纹。旧裸 Git SHA
+  或旧裸 workspace baseline 不会 backfill，必须回 Build 重新捕获。`verify-pass` 会重算当前 identity/
+  revision，并用 validated canonical transition head、唯一 `build_sha` effect 与当前 Verify-like step
+  证明来源；缺失、非法、漂移、能力/来源无法证明都返回 stable
+  `verify-build-revision-untrusted`，remediation 为 `return-to-build-and-capture-current-revision`，
+  只投影 closed reason 与 `sha256:` state/revision hash。in-place 绝不要求或伪造 commit；工作区能力缺失或
+  返回非规范值时 build-complete 与 readiness 均 fail-closed。
 - 合法转换与 `review_phases` 由 `templates/manifest.yaml` 派生（**引擎侧真读该字段**——
   这是对老内核 state-transition.sh 硬编码欠账的构造性修复）。
 - 门 marker 文件（项目根）：`.pipeline-pending-confirm` / `-review` / `-interaction`，

@@ -14,6 +14,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { FIELD_ORDER, LIST_FIELDS } from '../types.js'
+import { createBuildRevisionToken } from '../workflow/build-revision.js'
 import type { FieldName, GuardContext, PipelineState } from '../types.js'
 import { renderTaskPlanTasksMd, type TaskPlanRevisionV1 } from '../task-plan/index.js'
 import type { CoverageProfile } from '../tracks/types.js'
@@ -620,7 +621,15 @@ describe('一致性矩阵：guard 出口适用性 == transition 前置强制性�
       verification_report: 'docs/v.md',
       branch_status: 'handled',
     } as const
-    const violations = await checkDefaultEventPreconditions('verify-pass', makeState({ ...fields, track }))
+    const trustedRevision = createBuildRevisionToken('git', 'a'.repeat(40), {
+      repository: 'guard-test-repository',
+      worktree: 'guard-test-worktree',
+    })
+    const violations = await checkDefaultEventPreconditions(
+      'verify-pass',
+      makeState({ ...fields, track }),
+      { assessBuildRevision: async () => ({ trusted: true as const, token: trustedRevision }) },
+    )
     const transitionRequires = violations !== null
     if (violations !== null) expect(violations[0]).toContain('要求 agent_review_result=pass')
     const failures = engine.guardCheck(makeState({ ...fields, phase: 'verify', track })).failures

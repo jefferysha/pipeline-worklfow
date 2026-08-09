@@ -6,19 +6,22 @@ import type { CompiledGuardConfig, GuardInput, StepIR } from './ir.js'
 import type { StepDef } from './types.js'
 import type { PipelineState, GuardResult } from '../types.js'
 import { normalizeDefaultGuardFields } from '../flow/default-event-policy.js'
+import { safeRevisionHash } from './build-revision.js'
 
 /**
  * 自定义 workflow 当前 step 的出口 guard 评估（G2 P2：v1 两变体经 compileStepGuards 下沉后走
  * GUARD_HANDLERS 同一 handler 路径，不再各写一份 if 链）。changeDirAbs = tasks.md 所在 change 目录；
- * fileExists（项目根相对）/gitHeadSha/workspaceFingerprint 是 guard 变体（file-exists /
- * build-head-unchanged）的能力注入，缺省 = 对应 guard 降级 skipped（视为通过，同
- * lite/GUARD-RULES §7.2 文件/SHA 面降级口径）。
+ * fileExists（项目根相对）/gitHeadSha/workspaceFingerprint 是 guard 变体能力；普通文件面
+ * 仍按既有可选能力语义处理，但 build-head-unchanged 现在必须绑定 revision assessor，缺失
+ * capability 会 fail-closed 为 typed revision blocker，绝不 skipped/pass。
  */
 export interface StepGuardContext {
   readonly changeDirAbs: string
   readonly fileExists?: (repoRelativePath: string) => boolean
   readonly gitHeadSha?: () => Promise<string>
   readonly workspaceFingerprint?: () => Promise<string>
+  readonly assessBuildRevision?: GuardInput['assessBuildRevision']
+  readonly currentStep?: string
   readonly specMigrationStatus?: GuardInput['specMigrationStatus']
 }
 
@@ -43,12 +46,16 @@ function readChangeText(changeDirAbs: string, rel: string): string | undefined {
 export function buildStepGuardInput(state: PipelineState, ctx: StepGuardContext): GuardInput {
   return {
     fields: state.fields,
+    stateHash: safeRevisionHash(state.fields),
+    rawBuildSha: state.fields.build_sha,
     track: fieldStr(state.fields.track),
     readText: (rel) => readChangeText(ctx.changeDirAbs, rel),
     fileExists: ctx.fileExists,
     gitHeadSha: ctx.gitHeadSha,
     workspaceFingerprint: ctx.workspaceFingerprint,
     specMigrationStatus: ctx.specMigrationStatus,
+    assessBuildRevision: ctx.assessBuildRevision,
+    currentStep: ctx.currentStep ?? fieldStr(state.fields.phase),
   }
 }
 
@@ -58,6 +65,7 @@ export function buildDefaultGuardInput(state: PipelineState, ctx: StepGuardConte
     ...buildStepGuardInput(state, ctx),
     fields: normalizeDefaultGuardFields(state.fields),
     track: fieldStr(state.fields.track),
+    currentStep: ctx.currentStep ?? fieldStr(state.fields.phase),
   }
 }
 
@@ -88,6 +96,16 @@ export function renderGuardFailure(ev: GuardEvaluation, stepId: string): string 
     case 'full-direct-override':
       return `step '${stepId}' 要求 preset=full 且 build_mode=direct 时 direct_override=true（当前=${d.actual ?? ''}）`
     case 'build-head-unchanged':
+      if (d.blocker !== undefined) {
+        const blocker = d.blocker
+        return [
+          blocker.code,
+          `reason=${blocker.reason}`,
+          `remediation=${blocker.remediation}`,
+          ...(blocker.stateHash === undefined ? [] : [`stateHash=${blocker.stateHash}`]),
+          ...(blocker.revisionHash === undefined ? [] : [`revisionHash=${blocker.revisionHash}`]),
+        ].join(' ')
+      }
       if ((d.expected?.[0] ?? '').startsWith('workspace:sha256:')) {
         return `step '${stepId}' 要求当前工作区内容等于 build 冻结基线（build_sha=${d.expected?.[0] ?? ''}，当前=${d.actual ?? ''}）`
       }
@@ -115,7 +133,15 @@ export async function evaluateCompiledGuards(
   const failures = evals
     .filter((e) => e.decision.kind === 'failed')
     .map((e) => renderGuardFailure(e, stepId))
-  return { pass: failures.length === 0, failures }
+  const blockers = evals
+    .flatMap((e) => e.decision.kind === 'failed' && e.decision.blocker !== undefined
+      ? [e.decision.blocker]
+      : [])
+  return {
+    pass: failures.length === 0,
+    failures,
+    ...(blockers.length === 0 ? {} : { blockers }),
+  }
 }
 
 /**

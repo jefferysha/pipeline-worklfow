@@ -46,15 +46,22 @@ export function eventEdge(event: string): EventEdge | undefined {
  * 注入；全部可选）。路径 / cwd 由调用方绑定项目根：
  *   · cli   —— fileExists = guardCtx(name)?.fileExists；gitHeadSha / workspaceFingerprint = deps 绑定当前项目根。
  *   · server —— fileExists = (p) => deps.fileExists(root, p)；gitHeadSha / workspaceFingerprint 绑定 root。
- * 未注入某能力时依赖它的 guard 降级跳过（文件面视为存在；Git SHA / workspace baseline 面跳过）。
+ * 文件面能力缺失沿既有可选面处理；Verify-like revision guard 必须绑定 assessor，缺失时
+ * 返回 typed revision blocker，不能把 Git SHA/workspace baseline 面静默跳过。
  */
 export interface TransitionContext {
   /** 文件存在（相对项目根，已绑定）；缺省 = 降级跳过文件面（视为存在），字段面不降级。 */
   fileExists?: (relPath: string) => boolean
-  /** `git rev-parse HEAD` stdout（trim 前；已绑定 cwd）；缺省 = 跳过 SHA 面。 */
+  /** `git rev-parse HEAD` stdout（trim 前；已绑定 cwd），仅供 legacy capture/观察适配器。 */
   gitHeadSha?: () => Promise<string>
-  /** `isolation=in-place` 的内容寻址工作区基线；缺省 = workspace guard 跳过。 */
+  /** `isolation=in-place` 的内容寻址工作区基线；实际 Verify 信任由 assessor 裁决。 */
   workspaceFingerprint?: () => Promise<string>
+  /** Trusted Build revision token capture. Missing capability fails the Build transition closed. */
+  captureBuildRevision?: (isolation: string) => Promise<string>
+  /** Trusted Build revision assessment. Missing capability fails Verify-like success closed. */
+  assessBuildRevision?: import('../workflow/ir.js').GuardInput['assessBuildRevision']
+  /** Current Verify-like step for provenance checks. */
+  currentStep?: string
   /** 当前 Change 的主规格迁移证据；Ship 出口硬门禁，不注入时失败关闭。 */
   specMigrationStatus?: import('../workflow/ir.js').GuardInput['specMigrationStatus']
   /** 在 transition 持有 Change lock 时重验 tasks-through-phase，关闭 preview→commit TOCTOU。 */

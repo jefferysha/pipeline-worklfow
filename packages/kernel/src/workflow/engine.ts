@@ -14,6 +14,7 @@
 import { buildStepGuardInput, evaluateCompiledGuards, type StepGuardContext } from './stepGuard.js'
 import type { ActionConfig, StepIR, WorkflowIR } from './ir.js'
 import type { FieldName, PipelineState } from '../types.js'
+import type { EffectiveLifecyclePolicy } from './governed-lifecycle-policy.js'
 import { mergeLifecycleGuards } from './governed-lifecycle-policy.js'
 
 /** 字段值 → 字符串（列表按逗号连接；undefined → 空串）——cli str / server fstr 同款强转。 */
@@ -57,7 +58,13 @@ export type StepTransitionPlan =
   | { readonly ok: true; readonly from: string; readonly to: string; readonly actions: readonly ActionConfig[] }
   | { readonly ok: false; readonly kind: 'step-not-in-graph'; readonly stepId: string }
   | { readonly ok: false; readonly kind: 'event-unsupported'; readonly stepId: string; readonly available: readonly string[] }
-  | { readonly ok: false; readonly kind: 'guard-failed'; readonly stepId: string; readonly failures: readonly string[] }
+  | {
+      readonly ok: false
+      readonly kind: 'guard-failed'
+      readonly stepId: string
+      readonly failures: readonly string[]
+      readonly blockers?: readonly import('./build-revision.js').BuildRevisionBlocker[]
+    }
 
 /**
  * 非 default workflow 的转换判定编排（G2 P2：输入收编译产物 WorkflowIR，不再是裸 WorkflowDef）：
@@ -75,7 +82,9 @@ export async function planStepTransition(
   event: string,
   ctx: StepGuardContext,
   /** Governed lifecycle invariants supplied by TransitionApplication after it resolves a canonical phase edge. */
-  additionalGuards: readonly import('./ir.js').CompiledGuardConfig[] = [],
+  additionalGuardsOrLifecycle:
+    | readonly import('./ir.js').CompiledGuardConfig[]
+    | EffectiveLifecyclePolicy = [],
 ): Promise<StepTransitionPlan> {
   const stepId = fieldStr(state, 'phase')
   const step: StepIR | null = resolveStep(ir, stepId)
@@ -86,12 +95,28 @@ export async function planStepTransition(
   }
   // A governed custom workflow may declare a canonical guard itself. Evaluate it only once:
   // duplicate build-head-unchanged could read a moving workspace twice in one transaction.
-  const guards = mergeLifecycleGuards([...step.guards, ...edge.guards], additionalGuards)
+  // TransitionApplication supplies the complete edge-aware policy; the array form remains
+  // compatible with callers that only need to append guards to the historical step/edge set.
+  const lifecycle = 'guards' in additionalGuardsOrLifecycle
+    ? additionalGuardsOrLifecycle
+    : undefined
+  const additionalGuards: readonly import('./ir.js').CompiledGuardConfig[] = lifecycle === undefined
+    ? additionalGuardsOrLifecycle as readonly import('./ir.js').CompiledGuardConfig[]
+    : []
+  const guards = lifecycle === undefined
+    ? mergeLifecycleGuards([...step.guards, ...edge.guards], additionalGuards)
+    : lifecycle.guards
   const guardResult = await evaluateCompiledGuards(guards, stepId, buildStepGuardInput(state, ctx))
   if (!guardResult.pass) {
-    return { ok: false, kind: 'guard-failed', stepId, failures: guardResult.failures }
+    return {
+      ok: false,
+      kind: 'guard-failed',
+      stepId,
+      failures: guardResult.failures,
+      ...(guardResult.blockers === undefined ? {} : { blockers: guardResult.blockers }),
+    }
   }
-  return { ok: true, from: stepId, to: edge.to, actions: edge.actions }
+  return { ok: true, from: stepId, to: edge.to, actions: lifecycle?.actions ?? edge.actions }
 }
 
 /**
