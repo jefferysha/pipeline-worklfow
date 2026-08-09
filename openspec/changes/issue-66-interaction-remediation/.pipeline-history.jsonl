@@ -77,3 +77,7 @@
 {"ts":"2026-08-09T21:31:03Z","kind":"set","field":"agent_review_result","to":"pass"}
 {"ts":"2026-08-09T21:31:06Z","kind":"set","field":"codex_review_result","to":"pass"}
 {"ts":"2026-08-09T21:31:08Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-08-09T21:32:17Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-09T21:32:27Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-09T21:32:28Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T21:32:27Z authority_host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-09T21:32:28Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"95a6afba-6c48-4f86-b74f-4a878fcc5779"}
