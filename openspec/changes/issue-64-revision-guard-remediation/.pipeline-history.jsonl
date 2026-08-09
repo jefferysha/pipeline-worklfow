@@ -54,3 +54,15 @@
 {"ts":"2026-08-09T20:12:24Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
 {"ts":"2026-08-09T20:12:24Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 61dd35b5-078a-48fd-835e-597604edf0a7 3"}
 {"ts":"2026-08-09T20:12:25Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-09T20:12:57Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T20:12:57Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T20:12:57Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"2eb51a1a-db3c-4a44-8bb7-912a8ff74a7e"}
+{"ts":"2026-08-09T20:14:29Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-10-issue-64-revision-guard-remediation-verify-runtime-barrier-recovery.md"}
+{"ts":"2026-08-09T20:17:02Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T20:17:02Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 61dd35b5-078a-48fd-835e-597604edf0a7 4"}
+{"ts":"2026-08-09T20:17:17Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-09T20:17:21Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T19:30:24Z authority_host_session=019fe7fe-a6e3-75b1-92cd-440d19b07fd4"}
+{"ts":"2026-08-09T20:17:24Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"33479f6a-3b0c-43cf-902b-70c7f7a97f25"}
+{"ts":"2026-08-09T20:18:40Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-09T20:18:40Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 61dd35b5-078a-48fd-835e-597604edf0a7 5"}
+{"ts":"2026-08-09T20:19:07Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
