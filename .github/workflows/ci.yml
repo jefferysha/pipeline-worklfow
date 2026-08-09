@@ -18,6 +18,8 @@ jobs:
           cache: npm
       - name: Install exact lockfile
         run: npm ci
+      - name: Build kernel dependency used by CLI trust probes
+        run: npx tsc -p packages/kernel/tsconfig.json
       - name: Real Windows native executable and batch interpreter trust
         run: >-
           npx vitest run

@@ -256,8 +256,16 @@ export function checkMarkdownImages(root, markdownFiles) {
 }
 
 function gitTracked(root) {
-  const result = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
-  if (result.status !== 0) throw new Error(result.stderr.trim() || 'git ls-files failed')
+  const result = spawnSync('git', ['ls-files', '-z'], {
+    cwd: root,
+    encoding: 'utf8',
+    // The governed repository already exceeds Node's 1 MiB spawnSync default. Keep this bounded,
+    // but large enough that CI and developer machines enumerate the same complete tracked set.
+    maxBuffer: 16 * 1024 * 1024,
+  })
+  if (result.error !== undefined || result.status !== 0) {
+    throw new Error(result.stderr.trim() || result.error?.message || 'git ls-files failed')
+  }
   // `git ls-files` 仍会列出工作树中已删除、尚未 stage 的索引项；仓库卫生门检查的是
   // 即将交付的当前文件树，删除中的历史路径不应在提交前制造假阳性。
   return result.stdout
