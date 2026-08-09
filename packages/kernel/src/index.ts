@@ -55,6 +55,13 @@ export {
   missingWorkflowStepSkills,
 } from './workflow/skill-evidence.js'
 export { evaluateStepGuards, evaluateWorkflowIrStepGuards } from './workflow/stepGuard.js'
+export {
+  effectiveLifecyclePolicy, governedLifecyclePolicy, isRevisionGuard,
+  mergeLifecycleActions, mergeLifecycleGuards, semanticRevisionLifecyclePolicy,
+} from './workflow/governed-lifecycle-policy.js'
+export type {
+  EffectiveLifecyclePolicy, GovernedLifecyclePolicy,
+} from './workflow/governed-lifecycle-policy.js'
 // step 编排层（Wave 2 下沉）：解析 step/找边/评 guard/算下相位的单一真相源，
 // cli transition/check 与 server transition 塌成 adapter（消息模板与错误分类学留 adapter）。
 export { applyStepTransition, firstStep, planStepTransition, resolveStep, resolveWorkflowName } from './workflow/engine.js'

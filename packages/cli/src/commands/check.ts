@@ -15,8 +15,10 @@ import {
   evaluateWorkflowIrStepGuards,
   evaluateDefaultEventPreconditions,
   classifyTaskPlanProjectionForChange,
+  effectiveLifecyclePolicy,
   isDocumentContractPhase,
   isDocumentPolicyStep,
+  isRevisionGuard,
   resolveStep,
   resolveWorkflowName,
   TASK_PLAN_CURRENT_FILE,
@@ -30,6 +32,7 @@ import type {
   PipelineState,
   BuildRevisionBlocker,
 } from '@tenon/kernel'
+import type { StepIR } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { display, str } from '../render.js'
@@ -46,7 +49,12 @@ function renderBuildRevisionBlocker(blocker: BuildRevisionBlocker): string {
   ].join(' ')
 }
 
-export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
+export interface CheckOpts {
+  /** Exact custom edge to preflight (used by review request). */
+  readonly event?: string
+}
+
+export async function cmdCheck(deps: CliDeps, name: string, opts: CheckOpts = {}): Promise<number> {
   if (!isValidChangeName(name)) {
     deps.io.err(`ERROR: change-name 非法: '${name}' (仅允许 a-z A-Z 0-9 - _)`)
     return 1
@@ -73,7 +81,7 @@ export async function cmdCheck(deps: CliDeps, name: string): Promise<number> {
     return 1
   }
   if (plan.capabilities.execution.model === 'step-graph') {
-    return checkGraphWorkflow(deps, name, dir, state, plan)
+    return checkGraphWorkflow(deps, name, dir, state, plan, opts.event)
   }
 
   // ── default workflow：coverage policy 必须来自当前项目 effective registry。registry 损坏或
@@ -240,6 +248,7 @@ async function checkGraphWorkflow(
   dir: string,
   state: PipelineState,
   plan: EffectiveWorkflowPlan,
+  event: string | undefined,
 ): Promise<number> {
   const currentStepId = str(state.fields.phase)
   const step = resolveStep(plan.workflow, currentStepId)
@@ -247,10 +256,28 @@ async function checkGraphWorkflow(
     deps.io.err(`ERROR: step '${currentStepId}' 不在 workflow '${plan.id}' 里`)
     return 1
   }
+  let guards: StepIR['guards']
+  if (event === undefined) {
+    guards = plainGraphCheckGuards(plan, step)
+  } else {
+    const selectedEdge = step.transitions.find((transition) => transition.event === event)
+    if (selectedEdge === undefined) {
+      deps.io.err(
+        `ERROR: step '${currentStepId}' 不支持 event '${event}'；可选：${step.transitions.map((transition) => transition.event).join(', ') || '(无)'}`,
+      )
+      return 1
+    }
+    guards = effectiveLifecyclePolicy(
+      plan.capabilities.documents.governed,
+      step,
+      selectedEdge,
+      plan.workflow.steps.find((candidate) => candidate.id === selectedEdge.to),
+    ).guards
+  }
   // 能力注入让 file-exists/build-head-unchanged 类 guard 在预览里忠实评估；revision assessor
   // 缺失时显式 fail-closed，不把 Verify 信任面降级为 skipped。tasks-at-least/nonempty-output
   // 只用 readText/字段面，不受此影响。
-  const result = await evaluateWorkflowIrStepGuards(state, step, {
+  const result = await evaluateWorkflowIrStepGuards(state, { ...step, guards }, {
     changeDirAbs: dir,
     fileExists: deps.guardCtx?.(name)?.fileExists,
     gitHeadSha: deps.gitHeadSha,
@@ -293,4 +320,34 @@ async function checkGraphWorkflow(
     + (migration?.kind === 'invalid' ? 1 : 0)
   deps.io.out(`  [FAIL] 共 ${total} 项未通过`)
   return 2
+}
+
+/**
+ * Plain custom check keeps its historical step-guard preview and only supplements the
+ * revision invariant.  Edge-specific non-revision guards are intentionally not previewed
+ * without an exact event.  A single revision guard is retained for all non-rollback exits,
+ * while rollback-only steps do not require a forward proof.
+ */
+function plainGraphCheckGuards(plan: EffectiveWorkflowPlan, step: StepIR): StepIR['guards'] {
+  const policies = step.transitions.map((transition) => effectiveLifecyclePolicy(
+    plan.capabilities.documents.governed,
+    step,
+    transition,
+    plan.workflow.steps.find((candidate) => candidate.id === transition.to),
+  ))
+  const revisionGuard = policies
+    .filter((policy) => !policy.rollback)
+    .flatMap((policy) => policy.guards)
+    .find(isRevisionGuard)
+  const nonRevision = step.guards.filter((guard) => !isRevisionGuard(guard))
+  if (revisionGuard === undefined) return nonRevision
+  const firstRevisionIndex = step.guards.findIndex(isRevisionGuard)
+  const insertionIndex = firstRevisionIndex < 0
+    ? nonRevision.length
+    : Math.min(firstRevisionIndex, nonRevision.length)
+  return [
+    ...nonRevision.slice(0, insertionIndex),
+    revisionGuard,
+    ...nonRevision.slice(insertionIndex),
+  ]
 }

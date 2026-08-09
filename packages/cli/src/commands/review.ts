@@ -162,7 +162,11 @@ async function checkReviewRequestReadiness(
   }
   // A successful outgoing edge must satisfy the same public exit check that transition will
   // re-evaluate under its own lock. This keeps an agent from freezing knowingly incomplete output.
-  return cmdCheck(deps, name)
+  return cmdCheck(
+    deps,
+    name,
+    step.executionModel === 'step-graph' ? { event } : undefined,
+  )
 }
 
 async function clearMarker(deps: CliDeps): Promise<boolean> {

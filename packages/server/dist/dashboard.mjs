@@ -13138,9 +13138,27 @@ function mergeLifecycleGuards(declared, required2) {
   return merged;
 }
 function mergeLifecycleActions(declared, required2) {
-  if (!required2 || required2.length === 0)
-    return declared;
-  return [...declared, ...required2.filter((candidate) => !declared.some((action) => action.type === candidate.type))];
+  const merged = [];
+  for (const action of [...declared, ...required2 ?? []]) {
+    if (!merged.some((candidate) => JSON.stringify(candidate) === JSON.stringify(action))) {
+      merged.push(action);
+    }
+  }
+  return merged;
+}
+function isRevisionGuard(guard) {
+  return guard.type === "build-head-unchanged" && guard.field === "build_sha";
+}
+function effectiveLifecyclePolicy(governed, from, edge2, to) {
+  const fixed = governedLifecyclePolicy(governed, from.id, edge2.to);
+  const semantic = semanticRevisionLifecyclePolicy(from, edge2, to, fixed?.actions);
+  const actions = mergeLifecycleActions(mergeLifecycleActions(edge2.actions, fixed?.actions), semantic?.actions);
+  const rollback = actions.some((action) => action.type === "mark-verification-failed");
+  const declared = mergeLifecycleGuards(from.guards, edge2.guards);
+  const withFixed = mergeLifecycleGuards(declared, fixed?.guards);
+  const merged = mergeLifecycleGuards(withFixed, semantic?.guards);
+  const guards = rollback ? merged.filter((guard) => !isRevisionGuard(guard)) : merged;
+  return { guards, actions, rollback };
 }
 function semanticRevisionLifecyclePolicy(from, edge2, to, inheritedActions = []) {
   const outputsBuildSha = from.outputs.some((output) => output.field === "build_sha");
@@ -13165,7 +13183,7 @@ function resolveWorkflowName(state) {
 function resolveStep(wf, stepId) {
   return wf.steps.find((s) => s.id === stepId) ?? null;
 }
-async function planStepTransition(ir, state, event, ctx, additionalGuards = []) {
+async function planStepTransition(ir, state, event, ctx, additionalGuardsOrLifecycle = []) {
   const stepId = fieldStr3(state, "phase");
   const step = resolveStep(ir, stepId);
   if (!step)
@@ -13174,7 +13192,9 @@ async function planStepTransition(ir, state, event, ctx, additionalGuards = []) 
   if (!edge2) {
     return { ok: false, kind: "event-unsupported", stepId, available: step.transitions.map((t) => t.event) };
   }
-  const guards = mergeLifecycleGuards([...step.guards, ...edge2.guards], additionalGuards);
+  const lifecycle = "guards" in additionalGuardsOrLifecycle ? additionalGuardsOrLifecycle : void 0;
+  const additionalGuards = lifecycle === void 0 ? additionalGuardsOrLifecycle : [];
+  const guards = lifecycle === void 0 ? mergeLifecycleGuards([...step.guards, ...edge2.guards], additionalGuards) : lifecycle.guards;
   const guardResult = await evaluateCompiledGuards(guards, stepId, buildStepGuardInput(state, ctx));
   if (!guardResult.pass) {
     return {
@@ -13185,7 +13205,7 @@ async function planStepTransition(ir, state, event, ctx, additionalGuards = []) 
       ...guardResult.blockers === void 0 ? {} : { blockers: guardResult.blockers }
     };
   }
-  return { ok: true, from: stepId, to: edge2.to, actions: edge2.actions };
+  return { ok: true, from: stepId, to: edge2.to, actions: lifecycle?.actions ?? edge2.actions };
 }
 function applyStepTransition(state, to, clock) {
   return { ...state, fields: { ...state.fields, phase: to, updated_at: clock() } };
@@ -20749,12 +20769,7 @@ async function readinessByTransition(plan, state, context) {
   if (step === void 0)
     return {};
   const transitions = await Promise.all(step.transitions.map(async (transition) => {
-    const guards = plan.executionModel === "phase-manifest" ? defaultEventGuards(transition.event) : (() => {
-      const fixed = governedLifecyclePolicy(plan.capabilities.documents.policy !== void 0, step.id, transition.to);
-      const target = plan.workflow.steps.find((candidate) => candidate.id === transition.to);
-      const semantic = semanticRevisionLifecyclePolicy(step, transition, target, fixed?.actions);
-      return mergeLifecycleGuards(mergeLifecycleGuards([...step.guards, ...transition.guards], fixed?.guards), semantic?.guards);
-    })();
+    const guards = plan.executionModel === "phase-manifest" ? defaultEventGuards(transition.event) : effectiveLifecyclePolicy(plan.capabilities.documents.policy !== void 0, step, transition, plan.workflow.steps.find((candidate) => candidate.id === transition.to)).guards;
     const evaluations = [];
     const errors = [];
     for (const guard of guards) {
@@ -21051,13 +21066,8 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
   const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event);
   const documentPolicy = effectivePlan.capabilities.documents.policy;
   const governed = documentPolicy !== void 0;
-  const fixedLifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
   const targetStep = edgeBeforePlan === void 0 ? void 0 : resolveStep(planningIr, edgeBeforePlan.to);
-  const semanticLifecycle = currentBeforePlan && edgeBeforePlan ? semanticRevisionLifecyclePolicy(currentBeforePlan, edgeBeforePlan, targetStep ?? void 0, fixedLifecycle?.actions) : void 0;
-  const lifecycle = fixedLifecycle === void 0 ? semanticLifecycle : semanticLifecycle === void 0 ? fixedLifecycle : {
-    guards: mergeLifecycleGuards(fixedLifecycle.guards, semanticLifecycle.guards),
-    actions: mergeLifecycleActions(fixedLifecycle.actions, semanticLifecycle.actions)
-  };
+  const lifecycle = currentBeforePlan && edgeBeforePlan ? effectiveLifecyclePolicy(governed, currentBeforePlan, edgeBeforePlan, targetStep ?? void 0) : void 0;
   const plan = await planStepTransition(planningIr, state, command.event, {
     changeDirAbs: command.changeDir,
     fileExists: command.context.fileExists,
@@ -21066,7 +21076,7 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
     specMigrationStatus: command.context.specMigrationStatus,
     assessBuildRevision: command.context.assessBuildRevision,
     currentStep: fieldStr4(state.fields.phase)
-  }, lifecycle?.guards);
+  }, lifecycle);
   if (!plan.ok) {
     if (plan.kind === "step-not-in-graph")
       return { kind: "step-not-in-graph", workflowName, stepId: plan.stepId };
@@ -21088,7 +21098,7 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
   if (!currentStep)
     throw new Error(`workflow '${workflowName}' \u5728\u5DF2\u89C4\u5212 step '${plan.from}' \u540E\u65E0\u6CD5\u91CD\u53D6\u5F53\u524D step`);
   const nextState = applyStepTransition(state, plan.to, clock);
-  const actions = mergeLifecycleActions(plan.actions, lifecycle?.actions);
+  const actions = plan.actions;
   const closesRun = terminalArchive || actions.some((action) => action.type === "archive-run");
   const warnings = [];
   let nextFields = closesRun ? { ...nextState.fields, phase_status: "done" } : nextState.fields;

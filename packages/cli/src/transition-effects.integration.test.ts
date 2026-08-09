@@ -14,7 +14,7 @@
  *   archived           archived=true + archived_at + phase_status=done（L212-218）
  * 校验失败 = exit 1 + ERROR 走 stderr + canonical/YAML 均不变（老仓 case 校验先于任何写）。
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
@@ -300,13 +300,29 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     await h.run(['set', 'demo', 'branch_status', 'handled'])
     await h.run(['set', 'demo', 'agent_review_result', 'pass'])
     await h.run(['set', 'demo', 'codex_review_result', 'pass'])
-    await corruptField('demo', 'build_sha', 'null')
+    // Obtain a valid exact-event receipt while the canonical Build token is still trusted.
     await approveReviewExit('demo', 'verify-pass')
+    await corruptField('demo', 'build_sha', 'null')
+    const changeDir = join(h.cwd, 'openspec', 'changes', 'demo')
+    const recordsPath = join(changeDir, '.pipeline-transitions')
+    const recordNames = (await readdir(recordsPath).catch(() => [] as string[])).sort()
+    const before = {
+      state: await h.read('demo'),
+      current: await readFile(join(changeDir, '.pipeline-run', 'current.json'), 'utf8'),
+      history: await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8'),
+      records: await Promise.all(recordNames.map(async (name) => [name, await readFile(join(recordsPath, name), 'utf8')] as const)),
+    }
     expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
     expect(h.err.join('\n')).toContain(
       'ERROR: verify-build-revision-untrusted reason=null remediation=return-to-build-and-capture-current-revision',
     )
-    expect(await h.read('demo')).toMatch(/^phase: verify$/m)
+    expect(await h.read('demo')).toBe(before.state)
+    expect(await readFile(join(changeDir, '.pipeline-run', 'current.json'), 'utf8')).toBe(before.current)
+    expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toBe(before.history)
+    const afterNames = (await readdir(recordsPath).catch(() => [] as string[])).sort()
+    expect(afterNames).toEqual(recordNames)
+    expect(await Promise.all(afterNames.map(async (name) => [name, await readFile(join(recordsPath, name), 'utf8')] as const)))
+      .toEqual(before.records)
   })
 
   test('pm track 豁免双 review（init 种 skipped 原样通过）', async () => {

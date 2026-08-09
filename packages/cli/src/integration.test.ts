@@ -399,8 +399,8 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     const backfilledToken = createBuildRevisionToken('git', revision, identity).value
 
     // Reach Verify through the legacy field writer rather than Build-complete; no Build transition
-    // record/effect is created for this token. The report is a real governed artifact so review
-    // request/acknowledge can still produce an approved receipt.
+    // record/effect is created for this token. The report is a real governed artifact, but review
+    // request must now reject the unproven token before creating any receipt.
     expect(await h.run(['transition', 'backfill', 'open-complete'])).toBe(0)
     await h.run(['set', 'backfill', 'phase', 'verify'])
     await h.seedArtifact('backfill', 'verification_report', 'docs/superpowers/reports/backfill.md')
@@ -409,9 +409,6 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
       'isolation=branch',
       `build_sha=${backfilledToken}`,
     ])
-    expect(await h.run(['review', 'request', 'backfill', '--event', 'verify-pass'])).toBe(0)
-    expect(await h.run(['review', 'acknowledge', 'backfill'])).toBe(0)
-
     const changeDir = join(h.cwd, 'openspec', 'changes', 'backfill')
     const recordsPath = join(changeDir, '.pipeline-transitions')
     const recordNames = (await readdir(recordsPath).catch(() => [] as string[])).sort()
@@ -421,6 +418,8 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
       history: await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8'),
       records: await Promise.all(recordNames.map(async (name) => [name, await readFile(join(recordsPath, name), 'utf8')] as const)),
     }
+    const markerPath = join(h.cwd, '.pipeline-pending-review')
+    const markerBefore = await readFile(markerPath, 'utf8').catch(() => undefined)
 
     const out: string[] = []
     const err: string[] = []
@@ -436,16 +435,16 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     let exitCode = 0
     try {
       await buildProgram(actualDeps).parseAsync(
-        ['transition', 'backfill', 'verify-pass'], { from: 'user' },
+        ['review', 'request', 'backfill', '--event', 'verify-pass'], { from: 'user' },
       )
     } catch (error) {
       if (!(error instanceof CliExit)) throw error
       exitCode = error.code
     }
-    expect(exitCode).toBe(1)
-    const diagnostic = err.join('\n')
+    expect(exitCode).toBe(2)
+    const diagnostic = [...out, ...err].join('\n')
     expect(diagnostic).toContain('verify-build-revision-untrusted')
-    expect(diagnostic).toContain('reason=provenance-mismatch')
+    expect(diagnostic).toMatch(/reason=provenance-(missing|mismatch)/)
     expect(diagnostic).toContain('return-to-build-and-capture-current-revision')
     expect(diagnostic).not.toContain(backfilledToken)
     expect(diagnostic).not.toContain(h.cwd)
@@ -457,6 +456,8 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     expect(afterNames).toEqual(recordNames)
     expect(await Promise.all(afterNames.map(async (name) => [name, await readFile(join(recordsPath, name), 'utf8')] as const)))
       .toEqual(before.records)
+    const markerAfter = await readFile(markerPath, 'utf8').catch(() => undefined)
+    expect(markerAfter).toBe(markerBefore)
   })
 
   test('import 真迁移 base64 历史区（老仓 fixture）+ --strip 真清 YAML', async () => {

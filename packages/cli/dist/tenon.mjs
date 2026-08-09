@@ -17396,9 +17396,27 @@ function mergeLifecycleGuards(declared, required2) {
   return merged;
 }
 function mergeLifecycleActions(declared, required2) {
-  if (!required2 || required2.length === 0)
-    return declared;
-  return [...declared, ...required2.filter((candidate) => !declared.some((action) => action.type === candidate.type))];
+  const merged = [];
+  for (const action of [...declared, ...required2 ?? []]) {
+    if (!merged.some((candidate) => JSON.stringify(candidate) === JSON.stringify(action))) {
+      merged.push(action);
+    }
+  }
+  return merged;
+}
+function isRevisionGuard(guard) {
+  return guard.type === "build-head-unchanged" && guard.field === "build_sha";
+}
+function effectiveLifecyclePolicy(governed, from, edge, to) {
+  const fixed = governedLifecyclePolicy(governed, from.id, edge.to);
+  const semantic = semanticRevisionLifecyclePolicy(from, edge, to, fixed?.actions);
+  const actions = mergeLifecycleActions(mergeLifecycleActions(edge.actions, fixed?.actions), semantic?.actions);
+  const rollback = actions.some((action) => action.type === "mark-verification-failed");
+  const declared = mergeLifecycleGuards(from.guards, edge.guards);
+  const withFixed = mergeLifecycleGuards(declared, fixed?.guards);
+  const merged = mergeLifecycleGuards(withFixed, semantic?.guards);
+  const guards = rollback ? merged.filter((guard) => !isRevisionGuard(guard)) : merged;
+  return { guards, actions, rollback };
 }
 function semanticRevisionLifecyclePolicy(from, edge, to, inheritedActions = []) {
   const outputsBuildSha = from.outputs.some((output) => output.field === "build_sha");
@@ -17423,7 +17441,7 @@ function resolveWorkflowName(state) {
 function resolveStep(wf, stepId) {
   return wf.steps.find((s) => s.id === stepId) ?? null;
 }
-async function planStepTransition(ir, state, event, ctx, additionalGuards = []) {
+async function planStepTransition(ir, state, event, ctx, additionalGuardsOrLifecycle = []) {
   const stepId = fieldStr3(state, "phase");
   const step = resolveStep(ir, stepId);
   if (!step)
@@ -17432,7 +17450,9 @@ async function planStepTransition(ir, state, event, ctx, additionalGuards = []) 
   if (!edge) {
     return { ok: false, kind: "event-unsupported", stepId, available: step.transitions.map((t) => t.event) };
   }
-  const guards = mergeLifecycleGuards([...step.guards, ...edge.guards], additionalGuards);
+  const lifecycle = "guards" in additionalGuardsOrLifecycle ? additionalGuardsOrLifecycle : void 0;
+  const additionalGuards = lifecycle === void 0 ? additionalGuardsOrLifecycle : [];
+  const guards = lifecycle === void 0 ? mergeLifecycleGuards([...step.guards, ...edge.guards], additionalGuards) : lifecycle.guards;
   const guardResult = await evaluateCompiledGuards(guards, stepId, buildStepGuardInput(state, ctx));
   if (!guardResult.pass) {
     return {
@@ -17443,7 +17463,7 @@ async function planStepTransition(ir, state, event, ctx, additionalGuards = []) 
       ...guardResult.blockers === void 0 ? {} : { blockers: guardResult.blockers }
     };
   }
-  return { ok: true, from: stepId, to: edge.to, actions: edge.actions };
+  return { ok: true, from: stepId, to: edge.to, actions: lifecycle?.actions ?? edge.actions };
 }
 function applyStepTransition(state, to, clock) {
   return { ...state, fields: { ...state.fields, phase: to, updated_at: clock() } };
@@ -27903,13 +27923,8 @@ async function planCustomTransition(state, effectivePlan, command2, clock) {
   const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command2.event);
   const documentPolicy = effectivePlan.capabilities.documents.policy;
   const governed = documentPolicy !== void 0;
-  const fixedLifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
   const targetStep = edgeBeforePlan === void 0 ? void 0 : resolveStep(planningIr, edgeBeforePlan.to);
-  const semanticLifecycle = currentBeforePlan && edgeBeforePlan ? semanticRevisionLifecyclePolicy(currentBeforePlan, edgeBeforePlan, targetStep ?? void 0, fixedLifecycle?.actions) : void 0;
-  const lifecycle = fixedLifecycle === void 0 ? semanticLifecycle : semanticLifecycle === void 0 ? fixedLifecycle : {
-    guards: mergeLifecycleGuards(fixedLifecycle.guards, semanticLifecycle.guards),
-    actions: mergeLifecycleActions(fixedLifecycle.actions, semanticLifecycle.actions)
-  };
+  const lifecycle = currentBeforePlan && edgeBeforePlan ? effectiveLifecyclePolicy(governed, currentBeforePlan, edgeBeforePlan, targetStep ?? void 0) : void 0;
   const plan = await planStepTransition(planningIr, state, command2.event, {
     changeDirAbs: command2.changeDir,
     fileExists: command2.context.fileExists,
@@ -27918,7 +27933,7 @@ async function planCustomTransition(state, effectivePlan, command2, clock) {
     specMigrationStatus: command2.context.specMigrationStatus,
     assessBuildRevision: command2.context.assessBuildRevision,
     currentStep: fieldStr4(state.fields.phase)
-  }, lifecycle?.guards);
+  }, lifecycle);
   if (!plan.ok) {
     if (plan.kind === "step-not-in-graph")
       return { kind: "step-not-in-graph", workflowName, stepId: plan.stepId };
@@ -27940,7 +27955,7 @@ async function planCustomTransition(state, effectivePlan, command2, clock) {
   if (!currentStep)
     throw new Error(`workflow '${workflowName}' \u5728\u5DF2\u89C4\u5212 step '${plan.from}' \u540E\u65E0\u6CD5\u91CD\u53D6\u5F53\u524D step`);
   const nextState = applyStepTransition(state, plan.to, clock);
-  const actions = mergeLifecycleActions(plan.actions, lifecycle?.actions);
+  const actions = plan.actions;
   const closesRun = terminalArchive || actions.some((action) => action.type === "archive-run");
   const warnings = [];
   let nextFields = closesRun ? { ...nextState.fields, phase_status: "done" } : nextState.fields;
@@ -39513,7 +39528,7 @@ function renderBuildRevisionBlocker(blocker) {
     ...blocker.revisionHash === void 0 ? [] : [`revisionHash=${blocker.revisionHash}`]
   ].join(" ");
 }
-async function cmdCheck(deps, name2) {
+async function cmdCheck(deps, name2, opts = {}) {
   if (!isValidChangeName(name2)) {
     deps.io.err(`ERROR: change-name \u975E\u6CD5: '${name2}' (\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _)`);
     return 1;
@@ -39539,7 +39554,7 @@ async function cmdCheck(deps, name2) {
     return 1;
   }
   if (plan.capabilities.execution.model === "step-graph") {
-    return checkGraphWorkflow(deps, name2, dir, state, plan);
+    return checkGraphWorkflow(deps, name2, dir, state, plan, opts.event);
   }
   const coverageProfile = plan.capabilities.track.coverageProfile;
   const fileContext = deps.guardCtx?.(name2);
@@ -39627,14 +39642,32 @@ async function governedDocumentEvidence(deps, dir, state, policy2) {
   }
   return evaluateDocumentEvidence(deps.cwd, dir, phase, {}, policy2);
 }
-async function checkGraphWorkflow(deps, name2, dir, state, plan) {
+async function checkGraphWorkflow(deps, name2, dir, state, plan, event) {
   const currentStepId = str(state.fields.phase);
   const step = resolveStep(plan.workflow, currentStepId);
   if (!step) {
     deps.io.err(`ERROR: step '${currentStepId}' \u4E0D\u5728 workflow '${plan.id}' \u91CC`);
     return 1;
   }
-  const result = await evaluateWorkflowIrStepGuards(state, step, {
+  let guards;
+  if (event === void 0) {
+    guards = plainGraphCheckGuards(plan, step);
+  } else {
+    const selectedEdge = step.transitions.find((transition) => transition.event === event);
+    if (selectedEdge === void 0) {
+      deps.io.err(
+        `ERROR: step '${currentStepId}' \u4E0D\u652F\u6301 event '${event}'\uFF1B\u53EF\u9009\uFF1A${step.transitions.map((transition) => transition.event).join(", ") || "(\u65E0)"}`
+      );
+      return 1;
+    }
+    guards = effectiveLifecyclePolicy(
+      plan.capabilities.documents.governed,
+      step,
+      selectedEdge,
+      plan.workflow.steps.find((candidate) => candidate.id === selectedEdge.to)
+    ).guards;
+  }
+  const result = await evaluateWorkflowIrStepGuards(state, { ...step, guards }, {
     changeDirAbs: dir,
     fileExists: deps.guardCtx?.(name2)?.fileExists,
     gitHeadSha: deps.gitHeadSha,
@@ -39670,6 +39703,24 @@ async function checkGraphWorkflow(deps, name2, dir, state, plan) {
   const total = result.failures.length + (documents?.blockers.length ?? 0) + (migration?.kind === "invalid" ? 1 : 0);
   deps.io.out(`  [FAIL] \u5171 ${total} \u9879\u672A\u901A\u8FC7`);
   return 2;
+}
+function plainGraphCheckGuards(plan, step) {
+  const policies = step.transitions.map((transition) => effectiveLifecyclePolicy(
+    plan.capabilities.documents.governed,
+    step,
+    transition,
+    plan.workflow.steps.find((candidate) => candidate.id === transition.to)
+  ));
+  const revisionGuard = policies.filter((policy2) => !policy2.rollback).flatMap((policy2) => policy2.guards).find(isRevisionGuard);
+  const nonRevision = step.guards.filter((guard) => !isRevisionGuard(guard));
+  if (revisionGuard === void 0) return nonRevision;
+  const firstRevisionIndex = step.guards.findIndex(isRevisionGuard);
+  const insertionIndex = firstRevisionIndex < 0 ? nonRevision.length : Math.min(firstRevisionIndex, nonRevision.length);
+  return [
+    ...nonRevision.slice(0, insertionIndex),
+    revisionGuard,
+    ...nonRevision.slice(insertionIndex)
+  ];
 }
 
 // packages/cli/src/commands/doctor.ts
@@ -54831,7 +54882,11 @@ async function checkReviewRequestReadiness(deps, name2, dir, state, step, event)
   if (step.executionModel === "phase-manifest" && step.phase === "verify" && event === "verify-fail") {
     return checkVerifyFailReadiness(deps, name2, dir, state);
   }
-  return cmdCheck(deps, name2);
+  return cmdCheck(
+    deps,
+    name2,
+    step.executionModel === "step-graph" ? { event } : void 0
+  );
 }
 async function clearMarker(deps) {
   if (!deps.clearReviewMarker) return true;

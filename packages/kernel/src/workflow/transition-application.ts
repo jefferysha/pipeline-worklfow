@@ -46,8 +46,7 @@ import { applyActions } from './action-handlers.js'
 import { evaluateConstraintPolicy, type ConstraintDecision } from '../loops/automation-policy.js'
 import type { ActionOutcome, WorkflowIR } from './ir.js'
 import {
-  governedLifecyclePolicy,
-  mergeLifecycleActions, mergeLifecycleGuards, semanticRevisionLifecyclePolicy,
+  effectiveLifecyclePolicy,
 } from './governed-lifecycle-policy.js'
 import {
   isDocumentContractPhase, isDocumentPolicyStep, shouldEnforceDocumentPolicyOnTransition,
@@ -205,28 +204,12 @@ async function planCustomTransition(
     : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event)
   const documentPolicy = effectivePlan.capabilities.documents.policy
   const governed = documentPolicy !== undefined
-  const fixedLifecycle = currentBeforePlan && edgeBeforePlan
-    ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to)
-    : undefined
   const targetStep = edgeBeforePlan === undefined
     ? undefined
     : resolveStep(planningIr, edgeBeforePlan.to)
-  const semanticLifecycle = currentBeforePlan && edgeBeforePlan
-    ? semanticRevisionLifecyclePolicy(
-        currentBeforePlan,
-        edgeBeforePlan,
-        targetStep ?? undefined,
-        fixedLifecycle?.actions,
-      )
+  const lifecycle = currentBeforePlan && edgeBeforePlan
+    ? effectiveLifecyclePolicy(governed, currentBeforePlan, edgeBeforePlan, targetStep ?? undefined)
     : undefined
-  const lifecycle = fixedLifecycle === undefined
-    ? semanticLifecycle
-    : semanticLifecycle === undefined
-      ? fixedLifecycle
-      : {
-          guards: mergeLifecycleGuards(fixedLifecycle.guards, semanticLifecycle.guards),
-          actions: mergeLifecycleActions(fixedLifecycle.actions, semanticLifecycle.actions),
-        }
   const plan = await planStepTransition(planningIr, state, command.event, {
     changeDirAbs: command.changeDir,
     fileExists: command.context.fileExists,
@@ -235,7 +218,7 @@ async function planCustomTransition(
     specMigrationStatus: command.context.specMigrationStatus,
     assessBuildRevision: command.context.assessBuildRevision,
     currentStep: fieldStr(state.fields.phase),
-  }, lifecycle?.guards)
+  }, lifecycle)
   if (!plan.ok) {
     if (plan.kind === 'step-not-in-graph') return { kind: 'step-not-in-graph', workflowName, stepId: plan.stepId }
     if (plan.kind === 'event-unsupported') {
@@ -253,10 +236,11 @@ async function planCustomTransition(
   // nextFields **在 commit 之前**（对照 default 轨 typed action（applyActions）在 commit 前改 fields
   // 的同一时序）。actions 是 async，其真异常（如 freeze-build-sha 的 gitHeadSha 抛错）原样上抛 → 出
   // transact 回调 → 事务中止不 commit（state 不推进）。旧 YAML 无 edge action → 零 patch 零 signal，
-  // 行为逐字不变。actions 直接取自 plan（planStepTransition 选边时携带该边的 actions），不二次按
-  // from+event 查表——规划即选边的单一真相，无「选一条边、执行另查一条」的语义漂移面。
+  // 行为逐字不变。actions 直接取自 plan（planStepTransition 选边时携带同一条 edge 的
+  // effective lifecycle actions），不二次按 from+event 查表——规划即选边的单一真相，无
+  // 「选一条边、执行另查一条」的语义漂移面。
   const nextState = applyStepTransition(state, plan.to, clock)
-  const actions = mergeLifecycleActions(plan.actions, lifecycle?.actions)
+  const actions = plan.actions
   const closesRun = terminalArchive || actions.some((action) => action.type === 'archive-run')
   const warnings: TransitionApplicationWarning[] = []
   let nextFields = closesRun

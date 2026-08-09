@@ -5,8 +5,7 @@ import type { BuildRevisionBlocker } from './build-revision.js'
 import type { EffectiveWorkflowPlan } from './effective-plan.js'
 import { evaluateGuards } from './guard-handlers.js'
 import {
-  governedLifecyclePolicy,
-  mergeLifecycleGuards, semanticRevisionLifecyclePolicy,
+  effectiveLifecyclePolicy,
 } from './governed-lifecycle-policy.js'
 import type { CompiledGuardConfig, GuardCapability, GuardDecision } from './ir.js'
 import {
@@ -103,19 +102,12 @@ export async function readinessByTransition(
   const transitions = await Promise.all(step.transitions.map(async (transition) => {
       const guards = plan.executionModel === 'phase-manifest'
         ? defaultEventGuards(transition.event)
-        : (() => {
-            const fixed = governedLifecyclePolicy(
-              plan.capabilities.documents.policy !== undefined,
-              step.id,
-              transition.to,
-            )
-            const target = plan.workflow.steps.find((candidate) => candidate.id === transition.to)
-            const semantic = semanticRevisionLifecyclePolicy(step, transition, target, fixed?.actions)
-            return mergeLifecycleGuards(
-              mergeLifecycleGuards([...step.guards, ...transition.guards], fixed?.guards),
-              semantic?.guards,
-            )
-          })()
+        : effectiveLifecyclePolicy(
+            plan.capabilities.documents.policy !== undefined,
+            step,
+            transition,
+            plan.workflow.steps.find((candidate) => candidate.id === transition.to),
+          ).guards
       const evaluations = []
       const errors: TransitionReadinessBlocker[] = []
       for (const guard of guards) {

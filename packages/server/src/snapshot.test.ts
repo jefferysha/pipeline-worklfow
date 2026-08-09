@@ -1583,6 +1583,71 @@ steps:
     })
   })
 
+  it('custom Verify-like snapshot keeps success blocked while explicit rollback stays ready', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'edge-revision.yaml'), `name: edge-revision
+steps:
+  - id: implement-anything
+    label: Implement
+    gate: null
+    skills: []
+    inputs: []
+    outputs:
+      - field: build_sha
+        type: string
+    guards: []
+    transitions:
+      - event: ready
+        to: assure-anything
+  - id: assure-anything
+    label: Assure
+    gate: review
+    skills: []
+    inputs:
+      - field: build_sha
+        type: string
+    outputs: []
+    guards:
+      - type: build-head-unchanged
+        field: build_sha
+    transitions:
+      - event: pass
+        to: ship-anything
+      - event: rollback
+        to: implement-anything
+        actions:
+          - type: mark-verification-failed
+  - id: ship-anything
+    label: Ship
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+    const dir = await initChange(store, root, 'edge-revision', {
+      track: 'backend',
+      initialWorkflow: { workflow: 'edge-revision', phase: 'assure-anything' },
+    })
+    await store.setMany(dir, { build_sha: 'legacy-sha', isolation: 'branch' })
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+    })
+    const readiness = snapshot.projects[0]?.changes[0]?.workflowExecution.readinessByTransition
+    expect(readiness?.['assure-anything']?.pass).toMatchObject({
+      ready: false,
+      blockers: [{ code: 'verify-build-revision-untrusted', reason: 'malformed' }],
+    })
+    expect(readiness?.['assure-anything']?.rollback).toEqual({ ready: true, blockers: [] })
+  })
+
   it('automation_current_phase 经 fields 全量透传（T4 决策 G：进度详情「沙箱内阶段」数据源）', async () => {
     const store = newStore()
     const root = await makeProject()

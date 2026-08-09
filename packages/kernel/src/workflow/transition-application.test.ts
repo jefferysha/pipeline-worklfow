@@ -1023,7 +1023,12 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
           {
             id: 'assure', label: '', gate: 'review', skills: [],
             inputs: [{ field: 'build_sha', type: 'string' }], outputs: [], guards: [],
-            transitions: [{ event: 'rollback', to: 'implement', actions: [{ type: 'mark-verification-failed' }] }],
+            transitions: [{
+              event: 'rollback', to: 'implement',
+              // An explicit edge guard must not make this recovery edge assess the stale token.
+              guards: [{ type: 'build-head-unchanged', field: 'build_sha' }],
+              actions: [{ type: 'mark-verification-failed' }],
+            }],
           },
         ],
       }
@@ -1034,16 +1039,19 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
         review_gate_phase: 'assure', review_gate_status: 'approved', review_gate_event: 'rollback',
         review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
       })
-      let assessorCalled = false
+      let assessorCalls = 0
       const result = await createTransitionApplication(deps).execute({
         root, changeDir: dir, changeName: 'demo', event: 'rollback',
         context: {
-          assessBuildRevision: async () => { assessorCalled = true; return { trusted: false as const, blocker: makeBuildRevisionBlocker('revision-stale') } },
+          assessBuildRevision: async () => {
+            assessorCalls += 1
+            return { trusted: false as const, blocker: makeBuildRevisionBlocker('revision-stale') }
+          },
         },
         loadWorkflow: (name) => name === 'rollback' ? compileWorkflow(wf) : null,
       })
       expect(result.kind).toBe('applied')
-      expect(assessorCalled).toBe(false)
+      expect(assessorCalls).toBe(0)
       expect((await createStateStore().read(dir)).fields.build_sha).toBe('null')
     })
 
