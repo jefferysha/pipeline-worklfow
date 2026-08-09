@@ -83,10 +83,10 @@
 
 ## 交付
 
-- [ ] 完成代码评审、CI、非草稿 PR、合并与稳定 SemVer Release 发布。 (ship)
-- [ ] 从已发布版本执行真实卸载、版本化全新安装、重复安装与一键更新验收。 (ship)
-- [ ] 复核开放 PR 为零、本地 `main` 与远端一致，并验证正式插件、runtime、Dashboard 与项目数据。 (ship)
+- [x] 完成代码评审、CI、非草稿 PR、合并与稳定 SemVer Release 发布。 (ship)
+- [x] 从已发布版本执行真实卸载、版本化全新安装、重复安装与一键更新验收。 (ship)
+- [x] 复核开放 PR 为零、本地 `main` 与远端一致，并验证正式插件、runtime、Dashboard 与项目数据。 (ship)
 
 ## 归档
 
-- [ ] 应用主规格、登记最终证据、归档 Change 并记录剩余风险。 (archive)
+- [x] 应用主规格、登记最终证据、归档 Change 并记录剩余风险。 (archive)

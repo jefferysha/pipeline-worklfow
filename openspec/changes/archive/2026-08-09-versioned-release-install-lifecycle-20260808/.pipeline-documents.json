@@ -255,8 +255,14 @@
         {
           "phase": "ship",
           "sha256": "d11d7705bc9e9907e75264c76dfa70368d5366a19f2c326366ff92773612816f",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "d11d7705bc9e9907e75264c76dfa70368d5366a19f2c326366ff92773612816f",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -428,8 +434,14 @@
         {
           "phase": "ship",
           "sha256": "d42d5d5fad84ae0fd6af9275a9352634205ad5852260534e526d921cab965957",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "d42d5d5fad84ae0fd6af9275a9352634205ad5852260534e526d921cab965957",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -601,8 +613,14 @@
         {
           "phase": "ship",
           "sha256": "1dfe4f40b18780dfe64b8b40f7c167fef04d6de7f4608b2a0c18b3a7348ef246",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "1dfe4f40b18780dfe64b8b40f7c167fef04d6de7f4608b2a0c18b3a7348ef246",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -684,8 +702,14 @@
         {
           "phase": "ship",
           "sha256": "c25cced49caf72febab72a8a0a49dadbb4d8879264e62f000f2c839c707fa30c",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "c25cced49caf72febab72a8a0a49dadbb4d8879264e62f000f2c839c707fa30c",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -779,8 +803,14 @@
         {
           "phase": "ship",
           "sha256": "0dfd21de8d7f0b670c340ff9d40d6f8b9fc10db66073c19dd774739c330bd4f3",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "0dfd21de8d7f0b670c340ff9d40d6f8b9fc10db66073c19dd774739c330bd4f3",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -886,8 +916,14 @@
         {
           "phase": "ship",
           "sha256": "b146e60c03f900c780cec5ad531918393ad308658b4e15c03583a5f577267bd9",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "b146e60c03f900c780cec5ad531918393ad308658b4e15c03583a5f577267bd9",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -1053,8 +1089,14 @@
         {
           "phase": "ship",
           "sha256": "1a93486efe98c4f4711e5530e5602a94feb371d067b6ea73b6217314f9ba59cb",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "1a93486efe98c4f4711e5530e5602a94feb371d067b6ea73b6217314f9ba59cb",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -1130,8 +1172,14 @@
         {
           "phase": "ship",
           "sha256": "9b19e9bb33ad6a68e7b3b2e989e5a00121470e976db9a28c05a89c1b86c198a6",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "9b19e9bb33ad6a68e7b3b2e989e5a00121470e976db9a28c05a89c1b86c198a6",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -1207,8 +1255,14 @@
         {
           "phase": "ship",
           "sha256": "ff513cec96731fd63ba49edb4dac0314c1b528a6833db5dac2f3271dfdf1a6ab",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "ff513cec96731fd63ba49edb4dac0314c1b528a6833db5dac2f3271dfdf1a6ab",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -1284,8 +1338,14 @@
         {
           "phase": "ship",
           "sha256": "a19d4f4340f6d70e475b9644b2a7161aec09f267dee96ee9eee6ca5180834137",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "a19d4f4340f6d70e475b9644b2a7161aec09f267dee96ee9eee6ca5180834137",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -1355,8 +1415,14 @@
         {
           "phase": "ship",
           "sha256": "474801bfdc084b488ea4d535de2f91dd8d5a819ffdbaa65ada9ea6d02cad1f51",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "474801bfdc084b488ea4d535de2f91dd8d5a819ffdbaa65ada9ea6d02cad1f51",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -1426,8 +1492,14 @@
         {
           "phase": "ship",
           "sha256": "c0eb15bea590c5e55c8fb30bec48f10b74e69c7e12f6f6de77167ed69f61ffe0",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "c0eb15bea590c5e55c8fb30bec48f10b74e69c7e12f6f6de77167ed69f61ffe0",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -1497,8 +1569,14 @@
         {
           "phase": "ship",
           "sha256": "c0eb15bea590c5e55c8fb30bec48f10b74e69c7e12f6f6de77167ed69f61ffe0",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "c0eb15bea590c5e55c8fb30bec48f10b74e69c7e12f6f6de77167ed69f61ffe0",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -1520,37 +1598,14 @@
         {
           "phase": "ship",
           "sha256": "8786888e27e40c2d97c5d312e83d1c0e12fffe02f3cfa7ad5198e5fefbd8c546",
-          "readAt": "2026-08-09T08:57:00Z",
+          "readAt": "2026-08-09T15:43:08Z",
           "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/tasks.md",
-      "sha256": "60c392c364d377971c3886b52342bb341233267d9e4a634d5a8e103fbc8763c0",
-      "producer": "tenon-verify",
-      "recordedAt": "2026-08-09T08:51:32Z",
-      "producerInvocation": {
-        "confirmationInvocationId": "invocation-19966bad14d556c800ca06cf573581e8b406adeca9abfe73f4bfcf085333ec4c",
-        "evidenceScope": "verify",
-        "stepVisit": {
-          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
-          "transitionSequence": 40
-        }
-      },
-      "reads": [
-        {
-          "phase": "verify",
-          "sha256": "60c392c364d377971c3886b52342bb341233267d9e4a634d5a8e103fbc8763c0",
-          "readAt": "2026-08-09T08:51:32Z",
-          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",40]"
         },
         {
-          "phase": "ship",
-          "sha256": "60c392c364d377971c3886b52342bb341233267d9e4a634d5a8e103fbc8763c0",
-          "readAt": "2026-08-09T08:57:00Z",
-          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",41]"
+          "phase": "archive",
+          "sha256": "8786888e27e40c2d97c5d312e83d1c0e12fffe02f3cfa7ad5198e5fefbd8c546",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
         }
       ]
     },
@@ -1568,7 +1623,37 @@
           "transitionSequence": 41
         }
       },
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "d28fd8c6592b1ec8a30e1bda51b1b427af3a69c83e47558a638fbf6a1db9642b",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/versioned-release-install-lifecycle-20260808/tasks.md",
+      "sha256": "32259376a3cd321f587d03f03ff8ede43346cde98090a778197cad239ed704de",
+      "producer": "tenon-archive",
+      "recordedAt": "2026-08-09T15:44:00Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-20e14bf6b7b3f57891d5033b30444c7288faa214580efc396c21e2e5be6341be",
+        "evidenceScope": "archive",
+        "stepVisit": {
+          "runId": "b1ef6032-2cfe-4a12-a5db-41d46f07ff23",
+          "transitionSequence": 42
+        }
+      },
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "32259376a3cd321f587d03f03ff8ede43346cde98090a778197cad239ed704de",
+          "readAt": "2026-08-09T15:44:08Z",
+          "visitId": "[\"b1ef6032-2cfe-4a12-a5db-41d46f07ff23\",42]"
+        }
+      ]
     }
   ]
 }
