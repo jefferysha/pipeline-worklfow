@@ -60,14 +60,16 @@ async function initializeCanonicalStepVisit(cwd: string, change = 'w'): Promise<
 
 /**
  * Hermetic bundled content for legacy AFK argv fixtures. The production preparation and locator
- * remain real; only the temporary test plugin supplies the frozen default phase Skill that Linux
- * CI cannot assume is installed on the host.
+ * remain real; only the temporary test plugin supplies the two phase Skills declared by W_LOOPS_YAML
+ * (`build` and `ship`) that Linux CI cannot assume are installed on the host.
  */
-async function seedDefaultPhaseSkill(cwd: string): Promise<string> {
+async function seedDefaultPhaseSkills(cwd: string): Promise<string> {
   const pluginRoot = join(cwd, '.test-plugin')
-  const skillDir = join(pluginRoot, 'skills', 'tenon-build')
-  await mkdir(skillDir, { recursive: true })
-  await writeFile(join(skillDir, 'SKILL.md'), '# hermetic tenon-build fixture\n', 'utf8')
+  for (const phase of ['build', 'ship'] as const) {
+    const skillDir = join(pluginRoot, 'skills', `tenon-${phase}`)
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(join(skillDir, 'SKILL.md'), `# hermetic tenon-${phase} fixture\n`, 'utf8')
+  }
   return pluginRoot
 }
 
@@ -221,7 +223,7 @@ describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
     await initializeCanonicalStepVisit(cwd)
-    pluginRoot = await seedDefaultPhaseSkill(cwd)
+    pluginRoot = await seedDefaultPhaseSkills(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -280,7 +282,7 @@ describe("cmdAfk('run') · image 同源三段链路（--image > automation.json 
     // scanReadyFromFs 真 readdir openspec/changes/*；字段值由 makeDeps 的 mockStore 供给
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
     await initializeCanonicalStepVisit(cwd)
-    pluginRoot = await seedDefaultPhaseSkill(cwd)
+    pluginRoot = await seedDefaultPhaseSkills(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -351,7 +353,7 @@ describe("cmdAfk('run') · 凭证注入(secrets 文件 × 宿主 env 合并)", (
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
     await initializeCanonicalStepVisit(cwd)
-    pluginRoot = await seedDefaultPhaseSkill(cwd)
+    pluginRoot = await seedDefaultPhaseSkills(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })

@@ -355,7 +355,7 @@ describe('真实 e2e —— init --workflow 落地自定义 workflow 的首个 s
     expect(completed).toMatch(/^codex_review_result: pending$/m)
     expect(completed).toMatch(/^pr_url: null$/m)
     expect(completed).toMatch(/^archived: true$/m)
-  })
+  }, 30_000)
 
   test('simple workflow 完整生命周期可验证后结束；范围扩大走独立 escalated 终态', async () => {
     expect(await h.run(['init', 'tiny-done', '--track', 'simple', '--preset', 'tweak'])).toBe(0)

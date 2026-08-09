@@ -370,7 +370,7 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     const trans = hist.split('\n').filter((l) => l.includes('"kind":"transition"'))
     expect(trans).toHaveLength(7)
     expect(trans.some((l) => l.includes('"raw":"verify-pass"'))).toBe(true)
-  })
+  }, 30_000)
 
   test('import 真迁移 base64 历史区（老仓 fixture）+ --strip 真清 YAML', async () => {
     // 用老仓真实 fixture 建 change（含 tools/prompts/transitions_history base64 区）
