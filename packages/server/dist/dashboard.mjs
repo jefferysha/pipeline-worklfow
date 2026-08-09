@@ -5389,7 +5389,7 @@ import { lstat as lstat6, mkdir as mkdir5, opendir, realpath as realpath2 } from
 import { isAbsolute as isAbsolute2, join as join12, relative as relative2, sep as sep3 } from "node:path";
 
 // packages/kernel/dist/workflow/default-workflow.generated.js
-var DEFAULT_WORKFLOW_SOURCE = "name: default\nreview_budget:\n  version: v1\n  max_attempts: 2\nsteps:\n  - id: open\n    label: \u7ACB\u9879\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions:\n      - event: open-complete\n        to: explore\n  - id: explore\n    label: \u8C03\u7814\n    gate: review\n    skills: []\n    inputs: []\n    outputs:\n      - field: design_doc\n        type: file_path\n    artifacts:\n      - field: design_doc\n        type: file_path\n        producer_policy: effective-phase-skills\n    guards: []\n    transitions:\n      - event: explore-complete\n        to: spec\n  - id: spec\n    label: \u89C4\u683C\n    gate: review\n    skills: []\n    inputs:\n      - field: design_doc\n        type: file_path\n    outputs:\n      - field: plan\n        type: file_path\n    artifacts:\n      - field: plan\n        type: file_path\n        producer_policy: effective-phase-skills\n        required_when:\n          track_not_in: [pm]\n    guards:\n      - type: tasks-at-least\n        n: 3\n    transitions:\n      - event: spec-complete\n        to: build\n        actions:\n          - type: reset-pre-verify-review\n  - id: build\n    label: \u5B9E\u73B0\n    gate: null\n    skills: []\n    inputs:\n      - field: design_doc\n        type: file_path\n      - field: plan\n        type: file_path\n    outputs:\n      - field: build_sha\n        type: string\n    guards:\n      - type: field-equals\n        field: pre_verify_review_result\n        value: pass\n    transitions:\n      - event: build-complete\n        to: verify\n      - event: requirements-changed\n        to: spec\n        actions:\n          - type: reset-pre-verify-review\n  - id: verify\n    label: \u9A8C\u8BC1\n    gate: review\n    review_lanes: [standards, spec, e2e]\n    skills: []\n    inputs:\n      - field: build_sha\n        type: string\n    outputs:\n      - field: verification_report\n        type: file_path\n    artifacts:\n      - field: verification_report\n        type: file_path\n        producer_policy: effective-phase-skills\n    guards: []\n    transitions:\n      - event: verify-pass\n        to: ship\n      - event: verify-fail\n        to: build\n        actions:\n          - type: mark-verification-failed\n          - type: reset-pre-verify-review\n  - id: ship\n    label: \u4EA4\u4ED8\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards:\n      - type: spec-migration-applied\n    transitions:\n      - event: ship-complete\n        to: archive\n  - id: archive\n    label: \u5F52\u6863\n    gate: null\n    skills: []\n    inputs: []\n    outputs: []\n    guards: []\n    transitions: []\n";
+var DEFAULT_WORKFLOW_SOURCE = "name: default\nreview_budget:\n  version: v1\n  max_attempts: 2\nsteps:\n  - id: open\n    label: \u7ACB\u9879\n    gate: null\n    skills:\n      - id: tenon-open\n    inputs: []\n    outputs: []\n    guards: []\n    transitions:\n      - event: open-complete\n        to: explore\n  - id: explore\n    label: \u8C03\u7814\n    gate: review\n    skills:\n      - id: tenon-explore\n    inputs: []\n    outputs:\n      - field: design_doc\n        type: file_path\n    artifacts:\n      - field: design_doc\n        type: file_path\n        producer_policy: effective-phase-skills\n    guards: []\n    transitions:\n      - event: explore-complete\n        to: spec\n  - id: spec\n    label: \u89C4\u683C\n    gate: review\n    skills:\n      - id: tenon-spec\n    inputs:\n      - field: design_doc\n        type: file_path\n    outputs:\n      - field: plan\n        type: file_path\n    artifacts:\n      - field: plan\n        type: file_path\n        producer_policy: effective-phase-skills\n        required_when:\n          track_not_in: [pm]\n    guards:\n      - type: tasks-at-least\n        n: 3\n    transitions:\n      - event: spec-complete\n        to: build\n        actions:\n          - type: reset-pre-verify-review\n  - id: build\n    label: \u5B9E\u73B0\n    gate: null\n    skills:\n      - id: tenon-build\n    inputs:\n      - field: design_doc\n        type: file_path\n      - field: plan\n        type: file_path\n    outputs:\n      - field: build_sha\n        type: string\n    guards:\n      - type: field-equals\n        field: pre_verify_review_result\n        value: pass\n    transitions:\n      - event: build-complete\n        to: verify\n      - event: requirements-changed\n        to: spec\n        actions:\n          - type: reset-pre-verify-review\n  - id: verify\n    label: \u9A8C\u8BC1\n    gate: review\n    review_lanes: [standards, spec, e2e]\n    skills:\n      - id: tenon-verify\n    inputs:\n      - field: build_sha\n        type: string\n    outputs:\n      - field: verification_report\n        type: file_path\n    artifacts:\n      - field: verification_report\n        type: file_path\n        producer_policy: effective-phase-skills\n    guards: []\n    transitions:\n      - event: verify-pass\n        to: ship\n      - event: verify-fail\n        to: build\n        actions:\n          - type: mark-verification-failed\n          - type: reset-pre-verify-review\n  - id: ship\n    label: \u4EA4\u4ED8\n    gate: null\n    skills:\n      - id: tenon-ship\n    inputs: []\n    outputs: []\n    guards:\n      - type: spec-migration-applied\n    transitions:\n      - event: ship-complete\n        to: archive\n  - id: archive\n    label: \u5F52\u6863\n    gate: null\n    skills:\n      - id: tenon-archive\n    inputs: []\n    outputs: []\n    guards: []\n    transitions: []\n";
 var DEFAULT_WORKFLOW_STEPS = [
   { id: "open", label: "\u7ACB\u9879" },
   { id: "explore", label: "\u8C03\u7814" },
@@ -20462,13 +20462,26 @@ async function readinessByTransition(plan, state, context) {
 function resolveRequiredSkillSlots(resolver, capability, stepId) {
   if (resolver?.resolveRequired !== void 0)
     return resolver.resolveRequired(capability, stepId);
+  const phase = capability.steps.find((candidate) => candidate.stepId === stepId)?.requiredSkillIds ?? [];
   if (capability.source === "manifest-overlay") {
-    if (!capability.trackOverlay.matrix || resolver === void 0)
-      return [];
-    return resolver.resolveDefaultMandatory(stepId, capability.trackOverlay.profile);
+    const overlay = capability.trackOverlay.matrix && resolver !== void 0 ? resolver.resolveDefaultMandatory(stepId, capability.trackOverlay.profile) : [];
+    return dedupeStableSlots([
+      ...phase.map((id2) => ({ token: id2, alternatives: [id2] })),
+      ...overlay
+    ]);
   }
-  const step = capability.steps.find((candidate) => candidate.stepId === stepId);
-  return (step?.requiredSkillIds ?? []).map((id2) => ({ token: id2, alternatives: [id2] }));
+  return dedupeStableSlots(phase.map((id2) => ({ token: id2, alternatives: [id2] })));
+}
+function resolveExplicitProfileSkillSlots(resolver, capability, stepId, profile) {
+  if (resolver?.resolveExplicitProfile !== void 0) {
+    return resolver.resolveExplicitProfile(capability, stepId, profile);
+  }
+  const phase = capability.steps.find((candidate) => candidate.stepId === stepId)?.requiredSkillIds ?? [];
+  const profileSlots = capability.source === "manifest-overlay" && resolver !== void 0 ? resolver.resolveDefaultProfile?.(stepId, profile) ?? resolver.resolveDefault(stepId, profile) : [];
+  return dedupeStableSlots([
+    ...phase.map((id2) => ({ token: id2, alternatives: [id2] })),
+    ...profileSlots
+  ]);
 }
 function dedupeStable(tokens) {
   const seen = /* @__PURE__ */ new Set();
@@ -20478,6 +20491,17 @@ function dedupeStable(tokens) {
       continue;
     seen.add(t);
     out.push(t);
+  }
+  return out;
+}
+function dedupeStableSlots(slots) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const slot of slots) {
+    if (seen.has(slot.token))
+      continue;
+    seen.add(slot.token);
+    out.push(slot);
   }
   return out;
 }
@@ -20492,6 +20516,17 @@ function createEffectiveSkillResolver(input) {
       alternatives: skillTokenAlternatives(token)
     }));
   };
+  const resolveMandatory = (stepId, profile) => dedupeStable(skillsFor(manifest.mandatorySkills, stepId, profile)).map((token) => ({
+    token,
+    alternatives: skillTokenAlternatives(token)
+  }));
+  const phaseSlots = (capability, stepId) => {
+    const step = capability.steps.find((candidate) => candidate.stepId === stepId);
+    return dedupeStableSlots((step?.requiredSkillIds ?? []).map((id2) => ({
+      token: id2,
+      alternatives: [id2]
+    })));
+  };
   return {
     reviewLaneFor(capability, stepId, skillId) {
       if (capability.source === "manifest-overlay")
@@ -20501,25 +20536,22 @@ function createEffectiveSkillResolver(input) {
     },
     resolveRequired(capability, stepId) {
       if (capability.source === "manifest-overlay") {
-        if (!capability.trackOverlay.matrix)
-          return [];
-        const profile = capability.trackOverlay.profile;
-        return dedupeStable(skillsFor(manifest.mandatorySkills, stepId, profile)).map((token) => ({
-          token,
-          alternatives: skillTokenAlternatives(token)
-        }));
+        const overlay = capability.trackOverlay.matrix ? resolveMandatory(stepId, capability.trackOverlay.profile) : [];
+        return dedupeStableSlots([...phaseSlots(capability, stepId), ...overlay]);
       }
-      const step = capability.steps.find((candidate) => candidate.stepId === stepId);
-      return dedupeStable(step?.requiredSkillIds ?? []).map((id2) => ({ token: id2, alternatives: [id2] }));
+      return phaseSlots(capability, stepId);
     },
     resolveAvailable(capability, stepId) {
       if (capability.source === "manifest-overlay") {
-        if (!capability.trackOverlay.matrix)
-          return [];
-        return resolveProfile(stepId, capability.trackOverlay.profile);
+        const overlay = capability.trackOverlay.matrix ? resolveProfile(stepId, capability.trackOverlay.profile) : [];
+        return dedupeStableSlots([...phaseSlots(capability, stepId), ...overlay]);
       }
-      const step = capability.steps.find((candidate) => candidate.stepId === stepId);
-      return dedupeStable(step?.requiredSkillIds ?? []).map((id2) => ({ token: id2, alternatives: [id2] }));
+      return phaseSlots(capability, stepId);
+    },
+    resolveExplicitProfile(capability, stepId, profile) {
+      if (capability.source !== "manifest-overlay")
+        return phaseSlots(capability, stepId);
+      return dedupeStableSlots([...phaseSlots(capability, stepId), ...resolveProfile(stepId, profile)]);
     },
     resolveDefaultMandatory(stepId, track) {
       const currentRegistry = typeof registry === "function" ? registry() : registry;
@@ -20538,6 +20570,9 @@ function createEffectiveSkillResolver(input) {
         throw new Error(`unknown track '${track}' in effective skill resolver`);
       return resolveProfile(stepId, profile);
     },
+    // Legacy profile-only seam retained for callers that explicitly need the manifest
+    // allowlist. New artifact/AFK consumers use resolveExplicitProfile so phase slots
+    // cannot be dropped when matrix=false.
     resolveDefaultProfile: resolveProfile,
     // track 目前不参与 custom 解析（step.skills 固定）——保留在签名里供 T-R6 track-条件 custom skill 接线。
     resolveCustom(step, _track) {
@@ -20549,8 +20584,11 @@ function createEffectiveSkillResolver(input) {
 // packages/kernel/dist/workflow/skill-bundle-resolver.js
 function resolveSkillBundle(resolver, input) {
   if (input.kind === "default") {
-    const resolveProfile = resolver.resolveDefaultProfile?.bind(resolver) ?? resolver.resolveDefault.bind(resolver);
-    return { source: "default", slots: resolveProfile(input.stepId, input.profileId) };
+    if (input.capability === void 0) {
+      throw new Error("default skill bundle requires frozen workflow capability");
+    }
+    const slots = resolveExplicitProfileSkillSlots(resolver, input.capability, input.stepId, input.profileId);
+    return { source: "default", slots };
   }
   return { source: "custom", slots: resolver.resolveCustom(input.step, input.profileId) };
 }
@@ -21666,10 +21704,10 @@ async function evaluateSkillBundleWiring(loop, deps, resolutionInputs) {
       reason: `custom workflow "${workflowId}" \u7F3A\u5C11 host \u5DF2\u7F16\u8BD1 StepIR \u89E3\u6790\u8BA1\u5212\uFF0C\u62D2\u7EDD\u5077\u7528\u540C\u540D default phase`
     };
   }
-  const effectiveInputs = resolutionInputs ?? loop.phases.map((stepId) => ({
-    kind: "default",
-    stepId
-  }));
+  const effectiveInputs = resolutionInputs ?? (() => {
+    const capability = compileEffectiveWorkflowPlan("default").capabilities.skills;
+    return loop.phases.map((stepId) => ({ kind: "default", stepId, capability }));
+  })();
   const expectedKind = workflowId === "default" ? "default" : "custom";
   const mismatchedKind = effectiveInputs.find((input) => input.kind !== expectedKind);
   if (mismatchedKind !== void 0) {
@@ -21699,7 +21737,12 @@ async function evaluateSkillBundleWiring(loop, deps, resolutionInputs) {
     }
     let slots;
     try {
-      slots = resolveSkillBundle(deps.resolver, resolutionInput.kind === "default" ? { kind: "default", stepId: resolutionInput.stepId, profileId: bundleId } : { kind: "custom", step: resolutionInput.step, profileId: bundleId }).slots;
+      slots = resolveSkillBundle(deps.resolver, resolutionInput.kind === "default" ? {
+        kind: "default",
+        stepId: resolutionInput.stepId,
+        profileId: bundleId,
+        capability: resolutionInput.capability
+      } : { kind: "custom", step: resolutionInput.step, profileId: bundleId }).slots;
     } catch (error2) {
       return {
         status: "invalid",
@@ -21795,7 +21838,8 @@ async function buildLoopStarterWiringReport(starterId, loops, deps) {
         const reason2 = `loop phase "${invalidPhase}" \u4E0D\u5728 default runtime PHASES \u95ED\u96C6\uFF08${PHASES.join(", ")}\uFF09`;
         return wiringFailureReport(starterId, binding, { status: "invalid", workflowId, reason: reason2 }, { status: "unwired", reason: "default workflow phase \u65E0\u6CD5\u6620\u5C04\u5230 runtime \u5750\u6807" });
       }
-      skillResolutionInputs = target.phases.map((stepId) => ({ kind: "default", stepId }));
+      const capability = compileEffectiveWorkflowPlan("default").capabilities.skills;
+      skillResolutionInputs = target.phases.map((stepId) => ({ kind: "default", stepId, capability }));
     } else {
       let definition;
       try {
@@ -21895,7 +21939,62 @@ async function evaluateLoopExecutionWiring(loop, loops, deps) {
     }
     return { status: "ready", loopId: loop.id, starter };
   }
-  const skill = await (deps.evaluateSkillBundleWiring ?? evaluateSkillBundleWiring)(loop, deps.skillBundleWiringForLoop?.(loop) ?? deps.skillBundleWiring, loop.phases.map((stepId) => ({ kind: "default", stepId })));
+  const workflowId = loop.workflow_id ?? "default";
+  let skillResolutionInputs;
+  if (workflowId === "default") {
+    const defaultCapability = compileEffectiveWorkflowPlan("default").capabilities.skills;
+    skillResolutionInputs = loop.phases.map((stepId) => ({ kind: "default", stepId, capability: defaultCapability }));
+  } else {
+    let definition;
+    try {
+      definition = (deps.loadWorkflow ?? loadWorkflow)(deps.repoRoot, workflowId);
+    } catch (error2) {
+      return {
+        status: "invalid",
+        loopId: loop.id,
+        dimension: "workflow",
+        reason: `custom workflow "${workflowId}" \u52A0\u8F7D/\u6821\u9A8C/\u7F16\u8BD1\u5931\u8D25\uFF1A${errorMessage2(error2)}`,
+        starter: null
+      };
+    }
+    if (definition === null) {
+      return {
+        status: "invalid",
+        loopId: loop.id,
+        dimension: "workflow",
+        reason: `custom workflow "${workflowId}" \u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u7F3A\u5931\uFF0C\u65E0\u6CD5\u5EFA\u7ACB\u6267\u884C wiring`,
+        starter: null
+      };
+    }
+    let compiled;
+    try {
+      compiled = (deps.compileWorkflow ?? compileWorkflow)(definition);
+    } catch (error2) {
+      return {
+        status: "invalid",
+        loopId: loop.id,
+        dimension: "workflow",
+        reason: `custom workflow "${workflowId}" \u7F16\u8BD1\u5931\u8D25\uFF1A${errorMessage2(error2)}`,
+        starter: null
+      };
+    }
+    const customInputs = [];
+    for (const phase of loop.phases) {
+      const step = (deps.resolveStep ?? resolveStep)(compiled, phase);
+      if (step === null) {
+        return {
+          status: "invalid",
+          loopId: loop.id,
+          dimension: "workflow",
+          reason: `loop phase/step "${phase}" \u672A\u5728 custom workflow "${workflowId}" \u4E2D\u58F0\u660E`,
+          starter: null
+        };
+      }
+      customInputs.push({ kind: "custom", step });
+    }
+    skillResolutionInputs = customInputs;
+  }
+  const skill = await (deps.evaluateSkillBundleWiring ?? evaluateSkillBundleWiring)(loop, deps.skillBundleWiringForLoop?.(loop) ?? deps.skillBundleWiring, skillResolutionInputs);
   if (skill.status !== "ready") {
     return {
       status: skill.status,

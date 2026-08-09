@@ -15,7 +15,10 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SkillContentNotFoundError } from '@tenon/automation'
-import { createEffectiveSkillResolver, loadManifest, resolveSkillBundle } from '@tenon/kernel'
+import {
+  compileEffectiveWorkflowPlan, createEffectiveSkillResolver, loadManifest, parseWorkflow, resolveSkillBundle,
+  workflowPlanSnapshot,
+} from '@tenon/kernel'
 import { mockState, mockStore } from './test-support.js'
 import {
   createExecutionCoordinatePort, createProductionSkillContentLocator,
@@ -569,9 +572,12 @@ describe('default skill bundle 资产真实性', () => {
       mandatorySkills: manifest.mandatorySkills,
       recommendedSkills: manifest.recommendedSkills,
     })
+    const capability = compileEffectiveWorkflowPlan('default').capabilities.skills
 
     for (const profileId of ['frontend', 'backend']) {
-      const resolution = resolveSkillBundle(resolver, { kind: 'default', stepId: 'ship', profileId })
+      const resolution = resolveSkillBundle(resolver, {
+        kind: 'default', stepId: 'ship', profileId, capability,
+      })
       expect(resolution.slots.map((slot) => slot.token)).not.toContain('commit-commands:commit-push-pr')
       expect(resolution.slots.map((slot) => slot.token)).toContain('finishing-a-development-branch')
     }
@@ -605,9 +611,57 @@ describe('createExecutionCoordinatePort', () => {
     const store = mockStore({ x: mockState({ phase: 'build' }) })
     const port = createExecutionCoordinatePort({ store, repoRoot: cwd })
     const coord = await port.capture(ctxFor('x') as never)
-    expect(coord.resolution).toEqual({ kind: 'default', stepId: 'build' })
+    expect(coord.resolution).toMatchObject({ kind: 'default', stepId: 'build' })
+    if (coord.resolution.kind === 'default') {
+      expect(coord.resolution.capability?.steps.find((step) => step.stepId === 'build')?.requiredSkillIds)
+        .toEqual(['tenon-build'])
+    }
     expect(typeof coord.inputsDigest).toBe('string')
     expect(coord.inputsDigest.length).toBeGreaterThan(0)
+  })
+
+  it('default workflow：存在 frozen WorkflowRun snapshot 时 phase capability 来自 snapshot', async () => {
+    const frozen = compileEffectiveWorkflowPlan('default')
+    const state = {
+      ...mockState({ phase: 'build' }),
+      runMetadata: {
+        runId: 'workflow-run-frozen-capability',
+        transitionSequence: 0,
+        workflowPlanFingerprint: frozen.workflowFingerprint,
+        workflowPlanSnapshot: workflowPlanSnapshot(frozen),
+      },
+    }
+    const port = createExecutionCoordinatePort({ store: mockStore({ x: state }), repoRoot: cwd })
+    const coord = await port.capture(ctxFor('x') as never)
+    if (coord.resolution.kind !== 'default') throw new Error('expected default coordinate')
+    expect(coord.resolution.capability?.steps.find((step) => step.stepId === 'build')?.requiredSkillIds)
+      .toEqual(['tenon-build'])
+    expect(coord.workflowRunId).toBe('workflow-run-frozen-capability')
+  })
+
+  it('default workflow：pre-issue#43 frozen snapshot 的空 build Skill 不被当前模板 phase capability 覆盖', async () => {
+    const source = await readFile(join(process.cwd(), 'templates', 'workflows', 'default.yaml'), 'utf8')
+    const current = parseWorkflow(source)
+    const historical = {
+      ...current,
+      steps: current.steps.map((step) => step.id === 'build' ? { ...step, skills: [] } : step),
+    }
+    const frozen = compileEffectiveWorkflowPlan('default', historical)
+    const state = {
+      ...mockState({ phase: 'build' }),
+      runMetadata: {
+        runId: 'workflow-run-pre-issue-43',
+        transitionSequence: 0,
+        workflowPlanFingerprint: frozen.workflowFingerprint,
+        workflowPlanSnapshot: workflowPlanSnapshot(frozen),
+      },
+    }
+    const port = createExecutionCoordinatePort({ store: mockStore({ x: state }), repoRoot: cwd })
+    const coord = await port.capture(ctxFor('x') as never)
+    if (coord.resolution.kind !== 'default') throw new Error('expected default coordinate')
+    expect(coord.resolution.capability?.steps.find((step) => step.stepId === 'build')?.requiredSkillIds)
+      .toEqual([])
+    expect(coord.workflowRunId).toBe('workflow-run-pre-issue-43')
   })
 
   it('capture 把 .pipeline.yaml 的稳定 runMetadata.runId 作为 workflowRunId 真透传，不用 attempt id 冒充', async () => {

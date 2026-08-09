@@ -21,7 +21,7 @@
  */
 import {
   matchesTrackPredicate,
-  resolveAvailableSkillSlots,
+  resolveExplicitProfileSkillSlots,
   resolveStep,
 } from '@tenon/kernel'
 import type { EffectiveSkillSlot, FieldName, PipelineState } from '@tenon/kernel'
@@ -87,23 +87,17 @@ async function runRegister(
       `artifact '${field}' 的 producerPolicy '${decl.producerPolicy}' 与 workflow skill policy '${skillCapability.source}' 不相容（应 ${expectedPolicy}）`,
     )
   }
-  let slots: readonly EffectiveSkillSlot[] = resolveAvailableSkillSlots(
-    deps.resolver,
-    skillCapability,
-    stepId,
-  )
-  // matrix=false disables automatic orchestration/gating for lightweight/free Tracks; it does not
-  // erase the profile's producer allowlist for an explicitly declared artifact.  Otherwise a
-  // document contract can require a report produced by verification-before-completion while the
-  // only sanctioned writer (`artifact register`) deterministically sees an empty producer set.
-  if (
-    slots.length === 0
-    && skillCapability.source === 'manifest-overlay'
-    && !skillCapability.trackOverlay.matrix
-  ) {
-    slots = deps.resolver.resolveDefaultProfile?.(stepId, skillCapability.trackOverlay.profile)
-      ?? deps.resolver.resolveDefault(stepId, skillCapability.trackOverlay.profile)
-  }
+  // Artifact registration is an explicit named-profile projection. It retains the frozen phase
+  // slot even when matrix=false, while never making that profile an automatic Hook/transition
+  // requirement; custom workflows resolve to their frozen step declarations only.
+  const slots: readonly EffectiveSkillSlot[] = skillCapability.source === 'manifest-overlay'
+    ? resolveExplicitProfileSkillSlots(
+        deps.resolver,
+        skillCapability,
+        stepId,
+        skillCapability.trackOverlay.profile,
+      )
+    : resolveExplicitProfileSkillSlots(deps.resolver, skillCapability, stepId, track)
 
   // 空 effective skill 集必须拒绝（不退化成任意 producer 入口，D5）。
   if (slots.length === 0) {

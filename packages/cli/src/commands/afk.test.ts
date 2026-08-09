@@ -33,7 +33,9 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { skillActionAuthorityContract } from '@tenon/automation'
-import { createLoopLedgerStore, emptyFields, loadRegistry } from '@tenon/kernel'
+import {
+  compileEffectiveWorkflowPlan, createLoopLedgerStore, emptyFields, loadRegistry, workflowPlanSnapshot,
+} from '@tenon/kernel'
 import { publishInitialRunRevision } from '../../../kernel/src/state/run-revision-store.js'
 import { makeDeps, mockAfkState, mockState } from '../test-support.js'
 import { buildProgram, CliExit } from '../program.js'
@@ -403,8 +405,8 @@ describe("cmdAfk('run') · registry 真实 I/O 故障 → round failure（非零
  * 真接线）—— 证明 vi.mock 顶部的 test-only 直通 preparation 兜底（本文件头注「H10 §1/§5 + 二次任务交叉
  * 边界」）此刻确实不再是唯一路径：afk.ts 生产代码永远传一个非 undefined 的真 preparation，故 mock 的
  * `deps.preparation ?? fallback` 三元恒取左侧——以下用例专测这条真链路本身（具名 profile 而非
- * `_all`，且不依赖真 skill 内容——TEST_MANDATORY_SKILLS/TEST_RECOMMENDED_SKILLS 均无 'build' 键，
- * resolveDefault('build', <任意 profile>) 恒空 slots，合法空快照、零真 fs 内容依赖）。
+ * `_all`）。它显式构造带 `tenon-build` 的 frozen default capability，并把插件根指向本仓，
+ * 证明 phase slot 会进入快照；其他本文件 fixture 仍保留旧空 snapshot 以覆盖历史快照不迁移。
  */
 describe("cmdAfk('run') · H10 §8任务7 真实 preparation 装配（isSkillProfileKnown + createExecutionPreparation）", () => {
   let cwd: string
@@ -450,7 +452,28 @@ loops:
   const deps = () => withEnterAfkSkillAuthority(makeDeps({ cwd, states: { v: mockAfkState({ phase: 'build', automation: 'queued' }) } }))
 
   it('具名 profile 已知（isSkillProfileKnown 命中）→ 真 prepare 成功：docker 真跑 + ledger 落 skill-bundle-snapshot 事件', async () => {
-    const d = deps()
+    // This case models a newly initialized default AFK run: its frozen snapshot contains the
+    // Workflow-owned phase slot. Other legacy fixture cases intentionally retain an empty frozen
+    // snapshot to keep historical-snapshot/no-migration coverage isolated.
+    const phasePlan = compileEffectiveWorkflowPlan('default', {
+      name: 'default',
+      interaction: { version: 'v1', mode: 'afk' },
+      steps: [{
+        id: 'build', label: 'Build', gate: null,
+        skills: [{ id: 'tenon-build' }], inputs: [], outputs: [], guards: [], transitions: [],
+      }],
+    })
+    const phaseState = mockAfkState({ phase: 'build', automation: 'queued' })
+    phaseState.runMetadata = {
+      ...phaseState.runMetadata!,
+      workflowPlanFingerprint: phasePlan.workflowFingerprint,
+      workflowPlanSnapshot: workflowPlanSnapshot(phasePlan),
+    }
+    const d = withEnterAfkSkillAuthority(makeDeps({
+      cwd,
+      states: { v: phaseState },
+      doctor: { pluginRoot: process.cwd() },
+    }))
     d.isSkillProfileKnown = (id: string) => id === 'backend'
     expect(await cmdAfk(d, 'run', undefined, {})).toBe(0)
     expect(dockerRunArgv()).toBeTruthy() // 真跑到 docker run（未被 profile 校验挡在 admission）
@@ -458,7 +481,43 @@ loops:
     const { records } = await createLoopLedgerStore().read(cwd)
     const snapshots = records.filter((r) => r.kind === 'skill-bundle-snapshot')
     expect(snapshots.length).toBe(1) // 真 createExecutionPreparation 落的账本事实，test-only fallback 不会产生此事件
-    expect(snapshots[0]).toMatchObject({ skill_bundle_id: 'backend', resolution_source: 'default', slots: [] })
+    expect(snapshots[0]).toMatchObject({
+      skill_bundle_id: 'backend',
+      resolution_source: 'default',
+      slots: [expect.objectContaining({ token: 'tenon-build', concrete_skill_id: 'tenon-build' })],
+    })
+  })
+
+  it('frozen phase Skill 内容缺失 → preparation fail-closed：无 snapshot、无 sandbox/收费', async () => {
+    const missingSkill = 'tenon-phase-skill-missing-for-test'
+    const phasePlan = compileEffectiveWorkflowPlan('default', {
+      name: 'default',
+      interaction: { version: 'v1', mode: 'afk' },
+      steps: [{
+        id: 'build', label: 'Build', gate: null,
+        skills: [{ id: missingSkill }], inputs: [], outputs: [], guards: [], transitions: [],
+      }],
+    })
+    const phaseState = mockAfkState({ phase: 'build', automation: 'queued' })
+    phaseState.runMetadata = {
+      ...phaseState.runMetadata!,
+      workflowPlanFingerprint: phasePlan.workflowFingerprint,
+      workflowPlanSnapshot: workflowPlanSnapshot(phasePlan),
+    }
+    const d = withEnterAfkSkillAuthority(makeDeps({
+      cwd,
+      states: { v: phaseState },
+      doctor: { pluginRoot: process.cwd() },
+    }))
+    d.isSkillProfileKnown = (id: string) => id === 'backend'
+    // The round itself remains healthy: preparation failure is a settled, non-charged entry
+    // (`paused`), not a CLI-level registry/runtime failure.
+    expect(await cmdAfk(d, 'run', undefined, {})).toBe(0)
+    expect(h.calls.find((c) => c[0] === 'docker' && c[1] === 'run')).toBeUndefined()
+    const { records } = await createLoopLedgerStore().read(cwd)
+    expect(records.some((r) => r.kind === 'skill-bundle-snapshot')).toBe(false)
+    const terminal = records.find((r) => r.kind === 'run')
+    expect(terminal).toMatchObject({ result: 'paused', reason: 'skill-bundle-skill-not-found' })
   })
 
   it('具名 profile 不存在（isSkillProfileKnown 判 false）→ H11 fresh wiring guard 非零阻断 + 暂停 loop，零 docker、零 prepare', async () => {

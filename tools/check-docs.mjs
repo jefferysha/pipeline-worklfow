@@ -47,6 +47,8 @@ const TRUTH_SOURCES = [
   'packages/cli/src/commands/runtime.ts',
   'packages/dashboard-app/src/shell/Nav.tsx',
   'templates/workflows/default.yaml',
+  'packages/kernel/src/workflow/default-workflow.generated.ts',
+  'skills/tenon/SKILL.md',
   'templates/workflows/simple.yaml',
 ]
 
@@ -89,6 +91,103 @@ export function extractMarkdownTargets(markdown) {
 
 export function extractYamlStepIds(yaml) {
   return [...yaml.matchAll(/^ {2}- id:\s*([A-Za-z0-9_-]+)\s*$/gmu)].map((match) => match[1])
+}
+
+/** Extract only the Skill ids in each top-level workflow step's `skills` block. */
+export function extractYamlStepSkillIds(yaml) {
+  const matches = [...yaml.matchAll(/^ {2}- id:\s*([A-Za-z0-9_-]+)\s*$/gmu)]
+  return matches.map((match, index) => {
+    const blockEnd = matches[index + 1]?.index ?? yaml.length
+    const block = yaml.slice(match.index, blockEnd)
+    const skillsBlock = block.match(/^    skills:\s*\n((?:^      - id:\s*[^\n]+\n?)+)/mu)?.[1] ?? ''
+    return {
+      stepId: match[1],
+      skillIds: [...skillsBlock.matchAll(/^      - id:\s*([^\s#]+)\s*$/gmu)].map((skill) => skill[1]),
+    }
+  })
+}
+
+function generatedWorkflowSource(source) {
+  const literal = source.match(/\bDEFAULT_WORKFLOW_SOURCE\s*=\s*("(?:\\.|[^"\\])*")/u)?.[1]
+  if (literal === undefined) return undefined
+  try {
+    return JSON.parse(literal)
+  } catch {
+    return undefined
+  }
+}
+
+function extractPhaseDispatchMapping(skillDoc) {
+  const mapping = new Map()
+  for (const match of skillDoc.matchAll(/^\|\s*`([^`]+)`\s*\|\s*`(tenon-[^`]+)`\s*\|/gmu)) {
+    mapping.set(match[1], match[2])
+  }
+  return mapping
+}
+
+function checkWorkflowSkillContract(contents, failures) {
+  const sourceYaml = contents.get('templates/workflows/default.yaml')
+  const generated = contents.get('packages/kernel/src/workflow/default-workflow.generated.ts')
+  const skillDoc = contents.get('skills/tenon/SKILL.md')
+  if (sourceYaml === undefined || generated === undefined || skillDoc === undefined) return
+
+  const sourceSteps = extractYamlStepSkillIds(sourceYaml)
+  const expected = sourceSteps.map(({ stepId }) => ({ stepId, skillId: `tenon-${stepId}` }))
+  if (expected.length !== 7) {
+    failures.push(`templates/workflows/default.yaml: expected seven phase steps for phase Skill contract, found ${expected.length}`)
+  }
+  for (const { stepId, skillId } of expected) {
+    const sourceEntry = sourceSteps.find((step) => step.stepId === stepId)
+    const sourceCount = sourceEntry?.skillIds.filter((id) => id === skillId).length ?? 0
+    if (sourceCount !== 1) {
+      failures.push(`templates/workflows/default.yaml: step '${stepId}' must declare exactly one frozen phase Skill '${skillId}'`)
+    }
+  }
+
+  const generatedYaml = generatedWorkflowSource(generated)
+  if (generatedYaml === undefined) {
+    failures.push('packages/kernel/src/workflow/default-workflow.generated.ts: DEFAULT_WORKFLOW_SOURCE is not a readable generated YAML literal')
+  } else {
+    for (const { stepId, skillId } of expected) {
+      const generatedEntry = extractYamlStepSkillIds(generatedYaml).find((step) => step.stepId === stepId)
+      const generatedCount = generatedEntry?.skillIds.filter((id) => id === skillId).length ?? 0
+      if (generatedCount !== 1) {
+        failures.push(`packages/kernel/src/workflow/default-workflow.generated.ts: step '${stepId}' drifted from frozen phase Skill '${skillId}'`)
+      }
+    }
+  }
+
+  const dispatch = extractPhaseDispatchMapping(skillDoc)
+  for (const { stepId, skillId } of expected) {
+    if (dispatch.get(stepId) !== skillId) {
+      failures.push(`skills/tenon/SKILL.md: dispatch mapping for phase '${stepId}' must point to '${skillId}'`)
+    }
+  }
+
+  const englishDefault = contents.get('docs/usage/default-workflow.md')
+  const chineseDefault = contents.get('docs/usage/zh-CN/default-workflow.md')
+  for (const [document, text] of [
+    ['docs/usage/default-workflow.md', englishDefault],
+    ['docs/usage/zh-CN/default-workflow.md', chineseDefault],
+  ]) {
+    if (text === undefined) continue
+    for (const { skillId } of expected) {
+      if (!text.includes(`\`${skillId}\``) && !text.includes(skillId)) {
+        failures.push(`${document}: missing documented frozen phase Skill ${skillId}`)
+      }
+    }
+  }
+
+  const englishRouting = contents.get('docs/usage/routing-and-workflows.md')?.toLowerCase() ?? ''
+  const chineseRouting = contents.get('docs/usage/zh-CN/routing-and-workflows.md') ?? ''
+  for (const [document, text, anchors] of [
+    ['docs/usage/routing-and-workflows.md', englishRouting, ['frozen', 'phase-first', 'automatic gate']],
+    ['docs/usage/zh-CN/routing-and-workflows.md', chineseRouting, ['冻结', 'phase-first', '自动要求']],
+  ]) {
+    for (const anchor of anchors) {
+      if (!text.includes(anchor.toLowerCase())) failures.push(`${document}: missing phase/overlay/explicit contract anchor '${anchor}'`)
+    }
+  }
 }
 
 export function extractPrimaryViews(source) {
@@ -505,6 +604,7 @@ export function checkRepository(rootInput) {
     failures,
   )
   checkSourceBoundedClaims(root, contents, failures)
+  checkWorkflowSkillContract(contents, failures)
   return failures
 }
 

@@ -155,10 +155,10 @@ export type {
 export { defaultArtifactForField, defaultArtifactsForStep, defaultArtifactDeclaredForField } from './workflow/default-artifacts.js'
 export type { DefaultArtifactDeclaration } from './workflow/default-artifacts.js'
 export type { ArtifactProducerPolicy, WorkflowArtifactConfig } from './workflow/types.js'
-// EffectiveSkillResolver（G2 P5）：artifact register 校验具体 producer 的接缝（default=manifest
-// mandatory+recommended / custom=step.skills；a|b 备选拆 alternatives）。artifact command 只依赖本接口。
+// EffectiveSkillResolver（G2 P5）：runtime 三投影接缝（phase-first required/available/explicit-profile；
+// legacy manifest-only default/custom seams retained for compatibility）。artifact command 只依赖本接口。
 export {
-  createEffectiveSkillResolver, resolveAvailableSkillSlots, resolveRequiredSkillSlots,
+  createEffectiveSkillResolver, resolveAvailableSkillSlots, resolveExplicitProfileSkillSlots, resolveRequiredSkillSlots,
 } from './workflow/effective-skill-resolver.js'
 export type {
   EffectiveSkillResolver, EffectiveSkillSlot, EffectiveSkillResolverManifest, EffectiveSkillResolverOptions,

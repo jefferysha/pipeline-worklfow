@@ -33,6 +33,25 @@ Transitions:
 
 Explore, Spec, and Verify are review-gated.
 
+Every default step freezes its phase entry Skill (`tenon-open` through
+`tenon-archive`) in the Workflow capability. The phase Skill is required even
+for `free`/`matrix=false` Changes. Track `mandatory_skills` and
+`recommended_skills` are a separate automatic overlay only when the Track
+matrix is enabled; explicit artifact producers and AFK bundles use a named
+profile projection that still starts with the frozen phase Skill.
+
+The frozen phase dispatch is one-to-one with the source Workflow steps:
+
+| Step | Frozen phase Skill |
+| --- | --- |
+| `open` | `tenon-open` |
+| `explore` | `tenon-explore` |
+| `spec` | `tenon-spec` |
+| `build` | `tenon-build` |
+| `verify` | `tenon-verify` |
+| `ship` | `tenon-ship` |
+| `archive` | `tenon-archive` |
+
 The Verify phase also opens exactly one automated Review attempt for the frozen
 `build_sha`. Its standards, spec, and E2E lanes share the same attempt ID and
 finite Workflow budget. E2E is a Review lane, not an independent Review count.

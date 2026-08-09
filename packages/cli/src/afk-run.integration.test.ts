@@ -24,11 +24,9 @@ import { makeHarness, type Harness } from './integration-harness.js'
  * H10 §1/§8任务7：`skill_bundle_id: _all` 是必填——缺省/null 会被 loop-admission.ts::reserveOnce
  * 的 unwired 硬闸拒绝（fail-closed，pause-loop），change 永远到不了 claim/prepareSkillBundle/
  * runChange，本文件下方对 automation 终态字段的断言会全部落空。`_all` 无需 isSkillProfileKnown
- * 装配即合法；下方 x/y/x2 三个 change 的当前 phase 均为 'build'，templates/manifest.yaml 的
- * mandatory_skills/recommended_skills 两表都没有 `build._all` 键（只声明了 build.pm/frontend/
- * backend），故 `resolveDefault('build', '_all')` 三级回退到空——真实
- * createExecutionPreparation（packages/cli/src/commands/afk.ts 生产装配）据此物化一个合法的
- * 空 CAS 快照并成功 prepare，不依赖本机是否装有任何具体 skill 内容。
+ * 装配即合法；下方 x/y/x2 三个 change 的当前 phase 均为 'build'。default coordinate 会携带
+ * frozen `tenon-build` phase capability，显式 `_all` profile 只叠加其 named allowlist；本测试
+ * 关注完整 AFK wiring/settle 链，不用 profile-only 空 bundle 绕过 phase 内容校验。
  */
 const AFK_LOOPS_YAML = `version: 1
 loops:

@@ -105,12 +105,12 @@ describe('cmdArtifactRegister —— producer 校验（class 4/5/6）', () => {
     expect(err).toContain('opsx:explore openspec-explore superpowers:brainstorming grill-with-docs search-first')
   })
 
-  test('空 effective skill 集（explore/chat 无 manifest skill）→ exit 1，不退化成任意 producer', async () => {
-    // design_doc 无 requiredWhen 对 chat 也适用（declaration 存在），但 resolveDefault 空集 → 拒。
+  test('default phase skill 仍是 artifact producer 的最小有效集', async () => {
+    // design_doc 无 requiredWhen 对 chat 也适用；Workflow-owned phase slot 不能因 matrix/profile 为空而消失。
     const deps = makeDeps({ state: mockState({ phase: 'explore', track: 'chat' }) })
     expect(await cmdArtifactRegister(deps, CH, 'design_doc', P, 'whatever')).toBe(1)
     expect(deps.store.write.calls.length).toBe(0)
-    expect(deps.errLines.join('\n')).toContain('有效 skill 集为空')
+    expect(deps.errLines.join('\n')).toContain('允许: tenon-explore')
   })
 })
 

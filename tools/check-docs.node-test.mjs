@@ -69,10 +69,39 @@ async function fixture() {
       "export const PRIMARY_VIEWS = ['projects', 'progress', 'afk', 'workbench', 'machine', 'hostPlan']",
     ].join('\n'),
   )
+  const defaultStepIds = ['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive']
+  const defaultWorkflowYaml = [
+    'name: default',
+    ...defaultStepIds.flatMap((id) => [
+      `  - id: ${id}`,
+      '    skills:',
+      `      - id: tenon-${id}`,
+    ]),
+  ].join('\n')
+  await write(root, 'templates/workflows/default.yaml', defaultWorkflowYaml)
+  const generatedWorkflowSource = [
+    'name: default',
+    ...defaultStepIds.flatMap((id) => [
+      `  - id: ${id}`,
+      '    skills:',
+      `      - id: tenon-${id}`,
+    ]),
+  ].join('\n')
   await write(
     root,
-    'templates/workflows/default.yaml',
-    ['name: default', ...['open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive'].map((id) => `  - id: ${id}`)].join('\n'),
+    'packages/kernel/src/workflow/default-workflow.generated.ts',
+    `export const DEFAULT_WORKFLOW_SOURCE = ${JSON.stringify(generatedWorkflowSource)}\n`,
+  )
+  await write(
+    root,
+    'skills/tenon/SKILL.md',
+    [
+      '# Tenon',
+      '## Step 4: Phase dispatch',
+      '| phase | skill |',
+      '| --- | --- |',
+      ...defaultStepIds.map((id) => `| \`${id}\` | \`tenon-${id}\` |`),
+    ].join('\n'),
   )
   await write(
     root,
@@ -152,12 +181,12 @@ async function fixture() {
   await write(
     root,
     'docs/usage/routing-and-workflows.md',
-    '# Routing\n\nSimple: change → verify → done → escalated.\n',
+    '# Routing\n\nSimple: change → verify → done → escalated.\n\nThe default Workflow keeps its frozen phase Skills; named profiles remain phase-first and do not become an automatic gate.\n',
   )
   await write(
     root,
     'docs/usage/default-workflow.md',
-    '# Default\n\nopen → explore → spec ⇄ build ⇄ verify → ship → archive\n',
+    `# Default\n\nopen → explore → spec ⇄ build ⇄ verify → ship → archive\n\n${defaultStepIds.map((id) => `\`${id}\` → \`tenon-${id}\``).join(' · ')}\n`,
   )
   await write(
     root,
@@ -198,12 +227,12 @@ async function fixture() {
   await write(
     root,
     'docs/usage/zh-CN/routing-and-workflows.md',
-    '# 路由\n\nSimple: change → verify → done → escalated。\n',
+    '# 路由\n\nSimple: change → verify → done → escalated。\n\n默认 Workflow 的阶段 Skill 是冻结要求；具名 profile 仍按 phase-first 合并，不会变成自动要求。\n',
   )
   await write(
     root,
     'docs/usage/zh-CN/default-workflow.md',
-    '# 默认流程\n\nopen → explore → spec ⇄ build ⇄ verify → ship → archive\n',
+    `# 默认流程\n\nopen → explore → spec ⇄ build ⇄ verify → ship → archive\n\n${defaultStepIds.map((id) => `\`${id}\` → \`tenon-${id}\``).join(' · ')}\n`,
   )
   await write(
     root,
@@ -301,6 +330,24 @@ test('detects workflow shape drift from the YAML step list', async (t) => {
     ['name: simple', ...['change', 'verify', 'audit', 'done', 'escalated'].map((id) => `  - id: ${id}`)].join('\n'),
   )
   assert.match(checkRepository(root).join('\n'), /routing-and-workflows\.md.*audit/)
+})
+
+test('rejects a default phase Skill missing from the source YAML and generated runtime contract', async (t) => {
+  const root = await fixture()
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const source = await readFile(join(root, 'templates/workflows/default.yaml'), 'utf8')
+  await write(root, 'templates/workflows/default.yaml', source.replace('tenon-build', 'wrong-build'))
+  const failures = checkRepository(root).join('\n')
+  assert.match(failures, /default\.yaml.*build.*tenon-build/)
+})
+
+test('rejects a dispatch mapping drift even when source and generated workflow still agree', async (t) => {
+  const root = await fixture()
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const skill = await readFile(join(root, 'skills/tenon/SKILL.md'), 'utf8')
+  await write(root, 'skills/tenon/SKILL.md', skill.replace('| `verify` | `tenon-verify` |', '| `verify` | `tenon-build` |'))
+  const failures = checkRepository(root).join('\n')
+  assert.match(failures, /SKILL\.md.*verify.*tenon-verify/)
 })
 
 test('detects drift in the documented runtime subcommands', async (t) => {

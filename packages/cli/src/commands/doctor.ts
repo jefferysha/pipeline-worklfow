@@ -22,7 +22,7 @@ import {
   type DoctorCheck,
   type DoctorStatus,
 } from './doctor-check.js'
-import { checkCodexProjectSkills, checkSkills } from './doctor-skills.js'
+import { checkCodexProjectSkills, checkSkills, checkWorkflowPhaseSkills } from './doctor-skills.js'
 import { renderCodexAuthLines } from '../codexAuth.js'
 import { checkProductIdentity } from './doctor-product-identity.js'
 
@@ -300,6 +300,7 @@ export async function cmdDoctor(deps: CliDeps, opts: { json?: boolean }): Promis
     ['project:changes', () => checkChanges(deps)],
     ['project:markers', () => checkMarkers(deps)],
     ['quality:verify-skills', () => checkVerifySkills(p)],
+    ['skills:workflow-phase', () => checkWorkflowPhaseSkills(p)],
     ['identity:release', () => checkProductIdentity(p)],
   ]
 

@@ -28,7 +28,9 @@ open → explore → spec ⇄ build ⇄ verify → ship → archive
 
 ## Free
 
-Free 是默认七阶段的中性 track，不代表绕过门禁。它不自动叠加 PM、前端或后端模板，只按任务本身选择 Skill。
+Free 是默认七阶段的中性 track，不代表绕过门禁。它不自动叠加 PM、前端或后端模板；默认
+Workflow 当前阶段的 `tenon-<phase>` 仍是冻结的硬要求。artifact producer 或 AFK 显式选择
+具名 profile 时结果仍按 phase-first 合并，但 profile 不会反向成为 Hook/transition 的自动要求。
 
 ## Custom
 

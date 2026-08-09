@@ -2,6 +2,23 @@
 
 Default workflow 是 Tenon 的完整治理路径。每个阶段都有明确输入、产出、允许的回边和出口条件。
 
+七个默认 step 分别冻结一个阶段入口 Skill（`tenon-open` 到 `tenon-archive`）。即使是
+`free`/`matrix=false` Change，也必须完成当前阶段 Skill；manifest 的
+`mandatory_skills`/`recommended_skills` 只在启用 Track matrix 时作为自动 overlay。artifact
+producer 与 AFK bundle 的具名 profile 仍可显式选择既有 allowlist，但解析结果始终先包含冻结的阶段 Skill。
+
+冻结的阶段分发与 source Workflow 一一对应：
+
+| Step | 冻结阶段 Skill |
+| --- | --- |
+| `open` | `tenon-open` |
+| `explore` | `tenon-explore` |
+| `spec` | `tenon-spec` |
+| `build` | `tenon-build` |
+| `verify` | `tenon-verify` |
+| `ship` | `tenon-ship` |
+| `archive` | `tenon-archive` |
+
 ## Open
 
 创建独立 Change，写 proposal、initial design 和 tasks。这里不提前实现代码，也不把未来任务伪装成已确认计划。

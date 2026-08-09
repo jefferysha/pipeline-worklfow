@@ -23,6 +23,7 @@ import { randomBytes } from 'node:crypto'
 import type {
   AttemptContextLedgerSnapshot,
   AutomationPolicySnapshot,
+  EffectiveWorkflowPlan,
   StepIR,
   WorkflowActionAuthoritySnapshotV1,
 } from '@tenon/kernel'
@@ -290,7 +291,12 @@ export interface ExecutionPreparationPort {
  */
 export interface CapturedExecutionCoordinate {
   readonly resolution:
-    | { readonly kind: 'default'; readonly stepId: string }
+    | {
+        readonly kind: 'default'
+        readonly stepId: string
+        /** Frozen default Workflow capability captured with the coordinate. */
+        readonly capability: EffectiveWorkflowPlan['capabilities']['skills']
+      }
     | { readonly kind: 'custom'; readonly step: StepIR }
   readonly workflow: string
   readonly track: string

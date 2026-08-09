@@ -192,14 +192,59 @@ describe('真实 e2e —— hooks/gate.sh 委托 internal-skill-gate（Task 9）
     expect(await h.read(CHANGE)).toMatch(/^workflow: default$/m)
   })
 
-  test('workflow=default + 当前首个 mandatory Skill → 委托统一 DAG gate 后放行', async () => {
+  test('workflow=default + 当前 phase Skill 可首调用，overlay receipt 缺失时不能绕过', async () => {
     expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full'])).toBe(0)
     expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
-    const gate = runHook(
+    const blocked = runHook(
       'gate.sh',
       { cwd: h.cwd, tool_name: 'Skill', tool_input: { skill: 'openspec-propose' } },
     )
-    expect(gate.code, `stderr=${gate.stderr}`).toBe(0)
+    expect(blocked.code, `stderr=${blocked.stderr}`).toBe(2)
+    expect(blocked.stderr).toContain('tenon-open')
+    const phase = runHook(
+      'gate.sh',
+      { cwd: h.cwd, tool_name: 'Skill', tool_input: { skill: 'tenon-open' } },
+    )
+    expect(phase.code, `stderr=${phase.stderr}`).toBe(0)
+  })
+
+  test('workflow=default + phase 已完成时，matrix mandatory 未完成不应阻断未声明 optional Skill', async () => {
+    expect(await h.run(['init', CHANGE, '--track', 'backend', '--preset', 'full'])).toBe(0)
+    expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
+    const phase = runHook(
+      'gate.sh',
+      { cwd: h.cwd, tool_name: 'Skill', tool_input: { skill: 'tenon-open' } },
+    )
+    expect(phase.code, `stderr=${phase.stderr}`).toBe(0)
+    const tracker = runHook(
+      'skill-tracker.sh',
+      { cwd: h.cwd, tool_name: 'Skill', tool_input: { skill: 'tenon-open' } },
+    )
+    expect(tracker.code, `stderr=${tracker.stderr}`).toBe(0)
+
+    // backend 的 open overlay 仍缺 openspec-propose；该缺口不能把一个未声明的
+    // optional Skill 重新变成 mandatory。Issue #43 只扩大了 phase-first hard gate。
+    const optional = runHook(
+      'gate.sh',
+      { cwd: h.cwd, tool_name: 'Skill', tool_input: { skill: 'undeclared-optional-skill' } },
+    )
+    expect(optional.code, `stderr=${optional.stderr}`).toBe(0)
+  })
+
+  test('workflow=default + free/matrix=false 仍要求 phase Skill，未声明 Skill 不能先行', async () => {
+    expect(await h.run(['init', CHANGE, '--track', 'free', '--preset', 'full'])).toBe(0)
+    expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
+    const blocked = runHook(
+      'gate.sh',
+      { cwd: h.cwd, tool_name: 'Skill', tool_input: { skill: 'free-optional-skill' } },
+    )
+    expect(blocked.code, `stderr=${blocked.stderr}`).toBe(2)
+    expect(blocked.stderr).toContain('tenon-open')
+    const phase = runHook(
+      'gate.sh',
+      { cwd: h.cwd, tool_name: 'Skill', tool_input: { skill: 'tenon-open' } },
+    )
+    expect(phase.code, `stderr=${phase.stderr}`).toBe(0)
   })
 
   test('workflow=default → 真实委托 node；委托进程自身异常仍按 hook 总纲 fail-open', async () => {

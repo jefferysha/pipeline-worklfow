@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import {
+  createEffectiveSkillResolver,
   IllegalTransitionError,
+  loadManifest,
   TRANSITION_EVENTS,
   eventEdge as kernelEventEdge,
   publishTaskPlanRevision,
@@ -44,6 +46,18 @@ describe('接线 —— cli 事件表 = kernel 单源（无本地镜像）', () 
 })
 
 describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实测回写）', () => {
+  test('free/matrix=false 仍拒绝缺失当前 visit 的 frozen phase Skill', async () => {
+    const manifestPath = join(process.cwd(), 'templates', 'manifest.yaml')
+    const deps = makeDeps({
+      state: mockState({ phase: 'open', track: 'free' }),
+      resolver: createEffectiveSkillResolver(loadManifest(manifestPath)),
+    })
+    const code = await cmdTransition(deps, 'demo', 'open-complete')
+    expect(code).toBe(2)
+    expect(deps.errLines.join('\n')).toContain('tenon-open')
+    expect(deps.store.write.calls).toHaveLength(0)
+  })
+
   test('合法转换：stdout 无输出，[TRANSITION] 走 stderr，exit 0', async () => {
     const deps = makeDeps({ state: mockState({ phase: 'open' }) })
     const code = await cmdTransition(deps, 'demo', 'open-complete')

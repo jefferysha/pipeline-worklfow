@@ -58,11 +58,14 @@ of mutating the original Workflow identity.
 
 ## Free is not “no rules”
 
-The free Track disables automatic domain routing, coverage overlays, domain
-Skill matrix, and automation eligibility. It does not remove:
+The free Track disables automatic domain routing, coverage overlays, automatic
+domain Skill matrix overlays, and automation eligibility. It does not remove:
 
 - the selected Workflow's steps and transition graph;
 - Skills declared by that Workflow;
+- The default Workflow's frozen `tenon-<phase>` requirement. Explicit artifact
+  producers and AFK bundles may select a named profile, but that projection
+  remains phase-first and does not turn the profile into an automatic gate;
 - review/confirm gates;
 - guards;
 - artifact declarations;

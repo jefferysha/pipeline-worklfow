@@ -202,7 +202,11 @@ export async function runAfkRound(
     ledger,
     loadRegistry: (root) => loadRegistry(root, nodeLoopIoStrict),
     clock: deps.clock,
-    coordinates: createExecutionCoordinatePort({ store: deps.store, repoRoot: deps.cwd }),
+    coordinates: createExecutionCoordinatePort({
+      store: deps.store,
+      repoRoot: deps.cwd,
+      manifestRoot: deps.doctor?.pluginRoot,
+    }),
     resolver: deps.resolver,
     locator: createProductionSkillContentLocator({
       pluginRoot: deps.doctor?.pluginRoot, home: homeDir(), runner: 'claude-code',

@@ -1075,6 +1075,25 @@ describe('POST /api/change/<name>/transition —— B5 token 鉴权', () => {
     })
     expect(r.status).toBe(200)
   })
+
+  it('free/matrix=false 仍由 frozen phase Skill 阻断当前 visit（HTTP transition 与 CLI 共用 required projection）', async () => {
+    const manifestPath = await makeTempManifest()
+    const h = await start({ manifestPath })
+    const state = await h.store.read(h.changeDir)
+    await h.store.write(h.changeDir, {
+      ...state,
+      fields: { ...state.fields, track: 'free' },
+    })
+
+    const r = await reqPost(h.port, `/api/change/${h.name}/transition`, {
+      root: h.root, event: 'open-complete',
+    }, { headers: { Authorization: `Bearer ${h.token}` } })
+    expect(r.status).toBe(409)
+    expect(r.json<{ code?: string; detail?: string[] }>()).toMatchObject({
+      code: 'step-skills-incomplete',
+      detail: expect.arrayContaining([expect.stringContaining('tenon-open')]),
+    })
+  })
 })
 
 describe('POST /api/change/<name>/transition —— G1 default 轨收尾（breadcrumb + 显式 review receipt）', () => {
