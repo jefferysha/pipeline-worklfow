@@ -67,3 +67,15 @@
 {"ts":"2026-08-09T18:17:16Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
 {"ts":"2026-08-09T18:17:19Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T16:18:53Z authority_host_session=019fe750-2346-71b1-a265-f124cb746ca7"}
 {"ts":"2026-08-09T18:17:22Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"2ac3fb07-f0cc-4154-9a13-f37ede7284f8"}
+{"ts":"2026-08-09T19:04:53Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-09T19:06:16Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T19:06:16Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T19:06:16Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"284b79d0-2358-484d-86c4-0ab46f812bd8"}
+{"ts":"2026-08-09T19:22:54Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-08-09T19:22:54Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-08-09T19:22:54Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-10-issue-44-skill-provenance-verify-attempt-2.md"}
+{"ts":"2026-08-09T19:23:18Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T19:23:18Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion badc2842-0191-4885-ada7-977896fb0a9f 8"}
+{"ts":"2026-08-09T19:23:25Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
+{"ts":"2026-08-09T19:23:30Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T16:18:53Z authority_host_session=019fe750-2346-71b1-a265-f124cb746ca7"}
+{"ts":"2026-08-09T19:23:33Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"e7e584c1-a685-4979-9a2f-d93670cb25ca"}

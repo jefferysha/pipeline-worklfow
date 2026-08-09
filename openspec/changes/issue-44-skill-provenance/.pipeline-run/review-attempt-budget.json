@@ -7,7 +7,7 @@
       "scope": "verify",
       "defaultMaxAttempts": 2,
       "override": null,
-      "used": 1,
+      "used": 2,
       "active": null,
       "completed": [
         {
@@ -48,6 +48,45 @@
           "result": "fail",
           "reportPath": "openspec/changes/issue-44-skill-provenance/.pipeline-run/review-attempt-reports/c561e9be-18aa-47df-8eeb-d32852d139b0.aggregate.report",
           "reportDigest": "sha256:c4625c6d320ef21c484a51af1694072e49b64a1b8eb1d851fd37b27d69d224f0"
+        },
+        {
+          "attemptId": "3255898e-3ed1-48cd-afec-12fcb57c187b",
+          "sequence": 2,
+          "candidateFingerprint": "workspace:sha256:cda0ed3b7fd8675d0a3f88b2fc9267b65631ab957e2abeeb788145aaea0f1a98",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T19:07:43Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "fail",
+              "reportPath": "openspec/changes/issue-44-skill-provenance/.pipeline-run/review-attempt-reports/3255898e-3ed1-48cd-afec-12fcb57c187b.standards.report",
+              "reportDigest": "sha256:c271c710afc20f38d0414583082ece4759260fd633bbd3be54c5eb33831c81fe",
+              "recordedAt": "2026-08-09T19:23:04Z"
+            },
+            {
+              "lane": "spec",
+              "result": "fail",
+              "reportPath": "openspec/changes/issue-44-skill-provenance/.pipeline-run/review-attempt-reports/3255898e-3ed1-48cd-afec-12fcb57c187b.spec.report",
+              "reportDigest": "sha256:c271c710afc20f38d0414583082ece4759260fd633bbd3be54c5eb33831c81fe",
+              "recordedAt": "2026-08-09T19:23:08Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-44-skill-provenance/.pipeline-run/review-attempt-reports/3255898e-3ed1-48cd-afec-12fcb57c187b.e2e.report",
+              "reportDigest": "sha256:c271c710afc20f38d0414583082ece4759260fd633bbd3be54c5eb33831c81fe",
+              "recordedAt": "2026-08-09T19:23:09Z"
+            }
+          ],
+          "completedAt": "2026-08-09T19:23:13Z",
+          "result": "fail",
+          "reportPath": "openspec/changes/issue-44-skill-provenance/.pipeline-run/review-attempt-reports/3255898e-3ed1-48cd-afec-12fcb57c187b.aggregate.report",
+          "reportDigest": "sha256:09047567612c2b17ae27f642ad2ff874ade6ff78081bbc2d5561619990955634"
         }
       ]
     }
