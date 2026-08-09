@@ -792,13 +792,13 @@ describe('scheduler round（admission 闸门 + 真状态机写回 + 分级放权
     expect(report.ok).toBe(false)
   })
 
-  it('B2 · noop 空跑在 L3 不落 merged → paused + cause=no-op；settleWon reason=no-op', async () => {
+  it('B2 · noop 空跑在 L3 缺 authoritative revision → paused + stable revision blocker；settleWon reason 同口径', async () => {
     const { state, auto, fields } = makeState({ c: 'queued' })
     const fa = fakeAdmission()
     await createScheduler(deps({ state, admission: fa.admission, config: { maxParallel: 1, maxRetries: 1, level: 'L3' }, runChange: async () => outcome({ commits: [], buildSha: undefined, noop: true }) })).runRoundOnce(['c'])
     expect(auto.get('c')).toBe('paused')
-    expect(fields.get('c')?.automation_cause).toBe('no-op')
-    expect(fa.calls.settleWon[0]?.s.reason).toBe('no-op')
+    expect(fields.get('c')?.automation_cause).toBe('verify-build-revision-untrusted')
+    expect(fa.calls.settleWon[0]?.s.reason).toBe('verify-build-revision-untrusted')
   })
 
   it('B5/H7 r7 · running owner CAS 抛错 → 不猜是否落盘，保留 scheduled + open reservation，零 runChange 且 round fail-loud', async () => {
@@ -964,7 +964,7 @@ describe('H7 verifier Phase 2 · scheduler verification gate（结算选 merged/
     expect(fa.calls.settleWon[0]?.s.result).toBe('retry-queued')
   })
 
-  it('subject SHA 漂移（与 merge candidate buildSha 不符）→ fail-closed 落 paused，reason=verification-subject-mismatch，绝不 merge', async () => {
+  it('subject SHA 漂移（与 authoritative buildSha 不符）→ stable revision blocker，绝不 merge', async () => {
     const { state, auto, fields } = makeState({ c: 'queued' })
     const fa = fakeAdmission()
     await createScheduler(deps({
@@ -972,8 +972,8 @@ describe('H7 verifier Phase 2 · scheduler verification gate（结算选 merged/
       runChange: async () => outcome({ verification: verification({ subject: { ...verification().subject, revision: { kind: 'named-branch-head', sha: 'b'.repeat(40) } } }) }),
     })).runRoundOnce(['c'])
     expect(auto.get('c')).toBe('paused')
-    expect(fields.get('c')?.automation_cause).toBe('verification-subject-mismatch')
-    expect(fa.calls.settleWon[0]?.s.reason).toBe('verification-subject-mismatch')
+    expect(fields.get('c')?.automation_cause).toBe('verify-build-revision-untrusted')
+    expect(fa.calls.settleWon[0]?.s.reason).toBe('verify-build-revision-untrusted')
   })
 
   it('L1 无 trusted verification（absent）→ paused（level 本就 report-only）且诚实记 verification-missing（不是沉默的空 cause）', async () => {
@@ -1002,7 +1002,7 @@ describe('H7 verifier Phase 2 · scheduler verification gate（结算选 merged/
     expect(fa.calls.settleWon[0]?.s.reason).toBe('kill-switch')
   })
 
-  it('no-op（noop:true，无 buildSha/verification）→ 仍走既有 no-op 路径（cause=no-op，不被 gate 的 verification-missing 覆盖）', async () => {
+  it('no-op（noop:true，无 authoritative buildSha/verification）→ stable revision blocker，不被空跑旁路', async () => {
     const { state, auto, fields } = makeState({ c: 'queued' })
     const fa = fakeAdmission()
     await createScheduler(deps({
@@ -1010,8 +1010,8 @@ describe('H7 verifier Phase 2 · scheduler verification gate（结算选 merged/
       runChange: async () => outcome({ commits: [], buildSha: undefined, noop: true, verification: undefined }),
     })).runRoundOnce(['c'])
     expect(auto.get('c')).toBe('paused')
-    expect(fields.get('c')?.automation_cause).toBe('no-op') // 不是 verification-missing——noop 优先级更高、更精确
-    expect(fa.calls.settleWon[0]?.s.reason).toBe('no-op')
+    expect(fields.get('c')?.automation_cause).toBe('verify-build-revision-untrusted')
+    expect(fa.calls.settleWon[0]?.s.reason).toBe('verify-build-revision-untrusted')
   })
 
   it('human-review trusted passed + SHA 符 → 同样 authorized（trusted 不专属 host-verifier）', async () => {

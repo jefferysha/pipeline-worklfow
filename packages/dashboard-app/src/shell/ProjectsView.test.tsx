@@ -22,6 +22,18 @@ function rulesFor(...roots: string[]): ReadonlyMap<string, WorkflowRules> {
 }
 
 const EVIDENCE_OK = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
+/** Trusted Verify fixture: use the server-shaped canonical readiness projection explicitly. */
+const TRUSTED_VERIFY_EXECUTION = {
+  readinessByTransition: {
+    verify: {
+      'verify-pass': { ready: true, blockers: [] },
+      'verify-fail': { ready: true, blockers: [] },
+    },
+  },
+}
+function trustedVerifyChange(name: string, over: Parameters<typeof makeChange>[2] = {}) {
+  return makeChange(name, 'verify', { ...over, workflowExecution: TRUSTED_VERIFY_EXECUTION })
+}
 
 function renderView(over: Partial<Parameters<typeof ProjectsView>[0]> = {}) {
   const snapshot =
@@ -29,7 +41,7 @@ function renderView(over: Partial<Parameters<typeof ProjectsView>[0]> = {}) {
     makeSnapshot([
       // repo-a：一条证据齐的 verify 门（need=1）+ 一条 running（running=1）→ 归「需要你动手」分区。
       makeProject('/code/repo-a', [
-        makeChange('c-gate', 'verify', { fields: { ...EVIDENCE_OK } }),
+        trustedVerifyChange('c-gate', { fields: { ...EVIDENCE_OK } }),
         makeChange('c-run', 'build', { fields: { automation: 'running' } }),
       ]),
       // repo-b：一条 open（need=0）→ 归「其余」分区。
@@ -61,7 +73,7 @@ describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', ()
         makeProject(worktreeRoot, [makeChange('feature', 'build')], {
           repository: { ...repository, workspace_kind: 'worktree' },
         }),
-        makeProject(primaryRoot, [makeChange('main', 'verify', { fields: { ...EVIDENCE_OK } })], {
+        makeProject(primaryRoot, [trustedVerifyChange('main', { fields: { ...EVIDENCE_OK } })], {
           repository,
         }),
       ]),
@@ -113,7 +125,7 @@ describe('ProjectsView 紧凑列表（v10 重设计：按需关注排序）', ()
     renderView({
       snapshot: makeSnapshot([
         makeProject(primaryRoot, [makeChange('healthy', 'open')], { repository }),
-        makeProject(worktreeRoot, [makeChange('review', 'verify', { fields: EVIDENCE_OK })], {
+        makeProject(worktreeRoot, [trustedVerifyChange('review', { fields: EVIDENCE_OK })], {
           repository: { ...repository, workspace_kind: 'worktree' },
         }),
       ]),
@@ -360,7 +372,7 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     renderView({
       snapshot: makeSnapshot([
         makeProject(healthyRoot, [makeChange('healthy', 'open')], { repository }),
-        makeProject(gatedRoot, [makeChange('gated', 'verify', { fields: EVIDENCE_OK })], {
+        makeProject(gatedRoot, [trustedVerifyChange('gated', { fields: EVIDENCE_OK })], {
           repository: { ...repository, workspace_kind: 'worktree' },
         }),
       ]),
@@ -388,7 +400,7 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
     renderView({
       snapshot: makeSnapshot([
         makeProject(firstHealthy, [makeChange('healthy', 'open')], { repository: firstRepository }),
-        makeProject(firstGated, [makeChange('gated', 'verify', { fields: EVIDENCE_OK })], {
+        makeProject(firstGated, [trustedVerifyChange('gated', { fields: EVIDENCE_OK })], {
           repository: { ...firstRepository, workspace_kind: 'worktree' },
         }),
         makeProject(secondRunning, [makeChange('running', 'build', { fields: { automation: 'running' } })], {
@@ -409,7 +421,7 @@ describe('ProjectsView 电脑端检索与状态聚焦', () => {
   it('四个状态 badge 保持全局计数，状态与查询共同缩小结果', () => {
     const snapshot = makeSnapshot([
       makeProject('/code/repo-a', [
-        makeChange('c-gate', 'verify', { fields: { ...EVIDENCE_OK } }),
+        trustedVerifyChange('c-gate', { fields: { ...EVIDENCE_OK } }),
         makeChange('c-run', 'build', { fields: { automation: 'running' } }),
       ]),
       makeProject('/code/repo-b', [makeChange('b-open', 'open')]),

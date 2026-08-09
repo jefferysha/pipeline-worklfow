@@ -1,6 +1,6 @@
 ---
 name: tenon-verify
-description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原型走查（无 review agent），frontend/backend Track 跑 reviewer agent + codex + e2e 三轨并行，同读冻结的 build_sha 基线。"
+description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原型走查（无 review agent），frontend/backend Track 跑 reviewer agent + codex + e2e 三轨并行，同读冻结的 build_sha token。"
 ---
 
 <!-- TENON:INTERACTION-MODE:START -->
@@ -47,7 +47,10 @@ description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原�
 - `phase=verify`
 - `build_mode` / `isolation` 已设
 - `tasks.md` 全勾选
-- `build_sha` 已由 `build-complete` 冻结（`tenon get <name> build_sha`）：branch/worktree 为 Git SHA；in-place 为 `workspace:sha256:<内容基线>`
+- `build_sha` 已由 `build-complete` 冻结为 canonical token（`tenon get <name> build_sha`）：
+  `build:v1:<git|workspace>:<revision_hash>:<repository_hash>:<worktree_hash>`。token 是审查输入身份，
+  不是裸 SHA 或可回填的 workspace baseline；Verify 必须重新评估当前 HEAD/workspace、physical identity、
+  provenance 与 canonical state digest。
 
 ## 步骤
 
@@ -79,6 +82,10 @@ ATTEMPT_JSON="$(tenon review-attempt begin "$TENON_CHANGE_NAME" \
   --candidate "$BUILD_BASELINE" --json)" || exit $?
 ATTEMPT_ID="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(x.attemptId)' "$ATTEMPT_JSON")"
 ```
+
+`review-attempt begin` 接受当前 canonical `build:v1` token，并在比较/存储前规范化为既有
+`sha256:<revision_hash>` candidate ABI；同一 token resume 不增加 `used`，token 变化必须产生新的
+candidate/attempt。非 canonical token、旧裸 SHA、任意 workspace baseline、空白包裹值或伪造输入均拒绝。
 
 同一候选重启或上下文恢复时，`begin` 返回相同 `ATTEMPT_ID` 且不增加 used。Standards/Spec reviewer、
 security、E2E/API/browser/visual/public acceptance、Codex 轨都消费这个 id；lane 重试、E2E shard 和进程
@@ -137,22 +144,40 @@ tenon set "$TENON_CHANGE_NAME" branch_status handled
 
 ⚡ **HARD RULE**：以下 3 轨**必须在同一条 Agent 消息**内并行 dispatch。
 
-> **三轨同读冻结的 `build_sha` 基线（barrier）**：verify 审的是 build-complete 时冻结的固定靶，不是漂移中的 working tree。先取基线并按类型分流：
+> **三轨同读冻结的 `build_sha` token（barrier）**：verify 审的是 build-complete 时冻结的固定靶，不是漂移中的 working tree。先取 token 并按 kind 分流。Git 分支随后读取当前 HEAD 作为执行锚点；它不是 token 解码结果：
 > ```bash
 > BUILD_BASELINE="$(tenon get "$TENON_CHANGE_NAME" build_sha)"
 > case "$BUILD_BASELINE" in
->   workspace:sha256:*)
->     # in-place：不把内容基线传给 git checkout/diff。验证期间不得改实现/配置；
->     # verify-pass 会重新计算同一工作区内容基线，任何漂移都会真实拒绝。
->     echo "[verify] in-place workspace baseline: $BUILD_BASELINE"
+>   build:v1:workspace:*)
+>     # in-place token：审查同一 workspace content identity；不得把 token 当作 raw path 或 baseline 回填。
+>     unset BUILD_SHA
+>     echo "[verify] workspace build token captured"
+>     ;;
+>   build:v1:git:*)
+>     # token 不能解码为 raw SHA。后续 Codex/E2E/quality snippets 只使用当前 HEAD 锚点。
+>     BUILD_SHA="$(git rev-parse HEAD 2>/dev/null)" || {
+>       echo "[verify] cannot read current git HEAD; fail closed" >&2
+>       exit 2
+>     }
+>     if ! printf '%s\n' "$BUILD_SHA" | grep -Eq '^[0-9a-f]{40}([0-9a-f]{24})?$'; then
+>       echo "[verify] current git HEAD is not a valid object id; fail closed" >&2
+>       exit 2
+>     fi
+>     export BUILD_SHA
+>     # 这只是后续 Codex/E2E/quality 命令的执行锚点；最终 tenon check/transition 的 typed assessor
+>     # 才建立 token ↔ 当前 HEAD、physical identity、provenance 与 canonical state digest 的可信性。
+>     # repo-zero-output barrier 证明审查期间工作区没有写入。
+>     echo "[verify] current HEAD anchor captured; typed revalidation required"
 >     ;;
 >   *)
->     # branch/worktree：这是 Git revision，可作为提交区间/checkout 靶。
->     BUILD_SHA="$BUILD_BASELINE"
+>     echo "[verify] untrusted build revision; return to build and capture current revision" >&2
+>     exit 2
 >     ;;
 > esac
 > ```
-> reviewer agent / e2e 审该基线对应的代码状态；只有 Git 分支才可让 Codex 轨审 `BUILD_SHA` 提交区间 diff。in-place 的三轨审当前未漂移工作区，并由最终 `verify-pass` barrier 再次证明内容不变。
+> reviewer agent / e2e 审该 token 对应的代码状态；Git token 的当前 HEAD/identity 绑定由 typed assessor 复核，workspace token
+> 需审当前内容 identity。任一 assessment 失败都保留 `verify-build-revision-untrusted`、reason、stateHash/
+> revisionHash 与 remediation=`return-to-build-and-capture-current-revision`，不允许 set/backfill。
 
 **并发实现指南**：
 - 主 agent 一次性发起 3 个 tool 调用（2 个 Agent + 1 个 Bash）；含 UI 改动时再加第四轨 `tenon-design-reviewer` agent（视觉），同消息一并发起
@@ -191,10 +216,10 @@ tenon set "$TENON_CHANGE_NAME" branch_status handled
 - 使用 Skill 工具加载 `security-review`（builtin）
 
 **【轨道 1】Reviewer Agent（并行）**：
-- Agent 工具调用 `tenon-reviewer`（本仓 agents/tenon-reviewer.md）— 读冻结构建基线；Git 基线审完整提交区间 diff，in-place 枚举并审当前未漂移工作区全部 changed/untracked 交付文件；回读全部受影响 capability，按改动语言套评审视角（TS/JS 专项 + 通用），回传 coverage、全部 severity 发现 + PASS/FAIL。固定靶全量 brief 已收进 agent，无需在此重述。
+- Agent 工具调用 `tenon-reviewer`（本仓 agents/tenon-reviewer.md）— 读冻结 build token；Git 分支由 typed assessor 复核当前 HEAD/identity 后审完整提交区间 diff，in-place 枚举并审当前未漂移工作区全部 changed/untracked 交付文件；回读全部受影响 capability，按改动语言套评审视角（TS/JS 专项 + 通用），回传 coverage、全部 severity 发现 + PASS/FAIL。固定靶全量 brief 已收进 agent，无需在此重述。
 
 **【轨道 2】E2E（并行）**：
-- dispatch 一个通用子 agent（Agent 工具），brief：Git 基线时 checkout/read 冻结 `BUILD_SHA`；
+- dispatch 一个通用子 agent（Agent 工具），brief：Git 分支先由 typed assessor 复核 token 与当前 HEAD/identity，再以已读取的 `BUILD_SHA` 作为只读执行锚点；
   in-place 时读取当前未漂移工作区，加载 `e2e-testing` skill 跑 repo-zero-output E2E；所有截图、
   snapshot、trace、coverage 与日志写仓库外临时目录，会写 tracked 产物的命令改在隔离副本运行；
   前后 fingerprint 必须精确一致，回传通过/失败清单。（老仓专职 `e2e-runner` agent 未迁移，
@@ -211,7 +236,7 @@ elif [ -z "${BUILD_SHA:-}" ]; then
 else
   echo "[WARN] codex CLI 未装，第三轨跳过（两轨仍有效）"
 fi
-# 多提交区间（verify-fail 回环产生多个 build commit）：git diff <基线分支>..."$BUILD_SHA"
+# 多提交区间（verify-fail 回环产生多个 build commit）：git diff <review base>..."$BUILD_SHA"
 ```
 
 > ⏳ **待迁移（M2 verify 全量面）**：老仓 `pipeline-codex-review.sh`（commit-scoped /
@@ -223,7 +248,7 @@ fi
 
 #### ⚙️ Track = backend（多语言 reviewer 并行）
 
-> **三轨同读冻结的 `build_sha` 基线（barrier）**：同 frontend，先按上方 `BUILD_BASELINE` 分流。只有 Git SHA 可用于提交区间 diff；in-place 必须审当前未漂移工作区，最终由 `verify-pass` 重新指纹验证。
+> **三轨同读冻结的 `build_sha` token（barrier）**：同 frontend，先按上方 `BUILD_BASELINE` 分流。Git 分支的提交区间命令只能使用已读取并校验的当前 `BUILD_SHA` 锚点；不得从 token 解码 SHA。in-place 必须审当前未漂移工作区，最终由 `verify-pass` 重新指纹验证。
 
 **强制 Skill**：
 1. 使用本插件打包的 Skill `verification-before-completion`。**禁止跳过此步骤**。
@@ -239,7 +264,7 @@ fi
 - 使用 Skill 工具加载 `python-testing`（若 Python）
 
 **【轨道 1】强制 Reviewer Agent（并行）**：
-- Agent 工具调用 `tenon-reviewer` — 读冻结构建基线；Git 基线审完整提交区间 diff，in-place 枚举并审当前未漂移工作区全部 changed/untracked 交付文件；回读全部受影响 capability，**按改动语言自动套视角**（Python/Go/Rust/Java/TS 后端），回传 coverage、全部 severity 发现 + PASS/FAIL。多语言全量 brief 已收进 agent，**无需逐语言列 reviewer**。
+- Agent 工具调用 `tenon-reviewer` — 读冻结 build token；Git 分支由 typed assessor 复核当前 HEAD/identity 后审完整提交区间 diff，in-place 枚举并审当前未漂移工作区全部 changed/untracked 交付文件；回读全部受影响 capability，**按改动语言自动套视角**（Python/Go/Rust/Java/TS 后端），回传 coverage、全部 severity 发现 + PASS/FAIL。多语言全量 brief 已收进 agent，**无需逐语言列 reviewer**。
 - `database-reviewer`（外部，若装有）— 涉及 DB schema/查询时（专项，tenon-reviewer 不覆盖）
 
 **【轨道 2】E2E（并行）**：
@@ -271,7 +296,7 @@ tenon set "$TENON_CHANGE_NAME" branch_status handled
 不得 verify-pass。对标 Tenon contract check agent 强制 `git diff --name-only` + `git diff` 逐条对 spec。
 
 ```bash
-# 1) Git 基线时列出冻结靶引入的改动文件；in-place 基线没有 Git 区间，逐文件审当前工作区并保持其不变。
+# 1) Git 分支列出 typed assessor 复核后的 review 区间改动文件；in-place 没有 Git 区间，逐文件审当前工作区并保持其不变。
 if [ -n "${BUILD_SHA:-}" ]; then
   git diff --name-only "${BUILD_SHA:-HEAD}" 2>/dev/null || git diff --name-only
 else
@@ -373,6 +398,10 @@ tenon set "$TENON_CHANGE_NAME" branch_status handled
 tenon document status "$TENON_CHANGE_NAME"
 tenon check "$TENON_CHANGE_NAME"     # verify 出口：0 过 / 2 不过
 ```
+
+`tenon check` 在 review fields 或 verification evidence 尚未登记时可以按上述规则返回非零；这只是前期状态检查，
+不能声称 Verify 在 Review 前整体 PASS。最终可信性仍由 typed assessor 对当前 HEAD/workspace、physical identity、
+provenance 和 state digest 的复核决定。
 
 guard 通过条件（GUARD-RULES §5，按 Track 不同）：
 

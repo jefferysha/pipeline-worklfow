@@ -24,6 +24,19 @@ import { DEFAULT_RULES, rulesFromDef } from '../model/workflowModel'
 import { makeChange } from '../testkit'
 import type { ChangeHistoryEntry } from '../api/client'
 
+/** Trusted Verify fixture: readiness mirrors the canonical server snapshot projection. */
+const TRUSTED_VERIFY_EXECUTION = {
+  readinessByTransition: {
+    verify: {
+      'verify-pass': { ready: true, blockers: [] },
+      'verify-fail': { ready: true, blockers: [] },
+    },
+  },
+}
+function trustedVerifyChange(name: string, over: Parameters<typeof makeChange>[2] = {}) {
+  return makeChange(name, 'verify', { ...over, workflowExecution: TRUSTED_VERIFY_EXECUTION })
+}
+
 /** 可控 matchMedia 桩（同 WorkbenchView.test.tsx 既有先例）：驱动 gsap.matchMedia 的 reduced-motion 分支。 */
 function stubMatchMedia(reduceMatches: boolean): void {
   vi.stubGlobal(
@@ -86,12 +99,11 @@ async function renderDetail(over: Partial<Parameters<typeof TaskDetail>[0]> = {}
   }
   const props = {
     root: '/repo',
-    change: makeChange('c1', 'verify', {
+    change: trustedVerifyChange('c1', {
       fields: {
         design_doc: 'docs/design.md',
         plan: 'docs/plan.md',
         branch: 'feat/c1',
-        build_sha: 'a1b2c3d',
         verify_result: 'pass',
         agent_review_result: 'pass',
         codex_review_result: 'pass',
@@ -184,7 +196,7 @@ describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
 
   it('三轨有 fail → 结论列出未过项；verification_report 未设不算未过项（Important-1 判据迁移）且落 data-state=miss 占位', async () => {
     await renderDetail({
-      change: makeChange('c1', 'verify', {
+      change: trustedVerifyChange('c1', {
         fields: {
           verify_result: 'pass',
           agent_review_result: 'pass',
@@ -228,7 +240,7 @@ describe('TaskDetail 垂直时间线（默认 workflow 七阶段）', () => {
 
   it('OpenSpec tasks.md 投影的 checkbox 只显示在其 pipeline phase，不从原始需求另造通用 Todo', async () => {
     await renderDetail({
-      change: makeChange('c1', 'verify', {
+      change: trustedVerifyChange('c1', {
         fields: { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' },
         todo: {
           hasTaskSource: true,

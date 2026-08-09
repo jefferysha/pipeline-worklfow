@@ -1,0 +1,11 @@
+# #68 Verify attempt 1 · spec
+
+- result: PASS
+- candidate: `workspace:sha256:f2533ea6b4c683f2ed265a6f7991b2546bd5e0b42fecc76367758eaeb9c26476`
+- attempt: `042624d4-32ee-4127-a54a-bdd93712f890`
+
+The #68 change validates strictly (1/1), and all canonical specs validate strictly (41/41). The
+four remediated positive Dashboard fixtures now supply the server-shaped trusted Verify readiness
+projection. Existing missing, stale and untrusted negative fixtures remain unchanged. The import
+conflict resolution retains both #64 build-revision blockers and main's #66 interaction/review
+contracts.

@@ -1208,7 +1208,10 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     const store = newStore()
     const root = await makeProject()
     const dir = await initChange(store, root, 'fingerprint-read-model')
-    await store.set(dir, 'build_sha', `workspace:sha256:${'a'.repeat(64)}`)
+    await store.setMany(dir, {
+      isolation: 'in-place',
+      build_sha: `workspace:sha256:${'a'.repeat(64)}`,
+    })
     let calls = 0
     const fingerprint = async () => {
       calls += 1
@@ -1233,16 +1236,20 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
       clock: () => 't',
       workspaceFingerprint: fingerprint,
     })
-    expect(calls).toBe(1)
+    // Legacy raw workspace SHA is rejected before capability evaluation. A
+    // trustworthy build token must be captured by the build action first.
+    expect(calls).toBe(0)
     expect(verify.projects[0]?.ok).toBe(true)
     expect(
       verify.projects[0]?.changes[0]?.workflowExecution.readinessByTransition.verify?.['verify-pass'],
     ).toMatchObject({
       ready: false,
       blockers: expect.arrayContaining([{
-        kind: 'evaluation-error',
-        guardType: 'build-head-unchanged',
-        capability: 'workspaceFingerprint',
+        kind: 'verify-build-revision-untrusted',
+        code: 'verify-build-revision-untrusted',
+        reason: 'malformed',
+        remediation: 'return-to-build-and-capture-current-revision',
+        stateHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       }]),
     })
   })
@@ -1547,9 +1554,11 @@ steps:
     ).toEqual({
       ready: false,
       blockers: [{
-        kind: 'capability-unavailable',
-        guardType: 'build-head-unchanged',
-        capability: 'gitHeadSha',
+        kind: 'verify-build-revision-untrusted',
+        code: 'verify-build-revision-untrusted',
+        reason: 'malformed',
+        remediation: 'return-to-build-and-capture-current-revision',
+        stateHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       }],
     })
 
@@ -1565,13 +1574,78 @@ steps:
     ).toEqual({
       ready: false,
       blockers: [{
-        kind: 'guard-failed',
-        guardType: 'build-head-unchanged',
-        field: 'build_sha',
-        actual: 'def456',
-        expected: ['abc123'],
+        kind: 'verify-build-revision-untrusted',
+        code: 'verify-build-revision-untrusted',
+        reason: 'malformed',
+        remediation: 'return-to-build-and-capture-current-revision',
+        stateHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       }],
     })
+  })
+
+  it('custom Verify-like snapshot keeps success blocked while explicit rollback stays ready', async () => {
+    const store = newStore()
+    const root = await makeProject()
+    await mkdir(join(root, '.pipeline', 'workflows'), { recursive: true })
+    await writeFile(join(root, '.pipeline', 'workflows', 'edge-revision.yaml'), `name: edge-revision
+steps:
+  - id: implement-anything
+    label: Implement
+    gate: null
+    skills: []
+    inputs: []
+    outputs:
+      - field: build_sha
+        type: string
+    guards: []
+    transitions:
+      - event: ready
+        to: assure-anything
+  - id: assure-anything
+    label: Assure
+    gate: review
+    skills: []
+    inputs:
+      - field: build_sha
+        type: string
+    outputs: []
+    guards:
+      - type: build-head-unchanged
+        field: build_sha
+    transitions:
+      - event: pass
+        to: ship-anything
+      - event: rollback
+        to: implement-anything
+        actions:
+          - type: mark-verification-failed
+  - id: ship-anything
+    label: Ship
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`, 'utf8')
+    const dir = await initChange(store, root, 'edge-revision', {
+      track: 'backend',
+      initialWorkflow: { workflow: 'edge-revision', phase: 'assure-anything' },
+    })
+    await store.setMany(dir, { build_sha: 'legacy-sha', isolation: 'branch' })
+
+    const snapshot = await buildSnapshot({
+      registry: () => [root],
+      store,
+      version: '1',
+      clock: () => 't',
+    })
+    const readiness = snapshot.projects[0]?.changes[0]?.workflowExecution.readinessByTransition
+    expect(readiness?.['assure-anything']?.pass).toMatchObject({
+      ready: false,
+      blockers: [{ code: 'verify-build-revision-untrusted', reason: 'malformed' }],
+    })
+    expect(readiness?.['assure-anything']?.rollback).toEqual({ ready: true, blockers: [] })
   })
 
   it('automation_current_phase 经 fields 全量透传（T4 决策 G：进度详情「沙箱内阶段」数据源）', async () => {

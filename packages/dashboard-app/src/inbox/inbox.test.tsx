@@ -57,6 +57,18 @@ const REL_EXECUTION_READY = {
 
 /** verify 门三轨证据齐（可拍板）的 fields（同 progressModel.test 的 VERIFY_OK 口径）。 */
 const VERIFY_OK = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
+/** Trusted Verify fixture: readiness comes from the server-shaped canonical projection. */
+const TRUSTED_VERIFY_EXECUTION = {
+  readinessByTransition: {
+    verify: {
+      'verify-pass': { ready: true, blockers: [] },
+      'verify-fail': { ready: true, blockers: [] },
+    },
+  },
+}
+function trustedVerifyChange(name: string, over: Parameters<typeof makeChange>[2] = {}) {
+  return makeChange(name, 'verify', { ...over, workflowExecution: TRUSTED_VERIFY_EXECUTION })
+}
 /** explore/spec 门双产出齐的 fields。 */
 const DOCS_OK = { design_doc: 'docs/d.md', plan: 'docs/p.md' }
 
@@ -78,17 +90,17 @@ describe('isAwaitingDecision（T7 准入：人现在能拍板）', () => {
   it('default：explore/spec 双产出齐、verify 三轨齐（未归档）→ 在等我决定', () => {
     expect(isAwaitingDecision(makeChange('c', 'explore', { fields: { ...DOCS_OK } }), DEFAULT_RULES)).toBe(true)
     expect(isAwaitingDecision(makeChange('c', 'spec', { fields: { ...DOCS_OK } }), DEFAULT_RULES)).toBe(true)
-    expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(true)
+    expect(isAwaitingDecision(trustedVerifyChange('c', { fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(true)
   })
 
   it('default：单出口门缺字段时不在等；verify 的无前置 fail 出口仍可交给人决策', () => {
     expect(isAwaitingDecision(makeChange('c', 'explore'), DEFAULT_RULES)).toBe(false)
     expect(isAwaitingDecision(makeChange('c', 'spec', { fields: { design_doc: 'docs/d.md' } }), DEFAULT_RULES)).toBe(false)
-    expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK, codex_review_result: 'pending' } }), DEFAULT_RULES)).toBe(true)
+    expect(isAwaitingDecision(trustedVerifyChange('c', { fields: { ...VERIFY_OK, codex_review_result: 'pending' } }), DEFAULT_RULES)).toBe(true)
   })
 
   it('default：verify 三轨齐但 verification_report/build_sha 未设仍在等（产物没产出不等于验证没过）', () => {
-    expect(isAwaitingDecision(makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(true)
+    expect(isAwaitingDecision(trustedVerifyChange('c', { fields: { ...VERIFY_OK } }), DEFAULT_RULES)).toBe(true)
   })
 
   it('default：open/build/ship/archive 非门阶段不在等我决定', () => {
@@ -160,7 +172,7 @@ describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change�
     const snap = makeSnapshot([
       makeProject('/a', [
         makeChange('a-open', 'open'),
-        makeChange('a-verify', 'verify', { fields: { ...VERIFY_OK } }),
+        trustedVerifyChange('a-verify', { fields: { ...VERIFY_OK } }),
       ]),
       makeProject('/b', [makeChange('b-spec', 'spec', { fields: { ...DOCS_OK } })]),
     ])
@@ -171,8 +183,8 @@ describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change�
   it('单出口缺字段不进收件箱；多出口只要无前置的 fail 出口可走就进入', () => {
     const snap = makeSnapshot([
       makeProject('/a', [
-        makeChange('evidence-ok', 'verify', { fields: { ...VERIFY_OK } }),
-        makeChange('evidence-missing', 'verify'),
+        trustedVerifyChange('evidence-ok', { fields: { ...VERIFY_OK } }),
+        trustedVerifyChange('evidence-missing'),
         makeChange('plan-missing', 'spec', { fields: { design_doc: 'docs/d.md' } }),
       ]),
     ])
@@ -224,7 +236,7 @@ describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change�
     }]
     const snap = makeSnapshot([
       makeProject('/read-only', [
-        makeChange('readable-verify', 'verify', { fields: { ...VERIFY_OK } }),
+        trustedVerifyChange('readable-verify', { fields: { ...VERIFY_OK } }),
       ], { ok: false, compatibilityIssues }),
       makeProject('/broken', [
         makeChange('hidden-verify', 'verify', { fields: { ...VERIFY_OK } }),
@@ -239,7 +251,7 @@ describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change�
   it('按 updated_at 倒序、并列按 name 升序', () => {
     const snap = makeSnapshot([
       makeProject('/a', [
-        makeChange('old', 'verify', { updated_at: '2026-07-01T00:00:00Z', fields: { ...VERIFY_OK } }),
+        trustedVerifyChange('old', { updated_at: '2026-07-01T00:00:00Z', fields: { ...VERIFY_OK } }),
         makeChange('new-b', 'spec', { updated_at: '2026-07-07T00:00:00Z', fields: { ...DOCS_OK } }),
         makeChange('new-a', 'explore', { updated_at: '2026-07-07T00:00:00Z', fields: { ...DOCS_OK } }),
       ]),
@@ -251,7 +263,7 @@ describe('selectInbox（currentRoot 语境下摘出人现在能拍板的 change�
 describe('selectInbox 聚合语境（currentRoot=""，Task 8/G19③ 前半）', () => {
   it("currentRoot='' → 遍历全部 ok 项目的可拍板卡，每条各自带正确 root（ok=false 项目仍被跳过）", () => {
     const snap = makeSnapshot([
-      makeProject('/a', [makeChange('a-verify', 'verify', { updated_at: '2026-07-01T00:00:00Z', fields: { ...VERIFY_OK } })]),
+      makeProject('/a', [trustedVerifyChange('a-verify', { updated_at: '2026-07-01T00:00:00Z', fields: { ...VERIFY_OK } })]),
       makeProject('/b', [makeChange('b-spec', 'spec', { updated_at: '2026-07-02T00:00:00Z', fields: { ...DOCS_OK } })]),
       makeProject('/bad', [makeChange('bad-verify', 'verify', { fields: { ...VERIFY_OK } })], { ok: false, error: 'unreachable' }),
     ])

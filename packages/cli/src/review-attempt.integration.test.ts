@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { freshHarness, rm, type Harness } from './integration-harness.js'
-import { fingerprintWorkspace } from '@tenon/kernel'
+import { createBuildRevisionToken, fingerprintWorkspace } from '@tenon/kernel'
 
 const CANDIDATE_A = `workspace:sha256:${'1'.repeat(64)}`
 
@@ -56,6 +56,56 @@ async function recordLanes(attemptId: unknown, result: 'pass' | 'fail'): Promise
 }
 
 describe('review attempt budget CLI', () => {
+  it('accepts the raw canonical build:v1 token, stores the mapped candidate, and resumes idempotently', async () => {
+    const local = await freshHarness()
+    try {
+      await mkdir(join(local.cwd, '.pipeline', 'workflows'), { recursive: true })
+      await writeFile(join(local.cwd, '.pipeline', 'workflows', 'token-review.yaml'), `name: token-review
+review_budget:
+  version: v1
+  max_attempts: 2
+steps:
+  - id: build
+    label: Build
+    gate: null
+    skills: []
+    inputs: []
+    outputs:
+      - field: build_sha
+        type: string
+    guards: []
+    transitions:
+      - event: complete
+        to: verify
+  - id: verify
+    label: Verify
+    gate: review
+    review_lanes: [standards]
+    skills: []
+    inputs:
+      - field: build_sha
+        type: string
+    outputs: []
+    guards: []
+    transitions: []
+      `, 'utf8')
+      expect(await local.run(['init', 'demo', '--track', 'backend', '--preset', 'full', '--workflow', 'token-review'])).toBe(0)
+      await local.seedArtifact('demo', 'phase', 'verify')
+      const token = createBuildRevisionToken('git', 'a'.repeat(40), {
+        repository: 'integration-test-repository', worktree: 'integration-test-worktree',
+      })
+      await local.seedArtifact('demo', 'build_sha', token.value)
+      expect(await local.run(['review-attempt', 'begin', 'demo', '--candidate', token.value, '--json'])).toBe(0)
+      const first = JSON.parse(local.out[0] ?? '{}') as Record<string, unknown>
+      expect(first).toMatchObject({ used: 1, sequence: 1, resumed: false, candidateFingerprint: `sha256:${token.revisionHash}` })
+      expect(await local.run(['review-attempt', 'begin', 'demo', '--candidate', token.value, '--json'])).toBe(0)
+      const resumed = JSON.parse(local.out[0] ?? '{}') as Record<string, unknown>
+      expect(resumed).toMatchObject({ used: 1, resumed: true, attemptId: first.attemptId })
+    } finally {
+      await rm(local.cwd, { recursive: true, force: true })
+    }
+  })
+
   it('refuses a caller-supplied candidate that is not the current frozen review input', async () => {
     expect(await h.run([
       'review-attempt', 'begin', 'demo', '--candidate', CANDIDATE_A, '--json',

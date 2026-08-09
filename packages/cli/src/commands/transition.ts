@@ -35,7 +35,7 @@
  * | build-complete    | L144-147 | build_mode/isolation 必须已设                      | kernel DefaultEventPolicy guard ✓ |
  * | build-complete    | current  | validate_enum isolation ∈ {branch,worktree,in-place}| kernel DefaultEventPolicy guard ✓（set 闸外的纵深防线）|
  * | build-complete    | L150-153 | preset=full ∧ build_mode=direct → direct_override=true | kernel DefaultEventPolicy guard ✓ |
- * | build-complete    | L156-161 | build_sha 冻结 = git HEAD stdout；取不到 → WARN 留原值（unborn 仓字面 "HEAD"，T6 怪癖）| kernel DefaultEventPolicy action ✓（WARN 由本文件据 build-sha-missing 警告映射发出）|
+ * | build-complete    | L156-161 | build_sha 由 capability 捕获 canonical build:v1 token；能力缺失/非法 → typed revision blocker | kernel DefaultEventPolicy action ✓ |
  * | verify-pass       | L167-172 | verification_report 非空/非 null/文件存在          | kernel DefaultEventPolicy guard ✓ |
  * | verify-pass       | L173-176 | branch_status == handled                           | kernel DefaultEventPolicy guard ✓ |
  * | verify-pass       | L179-190 | track≠pm → agent/codex_review_result == pass       | kernel DefaultEventPolicy guard ✓ |
@@ -46,8 +46,8 @@
  * | ship-complete     | current  | 主规格迁移 receipt 存在时机器应用结果必须身份/摘要一致 | kernel DefaultEventPolicy guard ✓ |
  * | 其它事件          | L219-221 | 无专属校验（open-complete/自定义相位事件）| kernel default 通行 ✓ |
  * 校验失败 = 任何写盘之前 exit 1（老仓 case 校验先于 cmd_set phase），ERROR 文案逐字对齐。
- * 文件存在性经 deps.guardCtx 注入（main.ts/harness 全量注入 = 真实校验；未注入 = lite
- * 降级跳过文件面、字段面仍全量——GUARD-RULES §7.2 同款降级口径）。
+ * 文件存在性经 deps.guardCtx 注入（main.ts/harness 全量注入 = 真实校验；未注入时仅旧文件面
+ * 保持兼容，Verify revision assessor 缺失仍 fail-closed）。
  */
 import {
   compileWorkflow, completedWorkflowSkillsSinceStepEntry, createTransitionApplication,
@@ -61,6 +61,7 @@ import { enqueueAfterSpecComplete } from '@tenon/automation'
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { reconcileCodexSkillEvidence } from '../codexSkillReceipt.js'
+import { resolveBuildRevisionAssessor } from './buildRevisionAssessor.js'
 
 function canonicalPipelineSkillId(skillId: string): string {
   return skillId.startsWith('tenon:') ? skillId.slice('tenon:'.length) : skillId
@@ -92,8 +93,10 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
       ? (() => {
           const fingerprint = deps.workspaceFingerprint
           return fingerprint ? fingerprint(name) : Promise.reject(new Error('workspace fingerprint capability unavailable'))
-        })
+      })
       : undefined,
+    captureBuildRevision: deps.captureBuildRevision,
+    assessBuildRevision: resolveBuildRevisionAssessor(deps, name, dir),
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name),
     ...(guardContext === undefined
       ? {}
@@ -176,7 +179,9 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
         for (const w of result.warnings) {
           switch (w.kind) {
             case 'build-sha-missing':
-              deps.io.err('WARN: build-complete 未取到 git HEAD（非 git 仓？）build_sha 留空，verify 不做 SHA 校验')
+              // Legacy ABI signal retained for old kernel producers only. Current freeze action
+              // never emits it: missing/invalid capture is a typed revision rejection.
+              deps.io.err('WARN: legacy build-sha-missing signal ignored；当前 runtime 要求重新 Build 捕获 canonical revision token')
               break
             case 'projection-write-failed':
               switch (w.projection) {
@@ -231,6 +236,13 @@ export async function cmdTransition(deps: CliDeps, name: string, event: string):
         return 1
       case 'precondition-violated':
         for (const line of result.lines) deps.io.err(line)
+        return 1
+      case 'revision-untrusted':
+        deps.io.err([
+          `ERROR: ${result.blocker.code} reason=${result.blocker.reason} remediation=${result.blocker.remediation}`,
+          ...(result.blocker.stateHash === undefined ? [] : [`  stateHash=${result.blocker.stateHash}`]),
+          ...(result.blocker.revisionHash === undefined ? [] : [`  revisionHash=${result.blocker.revisionHash}`]),
+        ].join('\n'))
         return 1
       case 'workflow-not-found':
         deps.io.err(

@@ -1,0 +1,10 @@
+# #68 Verify attempt 1 · e2e
+
+- result: PASS
+- candidate: `workspace:sha256:f2533ea6b4c683f2ed265a6f7991b2546bd5e0b42fecc76367758eaeb9c26476`
+- attempt: `042624d4-32ee-4127-a54a-bdd93712f890`
+
+`npm run test:web -- --minWorkers=4 --maxWorkers=4` passed 98/98 files and 1744/1744 tests.
+The pre-freeze Build-readiness run also passed the exact six-file Dashboard matrix (310/310), web
+typecheck, full build, and the merge-sensitive kernel transition application suite (40/40).
+Tests and E2E are validation evidence and do not consume additional Review attempts.

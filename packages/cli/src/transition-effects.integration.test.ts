@@ -14,10 +14,17 @@
  *   archived           archived=true + archived_at + phase_status=done（L212-218）
  * 校验失败 = exit 1 + ERROR 走 stderr + canonical/YAML 均不变（老仓 case 校验先于任何写）。
  */
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { FIXED_CLOCK, freshHarness, realDeps, rm, type Harness } from './integration-harness.js'
+import {
+  FIXED_CLOCK,
+  TEST_GIT_BUILD_TOKEN,
+  freshHarness,
+  realDeps,
+  rm,
+  type Harness,
+} from './integration-harness.js'
 
 let h: Harness
 
@@ -184,7 +191,7 @@ describe('真实 e2e —— build-complete 校验 + build_sha 冻结（老仓 L1
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
     const yaml = await h.read('demo')
     expect(yaml).toMatch(/^phase: verify$/m)
-    expect(yaml).toMatch(/^build_sha: DEADBEEF$/m) // harness gitHeadSha 定桩
+    expect(yaml).toContain(`build_sha: ${TEST_GIT_BUILD_TOKEN}`)
   })
 
   test('hotfix preset + direct 不要求 direct_override（规则只锁 full）', async () => {
@@ -210,7 +217,7 @@ describe('真实 e2e —— build-complete 校验 + build_sha 冻结（老仓 L1
     expect(yaml).toMatch(/^phase: verify$/m)
     // in-place 没有不可变 Git checkout；必须冻结排除 pipeline 元数据后的工作区内容基线，
     // 不能把同一个 HEAD 错当成仍未漂移的实现目标。
-    expect(yaml).toMatch(/^build_sha: workspace:sha256:[a-f0-9]{64}$/m)
+    expect(yaml).toMatch(/^build_sha: build:v1:workspace:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/m)
   })
 })
 
@@ -241,7 +248,7 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
 
   test('barrier：build_sha≠HEAD 真拒（双行 ERROR），yaml 字节不变', async () => {
     await initGoverned('demo')
-    await advanceTo('demo', 'verify') // build_sha 已冻结 DEADBEEF
+    await advanceTo('demo', 'verify') // build_sha 已冻结为可信 token
     await seed('docs/verify.md')
     await h.seedArtifact('demo', 'verification_report', 'docs/verify.md')
     await h.run(['set', 'demo', 'branch_status', 'handled'])
@@ -250,10 +257,11 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     await corruptField('demo', 'build_sha', 'CAFEBABE') // 模拟 build 后偷改未复验
     const before = await h.read('demo')
     expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
-    expect(h.err).toContain(
-      'ERROR: verify-pass 要求 HEAD==build_sha（build 后产物被改未复验）build_sha=CAFEBABE HEAD=DEADBEEF',
+    expect(h.err.join('\n')).toContain(
+      'ERROR: verify-build-revision-untrusted reason=malformed remediation=return-to-build-and-capture-current-revision',
     )
-    expect(h.err).toContain('  修复：要么把改动并入复验（重跑 build→verify），要么 verify-fail 回退后重新 build-complete 冻结新 SHA')
+    expect(h.err.join('\n')).not.toContain('CAFEBABE')
+    expect(h.err.join('\n')).toContain('remediation=return-to-build-and-capture-current-revision')
     expect(await h.read('demo')).toBe(before)
   })
 
@@ -266,7 +274,7 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     await h.run(['set', 'demo', 'direct_override', 'true'])
     await h.run(['set', 'demo', 'pre_verify_review_result', 'pass'])
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0)
-    expect(await h.read('demo')).toMatch(/^build_sha: workspace:sha256:[a-f0-9]{64}$/m)
+    expect(await h.read('demo')).toMatch(/^build_sha: build:v1:workspace:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$/m)
 
     await seed('docs/verify.md')
     await h.seedArtifact('demo', 'verification_report', 'docs/verify.md')
@@ -278,11 +286,13 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     await seed('src/app.js', 'export const version = 2\n')
     const before = await h.read('demo')
     expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
-    expect(h.err.join('\n')).toContain('当前工作区内容等于 build 冻结基线')
+    expect(h.err.join('\n')).toContain(
+      'ERROR: verify-build-revision-untrusted reason=revision-stale remediation=return-to-build-and-capture-current-revision',
+    )
     expect(await h.read('demo')).toBe(before)
   })
 
-  test('barrier 退化：build_sha=null（非 git 仓语义）→ 跳过 SHA 校验，exit 0', async () => {
+  test('barrier 缺失：build_sha=null → fail closed，exit 1 且不提交', async () => {
     await initGoverned('demo')
     await advanceTo('demo', 'verify')
     await seed('docs/verify.md')
@@ -290,10 +300,29 @@ describe('真实 e2e —— verify-pass 校验 + 副作用（老仓 L163-205）'
     await h.run(['set', 'demo', 'branch_status', 'handled'])
     await h.run(['set', 'demo', 'agent_review_result', 'pass'])
     await h.run(['set', 'demo', 'codex_review_result', 'pass'])
-    await corruptField('demo', 'build_sha', 'null')
+    // Obtain a valid exact-event receipt while the canonical Build token is still trusted.
     await approveReviewExit('demo', 'verify-pass')
-    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(0)
-    expect(await h.read('demo')).toMatch(/^phase: ship$/m)
+    await corruptField('demo', 'build_sha', 'null')
+    const changeDir = join(h.cwd, 'openspec', 'changes', 'demo')
+    const recordsPath = join(changeDir, '.pipeline-transitions')
+    const recordNames = (await readdir(recordsPath).catch(() => [] as string[])).sort()
+    const before = {
+      state: await h.read('demo'),
+      current: await readFile(join(changeDir, '.pipeline-run', 'current.json'), 'utf8'),
+      history: await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8'),
+      records: await Promise.all(recordNames.map(async (name) => [name, await readFile(join(recordsPath, name), 'utf8')] as const)),
+    }
+    expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(1)
+    expect(h.err.join('\n')).toContain(
+      'ERROR: verify-build-revision-untrusted reason=null remediation=return-to-build-and-capture-current-revision',
+    )
+    expect(await h.read('demo')).toBe(before.state)
+    expect(await readFile(join(changeDir, '.pipeline-run', 'current.json'), 'utf8')).toBe(before.current)
+    expect(await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')).toBe(before.history)
+    const afterNames = (await readdir(recordsPath).catch(() => [] as string[])).sort()
+    expect(afterNames).toEqual(recordNames)
+    expect(await Promise.all(afterNames.map(async (name) => [name, await readFile(join(recordsPath, name), 'utf8')] as const)))
+      .toEqual(before.records)
   })
 
   test('pm track 豁免双 review（init 种 skipped 原样通过）', async () => {
@@ -327,7 +356,7 @@ describe('真实 e2e —— verify-fail / archived 副作用（老仓 L206-218�
   test('verify-fail：verify_result=fail + build_sha=null + phase_status=in_progress + phase=build', async () => {
     await initGoverned('demo')
     await advanceTo('demo', 'verify')
-    expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m) // 冻结在案
+    expect(await h.read('demo')).toContain(`build_sha: ${TEST_GIT_BUILD_TOKEN}`) // 冻结在案
     await seed('docs/verify-fail.md')
     await h.seedArtifact('demo', 'verification_report', 'docs/verify-fail.md')
     await approveReviewExit('demo', 'verify-fail')
@@ -386,7 +415,7 @@ describe('真实 e2e —— 跨命令串联 + 历史 JSONL（GOAL C10）', () =>
     expect(await h.run(['transition', 'demo', 'verify-fail'])).toBe(0) // → build，build_sha=null
     await h.run(['set', 'demo', 'pre_verify_review_result', 'pass'])
     expect(await h.run(['transition', 'demo', 'build-complete'])).toBe(0) // 重新收敛后冻结
-    expect(await h.read('demo')).toMatch(/^build_sha: DEADBEEF$/m)
+    expect(await h.read('demo')).toContain(`build_sha: ${TEST_GIT_BUILD_TOKEN}`)
     await seed('docs/verify.md')
     await h.seedArtifact('demo', 'verification_report', 'docs/verify.md')
     await h.run(['set', 'demo', 'branch_status', 'handled'])

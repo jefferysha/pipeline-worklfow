@@ -6,7 +6,13 @@ import { consumeIssuedPreparedContext } from '../admission/execution-context.js'
 import type { ActivateResult, AdmissionDenial, ReserveResult, RunSettlement } from '../admission/loop-admission.js'
 import { classifyFailure } from './classify.js'
 import { createSemaphore } from './semaphore.js'
-import { evaluateVerificationGate, isBoundaryVerifiedResult, type VerificationGateResult } from '../verifier/verifier.js'
+import {
+  evaluateVerificationGate,
+  isBoundaryVerifiedResult,
+  VERIFY_BUILD_REVISION_REMEDIATION,
+  VERIFY_BUILD_REVISION_UNTRUSTED,
+  type VerificationGateResult,
+} from '../verifier/verifier.js'
 import { validateVerificationResult } from '@tenon/kernel'
 import { certifyLifecycleOutcome, isCertifiedLifecycleOutcome } from '../lifecycle/outcome.js'
 import { isSettled } from '../queue/claim.js'
@@ -98,16 +104,22 @@ export function createSchedulerOutcomes(deps: SchedulerDeps, tryLedger: TryLedge
     // merged——停给人工复核。L1/L2 本就 paused，语义不变（只 L3 从 merged 改判 paused）。
     const mergeMissing = config.level === 'L3' && gate.kind === 'authorized' && outcome.mergeLanded !== true
     const forcePaused = outcome.noop === true || outcome.killSwitched === true || gate.kind === 'paused' || mergeMissing
+    const revisionUntrusted = gate.kind === 'paused' && gate.reason === VERIFY_BUILD_REVISION_UNTRUSTED
     const target = forcePaused ? 'paused' : settleSuccess(config.level)
     const terminalFields: Record<string, string> = { automation_attempts: '0' }
     if (outcome.killSwitched === true) {
       terminalFields.automation_last_error = sanitize('loop 运行中被停用（kill-switch）——未合并，停给人工复核')
       terminalFields.automation_cause = 'kill-switch'
+    } else if (revisionUntrusted) {
+      terminalFields.automation_last_error = VERIFY_BUILD_REVISION_REMEDIATION
+      terminalFields.automation_cause = VERIFY_BUILD_REVISION_UNTRUSTED
     } else if (outcome.noop === true) {
       terminalFields.automation_last_error = sanitize('no-op run：零 commit / 空构建（build_sha 缺失）——未合并、未解锁下游，停给人工复核')
       terminalFields.automation_cause = 'no-op'
     } else if (gate.kind === 'paused') {
-      terminalFields.automation_last_error = sanitize(`verification gate 未授权 merge（${gate.reason}）——未合并，停给人工复核`)
+      terminalFields.automation_last_error = gate.reason === VERIFY_BUILD_REVISION_UNTRUSTED
+        ? VERIFY_BUILD_REVISION_REMEDIATION
+        : sanitize(`verification gate 未授权 merge（${gate.reason}）——未合并，停给人工复核`)
       terminalFields.automation_cause = gate.reason
     } else if (mergeMissing) {
       terminalFields.automation_last_error = sanitize('核验已授权但缺少 lifecycle 物理 merge receipt——未把普通 RunChange 自报当作 merged')
@@ -185,7 +197,8 @@ export function createSchedulerOutcomes(deps: SchedulerDeps, tryLedger: TryLedge
         o.verifyResult === 'fail' ? 'verify-fail'
           : gate.kind === 'failure' ? 'verify-fail'
             : o.killSwitched === true ? 'kill-switch'
-              : o.noop === true ? 'no-op'
+              : gate.kind === 'paused' && gate.reason === VERIFY_BUILD_REVISION_UNTRUSTED ? VERIFY_BUILD_REVISION_UNTRUSTED
+                : o.noop === true ? 'no-op'
                 : gate.kind === 'paused' ? gate.reason
                   : o.mergeLanded === true && o.mergeJournalPending === true ? 'merge-journal-pending'
                     : o.mergeLanded === true && o.hostSyncPending === true ? 'host-sync-pending'

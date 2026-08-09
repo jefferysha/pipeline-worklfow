@@ -360,6 +360,7 @@ export interface TransitionResult {
 export interface GuardResult {
   pass: boolean
   failures: string[]
+  blockers?: readonly import('./workflow/build-revision.js').BuildRevisionBlocker[]
   /**
    * 非阻断告警（BACKLOG #12 加法扩展）：老 guard 的 yellow 提示面
    * （coverage 豁免 / 覆盖阻塞层明细等）。无告警时省略本键（lite 调用面 toEqual 兼容）。
@@ -401,7 +402,6 @@ export interface GuardContext {
   /** TENON_AUTOMATION_RUNNER=1 调度器旁路（build 相位 automation=queued 闸的逃生口） */
   automationRunner?: boolean
 }
-
 export interface FlowEngine {
   manifest: ManifestData
   legalTransitions(phase: Phase): readonly Phase[]

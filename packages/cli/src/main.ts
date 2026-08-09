@@ -18,6 +18,7 @@ import {
   BUILTIN_TRACK_DEFINITIONS, createEffectiveSkillResolver, createFlowEngine, createHistoryWriter, createStateStore,
   createInteractionEventRecorder, createTransitionRecordStore, createWorkflowRunRepository, loadManifest, loadTrackRegistry, loadWorkflow,
   fingerprintWorkspace, mutateTrackRegistry, readSecrets, registerProjectRoot,
+  createBuildRevisionToken, probeBuildRevisionIdentity,
   withTrackRegistryLock,
 } from '@tenon/kernel'
 import type { ExtendedManifestData, TrackRegistry, TrackValidationContext } from '@tenon/kernel'
@@ -200,6 +201,15 @@ async function main(): Promise<void> {
     },
     gitHeadSha: () => gitHeadSha(process.cwd()),
     workspaceFingerprint: () => fingerprintWorkspace(process.cwd()),
+    captureBuildRevision: async (isolation) => {
+      const identity = await probeBuildRevisionIdentity(process.cwd())
+      if (!identity) throw new Error('build revision identity unavailable')
+      const kind = isolation === 'in-place' ? 'workspace' as const : 'git' as const
+      const revision = kind === 'workspace'
+        ? await fingerprintWorkspace(process.cwd())
+        : await gitHeadSha(process.cwd())
+      return createBuildRevisionToken(kind, revision, identity).value
+    },
     writeReviewMarker: (content) => writeFile(join(process.cwd(), '.pipeline-pending-review'), content, 'utf8'),
     clearReviewMarker: () => rm(join(process.cwd(), '.pipeline-pending-review'), { force: true }),
     pluginVersion: readPluginVersion(),

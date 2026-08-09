@@ -1,0 +1,12 @@
+# #68 Verify attempt 1 · standards
+
+- result: FAIL
+- candidate: `workspace:sha256:f2533ea6b4c683f2ed265a6f7991b2546bd5e0b42fecc76367758eaeb9c26476`
+- attempt: `042624d4-32ee-4127-a54a-bdd93712f890`
+
+`git diff --check origin/main...HEAD` passed. The runtime import graph passed with 239 files,
+555 runtime edges and zero runtime SCCs. The architecture gate then failed because
+`packages/kernel/src/workflow/transition-application.ts` is 452 lines while the backend rule caps a
+domain module at 450 lines. `check:comments` did not run after the short-circuiting architecture
+failure. This is the only formal Review finding; the candidate must return to Build and reduce the
+module below the declared boundary without changing either build-revision or interaction behavior.

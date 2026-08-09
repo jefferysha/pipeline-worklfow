@@ -42,10 +42,10 @@ function checkNode(p: DoctorProbes): DoctorCheck {
 
 async function checkGit(p: DoctorProbes): Promise<DoctorCheck> {
   if (await p.gitAvailable()) return green('env:git', 'git 可用（build_sha 记录保障生效）')
-  return yellow(
+  return red(
     'env:git',
-    'git 不可用——build_sha 将静默记空（fail-open 降级中）',
-    '安装 git 或将其加入 PATH',
+    'git 不可用——Build revision capture 与 Verify revision guard 均 fail-closed',
+    '安装 git 或将其加入 PATH 后重新执行 Build；不得手动回填 build_sha',
   )
 }
 

@@ -211,6 +211,7 @@ async function scanAnchoredProject(
   const workspaceFingerprint = deps.workspaceFingerprint
   const capabilityDeps: WorkflowSnapshotCapabilityDeps = {
     ...(deps.fileExists === undefined ? {} : { fileExists: deps.fileExists }),
+    ...(deps.assessBuildRevision === undefined ? {} : { assessBuildRevision: deps.assessBuildRevision }),
     ...(gitHeadSha === undefined
       ? {}
       : {

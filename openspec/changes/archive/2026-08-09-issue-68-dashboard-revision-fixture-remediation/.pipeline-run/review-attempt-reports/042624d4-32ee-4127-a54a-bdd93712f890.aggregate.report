@@ -1,0 +1,15 @@
+{"version":1,"attemptId":"042624d4-32ee-4127-a54a-bdd93712f890","candidateFingerprint":"workspace:sha256:f2533ea6b4c683f2ed265a6f7991b2546bd5e0b42fecc76367758eaeb9c26476","requiredLanes":["standards","spec","e2e"],"lanes":[{"lane":"standards","result":"fail","reportPath":"openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/042624d4-32ee-4127-a54a-bdd93712f890.standards.report","reportDigest":"sha256:8330f1d6aaa9c971cc575d743a3a968261803c900c7a2738c6b2537add5635a4","recordedAt":"2026-08-09T22:53:28Z"},{"lane":"spec","result":"pass","reportPath":"openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/042624d4-32ee-4127-a54a-bdd93712f890.spec.report","reportDigest":"sha256:86fcbab50ef62579872371cf20588e90d65654edc538e2ea43b4b57ae826f120","recordedAt":"2026-08-09T22:53:28Z"},{"lane":"e2e","result":"pass","reportPath":"openspec/changes/issue-68-dashboard-revision-fixture-remediation/.pipeline-run/review-attempt-reports/042624d4-32ee-4127-a54a-bdd93712f890.e2e.report","reportDigest":"sha256:db92cf0532d3d42ca1e58b3c90ba834c71c54cbe7b3833268688c80132ff323b","recordedAt":"2026-08-09T22:53:28Z"}],"result":"fail","sourceReport":"docs/superpowers/reports/2026-08-10-issue-68-dashboard-revision-fixture-remediation-verify-attempt-1.md"}
+# #68 Verify attempt 1
+
+- result: FAIL
+- severity: MEDIUM release blocker
+- candidate: `workspace:sha256:f2533ea6b4c683f2ed265a6f7991b2546bd5e0b42fecc76367758eaeb9c26476`
+- attempt: `042624d4-32ee-4127-a54a-bdd93712f890`
+- budget: 1/2
+
+The main-agent code review found no correctness or trust regression in the fixture remediation or
+the merge conflict resolution. Spec and E2E lanes pass. Standards fails one repository architecture
+boundary: `packages/kernel/src/workflow/transition-application.ts` is 452 lines versus the 450-line
+cap. The attempt therefore fails and must take the exact `verify-fail` path back to Build. No other
+Review loop is authorized; after the focused architecture repair and Build-readiness, at most the
+second and final formal Review may run.

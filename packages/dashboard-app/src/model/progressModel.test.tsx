@@ -65,12 +65,25 @@ const REL_EXECUTION_READY = {
 /** verify 三轨证据齐（可拍板）的 fields。 */
 const VERIFY_OK = { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' }
 
+/** 新契约中的 trusted Verify：readiness 是服务端逐 event 的权威结果，测试显式提供它。 */
+const TRUSTED_VERIFY_EXECUTION = {
+  readinessByTransition: {
+    verify: {
+      'verify-pass': { ready: true, blockers: [] },
+      'verify-fail': { ready: true, blockers: [] },
+    },
+  },
+}
+function trustedVerify(name = 'c', over: Partial<ChangeSnapshot> = {}): ChangeSnapshot {
+  return makeChange(name, 'verify', { ...over, workflowExecution: TRUSTED_VERIFY_EXECUTION })
+}
+
 describe('changeProgressState —— 五态判定（表驱动全覆盖）', () => {
   const table: [string, ChangeSnapshot, ProgressRules | undefined, (typeof PROGRESS_STATES)[number]][] = [
     // ── gate（等你确认）：gate 阶段且证据/产出齐 ──
-    ['verify 三轨全 pass → gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES, 'gate'],
-    ['verify 有 fail 判定（可打回）→ gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK, verify_result: 'fail' } }), DEFAULT_RULES, 'gate'],
-    ['verify 三轨齐但 verification_report/build_sha 未设 → gate（产物没产出不等于验证没过）', makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES, 'gate'],
+    ['verify 三轨全 pass + authoritative readiness → gate', trustedVerify('c', { fields: { ...VERIFY_OK } }), DEFAULT_RULES, 'gate'],
+    ['verify 有 fail 判定（可打回）+ authoritative readiness → gate', trustedVerify('c', { fields: { ...VERIFY_OK, verify_result: 'fail' } }), DEFAULT_RULES, 'gate'],
+    ['Verify 没有 authoritative readiness 时 fail closed', makeChange('c', 'verify', { fields: { ...VERIFY_OK } }), DEFAULT_RULES, 'agent'],
     ['explore 只要求当前事件的 design_doc，不能被未来 spec 的 plan 阻塞', makeChange('c', 'explore', {
       fields: { design_doc: 'docs/d.md' },
       workflowExecution: {
@@ -109,7 +122,7 @@ describe('changeProgressState —— 五态判定（表驱动全覆盖）', () =
       },
     }), DEFAULT_RULES, 'gate'],
     ["explore 的 design_doc 是字面 'null' → agent（cmd_get 口径未设）", makeChange('c', 'explore', { fields: { design_doc: 'null', plan: 'docs/p.md' } }), DEFAULT_RULES, 'agent'],
-    ['verify 三轨全 pending 但 verify-fail 出口无字段前置 → gate', makeChange('c', 'verify'), DEFAULT_RULES, 'gate'],
+    ['verify 三轨全 pending 但两个出口 readiness 已明确 → gate', trustedVerify(), DEFAULT_RULES, 'gate'],
     ['自定义 review 步 nonempty guard 且产出未设 → agent', makeChange('c', 'review', {
       workflowExecution: REL_EXECUTION_REQUIRED,
     }), REL_RULES_GUARDED, 'agent'],
@@ -144,7 +157,7 @@ describe('changeProgressState —— 五态判定（表驱动全覆盖）', () =
       },
     }), DEFAULT_RULES, 'gate'],
     // ── 未知 automation 值：回落阶段判定 ──
-    ['automation 未知值回落阶段判定（verify 证据齐）→ gate', makeChange('c', 'verify', { fields: { ...VERIFY_OK, automation: 'bogus' } }), DEFAULT_RULES, 'gate'],
+    ['automation 未知值回落阶段判定（verify readiness 齐）→ gate', trustedVerify('c', { fields: { ...VERIFY_OK, automation: 'bogus' } }), DEFAULT_RULES, 'gate'],
   ]
 
   it.each(table)('%s', (_desc, change, rules, expected) => {
@@ -155,7 +168,7 @@ describe('changeProgressState —— 五态判定（表驱动全覆盖）', () =
     const deserializedDefaultRules = structuredClone(DEFAULT_RULES)
 
     expect(changeProgressState(
-      makeChange('c', 'verify'),
+      trustedVerify(),
       deserializedDefaultRules,
     )).toBe('gate')
   })
@@ -189,7 +202,7 @@ describe('missingGateArtifacts —— 「等 agent 补产出」的欠账清单',
 
   it('verify-fail 出口无字段前置时不把 verify-pass 的字段并集当成欠账', () => {
     const c = makeChange('c', 'verify', { fields: { verify_result: 'pass' } })
-    expect(missingGateArtifacts(c, DEFAULT_RULES)).toEqual([])
+    expect(missingGateArtifacts(c, DEFAULT_RULES)).toEqual(['verification_report'])
   })
 
   it('自定义 nonempty guard：未设产出点名；无 guard 声明 → 空（无自动证据）', () => {
@@ -247,6 +260,33 @@ describe('missingGateArtifacts —— 「等 agent 补产出」的欠账清单',
   it('default 非门阶段 / rules 缺失 → 空', () => {
     expect(missingGateArtifacts(makeChange('c', 'build'), DEFAULT_RULES)).toEqual([])
     expect(missingGateArtifacts(makeChange('c', 'verify'), undefined)).toEqual([])
+  })
+
+  it('Verify pass blocker is not hidden by a ready rollback edge', () => {
+    const mixed = makeChange('revision-blocked', 'verify', {
+      workflowExecution: {
+        readinessByTransition: {
+          verify: {
+            'verify-pass': {
+              ready: false,
+              blockers: [{
+                kind: 'verify-build-revision-untrusted',
+                code: 'verify-build-revision-untrusted',
+                reason: 'revision-stale',
+                remediation: 'return-to-build-and-capture-current-revision',
+                stateHash: `sha256:${'a'.repeat(64)}`,
+                revisionHash: `sha256:${'b'.repeat(64)}`,
+              }],
+            },
+            'verify-fail': { ready: true, blockers: [] },
+          },
+        },
+      },
+    })
+    expect(missingGateArtifacts(mixed, DEFAULT_RULES)).toEqual([
+      'verify-build-revision-untrusted reason=revision-stale remediation=return-to-build-and-capture-current-revision',
+    ])
+    expect(changeProgressState(mixed, DEFAULT_RULES)).toBe('agent')
   })
 })
 
@@ -555,7 +595,7 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
   it('行上的 state 与 changeProgressState 同源；rules 按 rulesKey 查（同名 wf 跨项目不串）', () => {
     const snap = makeSnapshot([
       makeProject('/a', [
-        makeChange('gate-1', 'verify', { fields: { ...VERIFY_OK } }),
+        trustedVerify('gate-1', { fields: { ...VERIFY_OK } }),
         makeChange('agent-1', 'spec'),
         makeChange('run-1', 'build', { fields: { automation: 'running' } }),
         makeChange('queue-1', 'open', { fields: { automation: 'queued' } }),
@@ -574,7 +614,7 @@ describe('selectProgress —— 项目×workflow 分组选择器', () => {
   it('不变式：五态计数之和 === total === 各组行数之和（聚合双项目混合态）', () => {
     const snap = makeSnapshot([
       makeProject('/a', [
-        makeChange('a-gate', 'verify', { fields: { ...VERIFY_OK } }),
+        trustedVerify('a-gate', { fields: { ...VERIFY_OK } }),
         makeChange('a-agent', 'spec'),
         makeChange('a-run', 'build', { fields: { automation: 'running' } }),
         makeChange('a-archived', 'ship', { archived: 'true' }),

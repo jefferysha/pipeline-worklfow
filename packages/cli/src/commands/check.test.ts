@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readFile, rm, truncate, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
-import { classifyTaskPlanProjectionForChange, publishTaskPlanRevision } from '@tenon/kernel'
+import {
+  classifyTaskPlanProjectionForChange,
+  createBuildRevisionToken,
+  makeBuildRevisionBlocker,
+  publishTaskPlanRevision,
+} from '@tenon/kernel'
 import type { GuardResult, PipelineState, TaskPlanRevisionV1 } from '@tenon/kernel'
 import type { GuardFileContext } from '../deps.js'
 import { cmdCheck } from './check.js'
@@ -196,13 +201,15 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     }
   })
 
-  test('真实 check 仅对真正缺失 canonical current 保留 legacy tasks absence', async () => {
+  test('真实 check 非 Verify phase 对真正缺失 canonical current 保留 legacy tasks absence', async () => {
     const root = await mkdtemp(join(tmpdir(), 'check-legacy-absence-'))
     await mkdir(join(root, 'openspec', 'changes', 'demo'), { recursive: true })
     let receivedCanonicalStatus = false
     const deps = makeDeps({
       cwd: root,
-      state: mockState({ phase: 'verify', track: 'backend' }),
+      // Verify now always runs the typed revision barrier; this legacy tasks absence assertion
+      // belongs to a non-Verify phase and preserves the old projection compatibility seam.
+      state: mockState({ phase: 'build', track: 'backend' }),
       guardCtx: makeGuardCtx(root),
     })
     deps.flow.guardCheck = spy((_state: PipelineState, context): GuardResult => {
@@ -397,6 +404,81 @@ describe('check —— guard 报告（人读）；0 过 / 2 不过（CONTRACT §
     expect(deps.flow.guardCheck.calls).toHaveLength(1)
     expect(deps.outLines).toEqual(['[CHECK] demo (phase=build)', '  [PASS] 所有检查通过'])
   })
+
+  test('Verify default check：旧 guard 绿灯也必须评估 null build_sha，typed blocker exit 2 且 assessor 恰一次', async () => {
+    const deps = makeDeps({
+      state: mockState({
+        phase: 'verify', track: 'backend', verification_report: 'docs/v.md',
+        branch_status: 'handled', agent_review_result: 'pass', codex_review_result: 'pass',
+        isolation: 'branch', build_sha: 'null',
+      }),
+    })
+    let calls = 0
+    deps.assessBuildRevision = async (request) => {
+      calls += 1
+      return { trusted: false, blocker: makeBuildRevisionBlocker('null', request.stateHash) }
+    }
+    expect(await cmdCheck(deps, 'demo')).toBe(2)
+    expect(calls).toBe(1)
+    expect(deps.outLines[1]).toMatch(
+      /^  \[FAIL\] verify-build-revision-untrusted reason=null remediation=return-to-build-and-capture-current-revision stateHash=sha256:[a-f0-9]{64}$/,
+    )
+  })
+
+  test('Verify default check：typed assessor 通过时保留 legacy PASS，且恰评估一次', async () => {
+    const deps = makeDeps({
+      state: mockState({
+        phase: 'verify', track: 'backend', verification_report: 'docs/v.md',
+        branch_status: 'handled', agent_review_result: 'pass', codex_review_result: 'pass',
+        isolation: 'branch', build_sha: 'build:v1:git:candidate',
+      }),
+    })
+    let calls = 0
+    deps.assessBuildRevision = async () => {
+      calls += 1
+      return {
+        trusted: true as const,
+        token: createBuildRevisionToken('git', 'a'.repeat(40), {
+          repository: '/repo.git', worktree: '/repo\\0/worktree',
+        }),
+      }
+    }
+    expect(await cmdCheck(deps, 'demo')).toBe(0)
+    expect(calls).toBe(1)
+    expect(deps.outLines).toContain('  [PASS] 所有检查通过')
+  })
+
+  test('非 Verify default check 不调用 revision assessor', async () => {
+    const deps = makeDeps({ state: mockState({ phase: 'build', track: 'backend', build_sha: 'null' }) })
+    let calls = 0
+    deps.assessBuildRevision = async () => {
+      calls += 1
+      throw new Error('must not be called')
+    }
+    expect(await cmdCheck(deps, 'demo')).toBe(0)
+    expect(calls).toBe(0)
+  })
+
+  test('Verify default check assessor 异常映射 evaluation-error 且 exit 2', async () => {
+    const deps = makeDeps({
+      state: mockState({
+        phase: 'verify', track: 'backend', verification_report: 'docs/v.md',
+        branch_status: 'handled', agent_review_result: 'pass', codex_review_result: 'pass',
+        isolation: 'branch', build_sha: 'build:v1:git:candidate',
+      }),
+    })
+    let calls = 0
+    deps.assessBuildRevision = async () => {
+      calls += 1
+      throw new Error('/private/raw/path')
+    }
+    expect(await cmdCheck(deps, 'demo')).toBe(2)
+    expect(calls).toBe(1)
+    expect(deps.outLines.join('\n')).toContain(
+      'verify-build-revision-untrusted reason=evaluation-error remediation=return-to-build-and-capture-current-revision',
+    )
+    expect(deps.outLines.join('\n')).not.toContain('/private/raw/path')
+  })
 })
 
 /** 自定义 workflow 的 step-guard 预览（真临时目录，同 internalSkillGate.test.ts 手法）——
@@ -525,12 +607,99 @@ steps:
     })
 
     expect(await cmdCheck(deps, 'demo')).toBe(2)
-    expect(deps.outLines).toEqual([
-      '[CHECK] demo (phase=s1)',
-      `  [FAIL] step 's1' 要求当前工作区内容等于 build 冻结基线（build_sha=${baseline}，当前=workspace:sha256:${'b'.repeat(64)}）`,
-      '  [FAIL] 共 1 项未通过',
-    ])
+    expect(deps.outLines).toHaveLength(3)
+    expect(deps.outLines[0]).toBe('[CHECK] demo (phase=s1)')
+    expect(deps.outLines[1]).toMatch(
+      /^  \[FAIL\] verify-build-revision-untrusted reason=malformed remediation=return-to-build-and-capture-current-revision stateHash=sha256:[a-f0-9]{64}$/,
+    )
+    expect(deps.outLines[1]).not.toContain(baseline)
+    expect(deps.outLines[1]).not.toContain('workspace:sha256:bbbb')
+    expect(deps.outLines[2]).toBe('  [FAIL] 共 1 项未通过')
     expect(gitCalls).toBe(0)
+  })
+
+  test('arbitrary Verify-like success exit 自动补 revision guard；仅 rollback exit 不要求 forward proof', async () => {
+    const revisionWorkflow = `name: revision-check
+steps:
+  - id: implement-anything
+    label: Implement
+    gate: null
+    skills: []
+    inputs: []
+    outputs:
+      - field: build_sha
+        type: string
+    guards: []
+    transitions:
+      - event: ready
+        to: assure-anything
+  - id: assure-anything
+    label: Assure
+    gate: review
+    skills: []
+    inputs:
+      - field: build_sha
+        type: string
+    outputs: []
+    guards:
+      - type: field-equals
+        field: branch_status
+        value: handled
+    transitions:
+      - event: pass
+        to: ship-anything
+      - event: rollback
+        to: implement-anything
+        actions:
+          - type: mark-verification-failed
+  - id: ship-anything
+    label: Ship
+    gate: null
+    skills: []
+    inputs: []
+    outputs: []
+    guards: []
+    transitions: []
+`
+    await writeFile(join(root, '.pipeline', 'workflows', 'revision-check.yaml'), revisionWorkflow, 'utf8')
+    const deps = makeDeps({
+      cwd: root,
+      state: mockState({
+        workflow: 'revision-check', phase: 'assure-anything', isolation: 'branch', build_sha: 'legacy-sha',
+        branch_status: 'handled',
+      }),
+    })
+    let successAssessCalls = 0
+    deps.assessBuildRevision = async () => {
+      successAssessCalls += 1
+      return { trusted: false, blocker: makeBuildRevisionBlocker('malformed') }
+    }
+    expect(await cmdCheck(deps, 'demo')).toBe(2)
+    expect(deps.outLines.join('\n')).toContain('verify-build-revision-untrusted')
+    expect(successAssessCalls).toBe(1)
+
+    deps.outLines.length = 0
+    let rollbackAssessCalls = 0
+    deps.assessBuildRevision = async () => {
+      rollbackAssessCalls += 1
+      return { trusted: false, blocker: makeBuildRevisionBlocker('malformed') }
+    }
+    deps.store.read = spy(async () => mockState({
+      workflow: 'revision-check', phase: 'assure-anything', isolation: 'branch', build_sha: 'legacy-sha',
+      branch_status: 'handled',
+    }))
+    expect(await cmdCheck(deps, 'demo', { event: 'rollback' })).toBe(0)
+    expect(deps.outLines).toContain('  [PASS] 所有检查通过')
+    expect(rollbackAssessCalls).toBe(0)
+
+    deps.outLines.length = 0
+    deps.store.read = spy(async () => mockState({
+      workflow: 'revision-check', phase: 'assure-anything', isolation: 'branch', build_sha: 'legacy-sha',
+      branch_status: 'unhandled',
+    }))
+    expect(await cmdCheck(deps, 'demo', { event: 'rollback' })).toBe(2)
+    expect(deps.outLines.join('\n')).toContain("step 'assure-anything' 要求字段 'branch_status'=handled")
+    expect(rollbackAssessCalls).toBe(0)
   })
 
   test('workflow 文件不存在 → exit 1，stderr 报未找到，不写 stdout', async () => {
