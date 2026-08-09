@@ -51,6 +51,20 @@ Host flags:
 
 ## Changes and state
 
+### Interaction observability
+
+```text
+tenon interaction scorecard <fixture-dir> --json
+```
+
+This read-only command replays the tracked v1 JSON fixtures and emits deterministic
+tenon-interaction-scorecard/v1 JSON. It reports the three fixed metrics, completeness,
+accepted stale decisions, same-state repeats, invalid resumes, diagnostic counts, and
+unclassified extension codes. A Change projection, when present, is the regular
+non-symlink file .pipeline-interactions.jsonl; projection failures warn after canonical
+success and never change canonical state. Prompt, token, credential, and artifact fields
+are rejected by the closed codec.
+
 ```text
 tenon init <name> --track <track> --preset <preset> [--workflow <name>]
 tenon list [--json]

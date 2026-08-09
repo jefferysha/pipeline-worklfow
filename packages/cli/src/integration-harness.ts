@@ -18,6 +18,7 @@ import {
   createEffectiveSkillResolver,
   completedWorkflowSkillsSinceStepEntry,
   createFlowEngine,
+  createInteractionEventRecorder,
   createHistoryWriter,
   createStateStore,
   createTransitionRecordStore,
@@ -297,6 +298,7 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     withRegistryLock: (cb) => withTrackRegistryLock(cwd, trackCtx, cb),
     mutateRegistry: (cb) => mutateTrackRegistry(cwd, trackCtx, cb),
     flow: createFlowEngine(manifest),
+    interaction: createInteractionEventRecorder(),
     // T-R6：镜像生产装配，每次解析 default artifact 都 fresh-load effective registry。
     resolver: createEffectiveSkillResolver({
       registry: () => loadTrackRegistry(cwd, trackCtx),

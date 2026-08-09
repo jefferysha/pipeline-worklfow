@@ -29,14 +29,14 @@ describe('真实 e2e —— PM spec-complete 自动 AFK 挂队', () => {
     )
     expect(await h.run(['init', 'pm-afk', '--track', 'pm', '--preset', 'full'])).toBe(0)
     await h.seedGovernedDocumentEvidence('pm-afk')
-    // 此用例聚焦 post-commit AFK；用真实 canonical store 预置已经完成的 Spec/review receipt，
-    // 不伪造 transition 的后置写入。
+    // 此用例聚焦 post-commit AFK；复核门必须走真实 request/acknowledge receipt 路径，
+    // 这样 transition 仍然只消费 canonical review gate，而不是测试手工拼装的受保护字段。
+    await h.seedArtifact('pm-afk', 'design_doc', 'openspec/changes/pm-afk/design.md')
     await h.seedArtifact('pm-afk', 'phase', 'spec')
-    await h.seedArtifact('pm-afk', 'review_gate_phase', 'spec')
-    await h.seedArtifact('pm-afk', 'review_gate_status', 'approved')
-    await h.seedArtifact('pm-afk', 'review_gate_event', 'spec-complete')
-    await h.seedArtifact('pm-afk', 'review_requested_at', '2026-07-07T00:00:00Z')
-    await h.seedArtifact('pm-afk', 'review_acknowledged_at', '2026-07-07T00:00:00Z')
+    await h.seedArtifact('pm-afk', 'plan', 'docs/superpowers/plans/pm-afk.md')
+    const pmRequest = await h.run(['review', 'request', 'pm-afk', '--event', 'spec-complete'])
+    expect(pmRequest, [...h.err, ...h.out].join('\n')).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'pm-afk'])).toBe(0)
 
     expect(await h.run(['transition', 'pm-afk', 'spec-complete'])).toBe(0)
     const state = await h.read('pm-afk')
@@ -49,13 +49,12 @@ describe('真实 e2e —— PM spec-complete 自动 AFK 挂队', () => {
   test('普通 frontend 默认流程仍完成 spec -> build，绝不被 PM 的自动 AFK 策略劫持', async () => {
     expect(await h.run(['init', 'frontend-normal', '--track', 'frontend', '--preset', 'full'])).toBe(0)
     await h.seedGovernedDocumentEvidence('frontend-normal')
+    await h.seedArtifact('frontend-normal', 'design_doc', 'openspec/changes/frontend-normal/design.md')
     await h.seedArtifact('frontend-normal', 'phase', 'spec')
-    await h.seedArtifact('frontend-normal', 'review_gate_phase', 'spec')
-    await h.seedArtifact('frontend-normal', 'review_gate_status', 'approved')
-    await h.seedArtifact('frontend-normal', 'review_gate_event', 'spec-complete')
-    await h.seedArtifact('frontend-normal', 'review_requested_at', '2026-07-07T00:00:00Z')
-    await h.seedArtifact('frontend-normal', 'review_acknowledged_at', '2026-07-07T00:00:00Z')
     await h.seedArtifact('frontend-normal', 'plan', 'docs/superpowers/plans/frontend-normal.md')
+    const frontendRequest = await h.run(['review', 'request', 'frontend-normal', '--event', 'spec-complete'])
+    expect(frontendRequest, [...h.err, ...h.out].join('\n')).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'frontend-normal'])).toBe(0)
 
     expect(await h.run(['transition', 'frontend-normal', 'spec-complete'])).toBe(0)
     const state = await h.read('frontend-normal')

@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { CommanderError } from 'commander'
 import {
   BUILTIN_TRACK_DEFINITIONS, createEffectiveSkillResolver, createFlowEngine, createHistoryWriter, createStateStore,
-  createTransitionRecordStore, createWorkflowRunRepository, loadManifest, loadTrackRegistry, loadWorkflow,
+  createInteractionEventRecorder, createTransitionRecordStore, createWorkflowRunRepository, loadManifest, loadTrackRegistry, loadWorkflow,
   fingerprintWorkspace, mutateTrackRegistry, readSecrets, registerProjectRoot,
   withTrackRegistryLock,
 } from '@tenon/kernel'
@@ -158,6 +158,7 @@ async function main(): Promise<void> {
       (profile) => trackCtx.skillProfiles.has(profile),
     ),
     store,
+    interaction: createInteractionEventRecorder(),
     runRepo,
     loadRegistry: () => loadTrackRegistry(process.cwd(), trackCtx),
     withRegistryLock: (cb) => withTrackRegistryLock(process.cwd(), trackCtx, cb),

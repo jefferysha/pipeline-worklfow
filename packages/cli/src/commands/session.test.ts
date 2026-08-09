@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from 'vitest'
 import { makeDeps, mockState, spy } from '../test-support.js'
-import { cmdSession, type SessionFs } from './session.js'
+import { cmdSession, resumeOccurredAt, type SessionFs } from './session.js'
 import type { PackageDecl } from '@tenon/kernel'
 
 const MONO: PackageDecl[] = [
@@ -38,6 +38,20 @@ describe('dispatch', () => {
     const deps = makeDeps()
     expect(await cmdSession(deps, 'bogus', [], fakeFs())).toBe(1)
     expect(deps.errLines.join('\n')).toContain('未知 session 子命令')
+  })
+})
+
+describe('resume timing', () => {
+  test('preserves a genuinely later activation clock', () => {
+    expect(resumeOccurredAt('2026-08-10T00:00:05.000Z', '2026-08-10T00:00:00.000Z'))
+      .toBe('2026-08-10T00:00:05.000Z')
+  })
+
+  test('raises a rollback/fixed clock to one millisecond after the effect', () => {
+    expect(resumeOccurredAt('2026-08-10T00:00:00.000Z', '2026-08-10T00:00:00.000Z'))
+      .toBe('2026-08-10T00:00:00.001Z')
+    expect(resumeOccurredAt('not-a-time', '2026-08-10T00:00:00.000Z'))
+      .toBe('not-a-time')
   })
 })
 
