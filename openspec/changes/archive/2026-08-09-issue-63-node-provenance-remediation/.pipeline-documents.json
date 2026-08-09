@@ -35,6 +35,18 @@
           "sha256": "0e2e6ed9f616dec8d41fe42ee58503d1c258a03465132daebf0494bfc4b94bb2",
           "readAt": "2026-08-09T20:50:40Z",
           "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "0e2e6ed9f616dec8d41fe42ee58503d1c258a03465132daebf0494bfc4b94bb2",
+          "readAt": "2026-08-09T20:55:54Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "0e2e6ed9f616dec8d41fe42ee58503d1c258a03465132daebf0494bfc4b94bb2",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
         }
       ]
     },
@@ -64,6 +76,18 @@
           "sha256": "384712a5dcfb5ef1d6a793503ed521aa2e03fe07a5a08d06f2217a7fda495aed",
           "readAt": "2026-08-09T20:50:40Z",
           "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "384712a5dcfb5ef1d6a793503ed521aa2e03fe07a5a08d06f2217a7fda495aed",
+          "readAt": "2026-08-09T20:55:54Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "384712a5dcfb5ef1d6a793503ed521aa2e03fe07a5a08d06f2217a7fda495aed",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
         }
       ]
     },
@@ -93,6 +117,18 @@
           "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
           "readAt": "2026-08-09T20:50:40Z",
           "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+          "readAt": "2026-08-09T20:55:54Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
         }
       ]
     },
@@ -122,6 +158,18 @@
           "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
           "readAt": "2026-08-09T20:50:40Z",
           "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+          "readAt": "2026-08-09T20:55:54Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
         }
       ]
     },
@@ -157,6 +205,18 @@
           "sha256": "f9fc5cfeb477ea689430613927fde9ab960af3e0d4686a742b4eef541d062ed9",
           "readAt": "2026-08-09T20:50:40Z",
           "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "f9fc5cfeb477ea689430613927fde9ab960af3e0d4686a742b4eef541d062ed9",
+          "readAt": "2026-08-09T20:55:54Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "f9fc5cfeb477ea689430613927fde9ab960af3e0d4686a742b4eef541d062ed9",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
         }
       ]
     },
@@ -192,6 +252,18 @@
           "sha256": "32c758536594ecf564985cb90acb7ecfd5ec737cb8c604ba049b0f67fb717b0a",
           "readAt": "2026-08-09T20:50:40Z",
           "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "32c758536594ecf564985cb90acb7ecfd5ec737cb8c604ba049b0f67fb717b0a",
+          "readAt": "2026-08-09T20:55:54Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "32c758536594ecf564985cb90acb7ecfd5ec737cb8c604ba049b0f67fb717b0a",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
         }
       ]
     },
@@ -227,6 +299,18 @@
           "sha256": "1a42fdd721e48e3fbef37e6c772884830866cbe0608c676b6e1bef151063d19e",
           "readAt": "2026-08-09T20:50:40Z",
           "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "1a42fdd721e48e3fbef37e6c772884830866cbe0608c676b6e1bef151063d19e",
+          "readAt": "2026-08-09T20:55:54Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "1a42fdd721e48e3fbef37e6c772884830866cbe0608c676b6e1bef151063d19e",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
         }
       ]
     },
@@ -244,28 +328,18 @@
           "transitionSequence": 4
         }
       },
-      "reads": []
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/issue-63-node-provenance-remediation/tasks.md",
-      "sha256": "6a62e9d72c93e8b23741092c5f4a71aa977819d1754c39125a7f2671952521c4",
-      "producer": "tenon-verify",
-      "recordedAt": "2026-08-09T20:50:26Z",
-      "producerInvocation": {
-        "confirmationInvocationId": "invocation-9563a1c82f54c126f631b21eb5cc611bfe2745963b4e71706cc480315fec4bb6",
-        "evidenceScope": "verify",
-        "stepVisit": {
-          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
-          "transitionSequence": 4
-        }
-      },
       "reads": [
         {
-          "phase": "verify",
-          "sha256": "6a62e9d72c93e8b23741092c5f4a71aa977819d1754c39125a7f2671952521c4",
-          "readAt": "2026-08-09T20:50:40Z",
-          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+          "phase": "ship",
+          "sha256": "099080a94eab5ed222ee69052d2bd4d7f4875dc68c9bf0f3af8dc3570ca79851",
+          "readAt": "2026-08-09T20:55:54Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",5]"
+        },
+        {
+          "phase": "archive",
+          "sha256": "099080a94eab5ed222ee69052d2bd4d7f4875dc68c9bf0f3af8dc3570ca79851",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
         }
       ]
     },
@@ -283,7 +357,37 @@
           "transitionSequence": 5
         }
       },
-      "reads": []
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "0ac6c99920ec02e33e0610639f838afd35dca24662abf24be9f3aaa0e8e517f5",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/issue-63-node-provenance-remediation/tasks.md",
+      "sha256": "5daa431258f666f17008409d6c5edc4e3486a9480bf642e1eed03116196a7e47",
+      "producer": "tenon-archive",
+      "recordedAt": "2026-08-09T20:56:57Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-6d14f804c0a3ac42ac239f46d044ad754aebb92dfd5c21018fefb4e5ac17a220",
+        "evidenceScope": "archive",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 6
+        }
+      },
+      "reads": [
+        {
+          "phase": "archive",
+          "sha256": "5daa431258f666f17008409d6c5edc4e3486a9480bf642e1eed03116196a7e47",
+          "readAt": "2026-08-09T20:57:00Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",6]"
+        }
+      ]
     }
   ]
 }

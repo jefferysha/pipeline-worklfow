@@ -28,8 +28,8 @@
 
 ## 交付
 
-- [ ] 应用规格，提交并推送精确 HEAD，创建同时关闭 #63 与 #44 的 PR，等待 exact-head CI。 (ship)
+- [x] 应用规格，提交并推送候选 HEAD，创建同时关闭 #63 与 #44 的 PR。 (ship)
 
 ## 归档
 
-- [ ] 用官方 Tenon 流程归档 Change，并保留实现、Review、CI 与残余风险证据。 (archive)
+- [x] 完成官方 Tenon/OpenSpec 归档 preflight；terminal transition 与最终 exact-head CI 分别由 canonical state 和 PR #69 留证。 (archive)
