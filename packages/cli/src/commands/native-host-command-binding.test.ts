@@ -188,7 +188,8 @@ describe('native lifecycle command binding', () => {
       const windowsIdentity = freezeTrustedExecutable(executable, 'win32')
       expect(windowsIdentity).toBeDefined()
       chmodSync(bin, 0o711)
-      expect(windowsIdentity?.verify()).toBe(false)
+      // chmod has no ACL/identity effect on Windows; POSIX hosts do expose the parent mode drift.
+      expect(windowsIdentity?.verify()).toBe(process.platform === 'win32')
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
