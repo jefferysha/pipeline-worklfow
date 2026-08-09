@@ -35,6 +35,12 @@
           "sha256": "7b16663e481224a290279e6ff311f844f895c2b91bd3eb3ec22a5111b337bcef",
           "readAt": "2026-08-09T16:36:32Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "7b16663e481224a290279e6ff311f844f895c2b91bd3eb3ec22a5111b337bcef",
+          "readAt": "2026-08-09T18:52:04Z",
+          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",4]"
         }
       ]
     },
@@ -70,6 +76,12 @@
           "sha256": "ca8980c151fd9dcee9cfc85e9ce762440a4d359888a957bea7cde1e6f6a4edc7",
           "readAt": "2026-08-09T16:36:32Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "ca8980c151fd9dcee9cfc85e9ce762440a4d359888a957bea7cde1e6f6a4edc7",
+          "readAt": "2026-08-09T18:52:04Z",
+          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",4]"
         }
       ]
     },
@@ -99,6 +111,12 @@
           "sha256": "b4aea8f4ac97b04e5494e288c0763890712871afe4920924eca1e34c2dabaeee",
           "readAt": "2026-08-09T16:36:32Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "b4aea8f4ac97b04e5494e288c0763890712871afe4920924eca1e34c2dabaeee",
+          "readAt": "2026-08-09T18:52:04Z",
+          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",4]"
         }
       ]
     },
@@ -122,6 +140,12 @@
           "sha256": "6d98263d810ab082cfb799545c7ace96ff2e6d63df17a68ae19352f144936694",
           "readAt": "2026-08-09T18:15:14Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "6d98263d810ab082cfb799545c7ace96ff2e6d63df17a68ae19352f144936694",
+          "readAt": "2026-08-09T18:52:04Z",
+          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",4]"
         }
       ]
     },
@@ -145,6 +169,12 @@
           "sha256": "81fe3d26946d9051c2de1784cb784ec6d87239e64f47af340dd4d5eab8ca52f0",
           "readAt": "2026-08-09T18:15:14Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "81fe3d26946d9051c2de1784cb784ec6d87239e64f47af340dd4d5eab8ca52f0",
+          "readAt": "2026-08-09T18:52:04Z",
+          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",4]"
         }
       ]
     },
@@ -168,6 +198,12 @@
           "sha256": "81fe3d26946d9051c2de1784cb784ec6d87239e64f47af340dd4d5eab8ca52f0",
           "readAt": "2026-08-09T18:15:15Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "81fe3d26946d9051c2de1784cb784ec6d87239e64f47af340dd4d5eab8ca52f0",
+          "readAt": "2026-08-09T18:52:04Z",
+          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",4]"
         }
       ]
     },
@@ -197,6 +233,12 @@
           "sha256": "bdcc4f159489ece1a920d2f34c4dde25d91672888adf9efdcb376e5a3c3c1cb4",
           "readAt": "2026-08-09T16:36:32Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "bdcc4f159489ece1a920d2f34c4dde25d91672888adf9efdcb376e5a3c3c1cb4",
+          "readAt": "2026-08-09T18:52:04Z",
+          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",4]"
         }
       ]
     },
@@ -220,8 +262,30 @@
           "sha256": "3c39bd8f696bc6f66c660c3e41b46f30037a51106e1870a106867428b542d72f",
           "readAt": "2026-08-09T18:13:29Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "3c39bd8f696bc6f66c660c3e41b46f30037a51106e1870a106867428b542d72f",
+          "readAt": "2026-08-09T18:52:04Z",
+          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",4]"
         }
       ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-10-issue-46-interaction-events-metrics-verify-attempt-1.md",
+      "sha256": "852384bff8735a999b392bfc7aafc7f875e39aee85b8120d2bd626879ab4fd33",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-09T18:51:15Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-4fda8e209cde6670f1786a514ae17355018b984103dc9b1ae9a483eb1bcc6563",
+        "evidenceScope": "verify",
+        "stepVisit": {
+          "runId": "0c180db0-1288-4ebb-9f02-b6e2dd352e3a",
+          "transitionSequence": 4
+        }
+      },
+      "reads": []
     }
   ]
 }
