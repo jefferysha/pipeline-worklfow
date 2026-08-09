@@ -94,8 +94,16 @@ describe('enforceActiveLoopExecutionWiring', () => {
   it('非 starter loop 显式绑定 custom workflow 时也不得走 default 解析旁路', async () => {
     const entry = loop({ template_id: undefined, template_version: undefined, workflow_id: 'custom-wf' })
     const resolveDefault = vi.fn(() => [])
-    const resolveCustom = vi.fn(() => [])
+    const resolveCustom = vi.fn(() => [{ token: 'custom-only-skill', alternatives: ['custom-only-skill'] }])
     const pauseAtEpoch = vi.fn(async () => ({ ok: true as const }))
+    const definition = { name: 'custom-wf', steps: [] } satisfies WorkflowDef
+    const compiled: WorkflowIR = {
+      name: 'custom-wf',
+      steps: [{
+        id: 'open', label: 'open', gate: null, skills: [], inputs: [], outputs: [],
+        guards: [], artifacts: [], transitions: [],
+      }],
+    }
     const d = deps({
       readSnapshot: vi.fn(async () => snapshot(entry)),
       pauseAtEpoch,
@@ -104,9 +112,14 @@ describe('enforceActiveLoopExecutionWiring', () => {
         repoRoot: '/repo',
         skillBundleWiring: {
           resolver: { resolveDefault, resolveCustom },
-          locator: { locate: async (skillId) => ({ skillId, contentDir: `/skills/${skillId}` }) },
+          locator: { locate: async () => {
+            throw Object.assign(new Error('custom-only-skill 未安装'), { _tag: 'SkillContentNotFoundError' })
+          } },
           isSkillProfileKnown: () => true,
         },
+        loadWorkflow: () => definition,
+        compileWorkflow: () => compiled,
+        customWorkflowRuntimeWired: true,
       },
     })
 
@@ -115,9 +128,9 @@ describe('enforceActiveLoopExecutionWiring', () => {
     expect(result.blocked).toEqual([expect.objectContaining({
       loopId: 'starter-loop', status: 'invalid', dimension: 'skill-bundle',
     })])
-    expect(result.blocked[0]?.reason).toMatch(/custom-wf|custom workflow|StepIR|解析计划/i)
+    expect(result.blocked[0]?.reason).toMatch(/custom-only-skill|custom-wf|custom workflow|StepIR|解析计划/i)
     expect(resolveDefault).not.toHaveBeenCalled()
-    expect(resolveCustom).not.toHaveBeenCalled()
+    expect(resolveCustom).toHaveBeenCalledOnce()
     expect(pauseAtEpoch).toHaveBeenCalledOnce()
   })
 

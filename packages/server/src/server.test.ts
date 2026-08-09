@@ -15,6 +15,7 @@ import {
   initChange, makeProject, makeTempHome, makeTempManifest, makeWorktreeDir, newStore, openSSE, repoManifestPath, reqDelete, reqGet,
   reqPatch, reqPost, testFlow,
   readGovernedDocumentsForCurrentVisit,
+  recordWorkflowPhaseSkill,
   seedGovernedDocumentEvidence,
 } from './test-support.js'
 import type { FlowEngine, StateStore } from '@tenon/kernel'
@@ -86,6 +87,7 @@ async function start(opts?: {
   legacyWithoutRunIdentity?: boolean
   initialWorkflow?: { workflow: string; phase: string }
   seedGovernedEvidence?: boolean
+  seedPhaseSkill?: boolean
 }): Promise<Harness> {
   const store = opts?.store ?? newStore()
   const root = await makeProject()
@@ -96,6 +98,7 @@ async function start(opts?: {
   })
   if (opts?.seedGovernedEvidence !== false) {
     await seedGovernedDocumentEvidence(root, changeDir, name)
+    if (opts?.seedPhaseSkill === true) await recordWorkflowPhaseSkill(root, changeDir)
   }
   const worktreeDir = await makeWorktreeDir()
   const hostHome = opts?.hostHome ?? await makeTempHome()
@@ -1039,7 +1042,7 @@ describe('POST /api/change/<name>/transition —— B5 token 鉴权', () => {
   })
 
   it('对 token → 200 且真改盘 .pipeline.yaml（open → explore）', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const before = await h.store.read(join(h.root, 'openspec', 'changes', h.name))
     expect(before.fields.phase).toBe('open')
 
@@ -1058,7 +1061,7 @@ describe('POST /api/change/<name>/transition —— B5 token 鉴权', () => {
   })
 
   it('G1 canonical-only：YAML projection 缺失不把 change 误判为 404，transition 提交后重建 adapter', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     await unlink(join(h.changeDir, '.pipeline.yaml'))
     const r = await reqPost(h.port, `/api/change/${h.name}/transition`, {
       root: h.root, event: 'open-complete',
@@ -1069,7 +1072,7 @@ describe('POST /api/change/<name>/transition —— B5 token 鉴权', () => {
   })
 
   it('X-Pipeline-Token header 亦被接受（对 token → 200）', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { 'X-Pipeline-Token': h.token },
     })
@@ -1078,7 +1081,7 @@ describe('POST /api/change/<name>/transition —— B5 token 鉴权', () => {
 
   it('free/matrix=false 仍由 frozen phase Skill 阻断当前 visit（HTTP transition 与 CLI 共用 required projection）', async () => {
     const manifestPath = await makeTempManifest()
-    const h = await start({ manifestPath })
+    const h = await start({ manifestPath, seedPhaseSkill: false })
     const state = await h.store.read(h.changeDir)
     await h.store.write(h.changeDir, {
       ...state,
@@ -1098,7 +1101,7 @@ describe('POST /api/change/<name>/transition —— B5 token 鉴权', () => {
 
 describe('POST /api/change/<name>/transition —— G1 default 轨收尾（breadcrumb + 显式 review receipt）', () => {
   it('进入 review 相位（explore）→ 真写 changeDir/.breadcrumb，但不在进入时自锁 review marker', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     })
@@ -1119,7 +1122,7 @@ describe('POST /api/change/<name>/transition —— G1 default 轨收尾（bread
   })
 
   it('转换到非 review 相位（build）→ 不写 .pipeline-pending-review，但仍真写 .breadcrumb（两个决策相互独立，非「都跟着 review 走」）', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     await mkdir(join(h.root, '.pipeline'), { recursive: true })
     await writeFile(
       join(h.root, '.pipeline', 'automation.json'),
@@ -1134,6 +1137,7 @@ describe('POST /api/change/<name>/transition —— G1 default 轨收尾（bread
       fields: { ...state.fields, phase: 'spec', track: 'pm', plan: `docs/superpowers/plans/${h.name}.md` },
     })
     await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
 
     const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'spec-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
@@ -1201,15 +1205,16 @@ describe('POST 写端点纵深防线（老仓安全模型 parity）', () => {
 
 describe('POST /api/change/<name>/transition —— .pipeline-history.jsonl 记账（G20 / v5-T1）', () => {
   it('转换成功 → changeDir/.pipeline-history.jsonl 追加一行，形状对齐 CLI recordHistory（kind=transition + raw=event 不变式）', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     })
     expect(r.status).toBe(200)
     const text = await readFile(join(h.changeDir, '.pipeline-history.jsonl'), 'utf8')
-    const lines = text.trim().split('\n')
+    const lines = text.trim().split('\n').map((line) => JSON.parse(line) as { kind?: string })
+      .filter((line) => line.kind === 'transition')
     expect(lines).toHaveLength(1)
-    expect(JSON.parse(lines[0]!)).toEqual({
+    expect(lines[0]).toEqual({
       ts: '2026-07-07T00:00:00Z',
       kind: 'transition',
       from: 'open',
@@ -1222,16 +1227,19 @@ describe('POST /api/change/<name>/transition —— .pipeline-history.jsonl 记�
   })
 
   it('转换被拒（event 与当前 phase 不匹配 → 409）→ 不写 history（guard 拒绝零记账）', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const r = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'verify-pass' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     })
     expect(r.status).toBe(409)
-    expect(existsSync(join(h.changeDir, '.pipeline-history.jsonl'))).toBe(false)
+    const historyPath = join(h.changeDir, '.pipeline-history.jsonl')
+    const history = existsSync(historyPath) ? await readFile(historyPath, 'utf8') : ''
+    const transitions = history.split('\n').filter((line) => line.includes('"kind":"transition"'))
+    expect(transitions).toHaveLength(0)
   })
 
   it('连续两次转换 → 追加两行（append 语义，不覆盖）', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     // explore-complete 有 design_doc 前置校验（字段非空 + 文件真存在）——先满足再转换。
     const { writeFile } = await import('node:fs/promises')
     await writeFile(join(h.root, 'design.md'), '# design\n', 'utf8')
@@ -1243,10 +1251,12 @@ describe('POST /api/change/<name>/transition —— .pipeline-history.jsonl 记�
       expect(r.status).toBe(200)
       if (event === 'open-complete') {
         await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
+        await recordWorkflowPhaseSkill(h.root, h.changeDir)
       }
     }
     const text = await readFile(join(h.changeDir, '.pipeline-history.jsonl'), 'utf8')
-    const rows = text.trim().split('\n').map((l) => JSON.parse(l) as { from: string; to: string })
+    const rows = text.trim().split('\n').map((l) => JSON.parse(l) as { kind?: string; from: string; to: string })
+      .filter((row) => row.kind === 'transition')
     expect(rows.map((e) => `${e.from}->${e.to}`)).toEqual(['open->explore', 'explore->spec'])
   })
 })
@@ -1285,16 +1295,16 @@ describe('GET /api/change/:name/history —— 阶段时间线读端点（G21 / 
   })
 
   it('转换成功后立即可读（写读闭环：POST transition → GET history 回放同一条记录）', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     })
     expect(w.status).toBe(200)
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
-    expect(
-      r.json<{ entries: Array<{ kind: string; from: string; to: string; raw: string; transitionRecordId?: string }> }>().entries,
-    ).toEqual([
+    const entries = r.json<{ entries: Array<{ kind: string; from: string; to: string; raw: string; transitionRecordId?: string }> }>()
+      .entries.filter((entry) => entry.kind === 'transition')
+    expect(entries).toEqual([
       // 这次转换首次建立 canonical 链（懒生成兜底），history 端点走 canonical 分支返回，条目带
       // transitionRecordId（chain.map(transitionRecordToHistoryEntry) 的标配字段）。
       { ts: '2026-07-07T00:00:00Z', kind: 'transition', from: 'open', to: 'explore', raw: 'open-complete', transitionRecordId: expect.any(String) },
@@ -1305,7 +1315,7 @@ describe('GET /api/change/:name/history —— 阶段时间线读端点（G21 / 
     '此前 canonical 链只写不读，GET history 事实上仍然只读 JSONL）——转换后手动破坏一行带真实' +
     'transitionRecordId 标记的 JSONL 条目，history 端点仍返回真实（canonical）数据，证明来源' +
     '判定只认标记是否存在、内容本身不是真相源，只有真读 canonical 链才会看到正确的 to', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     })
@@ -1313,7 +1323,8 @@ describe('GET /api/change/:name/history —— 阶段时间线读端点（G21 / 
     // 抓真实写入的 transitionRecordId：篡改的必须是「一行真的带标记的 canonical 投影」，不是
     // 恰好没打标记的遗留行——后者在新机制下本就会被当 legacy 原样保留，测不出"真读链、内容
     // 不看 JSONL"这件事。
-    const real = JSON.parse((await readFile(join(h.changeDir, '.pipeline-history.jsonl'), 'utf8')).trim()) as {
+    const real = JSON.parse((await readFile(join(h.changeDir, '.pipeline-history.jsonl'), 'utf8'))
+      .split('\n').find((line) => line.includes('"kind":"transition"')) ?? '{}') as {
       transitionRecordId: string
     }
     // 破坏 JSONL：把 to 改成一个转换从未发生过的假相位，但保留真实 transitionRecordId 标记。
@@ -1336,7 +1347,7 @@ describe('GET /api/change/:name/history —— 阶段时间线读端点（G21 / 
   it('老 change 升级场景：canonical 链建立之前就存在、不带 transitionRecordId 的 JSONL transition ' +
     '条目被保留（保留的原因是"没有标记"，不是"时间早"——新机制不比较任何时间戳），链建立之后的' +
     '转换走 canonical（带标记）——合并后既不丢历史也不重复计入', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     // 模拟一条"canonical 链出现之前"就已经存在的老 transition 记录：关键是它没有
     // transitionRecordId（老 writer 产生的，压根不知道这个字段），不是因为它的 ts 早——ts 只是
     // 顺带写成早于本次真转换，贴近真实老 change 升级场景，但保留与否不依赖这一点（时钟回拨场景
@@ -1344,6 +1355,7 @@ describe('GET /api/change/:name/history —— 阶段时间线读端点（G21 / 
     const { writeFile } = await import('node:fs/promises')
     const preCanonical = { ts: '2026-07-06T00:00:00Z', kind: 'transition', from: 'archive', to: 'archive', raw: 'archived' }
     await writeFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(preCanonical)}\n`, 'utf8')
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     // 真转换：这次会首次建立 canonical 链（runRepo.transact 的懒生成兜底），时间戳是 fixed clock，
     // 晚于上面手写的老记录
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
@@ -1352,7 +1364,7 @@ describe('GET /api/change/:name/history —— 阶段时间线读端点（G21 / 
     expect(w.status).toBe(200)
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
     const entries = r.json<{ entries: Array<{ ts: string; kind: string; from: string; to: string; raw: string; transitionRecordId?: string }> }>()
-      .entries
+      .entries.filter((entry) => entry.kind === 'transition')
     // 老记录（链建立前，无标记）与新记录（canonical 链，带标记）都在，按时间排好序，互不重复
     expect(entries).toEqual([
       { ts: '2026-07-06T00:00:00Z', kind: 'transition', from: 'archive', to: 'archive', raw: 'archived' },
@@ -1397,13 +1409,15 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     // 证明它不是同一次转换的重复投影，只是巧合撞了同一秒，理应两条都保留。
     const legacySameTs = { ts: '2026-07-07T00:00:00Z', kind: 'transition', from: 'verify', to: 'ship', raw: 'verify-pass' }
     await writeFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(legacySameTs)}\n`, 'utf8')
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     }) // 真实转换的 ts 同样是 fixed clock '2026-07-07T00:00:00Z'
     expect(w.status).toBe(200)
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
-    const entries = r.json<{ entries: Array<{ ts: string; raw: string; transitionRecordId?: string }> }>().entries
+    const entries = r.json<{ entries: Array<{ ts: string; raw: string; kind?: string; transitionRecordId?: string }> }>().entries
+      .filter((entry) => entry.kind === 'transition')
     expect(entries).toHaveLength(2)
     expect(entries).toContainEqual(legacySameTs)
     expect(entries.find((e) => e.raw === 'open-complete')).toMatchObject({
@@ -1413,17 +1427,19 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
 
   it('时钟回拨场景（遗留 JSONL 条目的 ts 比 canonical 链的 ts 更晚）→ 遗留条目仍正确保留（原方案' +
     '`e.ts < earliestCanonicalTs` 会判它为 false 从而误删——新方案不比较时间戳，只看标记）', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const { writeFile } = await import('node:fs/promises')
     const legacyLaterTs = { ts: '2026-07-08T00:00:00Z', kind: 'transition', from: 'verify', to: 'ship', raw: 'verify-pass' }
     await writeFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(legacyLaterTs)}\n`, 'utf8')
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     }) // canonical 链首次建立，ts 是 fixed clock '2026-07-07T00:00:00Z'，反而早于上面的遗留记录
     expect(w.status).toBe(200)
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
-    const entries = r.json<{ entries: Array<{ ts: string; raw: string }> }>().entries
+    const entries = r.json<{ entries: Array<{ ts: string; raw: string; kind?: string }> }>().entries
+      .filter((entry) => entry.kind === 'transition')
     expect(entries).toHaveLength(2)
     expect(entries).toContainEqual(legacyLaterTs)
     // 展示顺序仍按 ts 升序排（canonical 在前，遗留在后）——但"是否保留"与这个顺序无关
@@ -1431,10 +1447,11 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
   })
 
   it('G1 canonical cutover：current 的 head TransitionRecord 缺失 → history fail-loud，绝不回退 JSONL 伪装完整', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const { writeFile, unlink } = await import('node:fs/promises')
     const legacy = { ts: '2026-07-01T00:00:00Z', kind: 'transition', from: 'spec', to: 'build', raw: 'spec-approved' }
     await writeFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(legacy)}\n`, 'utf8')
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     })
@@ -1450,10 +1467,11 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
   })
 
   it('G1 canonical 全链：链中途缺祖先记录 → history fail-loud，不返回看似完整的后缀', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const { writeFile, unlink } = await import('node:fs/promises')
     const legacy = { ts: '2026-07-01T00:00:00Z', kind: 'transition', from: 'archive', to: 'archive', raw: 'archived-long-ago' }
     await writeFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(legacy)}\n`, 'utf8')
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     // explore-complete 的前置（design_doc）
     await writeFile(join(h.root, 'design.md'), '# design\n', 'utf8')
     await h.store.set(h.changeDir, 'design_doc', 'design.md')
@@ -1462,6 +1480,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     }) // sequence 1: open -> explore
     expect(w1.status).toBe(200)
     await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     const w2 = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'explore-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     }) // sequence 2: explore -> spec
@@ -1494,7 +1513,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
 
   it('晚于 canonical 链建立之后才写入的、不带 transitionRecordId 的 JSONL transition 条目（模拟迟到的' +
     ' tenon import）→ 必须保留，即使它在文件里的物理位置排在 canonical 投影之后', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     })
@@ -1506,7 +1525,8 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     await appendFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(lateImport)}\n`, 'utf8')
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
-    const entries = r.json<{ entries: Array<{ raw: string; transitionRecordId?: string }> }>().entries
+    const entries = r.json<{ entries: Array<{ raw: string; kind?: string; transitionRecordId?: string }> }>().entries
+      .filter((entry) => entry.kind === 'transition')
     expect(entries).toHaveLength(2)
     expect(entries.some((e) => e.raw === 'open-complete' && typeof e.transitionRecordId === 'string')).toBe(true)
     expect(entries.some((e) => e.raw === 'legacy-import-transitions_history' && e.transitionRecordId === undefined)).toBe(true)
@@ -1526,6 +1546,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     await writeFile(
       join(h.changeDir, '.pipeline-history.jsonl'), nonTransitionRows.map((row) => JSON.stringify(row)).join('\n') + '\n', 'utf8',
     )
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     const w = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'open-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     }) // 建立 canonical 链，证明非 transition kind 在链存在时也不受影响
@@ -1533,9 +1554,12 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
     const entries = r.json<{ entries: Array<Record<string, unknown>> }>().entries
-    expect(entries).toHaveLength(6) // 5 条非 transition + 1 条 canonical transition
+    const relevantEntries = entries.filter((entry) =>
+      nonTransitionRows.some((row) => JSON.stringify(row) === JSON.stringify(entry)) || entry.raw === 'open-complete',
+    )
+    expect(relevantEntries).toHaveLength(6) // 5 条非 transition + 1 条 canonical transition
     for (const row of nonTransitionRows) {
-      expect(entries).toContainEqual(row)
+      expect(relevantEntries).toContainEqual(row)
     }
   })
 
@@ -1543,7 +1567,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     '顺序排列，不因回拨的 ts 颠倒（两指针合并保证 canonical 序列内部两个元素永远不互相比较，这是 ' +
     'codex 架构 review 点名的 P2：sortByTs 对拼接后的整体数组重排会让权威的因果顺序被不可靠的时间戳打乱）', async () => {
     let observedAt = '2026-07-07T00:00:00Z'
-    const h = await start({ clock: () => observedAt })
+    const h = await start({ clock: () => observedAt, seedPhaseSkill: true })
     const { writeFile } = await import('node:fs/promises')
     // explore-complete 的前置（design_doc）
     await writeFile(join(h.root, 'design.md'), '# design\n', 'utf8')
@@ -1553,6 +1577,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     }) // sequence 1: open -> explore
     expect(w1.status).toBe(200)
     await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     observedAt = '2020-01-01T00:00:00Z' // 系统时钟在第二次真实 commit 前回拨
     const w2 = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'explore-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
@@ -1560,7 +1585,8 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     expect(w2.status).toBe(200)
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
-    const entries = r.json<{ entries: Array<{ raw: string; ts: string }> }>().entries
+    const entries = r.json<{ entries: Array<{ raw: string; ts: string; kind?: string }> }>().entries
+      .filter((entry) => entry.kind === 'transition')
     // sequence 1（open-complete）仍排在 sequence 2（explore-complete）前面——canonical 记录之间
     // 的相对顺序由 sequence 决定，不受回拨 ts 影响，即使 explore-complete 的 ts 显示更早。
     expect(entries.map((e) => e.raw)).toEqual(['open-complete', 'explore-complete'])
@@ -1568,7 +1594,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
   })
 
   it('G1：非 head 的祖先 TransitionRecord 被改写也必须让 history fail-loud', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     await writeFile(join(h.root, 'design.md'), '# design\n', 'utf8')
     await h.store.set(h.changeDir, 'design_doc', 'design.md')
     for (const event of ['open-complete', 'explore-complete']) {
@@ -1578,6 +1604,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
       expect(w.status).toBe(200)
       if (event === 'open-complete') {
         await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
+        await recordWorkflowPhaseSkill(h.root, h.changeDir)
       }
     }
     const recordsDir = join(h.changeDir, '.pipeline-transitions')
@@ -1594,11 +1621,12 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
 
   it('对照：legacy 条目与 canonical 条目混合时，legacy 仍按自身 ts 插入到正确位置（回归防护——证明' +
     '两指针合并没有破坏"混合排序在正常情况下仍然合理"这条既有性质）', async () => {
-    const h = await start()
+    const h = await start({ seedPhaseSkill: true })
     const { writeFile, appendFile } = await import('node:fs/promises')
     const legacyEarly = { ts: '2026-07-01T00:00:00Z', kind: 'transition', from: 'archive', to: 'archive', raw: 'legacy-early' }
     const legacyLate = { ts: '2026-07-09T00:00:00Z', kind: 'transition', from: 'archive', to: 'archive', raw: 'legacy-late' }
     await writeFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(legacyEarly)}\n`, 'utf8')
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     // explore-complete 的前置（design_doc）
     await writeFile(join(h.root, 'design.md'), '# design\n', 'utf8')
     await h.store.set(h.changeDir, 'design_doc', 'design.md')
@@ -1607,6 +1635,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     }) // sequence 1: open -> explore，ts = fixed clock '2026-07-07T00:00:00Z'
     expect(w1.status).toBe(200)
     await readGovernedDocumentsForCurrentVisit(h.root, h.changeDir)
+    await recordWorkflowPhaseSkill(h.root, h.changeDir)
     const w2 = await reqPost(h.port, `/api/change/${h.name}/transition`, { root: h.root, event: 'explore-complete' }, {
       headers: { Authorization: `Bearer ${h.token}` },
     }) // sequence 2: explore -> spec，ts 同样是 fixed clock '2026-07-07T00:00:00Z'
@@ -1614,7 +1643,8 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
     await appendFile(join(h.changeDir, '.pipeline-history.jsonl'), `${JSON.stringify(legacyLate)}\n`, 'utf8')
     const r = await reqGet(h.port, `/api/change/${h.name}/history?root=${encodeURIComponent(h.root)}`)
     expect(r.status).toBe(200)
-    const entries = r.json<{ entries: Array<{ raw: string }> }>().entries
+    const entries = r.json<{ entries: Array<{ raw: string; kind?: string }> }>().entries
+      .filter((entry) => entry.kind === 'transition')
     // legacy-early（ts 最早）排最前；两条 canonical 记录（ts 相同、未被篡改）按 sequence 顺序
     // 紧随其后；legacy-late（ts 最晚）排最后——混合排序在正常情况下依然合理。
     expect(entries.map((e) => e.raw)).toEqual(['legacy-early', 'open-complete', 'explore-complete', 'legacy-late'])
@@ -1633,7 +1663,7 @@ describe('GET /api/change/:name/history —— transitionRecordId 来源判定�
 
 describe('GET /api/stream —— SSE 真推送（.pipeline.yaml 变化即推）', () => {
   it('首连推初始快照；transition 改盘后推新快照（phase=explore）', async () => {
-    const h = await start({ pollIntervalMs: 20 })
+    const h = await start({ pollIntervalMs: 20, seedPhaseSkill: true })
     const sse = await openSSE(h.port, '/api/stream')
     // 初始快照
     const first = await sse.waitFor((e) => e.event === 'snapshot')

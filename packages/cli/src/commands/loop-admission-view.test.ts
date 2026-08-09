@@ -28,6 +28,7 @@ function loop(over: Partial<LoopEntry> = {}): LoopEntry {
 function fakeResolver(slotsByPhase: Record<string, EffectiveSkillSlot[]> = {}): EffectiveSkillResolver {
   return {
     resolveDefault: (stepId: string) => slotsByPhase[stepId] ?? [],
+    resolveExplicitProfile: (_capability, stepId: string) => slotsByPhase[stepId] ?? [],
     resolveCustom: () => [],
   }
 }
@@ -36,6 +37,7 @@ function fakeResolver(slotsByPhase: Record<string, EffectiveSkillSlot[]> = {}): 
 function throwingResolver(message = 'manifest token 畸形'): EffectiveSkillResolver {
   return {
     resolveDefault: () => { throw new Error(message) },
+    resolveExplicitProfile: () => { throw new Error(message) },
     resolveCustom: () => [],
   }
 }
@@ -204,6 +206,7 @@ describe('evaluateSkillBundleWiring', () => {
     const seen: string[] = []
     const resolver: EffectiveSkillResolver = {
       resolveDefault: (stepId) => { seen.push(stepId); return [] },
+      resolveExplicitProfile: (_capability, stepId) => { seen.push(stepId); return [] },
       resolveCustom: () => [],
     }
     await evaluateSkillBundleWiring(loop({ skill_bundle_id: '_all', phases: ['explore', 'build'] }), {
