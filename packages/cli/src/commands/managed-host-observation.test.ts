@@ -93,8 +93,21 @@ function observationEnv(state: {
       if (text === 'git ls-remote https://github.com/jefferysha/tenon.git refs/heads/main') {
         return { code: 0, stdout: `${state.remoteHead}\trefs/heads/main\n`, stderr: '' }
       }
-      if (text === 'git ls-remote https://github.com/jefferysha/tenon.git refs/tags/v1.0.2 refs/tags/v1.0.2^{}') {
-        return { code: 0, stdout: `${state.remoteHead}\trefs/tags/v1.0.2\n`, stderr: '' }
+      const stableTag = /^git ls-remote https:\/\/github\.com\/jefferysha\/tenon\.git refs\/tags\/(v[0-9]+\.[0-9]+\.[0-9]+) refs\/tags\/\1\^\{\}$/u.exec(text)?.[1]
+      if (stableTag !== undefined) {
+        return { code: 0, stdout: `${state.remoteHead}\trefs/tags/${stableTag}\n`, stderr: '' }
+      }
+      if (/^git init --bare .+$/u.test(text)) {
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      if (/^git -C .+ fetch --no-tags --depth=1 https:\/\/github\.com\/jefferysha\/tenon\.git refs\/tags\/v[0-9]+\.[0-9]+\.[0-9]+$/u.test(text)) {
+        return { code: 0, stdout: '', stderr: '' }
+      }
+      if (/^git -C .+ rev-parse FETCH_HEAD\^\{commit\}$/u.test(text)) {
+        return { code: 0, stdout: `${state.remoteHead}\n`, stderr: '' }
+      }
+      if (/^git -C .+ cat-file -t [a-f0-9]{40}$/u.test(text)) {
+        return { code: 0, stdout: 'commit\n', stderr: '' }
       }
       return { code: 1, stdout: '', stderr: `unexpected command: ${text}` }
     },
@@ -494,7 +507,7 @@ describe('managed native-host observation', () => {
     expect(() => observeNativeHost(pluginEnv, 'codex')).toThrow(/plugin identity.*重复/)
   })
 
-  test('disabled tenon plugin is not accepted as authoritative desired inventory', () => {
+  test('disabled tenon plugin remains observable for remove/reinstall reconciliation', () => {
     const env = observationEnv({
       head: 'a'.repeat(40),
       remoteHead: 'b'.repeat(40),
@@ -512,6 +525,8 @@ describe('managed native-host observation', () => {
       }
       return result
     }
-    expect(() => observeNativeHost(env, 'codex')).toThrow(/plugin identity 未启用/)
+    expect(JSON.parse(observeNativeHost(env, 'codex'))).toMatchObject({
+      plugin: { enabled: false, version: '1.0.1' },
+    })
   })
 })

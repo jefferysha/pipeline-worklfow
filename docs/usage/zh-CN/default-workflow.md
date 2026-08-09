@@ -41,6 +41,11 @@ Default workflow 是 Tenon 的完整治理路径。每个阶段都有明确输�
 
 Explore、Spec、Verify 的 review 必须绑定 exact phase 和 exact event。同一份确认不能同时授权 `verify-pass` 与 `verify-fail`。持续授权只改变确认记录方式，不改变 guard。
 
+Verify 对冻结的 `build_sha` 只开启一个自动 Review attempt。代码/标准、规格、安全、E2E、
+浏览器与视觉验收是同一 attempt 的不同 lane，共用次数上限；E2E 不单独再算一次 Review。
+任何 Review Skill、reviewer agent 或 E2E runner 都必须在 attempt 已激活后才能派发。
+Build 中的 TDD、单元测试、类型检查、lint 和窄集成测试属于实现反馈，不消耗 Review 次数。
+
 ## 阶段产物总览
 
 | Phase | 关键产物 | 主要出口条件 |

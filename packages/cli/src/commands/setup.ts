@@ -100,11 +100,15 @@ export function cmdSetup(
             : hostCode.then((code) => finish(code))
         }
         if (o.dryRun || !interactive) return runWithBrowserPolicy(false)
-        const trustedBashPath = isNativePipelineHost(host)
-          ? lifecycleEnv.resolveTrustedCommand?.('bash')
+        const trustedBash = isNativePipelineHost(host)
+          ? lifecycleEnv.resolveTrustedCommandBinding?.('bash')
+          : undefined
+        const trustedBashPath = trustedBash?.executable
+        const trustedNode = isNativePipelineHost(host)
+          ? lifecycleEnv.resolveTrustedCommandBinding?.('node')
           : undefined
         if (isNativePipelineHost(host)
-          && lifecycleEnv.resolveTrustedCommand !== undefined
+          && lifecycleEnv.resolveTrustedCommandBinding !== undefined
           && trustedBashPath === undefined) {
           return runWithBrowserPolicy(false)
         }
@@ -112,6 +116,12 @@ export function cmdSetup(
           homeDir: lifecycleEnv.homeDir(),
           env: lifecycleEnv.runtimeEnv(),
           ...(trustedBashPath === undefined ? {} : { trustedBashPath }),
+          ...(trustedBash === undefined ? {} : { verifyTrustedBash: trustedBash.assert }),
+          ...(trustedNode === undefined ? {} : {
+            trustedNodePath: trustedNode.executable,
+            trustedNodeProof: trustedNode.proof,
+            verifyTrustedNode: trustedNode.assert,
+          }),
         }).then(
           (before) => runWithBrowserPolicy(!before.activeValid),
           (error) => {

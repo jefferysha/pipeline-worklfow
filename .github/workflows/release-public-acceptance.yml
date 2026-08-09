@@ -1,0 +1,55 @@
+name: Public release acceptance
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stable-release-${{ github.event.repository.full_name }}
+  cancel-in-progress: false
+
+jobs:
+  public-install-update:
+    if: >-
+      github.event.repository.default_branch == 'main' &&
+      github.event.release.draft == false &&
+      github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Validate immutable stable release event
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET: ${{ github.event.release.target_commitish }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [ "$RELEASE_TARGET" = main ]
+          [ "$WORKFLOW_REF" = "$GITHUB_REPOSITORY/.github/workflows/release-public-acceptance.yml@refs/heads/main" ]
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
+      - name: Prove checkout is the published immutable tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          [ "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" ]
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact test dependencies and Codex CLI
+        run: |
+          npm ci
+          npm install --global @openai/codex@0.144.1
+      - name: Public new-user install, repeat install, update and Dashboard proof
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: node tools/clean-codex-install-acceptance.mjs --mode public --public-ref "$RELEASE_TAG"

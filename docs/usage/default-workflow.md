@@ -33,6 +33,13 @@ Transitions:
 
 Explore, Spec, and Verify are review-gated.
 
+The Verify phase also opens exactly one automated Review attempt for the frozen
+`build_sha`. Its standards, spec, and E2E lanes share the same attempt ID and
+finite Workflow budget. E2E is a Review lane, not an independent Review count.
+No Review Skill, reviewer agent, or E2E runner may start before that attempt is
+active. Build TDD, unit tests, type checks, lint, and narrow integration tests
+remain Build feedback and do not consume the Review budget.
+
 Ship also has a machine-enforced migration guard. When the Change contains
 `migration/spec-application.json`, the managed apply tool must produce a result bound to the
 Change, input receipt, delta, target path, and final digest. Both `tenon check` and

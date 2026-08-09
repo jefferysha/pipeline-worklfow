@@ -174,7 +174,8 @@ export function parseAudit(raw: string): RuntimeAuditEntry | null {
   const releaseId = value.releaseId
   const previousRelease = value.previousRelease
   if (at === null || detail === null
-    || (kind !== 'activated' && kind !== 'activation-rejected' && kind !== 'rolled-back'
+    || (kind !== 'activation-prepared' && kind !== 'activated' && kind !== 'activation-rejected'
+      && kind !== 'rollback-prepared' && kind !== 'rolled-back'
       && kind !== 'rollback-rejected' && kind !== 'update-rejected' && kind !== 'pruned')
     || (releaseId !== undefined && !validReleaseId(releaseId))
     || (previousRelease !== undefined && previousRelease !== null && !validReleaseId(previousRelease))) return null
@@ -211,19 +212,35 @@ export async function readSelection(paths: RuntimePaths): Promise<RuntimeSelecti
   }
 }
 
-export async function lastAudit(paths: RuntimePaths): Promise<RuntimeAuditEntry | null> {
+export interface RuntimeAuditState {
+  readonly lastAudit: RuntimeAuditEntry | null
+  readonly auditCorrupt: boolean
+}
+
+export async function readAuditState(paths: RuntimePaths): Promise<RuntimeAuditState> {
   try {
-    const lines = (await readFile(paths.auditPath, 'utf8')).trim().split(/\r?\n/)
-    for (let index = lines.length - 1; index >= 0; index -= 1) {
-      const line = lines[index]
-      if (line === undefined || line === '') continue
+    const raw = await readFile(paths.auditPath, 'utf8')
+    if (raw === '') return { lastAudit: null, auditCorrupt: false }
+    if (!raw.endsWith('\n')) return { lastAudit: null, auditCorrupt: true }
+    const lines = raw.slice(0, -1).split(/\r?\n/)
+    let latest: RuntimeAuditEntry | null = null
+    for (const line of lines) {
+      if (line === '') return { lastAudit: null, auditCorrupt: true }
       const parsed = parseAudit(line)
-      if (parsed !== null) return parsed
+      if (parsed === null) return { lastAudit: null, auditCorrupt: true }
+      latest = parsed
     }
-    return null
-  } catch {
-    return null
+    return { lastAudit: latest, auditCorrupt: false }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { lastAudit: null, auditCorrupt: false }
+    }
+    return { lastAudit: null, auditCorrupt: true }
   }
+}
+
+export async function lastAudit(paths: RuntimePaths): Promise<RuntimeAuditEntry | null> {
+  return (await readAuditState(paths)).lastAudit
 }
 
 export async function writeAudit(paths: RuntimePaths, entry: RuntimeAuditEntry): Promise<void> {

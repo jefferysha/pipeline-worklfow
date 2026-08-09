@@ -178,14 +178,16 @@
   必须由 `pipeline-spec` 重登记 proposal/design/tasks 的当前 SHA、补读取收据并重新通过 spec review。
 - **Phase-scoped Todo gate**：有标准阶段标题的 `tasks.md` 在出口只统计截至当前 phase 的未完成项；
   未来 phase 任务仍由 UI 展示，但不反向阻塞。无阶段标题的历史文件保留“build 全清单完成”兼容语义。
-- **Build pre-Verify 全量收敛门**：`pre_verify_review_result` 初始为 `pending`。Build 必须先对完整
-  待冻结 diff、全部受影响 capability / ADR / plan / 调用方 / 兼容边界和适用 release gate 做
-  Standards + Spec 双轴审查，等待全部适用检查后一次性聚合 findings；只有
-  Critical/High/Medium 全部清零且证据完整时才可置 `pass`，不得以批准偏差把已知 Medium
-  带入 Verify。
+- **Build pre-Verify readiness 门**：`pre_verify_review_result` 初始为 `pending`（字段名为兼容 ABI
+  保留）。Build 必须对完整待冻结 diff 建立 capability / ADR / plan / 调用方 / 兼容边界覆盖表，并
+  跑完适用 build、type、unit/integration、lint、静态检查与 release gate；这些是实现反馈，不产生
+  Review verdict，也不创建或消耗 Review attempt。只有 readiness 证据完整时才可置 `pass`。
   `build-complete` 硬性要求该字段为 `pass`；`spec-complete`、`requirements-changed` 与
-  `verify-fail` 都会重置为 `pending`。若通过后交付面再变化，Build 协议要求立即重置并重跑全量审查。
-  这道门负责在 Build 内一次收敛，不替代 Verify 对冻结基线的独立全量复核。
+  `verify-fail` 都会重置为 `pending`。若通过后交付面再变化，Build 协议要求立即重置并重跑 readiness。
+- **有限聚合 Review**：冻结候选后的 Standards/Spec、安全、E2E/API/browser/visual 与发布候选验收
+  都是同一个 Review attempt 的 lanes，不得各自计次或形成独立循环。Workflow 通过版本化
+  `review_budget` 配置每个 scope 的有限上限；默认上限为 2。每轮必须完成冻结的 required lanes 并
+  一次性聚合，Critical/High/Medium 全部清零才可通过。预算耗尽后停止自动 Review，等待显式人类处置。
 - **Build→Verify 可复验基线**：状态字段仍命名为 `build_sha` 以兼容既有 state ABI，但它是
   “构建基线”而非永远的 Git SHA。`isolation=branch|worktree` 冻结 `git rev-parse HEAD`；
   `isolation=in-place` 冻结 `workspace:sha256:<64 hex>`，即排除 `.git`、依赖、OpenSpec/文档证据、

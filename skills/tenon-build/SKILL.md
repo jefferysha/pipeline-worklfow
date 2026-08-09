@@ -171,15 +171,14 @@ tenon handoff "$TENON_CHANGE_NAME" --bundle --target build --json
    - **只有用户确认风格方向 + 选定 winner 后**，才进入下一步精修评估；方向要改就回 step 1 重出——**别带着错方向去 frontend-design/taste 精修空耗**。
    - **后续只精修这个 winner，不再 review 其余 N-1 个变体**——选一个最满意的深做，别把 token 摊在全部变体上。
 
-3. **frontend-design + taste 评 → 修 → 复评循环（HARD：禁止敷衍、禁止走过场、禁止只评不修）**——**只针对 Step 2 选定的 winner 变体，且 dispatch 到 subagent 跑、别在主线会话内联**（隔离上下文、省主线 token，跟 explore 的 `tenon-researcher` 同理）：
-   - **用 Agent 工具 dispatch `tenon-design-reviewer` agent**（本仓 agents/tenon-design-reviewer.md，独立上下文），交付下面这套 brief，让它**只对 winner 变体**自洽跑完评修复循环，回传 REVIEW.md 路径 + 结论。**别把 N 个变体全 review**（选一个最满意的深做，省 token）。多个待精修对象时同消息并行 dispatch 多个。
-   - 交给 `tenon-design-reviewer` 的 brief：
-     - **a. 评**：加载 `frontend-design` + `design-taste-frontend`，对 winner 变体**逐项严格评估**（设计 token / 层次 / 排版 / 组件态 / 反模板红线 / 可访问性），列出带 severity 的问题清单。禁止"看着还行"就过。
-     - **b. 修**：修掉清单里**全部 critical/high/medium**。
-     - **c. 复评**：重新跑 `frontend-design` + `design-taste-frontend`，确认问题已消、没引入新问题。
-     - **d. 循环 a→c，直到两者都无 critical/high/medium**。
-     - **e. 留证据**：把「问题清单 + 每轮修复记录」落到 `openspec/changes/<name>/prototype/REVIEW.md`，回传该路径 + "已无 critical/high/medium" 结论。没有它=评估没真做，不算完成、不交付。
-   - 主线收到 subagent 回传的 REVIEW.md + 结论才算本步完成、才交付用户；**主线不内联跑 review**。
+3. **winner 实现精修与一次自检（HARD：不是正式 Review）**——只针对 Step 2 选定的 winner：
+   - 使用 `frontend-design` + `design-taste-frontend` 作为实现指导，逐项检查设计 token、层次、排版、
+     组件态、反模板红线与可访问性，并在本次 Build 内修正已发现的问题。
+   - 这一步不得派发 reviewer agent，不产生 severity verdict 或 `REVIEW.md`，也不创建或消耗
+     Review attempt；它只是实现反馈。正式视觉、浏览器与规范复核统一在 Verify 中，作为同一 frozen
+     candidate、同一个有限 Review attempt 的 lanes 执行。
+   - 自检只执行一次；若实现仍未达到已批准的 acceptance criteria，则继续完成对应 task 和测试，
+     不启动“评 → 修 → 复评”自动循环。
 
 **条件性 Skill**（按 Step 0 选定的 DESIGN.md / 技术选型决定，用得上才加载）：
 - 使用 Skill 工具加载 `shadcn-ui` — **仅当**选 shadcn 风格的组件库
@@ -209,11 +208,11 @@ tenon handoff "$TENON_CHANGE_NAME" --bundle --target build --json
 
 3. 使用 Skill 工具加载 `web-design-guidelines`。**禁止跳过此步骤**。
 
-4. **含 UI 改动时：frontend-design + `design-taste-frontend` 评 → 修 → 复评循环（HARD：禁止只评不修、禁止走过场）**：
-   - **a. 评**：加载 `design-taste-frontend`，对本次新增/改动的组件**逐项严格评估**（设计 token / 层次 / 排版 / 组件态 / 反模板红线 / 可访问性），列出带 severity 的问题清单。禁止"看着还行"就过。
-   - **b. 修**：修掉清单里**全部 critical/high/medium**。
-   - **c. 复评**：重跑 `frontend-design` + `design-taste-frontend`，确认问题已消、没引入新问题，循环到两者都无 critical/high/medium。
-   - **d. 留证据**：把「问题清单 + 每轮修复记录」落到 `openspec/changes/<name>/REVIEW.md`——没有它=评估没真做，不算完成。
+4. **含 UI 改动时：frontend-design + `design-taste-frontend` 一次实现自检（HARD：不是正式 Review）**：
+   - 对新增/改动组件逐项核对设计 token、层次、排版、组件态、反模板红线与可访问性，并在 Build
+     内修正已发现的问题。
+   - 这里只执行一次实现自检，不派发 reviewer、不产生放行 verdict、不写 Review 报告，也不消耗
+     Review attempt。正式 frontend/visual/browser 复核统一由 Verify 的同一个有限 attempt 聚合。
    - 遵循项目既有设计系统（design token / 既有组件风格 / 既有动效库），不套 baseline 重构既有页面。
 
 **条件性 Skill**（按框架/选型决定，用得上才加载——Vue 项目不该被 React skill 卡）：
@@ -309,35 +308,31 @@ plan 已把 build 切成若干**子阶段（每个 ≈ 一个干净上下文窗�
 
 3. 宿主 VCS 可写且项目已有可提交 HEAD 时，可执行 `git commit -m "<task description>"`（message 体现设计意图）；否则保留真实 diff、完成 task/ledger 记录并继续验证。
 
-### Step 3.5: pre-Verify 全量收敛审查（HARD RULE）
+### Step 3.5: pre-Verify Build readiness（HARD RULE）
 
-Build 只有在**完整待冻结变更**已经收敛后才能进入 Verify。该审查不是针对最近一条 finding 的
-局部复查，也不能用“重点关注”缩小范围：
+Build 这里只完成实现紧反馈与冻结准备，**不得**派发 code/spec/security reviewer、E2E/browser/visual
+acceptance，也不得创建 Review attempt；这些对抗式活动统一在 Verify 对同一 frozen candidate 聚合为
+一次有限 Review。这样问题发现标准在 Spec 固定、实现期间靠 TDD 快速收敛，避免 Build 与 Verify
+重复全量 Review。
 
-1. 固定本轮比较边界，枚举全部 changed / untracked implementation、configuration、migration、
-   generated artifact 与 release asset；读取所有 delta spec、ADR、plan、相关调用方、兼容边界和
-   发布门禁，建立“文件 → capability / requirement”覆盖表。
-2. 实际加载本插件打包的 `code-review`，分别执行 Standards 与 Spec 两轴全量审查。
-   复杂 Change 同时 dispatch `tenon-reviewer`，brief 必须是完整待冻结 diff 与全部 capability；
-   专项关注只能追加审查维度，不能替代全量面。
-3. 跑完适用的 build、type、test、lint、静态检查、迁移兼容与 release gate；聚合全部结果后再决策，
-   不得发现第一个 CRITICAL/HIGH 就提前停止其他已适用的检查。所有 CRITICAL/HIGH 必须在 Build
-   修复并重新执行本步骤；所有 MEDIUM 同样必须修复，不能以偏差批准带入 Verify；LOW 记录处置
-   或剩余风险。只有 CRITICAL/HIGH/MEDIUM 全部清零且证据完整时才能写入 `pass`。
-   对 `in-place`，所有会重建 tracked 产物的命令（例如 build、bundle、codegen、release asset
-   生成）必须在本步骤完成并稳定落盘；确认没有仍在运行的 writer 后才进入 reviewer 和冻结。
-4. 全量审查和门禁通过后，才允许写入：
+1. 枚举全部 changed / untracked implementation、configuration、migration、generated artifact 与
+   release asset，建立“文件 → capability / requirement”覆盖表，确认没有漏做 plan task。
+2. 跑完适用的 build、type、unit/integration test、lint、静态检查、迁移兼容与 release gate；失败在
+   Build 当场修复并重跑。这里的检查是实现反馈，不产生放行 verdict，也不消耗 Review 次数。
+3. 对 `in-place`，所有会重建 tracked 产物的命令（例如 build、bundle、codegen、release asset
+   生成）必须在这里完成并稳定落盘；确认没有仍在运行的 writer 后才冻结。
+4. readiness 门通过后，写入兼容字段（字段历史名保留；其语义仅为 Build readiness，不是 Review）：
 
    ```bash
    tenon set "$TENON_CHANGE_NAME" pre_verify_review_result pass
    ```
 
 5. `pass` 后若任何 implementation、configuration、migration、generated artifact 或 release asset
-   再变化，必须立即重置为 `pending` 并从第 1 项重跑；不得沿用变化前的结论。
+   再变化，必须立即重置为 `pending` 并从第 1 项重跑。
 6. 把 Verify 所需的 repo-zero-output 约束一并交接：冻结后不得在真实工作区重跑会写 tracked
    产物的命令；这些命令若需二次对抗验证，只能在保留权限/软链的隔离副本运行。浏览器截图、
    snapshot、trace 与日志必须写入仓库外的临时目录。
-7. pre-Verify 审查是 Build 的收敛门，不替代 Verify 的独立、冻结基线、对抗式复核。
+7. Review attempt 只能在进入 Verify、取得冻结 `build_sha` 后 begin；不得在 Build 预占或拆成多次。
 
 ### Step 4: 验证（不自动推进）
 
@@ -350,7 +345,7 @@ guard 通过条件（GUARD-RULES §4）：
 - `tasks.md` 所有 `- [ ]` 已变为 `- [x]`
 - `build_mode` 已设
 - `isolation` 已设
-- `pre_verify_review_result=pass`
+- `pre_verify_review_result=pass`（兼容字段；表示 Build readiness，不表示自动 Review 已通过）
 - full preset 且 `build_mode=direct` 时必须 `direct_override=true`
 - `depends_on` 声明的依赖 change 均已归档（活跃依赖 → FAIL）
 
@@ -385,8 +380,8 @@ tenon transition "$TENON_CHANGE_NAME" requirements-changed
 
 交接顺序（不可颠倒）：
 1. build 全 task 完成、每个 task 自测绿（类型 + 测试 + lint）。
-2. 完成 Step 3.5 的全量 Standards + Spec 收敛审查和全部适用门禁，写入
-   `pre_verify_review_result=pass`；结论后的交付面变更会令它失效并要求重跑。
+2. 完成 Step 3.5 的 Build readiness 与全部适用机器门禁，写入兼容字段
+   `pre_verify_review_result=pass`；之后的交付面变更会令它失效并要求重跑。
 3. 若当前已由宿主提供 branch/worktree，确保该隔离目标的 Git HEAD 就是待验收版本；**不得**为满足流程自行建分支或伪造 commit。`in-place` 则保留真实未提交工作区，不要求 commit。
 4. `tenon transition <name> build-complete` —— CLI 自动冻结 `build_sha`：branch/worktree 是 `git rev-parse HEAD`；in-place 是排除 OpenSpec、证据、依赖和缓存后的工作区内容 SHA-256。
 5. **之后**才进 verify；verify 必须读取这个冻结基线。in-place 的 verify 期间不得改实现/配置文件；`verify-pass` 会重新计算同一内容基线，漂移即拒绝。
@@ -399,7 +394,7 @@ tenon transition "$TENON_CHANGE_NAME" requirements-changed
 
 - bundled-skill: test-driven-development · 强制（frontend/backend）
 - bundled-skill: writing-plans · 强制（backend）/ 推荐（frontend）
-- bundled-skill: code-review · pre-Verify 全量收敛审查强制
+- bundled-skill: code-review · 仅 Verify 的 standards lane 使用，不在 Build 重复派发
 - bundled-skill: subagent-driven-development · 条件（build_mode）
 - bundled-skill: dispatching-parallel-agents · 条件（build_mode）
 - bundled-skill: frontend-design / web-design-guidelines / design-taste-frontend · UI 评修

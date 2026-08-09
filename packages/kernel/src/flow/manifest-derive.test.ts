@@ -67,7 +67,6 @@ describe('派生面 · mandatory / recommended skills（evidence 派生，对齐
     expect(m.recommendedSkills.explore.pm).toEqual(['tenon-researcher'])
     expect(m.recommendedSkills.build.frontend).toEqual([
       'react-patterns',
-      'web-design-guidelines',
       'hallmark',
     ])
   })
@@ -255,6 +254,32 @@ describe('派生面 · versioned Skill action authority', () => {
     ['unknown action', 'skill_action_authority:\n  version: v1\n  _all: [invent-action]'],
     ['empty action', 'skill_action_authority:\n  version: v1\n  _all: [enter-afk, ]'],
     ['duplicate section', 'skill_action_authority:\n  version: v1\n  _all: [enter-afk]\nskill_action_authority:\n  version: v1\n  _all: [enter-afk]'],
+  ])('fail-loud: %s', (_label, body) => {
+    expect(() => loadManifest(writeManifest(body))).toThrow(ManifestError)
+  })
+})
+
+describe('派生面 · explicit Review Skill lanes', () => {
+  it('真读 templates：Review Skill 由显式 lane map 分类，不靠名字猜测', () => {
+    const manifest = loadManifest(TEMPLATE_MANIFEST)
+    expect(manifest.reviewSkillLanes['verification-before-completion']).toBe('e2e')
+    expect(manifest.reviewSkillLanes['browser-qa']).toBe('e2e')
+    expect(manifest.reviewSkillLanes['security-review']).toBe('standards')
+    expect(manifest.reviewSkillLanes['test-driven-development']).toBeUndefined()
+  })
+
+  it('支持名字不含 review/verify/e2e 的第三方 Review Skill', () => {
+    const manifest = loadManifest(writeManifest([
+      'review_skills:',
+      '  standards: [acme-quality-gate]',
+    ].join('\n')))
+    expect(manifest.reviewSkillLanes).toEqual({ 'acme-quality-gate': 'standards' })
+  })
+
+  it.each([
+    ['duplicate skill', 'review_skills:\n  standards: [same]\n  e2e: [same]'],
+    ['empty lane entry', 'review_skills:\n  standards: [ok, ]'],
+    ['invalid lane', 'review_skills:\n  bad/lane: [quality]'],
   ])('fail-loud: %s', (_label, body) => {
     expect(() => loadManifest(writeManifest(body))).toThrow(ManifestError)
   })

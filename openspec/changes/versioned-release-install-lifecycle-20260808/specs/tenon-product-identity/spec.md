@@ -28,3 +28,10 @@
 - **THEN** plugin inventory 来源不是本地 path 或移动分支
 - **AND** runtime source version、doctor 与 Dashboard health 都等于发布版本
 - **AND** `/api/snapshot` 可读取且开放 PR 审计为零
+
+#### Scenario: 公开 runtime status 证明当前版本
+
+- **WHEN** 用户执行 `tenon runtime status --json`
+- **THEN** active identity 显示经过完整性验证的 release schema、release id、payload digest、host 和 source plugin version
+- **AND** v2 release 显示 stable tag 与 commit，previous identity 使用同一严格投影
+- **AND** 不需要读取私有 `release.json` 才能与 plugin inventory、doctor 和 Dashboard 对账

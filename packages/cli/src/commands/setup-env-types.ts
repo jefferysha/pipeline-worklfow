@@ -23,7 +23,10 @@ export interface SetupEnv extends NativeHostCommandEnvironment {
   mkdirp(dir: string): void
   /** Generic PATH discovery preserves project-local tool directories. */
   commandExists(name: string): boolean
-  codexAuthStatus(codexExecutable?: string): Promise<CodexAuthStatus>
+  codexAuthStatus(
+    codexExecutable?: string,
+    commandBinding?: import('./native-host-command-binding.js').NativeHostCommandBinding,
+  ): Promise<CodexAuthStatus>
   listDir(dir: string): string[]
   writeText(path: string, text: string): void
   writeTextAtomic(path: string, text: string): void

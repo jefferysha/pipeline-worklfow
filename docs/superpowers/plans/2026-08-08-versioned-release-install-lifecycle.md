@@ -11,6 +11,32 @@ design-doc: docs/superpowers/specs/2026-08-08-versioned-release-install-lifecycl
 
 原型决策：不插入一次性 prototype。release resolver、host command、desired-state、runtime installer 和 Dashboard starter 都已有可注入边界，可用失败优先的单元/集成测试直接验证真实状态机；一次性实现不会降低关键未知。
 
+## Build 准入：冻结 Review 闭集
+
+本段优先于后续历史子阶段。进入 Build 前，源码停止变更，由同一冻结 fingerprint 完成规格、并发/安全、N-1/发布、文档/架构四轴前置 Review；结果先去重，再形成下面唯一开放闭集。Build 不再边写边扩审。最终 Review 只检查矩阵是否落实以及本轮 diff 是否新引入直接违反已冻结规格的回归；相邻改进进入 backlog。只有新的安全 Critical 或必须改变既有语义时，才通过官方 `requirements-changed` 回到 Spec 更新本表。
+
+| ID | 冻结缺口 | 先行失败证据 | 实现边界 | 完成验证 |
+| --- | --- | --- | --- | --- |
+| R01 | CLI/server 受控 dist 陈旧 | build 后 scoped diff 非零 | 最终源码上重建，不手改 dist | 连续两次 build 字节一致且 scoped diff=0 |
+| R02 | 新 default Run 被降级为 V2 | 默认 policy snapshot 断言 V3/current fingerprint | 新 Run 始终 V3；旧 V1/V2 只读兼容隔离 | kernel snapshot/repository + 真实 N-1 gate |
+| R03 | installer 未证明 exact published stable Release | unpublished/draft/prerelease 均零 host mutation | mutation 前查询官方 exact Release | bootstrap 测试和公网发布门 |
+| R04 | tag OID 未证明最终为 commit | direct/annotated tree/blob 均拒绝 | 递归 peel 或隔离 fetch + `cat-file` | resolver 与 bootstrap object matrix |
+| R05 | stable launcher 未持久化并重验 frozen Node identity | custom Node、安装后漂移、rollback/no-op | launcher contract、bootstrap、rollback、same-version 共用同一 identity | launcher/bootstrap/update 跨进程测试 |
+| R06 | live owner 可因 heartbeat 被接管且 release 非 CAS | 暂停 live owner、PID reuse、successor replacement | PID start identity + 不回收 live owner + fencing/CAS release | installer/bootstrap 双进程 barrier |
+| R07 | host observe→remove 非原子且 public/native 锁分裂 | inventory 返回后 mutation barrier | 所有 Tenon host mutation 共用锁；每次 mutation 紧邻前 fencing/CAS | public-vs-native 并发测试 |
+| R08 | terminal audit 失败被吞 | selection 已提交、terminal append 单独失败 | 保留恢复 journal并返回 degraded，重试补 terminal | release-store/bootstrap audit recovery |
+| R09 | 公网 acceptance 可与下一 Release 并发 | 两个 tag acceptance 的 latest 变化 | 仓库级串行或动态 latest identity | workflow checker + acceptance test |
+| R10 | installer 网络证明无实际超时 | 挂起 Git/HTTP 且零 mutation | connect/overall/low-speed 有界超时 | bootstrap timeout test |
+| R11 | architecture gate 失败 | `npm run check:architecture` 当前非零 | 按 lifecycle/rollback/transition 职责拆分 | architecture gate=0 + 定向回归 |
+| R12 | 本次生产代码含非空/双重断言 | 静态门命中指定文件 | closed tuple、显式 bounds/codec narrowing | architecture/static gate=0 |
+| R13 | release 文档仍称注册 `main` | docs checker 命中正式当前态描述 | immutable tag 文案 + 禁词门 | docs 12/12 + 全文入口扫描 |
+| R14 | 中文卸载文档给出不存在命令 | CLI surface/文档命令不一致 | 区分宿主卸载与项目 scrubber | 双语文档命令检查 |
+| R15 | 任意 Workflow/Pipeline 无可配置 Review 次数上限，且其他 Review Skill/E2E 可绕过固定 reviewer | 第三次 begin 在 max=2 时仍能启动；未 begin 即可派发第三方 Review/E2E | 冻结 `review_budget` + step `review_lanes`；默认 manifest/自定义 SkillRef 显式分类；Change 锁内聚合 begin/complete；run-bound override | parser/compiler/snapshot、Skill gate、reviewer+E2E 同 attempt、跨进程并发、恢复与耗尽 E2E |
+
+非回归矩阵固定覆盖：v1.0.1 setup/update WAL 与 receipt bridge、disabled registration、candidate/host/payload 漂移、same-version Dashboard-only 修复、rollback/launcher crash、Windows host+`cmd.exe`、Doctor/Dashboard frozen executables、公开重复安装、用户项目数据零修改。任何 R 项没有“失败测试 → 最小实现 → 定向绿 → 更宽门”四段证据，不得标完成。R15 优先于 R01-R14 实现，因为后续 Standards/Spec/security/E2E/browser 等全部 Review lanes 必须先受同一候选预算约束；Build 内 TDD/type/lint 自检不扣次数。
+
+**此处建议 /clear；后续 Build 必须从 R01-R15 闭集开始，不再从历史子阶段继续扩展。**
+
 ## 子阶段 1：Tracer bullet 打通稳定 Release 到 managed runtime
 
 先写失败测试，让一个注入的 `v1.0.2` stable Release 从 resolver 进入 `tenon update --codex`，冻结 tag/commit，经过 Codex plugin/marketplace 重绑定 WAL，最终由 inventory/version/root/asset 证明候选并激活 managed runtime。最初使用 fake host 与最小候选目录，但贯穿 resolver、命令计划、desired-state、coordinator 和 runtime selection，不按层横向堆积。
@@ -101,3 +127,69 @@ design-doc: docs/superpowers/specs/2026-08-08-versioned-release-install-lifecycl
 
 回滚：所有 coordinator/codec 修复保持 schema version 1 向后读；若新复证失败则保留 WAL 与旧 active runtime，
 不回退到旧的 fail-open activation。launcher/installer 变更只在正式安装或 activation 提交时覆盖产品自有文件。
+
+**此处建议 /clear**
+
+## 子阶段 7：Verify 红队发现的回滚、launcher、audit 与 N-1 收口
+
+1. 先在 `release-store.integration.test.ts`、`bootstrap.test.ts` 与 `launchers.test.ts` 增加失败测试：
+   真实 v1.0.1 rollback 不得降级 bootstrap；selection 提交后在两个 launcher 的 rename/chmod
+   任一边界崩溃，只有精确 old/new partial 可恢复，第三状态仍失败关闭。
+2. 调整 RuntimeReleaseStore 与 stable bootstrap：rollback 只原子切换 verified previous selection，
+   保留当前双读 v1/v2、绑定 `/bin/bash` 的 hardened bootstrap；恢复器按文件精确区分
+   checkpoint/committed 内的 old/new partial pair，再幂等收敛到两个 launcher 都精确。
+3. 为 activation/rollback audit 引入 prepared→selection committed→terminal success 顺序；CLI 与 bootstrap
+   对截断/损坏尾行报 `auditCorrupt`，不把更早记录冒充 latest。`update-native.ts`
+   的 failure audit 写入失败必须输出稳定 warning，不覆盖原始 update error。
+4. 扩展 `tenon runtime status --json` 的已验证 public identity：active/previous 都输出
+   release schema/id、payload digest、host、source version 与 v2 stable target；文本模式显示版本/标签。
+5. 将 installer/native host 工具冻结从 pathname 升级为 realpath + dev/inode/mode/owner +
+   完整父目录身份，每次 spawn 前复验；拒绝非 sticky world-write 与不同 owner 的 group-write，
+   保留同 owner Homebrew `0775` 根兼容，并补绝对可写 PATH、symlink/inode-swap barrier 测试。
+6. 修正 OpenSpec delta：用 `MODIFIED Requirements` 替换 canonical 中公开
+   `main/install.sh` 和旧 `pipeline` launcher 条款；archive rehearsal 后断言不再存在相反规格。
+7. 固定真实公开 v1.0.1 的 commit、完整 payload 与 CLI digest 到 N-1 release gate，
+   禁止本机 previous 替代或缺失时 skip；修复 v3 workflow plan 的 N-1 可读写兼容投影，
+   使真实 v1.0.1 `status`/`set`/bundle 契约全绿。
+
+验证：先运行每个新增用例确认红，再运行 `npx vitest run packages/cli/src/runtime/launchers.test.ts packages/cli/src/runtime/bootstrap.test.ts packages/cli/src/runtime/release-store.integration.test.ts packages/cli/src/runtime/release-store-codecs.test.ts packages/cli/src/commands/update.test.ts`、`tools/test-bundle.sh`、OpenSpec archive rehearsal、`npm run build`、全量 core/web/clean-install/release 门禁。
+
+回滚：保留 v1 manifest/payload 双读，不删除 previous release；新恢复只覆盖产品自有且精确匹配 checkpoint/committed 的 launcher 字节，任何外部修改继续失败关闭。
+
+**此处建议 /clear**
+
+## 子阶段 8：Pre-Verify executable 与 launcher 最后一跳收口
+
+1. 在 `runtime.test.ts` 先证明 `runtime repair --rollback` 会把冻结 Bash 的物理 assert 传入 installer；symlink/inode 漂移时零 runner spawn、零 selection mutation。
+2. 让 `verifyReleasePayload` 显式接收冻结 Node path；`inspectCandidatePayload`、staged payload、stored release 和 bootstrap check 全部在每次 Node spawn 前调用同一 verifier，并用不同于 `process.execPath` 的 runner 测试证明四次调用不旁路。
+3. 收紧 TypeScript 与 `install.sh` 的 executable identity：拒绝文件自身 group/world-write 和非 root/当前用户 owner，绑定 size/change identity，覆盖同 inode truncate/rewrite。
+4. 把 launcher replace/restore 改为 capture actual object → 验证 checkpoint/committed → exclusive no-replace publish。proof 后外部写入必须保留第三方字节并使事务 indeterminate，不得静默覆盖。
+5. 用 `MODIFIED Requirements` 明确补偿恢复 selection/launchers/Dashboard 但保留当前 hardened bootstrap；隔离 archive 后重新检索 canonical，确保不再要求恢复旧 bootstrap。
+
+验证：`npx vitest run packages/cli/src/commands/runtime.test.ts packages/cli/src/commands/native-host-command-binding.test.ts packages/cli/src/runtime/release-payload.test.ts packages/cli/src/runtime/launchers.test.ts packages/cli/src/runtime/release-store.integration.test.ts`、`node --test tools/install-bootstrap.node-test.mjs`、`npm run build`、architecture/identity/release/OpenSpec 门禁和隔离 archive rehearsal。
+
+回滚：任何物理证明或 launcher CAS 无法成立时保留 selection/WAL 并失败关闭；不得回退 pathname-only verifier、rename-overwrite 或 previous bootstrap 安装。
+
+**此处建议 /clear**
+
+## 子阶段 9：公开 bridge WAL、跨平台 trust 与最终公网验收
+
+1. `install.sh` 在任何宿主 remove/add 前创建 machine-state bridge journal，记录 target tag/commit、
+   before inventory 与 phase；存活 owner lease 串行化同宿主安装，dead owner 可由下一次命令原子接管。
+2. 每一步只接纳 journal before 或可权威证明的 desired postcondition；add 已提交但 phase 未写入时重跑
+   直接 adopt，非目标第三状态保留且失败关闭。packaged setup 成功后才删除 bridge journal。
+3. native executable resolver 在生产环境只接受 physical binding；Windows 对 host shim 与 `cmd.exe`
+   双重冻结并由真实 Windows CI 执行，POSIX owner/write 规则不错误套到 Windows mode/uid。
+4. Doctor、candidate verifier、Dashboard start/restore/compensation 全部消费同一冻结 Host/Bash/Git/Node
+   对象，每次 spawn 紧邻前 assert；任何漂移都不执行目标程序。
+5. Release published 后由独立只读 workflow 从精确 stable tag 跑 public clean acceptance：安装两次、
+   `tenon update --codex`、doctor/runtime/Dashboard 身份和外部用户状态零漂移。
+
+验证：`node --test tools/install-bootstrap.node-test.mjs tools/check-release-workflows.node-test.mjs`、
+`npx vitest run packages/cli/src/commands/native-host-command-binding.test.ts packages/cli/src/commands/doctor-product-identity.test.ts packages/cli/src/commands/setup.test.ts packages/cli/src/commands/update.test.ts packages/cli/src/runtime/launchers.test.ts`、
+Windows CI、`npm run build`、全量 core/web/local clean install 与发布后 public clean install。
+
+回滚：bridge journal 或 executable proof 不可读时保留宿主与 journal 原状并非零退出；不得删除第三状态、
+退回 pathname-only spawn 或绕过 public Release 验收。
+
+**此处建议 /clear**

@@ -1,11 +1,8 @@
 import { join } from 'node:path'
-import type { CliDeps } from '../deps.js'
 import { LEGACY_PLUGIN_IDENTITY } from '../migration/legacy-tenon-migration.js'
-import type { RuntimeInstaller } from '../runtime/installer.js'
 import { resolveRuntimePaths } from '../runtime/paths.js'
-import type { CandidatePayloadIdentity } from '../runtime/release-store.js'
 import { expectedStableLaunchers } from '../runtime/launchers.js'
-import { DEFAULT_DASHBOARD_PORT, type ReleasedDashboardStarter } from './dashboard.js'
+import { DEFAULT_DASHBOARD_PORT } from './dashboard.js'
 import { parseDashboardPort } from './dashboard-launch-options.js'
 import { recoverPendingHostConvergence } from './host-convergence-recovery.js'
 import { readHostPluginConvergenceReceipt, recordPendingHostPluginConflict } from './host-plugin-convergence.js'
@@ -16,52 +13,20 @@ import {
   hostFlag,
   nativeUpdatePlan,
   parseHostPluginInventory,
-  type HostCommandPlanItem,
-  type NativePipelineHost,
 } from './plugin-host.js'
 import { publishManagedRelease } from './release-coordinator.js'
-import type { SetupEnv } from './setup.js'
 import {
   compareStableVersions,
   resolveStableTagTarget,
-  type StableReleaseResolver,
   type StableReleaseTarget,
 } from './stable-release.js'
 import { boundaryDetail, reportHostBoundary, type HostBoundaryState } from './update-boundary-report.js'
 import { verifyUpdatedRoot } from './update-candidate-verification.js'
+import { rejectUpdate } from './update-failure.js'
 import { reportSuccessfulNativeUpdate } from './update-success-report.js'
-interface NativeUpdateInput {
-  readonly deps: CliDeps
-  readonly env: SetupEnv
-  readonly installer: RuntimeInstaller
-  readonly dashboardStarter: ReleasedDashboardStarter
-  readonly releaseResolver: StableReleaseResolver
-  readonly inspectCandidate: (root: string) => Promise<CandidatePayloadIdentity>
-  readonly host: NativePipelineHost
-  readonly hostExecutable: string
-  readonly trustedBashPath: string | undefined
-  readonly auto: boolean
-}
-
-export function renderNativeUpdatePlan(
-  deps: CliDeps,
-  host: NativePipelineHost,
-  plan: readonly HostCommandPlanItem[],
-): void {
-  deps.io.out(`[update] ${hostFlag(host)} 发布更新计划（只更新所选宿主）`)
-  for (const item of plan) deps.io.out(`  $ ${item.cmd} ${item.args.join(' ')}`)
-}
-
-function isAlreadyInstalledResult(result: { readonly stdout: string; readonly stderr: string }): boolean {
-  return /already|exists|installed|duplicate/i.test(`${result.stdout}\n${result.stderr}`)
-}
-
-async function rejectUpdate(installer: RuntimeInstaller, env: SetupEnv, detail: string): Promise<number> {
-  await installer.recordUpdateFailure?.({ homeDir: env.homeDir(), env: env.runtimeEnv() }, detail)
-    .catch(() => undefined)
-  return 1
-}
-
+import { isAlreadyInstalledResult, renderNativeUpdatePlan } from './update-native-plan.js'
+import type { NativeUpdateInput } from './update-native-contract.js'
+export { renderNativeUpdatePlan } from './update-native-plan.js'
 export async function runNativeUpdate(input: NativeUpdateInput): Promise<number> {
   const {
     deps,
@@ -73,6 +38,10 @@ export async function runNativeUpdate(input: NativeUpdateInput): Promise<number>
     host,
     hostExecutable,
     trustedBashPath,
+    verifyTrustedBash,
+    trustedNodePath,
+    trustedNodeProof,
+    verifyTrustedNode,
     auto,
   } = input
   const dashboardPort = parseDashboardPort(env.runtimeEnv().TENON_DASHBOARD_PORT)
@@ -81,6 +50,10 @@ export async function runNativeUpdate(input: NativeUpdateInput): Promise<number>
     homeDir: env.homeDir(),
     env: env.runtimeEnv(),
     trustedBashPath,
+    ...(verifyTrustedBash === undefined ? {} : { verifyTrustedBash }),
+    ...(trustedNodePath === undefined ? {} : { trustedNodePath }),
+    ...(trustedNodeProof === undefined ? {} : { trustedNodeProof }),
+    ...(verifyTrustedNode === undefined ? {} : { verifyTrustedNode }),
   }
   let pendingManagedJournal = false
   let prefetchedTarget: StableReleaseTarget | undefined
@@ -255,7 +228,12 @@ export async function runNativeUpdate(input: NativeUpdateInput): Promise<number>
                 selection: runtime.selection,
                 release: active,
                 releaseRoot: join(runtimePaths.releasesRoot, active.releaseId),
-                launcherCommitted: expectedStableLaunchers(runtimePaths, env.homeDir()),
+                launcherCommitted: expectedStableLaunchers(
+                  runtimePaths,
+                  env.homeDir(),
+                  trustedNodePath,
+                  trustedNodeProof,
+                ),
               }
               if (dashboard?.releaseId === active.releaseId
                 && dashboard.serverVersion === target.version
@@ -276,19 +254,23 @@ export async function runNativeUpdate(input: NativeUpdateInput): Promise<number>
         renderNativeUpdatePlan(deps, host, plan)
         let inventory = ''
         for (let index = 0; index < plan.length; index += 1) {
-          const item = plan[index]!
-          const stepId = [
+          const item = plan.at(index)
+          const stepId = ([
             'plugin-remove',
             'marketplace-remove',
             'marketplace-register',
             'plugin-install',
             'inventory-after',
-          ][index]!
+          ] as const).at(index)
+          if (item === undefined || stepId === undefined) {
+            throw new Error('宿主更新计划与受管步骤不一致')
+          }
           const result = await runManagedHostCommand(transaction, stepId, env, item, target)
           if (result.stdout.trim() !== '' && !auto) deps.io.out(result.stdout.trimEnd())
           if (result.code !== 0) {
             if (stepId === 'plugin-install' && isAlreadyInstalledResult(result)) {
-              const inventoryItem = plan[plan.length - 1]!
+              const inventoryItem = plan.at(-1)
+              if (inventoryItem === undefined) throw new Error('宿主更新计划缺少 inventory 步骤')
               const inventoryResult = await runManagedHostCommand(
                 transaction,
                 'inventory-after',
@@ -379,7 +361,7 @@ export async function runNativeUpdate(input: NativeUpdateInput): Promise<number>
   if (!outcome.ok) {
     deps.io.err(`ERROR: ${outcome.detail}`)
     reportHostBoundary(deps, host, hostBoundary)
-    return rejectUpdate(installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
+    return rejectUpdate(deps, installer, env, boundaryDetail(hostBoundary, outcome.state, outcome.detail))
   }
   if (outcome.state === 'current') {
     const tag = outcome.stableTarget?.tag ?? 'latest stable'

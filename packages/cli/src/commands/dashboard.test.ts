@@ -12,8 +12,8 @@ import {
 import { createReleasedDashboardStarter } from './released-dashboard-starter.js'
 
 interface Calls {
-  launches: Array<{ serverBundle: string; env: NodeJS.ProcessEnv }>
-  detached: Array<{ serverBundle: string; env: NodeJS.ProcessEnv }>
+  launches: Array<{ serverBundle: string; env: NodeJS.ProcessEnv; nodeExecutable?: string }>
+  detached: Array<{ serverBundle: string; env: NodeJS.ProcessEnv; nodeExecutable?: string }>
   healthPorts: number[]
   expectedReleaseIds: Array<string | undefined>
   expectedStateScopeIds: string[]
@@ -37,12 +37,12 @@ function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: Dashboar
     runtime: {
       resolveRoot: () => '/plugin/tenon',
       fileExists: () => true,
-      launch: async (serverBundle, env) => {
-        calls.launches.push({ serverBundle, env })
+      launch: async (serverBundle, env, nodeExecutable) => {
+        calls.launches.push({ serverBundle, env, nodeExecutable })
         return 0
       },
-      launchDetached: async (serverBundle, env) => {
-        calls.detached.push({ serverBundle, env })
+      launchDetached: async (serverBundle, env, nodeExecutable) => {
+        calls.detached.push({ serverBundle, env, nodeExecutable })
         return {
           pid: 321,
           terminate: async () => {
@@ -185,6 +185,95 @@ describe('tenon dashboard', () => {
     expect(calls.detached[0]?.env.TENON_MANAGED_TRANSACTION_ID)
       .toBe('transaction-dashboard-test')
     expect(calls.expectedTransactionIds).toEqual(['transaction-dashboard-test'])
+  })
+
+  test('managed release start re-proves and uses the frozen Node immediately before spawn', async () => {
+    const deps = makeDeps()
+    const { runtime: dashboard, calls } = runtime()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    let verifies = 0
+
+    expect(await startReleasedDashboard(
+      deps,
+      `/runtime/releases/${releaseId}/payload`,
+      {
+        transactionId: 'transaction-dashboard-node',
+        trustedNodePath: '/trusted/node',
+        verifyTrustedNode: () => { verifies += 1 },
+      },
+      dashboard,
+    )).toMatchObject({ state: 'ready' })
+
+    expect(verifies).toBe(1)
+    expect(calls.detached).toEqual([expect.objectContaining({ nodeExecutable: '/trusted/node' })])
+  })
+
+  test('managed release start rejects frozen Node drift before spawning Dashboard', async () => {
+    const deps = makeDeps()
+    const { runtime: dashboard, calls } = runtime()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+
+    expect(await startReleasedDashboard(
+      deps,
+      `/runtime/releases/${releaseId}/payload`,
+      {
+        trustedNodePath: '/trusted/node',
+        verifyTrustedNode: () => { throw new Error('frozen node changed') },
+      },
+      dashboard,
+    )).toMatchObject({
+      state: 'indeterminate',
+      detail: expect.stringContaining('frozen node changed'),
+    })
+    expect(calls.detached).toEqual([])
+  })
+
+  test('dashboard command uses one frozen Node for foreground and background starts', async () => {
+    const foreground = runtime()
+    let foregroundVerifies = 0
+    expect(await cmdDashboard(makeDeps(), {}, foreground.runtime, {
+      resolveTrustedNode: () => ({
+        executable: '/trusted/dashboard-node',
+        requestedPath: '/trusted/dashboard-node',
+        verify: () => true,
+        assert: () => { foregroundVerifies += 1 },
+      }),
+    })).toBe(0)
+    expect(foreground.calls.launches).toEqual([
+      expect.objectContaining({ nodeExecutable: '/trusted/dashboard-node' }),
+    ])
+    expect(foregroundVerifies).toBe(1)
+
+    const background = runtime()
+    let backgroundVerifies = 0
+    expect(await cmdDashboard(makeDeps(), { background: true }, background.runtime, {
+      resolveTrustedNode: () => ({
+        executable: '/trusted/dashboard-node',
+        requestedPath: '/trusted/dashboard-node',
+        verify: () => true,
+        assert: () => { backgroundVerifies += 1 },
+      }),
+    })).toBe(0)
+    expect(background.calls.detached).toEqual([
+      expect.objectContaining({ nodeExecutable: '/trusted/dashboard-node' }),
+    ])
+    expect(backgroundVerifies).toBe(1)
+  })
+
+  test('dashboard command rejects frozen Node drift before any foreground or detached spawn', async () => {
+    for (const opts of [{}, { background: true }]) {
+      const candidate = runtime()
+      expect(await cmdDashboard(makeDeps(), opts, candidate.runtime, {
+        resolveTrustedNode: () => ({
+          executable: '/trusted/dashboard-node',
+          requestedPath: '/trusted/dashboard-node',
+          verify: () => false,
+          assert: () => { throw new Error('node drift') },
+        }),
+      })).toBe(1)
+      expect(candidate.calls.launches).toEqual([])
+      expect(candidate.calls.detached).toEqual([])
+    }
   })
 
   test('managed release start rejects health served by a PID other than the spawned child', async () => {

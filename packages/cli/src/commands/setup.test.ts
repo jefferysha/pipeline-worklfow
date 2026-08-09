@@ -92,6 +92,14 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
       ].join(' ')) {
         return { code: 0, stdout: `${'a'.repeat(40)}\trefs/tags/v1.0.2\n`, stderr: '' }
       }
+      if (cmd === 'git' && args[0] === 'init') return { code: 0, stdout: '', stderr: '' }
+      if (cmd === 'git' && args[2] === 'fetch') return { code: 0, stdout: '', stderr: '' }
+      if (cmd === 'git' && args[2] === 'rev-parse' && args[3] === 'FETCH_HEAD^{commit}') {
+        return { code: 0, stdout: `${'a'.repeat(40)}\n`, stderr: '' }
+      }
+      if (cmd === 'git' && args[2] === 'cat-file') {
+        return { code: 0, stdout: 'commit\n', stderr: '' }
+      }
       const result = exec ? exec(cmd, args) : { code: 0, stdout: '', stderr: '' }
       if (result.code !== 0 || result.stdout.trim() !== '') return result
       const text = `${cmd} ${args.join(' ')}`
@@ -541,6 +549,12 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       pathExists: setupPathExists,
       readText: setupReadText,
       resolveTrustedCommand: (name) => name === 'bash' ? '/trusted/bin/bash' : 'git',
+      resolveTrustedCommandBinding: (name) => ({
+        executable: name === 'bash' ? '/trusted/bin/bash' : name,
+        requestedPath: name === 'bash' ? '/trusted/bin/bash' : name,
+        verify: () => true,
+        assert: () => {},
+      }),
     }, codexInstallExec)
     const runtime = fakeRuntimeInstaller()
     let activationScope: object | undefined
@@ -1408,7 +1422,9 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       ['codex', ['plugin', 'list', '--json']],
     ])
     expect(calls.exec.filter(([cmd]) => cmd === 'git').every(([, args]) =>
-      args.join(' ') === 'ls-remote https://github.com/jefferysha/tenon.git refs/tags/v1.0.2 refs/tags/v1.0.2^{}')).toBe(true)
+      args[0] === 'ls-remote'
+      || args[0] === 'init'
+      || (args[0] === '-C' && args[1]?.includes('/tenon-stable-tag-') === true))).toBe(true)
     expect(runtime.calls.activations).toEqual([])
     expect(deps.errLines.join('\n')).toContain('inventory')
   })
@@ -1561,6 +1577,88 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(removeIndex).toBeGreaterThan(commands.indexOf('codex plugin list --json'))
     expect(commands.slice(0, removeIndex)).toContain('git -C /installed/tenon rev-parse HEAD')
     expect(deps.errLines.join('\n')).toContain('permission denied')
+  })
+
+  test('cleanup-pending 在冻结 Node 漂移时保留 receipt，且零 legacy host mutation', async () => {
+    const deps = makeDeps()
+    const releaseId = `sha256-${'a'.repeat(64)}`
+    const paths = resolveRuntimePaths({ homeDir: '/home/test', env: {} })
+    const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
+    const proofPath = join(paths.stateRoot, 'migration', 'tenon-session-loaded')
+    const receipt = JSON.stringify({
+      version: 4,
+      transactionId: 'trusted-node-drift',
+      state: 'cleanup-pending',
+      host: 'codex',
+      conflictPluginId: 'pipeline-lite@pipeline-lite',
+      conflictScopes: ['user'],
+      releaseId,
+      releaseRoot: `/runtime/releases/${releaseId}/payload`,
+      candidateRoot: '/installed/tenon',
+      stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) },
+      createdAtEpoch: 1_700_000_000,
+      updatedAt: '2026-07-26T00:00:00Z',
+    })
+    const inventory = JSON.stringify({
+      installed: [
+        { pluginId: 'pipeline-lite@pipeline-lite', enabled: true, source: { path: '/old/workflow' } },
+        {
+          pluginId: 'tenon@tenon',
+          name: 'tenon',
+          marketplaceName: 'tenon',
+          enabled: true,
+          version: '1.0.2',
+          source: { path: '/installed/tenon' },
+        },
+      ],
+    })
+    const { env, calls } = spyEnv({
+      pathExists: (path) => path === receiptPath || path === proofPath || setupPathExists(path),
+      readText: (path) => {
+        if (path === receiptPath) return receipt
+        if (path === proofPath) {
+          return `version=2\nloaded_at_epoch=1800000000\nhost=codex\nrelease_id=${releaseId}\nrelease_root=/runtime/releases/${releaseId}/payload\n`
+        }
+        return setupReadText(path)
+      },
+      resolveTrustedCommandBinding: (name) => ({
+        executable: `/trusted/${name}`,
+        requestedPath: `/trusted/${name}`,
+        verify: () => name !== 'node',
+        assert: () => {
+          if (name === 'node') throw new Error('trusted Node identity drifted')
+        },
+      }),
+    }, (cmd, args) => cmd === 'codex' && args.join(' ') === 'plugin list --json'
+      ? { code: 0, stdout: inventory, stderr: '' }
+      : { code: 0, stdout: '', stderr: '' })
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, '1.0.2')
+    const guardedInstaller: RuntimeInstaller = {
+      ...runtime.installer,
+      inspect: async (scope) => {
+        scope.verifyTrustedNode?.()
+        return runtime.installer.inspect(scope)
+      },
+      withManagedTransaction: async (scope, operation) => {
+        scope.verifyTrustedNode?.()
+        return runtime.installer.withManagedTransaction(scope, operation)
+      },
+    }
+
+    expect(await cmdSetupHost(
+      deps,
+      'codex',
+      { codex: true },
+      env,
+      guardedInstaller,
+      fakeDashboardStarter(false, releaseId).starter,
+      true,
+      async () => ({ pluginVersion: '1.0.2', payloadDigest: 'a'.repeat(64) }),
+    )).toBe(1)
+    expect(calls.exec.some(([, args]) =>
+      args.join(' ') === 'plugin remove pipeline-lite@pipeline-lite --json')).toBe(false)
+    expect(calls.writeText.filter(([path]) => path === receiptPath)).toEqual([])
+    expect(deps.errLines.join('\n')).toContain('trusted Node identity drifted')
   })
 
   test('同 release 的旧 session proof 不得冒用为本次 receipt 之后的新会话', async () => {
@@ -2044,6 +2142,101 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(deps.outLines.join('\n')).not.toContain('[setup skills] 技能安装计划')
     expect(deps.outLines.join('\n')).not.toContain('[setup runtime] AFK 运行时就绪清单')
   })
+
+  test.each(['setup', 'update'] as const)(
+    'native %s 把 disabled Tenon 登记经官方 remove/add 收敛为 enabled，而不是在观察阶段失败',
+    async (operation) => {
+      const deps = makeDeps()
+      let marketplacePresent = true
+      let pluginPresent = true
+      let pluginEnabled = false
+      const hostMutations: string[] = []
+      const { env } = spyEnv({
+        pathExists: setupPathExists,
+        readText: setupReadText,
+        // Exercise the real authoritative observation/postcondition path.
+        managedHostReconciliation: undefined,
+      }, (cmd, args) => {
+        const text = `${cmd} ${args.join(' ')}`
+        if (text === 'codex plugin marketplace list --json') {
+          return {
+            code: 0,
+            stdout: JSON.stringify({ marketplaces: marketplacePresent
+              ? [{
+                  name: 'tenon',
+                  root: '/installed/tenon',
+                  marketplaceSource: { sourceType: 'git', source: 'jefferysha/tenon' },
+                }]
+              : [] }),
+            stderr: '',
+          }
+        }
+        if (text === 'codex plugin list --json') {
+          return {
+            code: 0,
+            stdout: JSON.stringify({ installed: pluginPresent
+              ? [{
+                  pluginId: 'tenon@tenon',
+                  name: 'tenon',
+                  marketplaceName: 'tenon',
+                  enabled: pluginEnabled,
+                  version: '1.0.2',
+                  source: { path: '/installed/tenon' },
+                }]
+              : [] }),
+            stderr: '',
+          }
+        }
+        if (text === 'codex plugin remove tenon@tenon --json') {
+          pluginPresent = false
+          pluginEnabled = false
+          hostMutations.push(text)
+        } else if (text === 'codex plugin marketplace remove tenon --json') {
+          marketplacePresent = false
+          hostMutations.push(text)
+        } else if (text.startsWith('codex plugin marketplace add ')) {
+          marketplacePresent = true
+          hostMutations.push(text)
+        } else if (text === 'codex plugin add tenon@tenon --json') {
+          pluginPresent = true
+          pluginEnabled = true
+          hostMutations.push(text)
+        }
+        return { code: 0, stdout: '', stderr: '' }
+      })
+      const runtime = fakeRuntimeInstaller()
+      const dashboard = fakeDashboardStarter()
+
+      const code = operation === 'setup'
+        ? await cmdSetupHost(
+            deps,
+            'codex',
+            { codex: true, yes: true },
+            env,
+            runtime.installer,
+            dashboard.starter,
+          )
+        : await cmdUpdate(
+            deps,
+            { codex: true },
+            env,
+            runtime.installer,
+            dashboard.starter,
+            { resolve: async () => ({ version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) }) },
+          )
+
+      expect(code, `${deps.errLines.join('\n')}\n${deps.outLines.join('\n')}`).toBe(0)
+      expect(hostMutations).toEqual([
+        'codex plugin remove tenon@tenon --json',
+        'codex plugin marketplace remove tenon --json',
+        'codex plugin marketplace add jefferysha/tenon --ref v1.0.2 --json',
+        'codex plugin add tenon@tenon --json',
+      ])
+      expect(pluginPresent).toBe(true)
+      expect(pluginEnabled).toBe(true)
+      expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
+    },
+  )
 
   test('Codex CLI 缺失时在 host/journal mutation 前失败并给出安装与版本检查命令', async () => {
     const deps = makeDeps()

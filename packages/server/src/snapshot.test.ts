@@ -1775,24 +1775,32 @@ steps:
     const store = newStore()
     const root = await makeProject()
     const currentWorkflow = compileEffectiveWorkflowPlan('default').workflow
-    const { decomposition: _decomposition, interaction: _interaction, ...legacyBase } = currentWorkflow
+    const {
+      decomposition: _decomposition,
+      interaction: _interaction,
+      reviewBudget: _reviewBudget,
+      ...legacyBase
+    } = currentWorkflow
     const legacyWorkflow = {
       ...legacyBase,
-      steps: legacyBase.steps.map((step) => ({
-        ...step,
-        guards: step.id === 'build'
-          ? step.guards.filter((guard) =>
-              !(guard.type === 'field-equals' && guard.field === 'pre_verify_review_result'))
-          : step.guards,
-        transitions: step.transitions.map((transition) => ({
-          ...transition,
-          actions: transition.actions.filter((action) =>
-            action.type !== 'reset-pre-verify-review'
-              && !(step.id === 'verify'
-                && transition.event === 'verify-fail'
-                && action.type === 'mark-verification-failed')),
-        })),
-      })),
+      steps: legacyBase.steps.map((step) => {
+        const { reviewLanes: _reviewLanes, ...legacyStep } = step
+        return {
+          ...legacyStep,
+          guards: step.id === 'build'
+            ? step.guards.filter((guard) =>
+                !(guard.type === 'field-equals' && guard.field === 'pre_verify_review_result'))
+            : step.guards,
+          transitions: step.transitions.map((transition) => ({
+            ...transition,
+            actions: transition.actions.filter((action) =>
+              action.type !== 'reset-pre-verify-review'
+                && !(step.id === 'verify'
+                  && transition.event === 'verify-fail'
+                  && action.type === 'mark-verification-failed')),
+          })),
+        }
+      }),
     }
     const legacyChangeDir = await store.init({
       repoRoot: root,

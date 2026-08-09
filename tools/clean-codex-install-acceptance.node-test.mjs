@@ -449,7 +449,13 @@ test('verified Dashboard ownership is registered before a later HTML identity fa
         + 'if [ "$1" = "runtime" ]; then\n'
         + `  printf '%s\\n' '${JSON.stringify({
           activeValid: true,
-          active: { releaseId, source: { pluginVersion: '1.0.2' } },
+          active: {
+            version: 2,
+            releaseId,
+            payloadDigest: 'd'.repeat(64),
+            source: { host: 'codex', pluginVersion: '1.0.2' },
+            stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'c'.repeat(40) },
+          },
           selection: { activeRelease: releaseId },
         })}'\n`
         + 'else\n'
@@ -458,13 +464,6 @@ test('verified Dashboard ownership is registered before a later HTML identity fa
       'utf8',
     )
     await chmod(launcher, 0o755)
-    const releaseRoot = join(runtimeHome, 'data', 'releases', releaseId)
-    await mkdir(releaseRoot, { recursive: true })
-    await writeFile(join(releaseRoot, 'release.json'), JSON.stringify({
-      version: 1,
-      releaseId,
-      source: { host: 'codex', pluginVersion: '1.0.2' },
-    }))
     await new Promise((resolve, reject) => {
       server.once('error', reject)
       server.listen(0, '127.0.0.1', resolve)

@@ -127,6 +127,11 @@ async function publishWithinManagedTransaction(
     if (!await transaction.proveActivation(activation)) {
       throw new ManagedRuntimeIndeterminateError('Dashboard-only reconciliation 的 current activation 已漂移')
     }
+    if (activation.auditPending === true) {
+      throw new ManagedRuntimeIndeterminateError(
+        'runtime selection/launcher 已提交，但 terminal audit 尚未持久化；保留 activating-runtime WAL 供同一命令恢复',
+      )
+    }
     assertManagedActivationIdentity(activation, request, journal)
     journal = {
       ...journal,
@@ -238,6 +243,11 @@ async function publishWithinManagedTransaction(
         }
       }
     }
+    if (activation.auditPending === true) {
+      throw new ManagedRuntimeIndeterminateError(
+        'runtime selection/launcher 已提交，但 terminal audit 尚未持久化；保留 activating-runtime WAL 供同一命令恢复',
+      )
+    }
     assertManagedActivationIdentity(activation, request, journal)
     try {
       journal = {
@@ -265,6 +275,8 @@ async function publishWithinManagedTransaction(
     candidate.openBrowser ?? request.openBrowser,
     journal.dashboardPort ?? DEFAULT_DASHBOARD_PORT,
     dashboardStarter,
+    request.runtime.trustedNodePath,
+    request.runtime.verifyTrustedNode,
   )
   if (!dashboard.ok) return dashboard
   journal = dashboard.journal
@@ -358,5 +370,7 @@ async function publishWithinManagedTransaction(
     journal,
     dashboardStarter,
     candidateDashboard,
+    request.runtime.trustedNodePath,
+    request.runtime.verifyTrustedNode,
   )
 }

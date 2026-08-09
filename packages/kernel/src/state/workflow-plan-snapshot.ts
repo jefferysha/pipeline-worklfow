@@ -10,6 +10,7 @@ import type { WorkflowIR } from '../workflow/ir.js'
 import type {
   WorkflowDecompositionPolicyV1,
   WorkflowInteractionPolicyV1,
+  WorkflowReviewBudgetPolicyV1,
 } from '../workflow/types.js'
 import { atomicLinkPublish } from './atomic-publish.js'
 
@@ -52,7 +53,7 @@ export function parseWorkflowPlanSnapshot(raw: string): WorkflowPlanSnapshotEnve
   const allowedPlanKeys = planVersion === 3
     ? [
         'version', 'workflowId', 'executionModel', 'workflow', 'documentPolicy',
-        'decomposition', 'interaction', 'workflowFingerprint',
+        'decomposition', 'interaction', 'reviewBudget', 'workflowFingerprint',
       ]
     : planVersion === 2
       ? ['version', 'workflowId', 'executionModel', 'workflow', 'documentPolicy', 'workflowFingerprint']
@@ -102,6 +103,9 @@ export function parseWorkflowPlanSnapshot(raw: string): WorkflowPlanSnapshotEnve
           documentPolicy: documentPolicy as DocumentGovernancePolicy | null,
           decomposition: plan.decomposition as WorkflowDecompositionPolicyV1,
           interaction: plan.interaction as WorkflowInteractionPolicyV1,
+          ...(plan.reviewBudget === undefined
+            ? {}
+            : { reviewBudget: plan.reviewBudget as WorkflowReviewBudgetPolicyV1 }),
           workflowFingerprint: plan.workflowFingerprint,
         }
   effectiveWorkflowPlanFromSnapshot(snapshot)

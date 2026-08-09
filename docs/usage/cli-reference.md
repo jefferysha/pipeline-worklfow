@@ -101,7 +101,22 @@ tenon document status <change> [--json]
 tenon artifact register <change> <field> <path> --producer <skill-id>
 tenon review request <change> --event <event>
 tenon review acknowledge <change> [--delegated]
+tenon review-attempt begin <change> --candidate <fingerprint> [--json]
+tenon review-attempt lane <change> --attempt-id <id> --lane <lane> \
+  --result <pass|fail> --report <project-relative-path> [--json]
+tenon review-attempt complete <change> --attempt-id <id> \
+  --result <pass|fail> --report <project-relative-path> [--json]
+tenon review-budget show <change> [--json]
+tenon review-budget set <change> --max-attempts <1..20> [--json]
 ```
+
+`review-attempt` governs automated Review execution. One frozen candidate uses
+one attempt and aggregates all declared lanes, including standards, spec,
+security, E2E, browser, and visual acceptance. Retrying or sharding a lane does
+not consume another attempt. `review-budget set` is run-, workflow-, and
+step-scoped; it cannot rewrite an active attempt or lower the ceiling below the
+number already used. Human `review request/acknowledge` remains a separate
+exact-event confirmation boundary.
 
 Document structures and project-level spec scaffolds default to Chinese. English
 is explicit:
@@ -135,6 +150,33 @@ tenon init <change> --workflow <workflow> --track <track> --preset <preset>
 Custom Workflow authoring is file/Dashboard based; there is no public
 `tenon workflow create` command in the current CLI. `tenon workflow plan`
 is a read-only runtime introspection command, not a workflow authoring command.
+
+Every Workflow has a finite Review budget. Review membership is explicit and
+never inferred from a Skill or command name:
+
+```yaml
+name: release-train
+review_budget:
+  version: v1
+  max_attempts: 2
+steps:
+  - id: verify
+    label: Verify
+    gate: review
+    review_lanes: [standards, spec, e2e]
+    skills:
+      - id: acme-quality-gate
+        kind: review
+        review_lane: standards
+      - id: e2e-looking-work
+        kind: work
+```
+
+The default plugin maps packaged Review Skills to lanes in
+`templates/manifest.yaml`. A custom Workflow must use `kind: review` plus a
+declared `review_lane`; an unclassified third-party Skill is ordinary work and
+does not consume Review attempts. Dashboard policy editing preserves these
+fields and exposes `max_attempts` directly.
 
 ## AFK and loops
 

@@ -241,6 +241,14 @@ function updateEnv(
           stderr: '',
         }
       }
+      if (cmd === 'git' && args[0] === 'init') return { code: 0, stdout: '', stderr: '' }
+      if (cmd === 'git' && args[2] === 'fetch') return { code: 0, stdout: '', stderr: '' }
+      if (cmd === 'git' && args[2] === 'rev-parse' && args[3] === 'FETCH_HEAD^{commit}') {
+        return { code: 0, stdout: `${STABLE_TARGET.commit}\n`, stderr: '' }
+      }
+      if (cmd === 'git' && args[2] === 'cat-file') {
+        return { code: 0, stdout: 'commit\n', stderr: '' }
+      }
       const result = run(cmd, args)
       const text = `${cmd} ${args.join(' ')}`
       if (result.stdout.trim() !== '' || result.code !== 0) {
@@ -643,7 +651,11 @@ describe('tenon update', () => {
       }),
     ), `${deps.errLines.join('\n')}\n${deps.outLines.join('\n')}`).toBe(0)
     expect(calls.exec
-      .filter(([cmd, args]) => !(cmd === 'git' && args[0] === 'ls-remote'))
+      .filter(([cmd, args]) => !(cmd === 'git' && (
+        args[0] === 'ls-remote'
+        || args[0] === 'init'
+        || (args[0] === '-C' && args[1]?.includes('/tenon-stable-tag-') === true)
+      )))
       .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin list --json'],
       ['codex', 'plugin marketplace list --json'],
@@ -1540,6 +1552,31 @@ describe('tenon update', () => {
       `/runtime/releases/${previousRelease}/payload`,
     ])
     expect(runtime.calls.failures[0]?.[1]).toContain('已恢复 managed transaction 与 previous Dashboard')
+  })
+
+  test('preserves the primary update failure and warns when runtime audit persistence also fails', async () => {
+    const deps = makeDeps()
+    const { env } = updateEnv((cmd, args) => {
+      if (cmd === 'codex' && args.join(' ') === 'plugin list --json') {
+        return { code: 0, stdout: CODEX_INVENTORY, stderr: '' }
+      }
+      return { code: 0, stdout: '', stderr: '' }
+    })
+    const runtime = fakeRuntimeInstaller(false, `sha256-${'a'.repeat(64)}`)
+    runtime.installer.recordUpdateFailure = async () => { throw new Error('audit disk unavailable') }
+
+    expect(await cmdUpdate(
+      deps,
+      { codex: true },
+      env,
+      runtime.installer,
+      fakeDashboardStarter([true, false]).starter,
+      STABLE_RESOLVER,
+    )).toBe(1)
+
+    expect(deps.errLines.join('\n')).toContain('injected readiness failure')
+    expect(deps.errLines.join('\n')).toContain('WARNING: runtime update failure audit 写入失败')
+    expect(deps.errLines.join('\n')).toContain('audit disk unavailable')
   })
 
   test('successful update reports registered projects that need an explicit sync without writing them', async () => {

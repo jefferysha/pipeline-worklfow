@@ -124,13 +124,14 @@ export async function installNativePluginCandidate(
     const item = plan[index]
     if (!item) continue
     deps.io.out(`[setup] $ ${commandText(item.cmd, item.args)}`)
-    const stepId = [
+    const stepId = ([
       'plugin-remove',
       'marketplace-remove',
       'marketplace-register',
       'plugin-install',
       'inventory-after',
-    ][index]!
+    ] as const).at(index)
+    if (stepId === undefined) throw new Error('宿主安装计划与受管步骤不一致')
     const result = await runManagedHostCommand(transaction, stepId, env, item, target)
     if (result.stdout.trim() !== '') deps.io.out(result.stdout.trimEnd())
     if (result.code === 0) {

@@ -126,7 +126,11 @@ jobs:
             packages/server/dist/dashboard.mjs \
             packages/dashboard-app/dist
           bash tools/verify-skills.sh
-          bash tools/test-bundle.sh
+          n_minus="$RUNNER_TEMP/tenon-n-minus-one"
+          bash tools/prepare-n-minus-one-release.sh "$n_minus"
+          TENON_N_MINUS_ONE_PAYLOAD="$n_minus/payload" \
+            TENON_N_MINUS_ONE_RELEASE="v1.0.1" \
+            bash tools/test-bundle.sh
 
       - name: Documentation and governance-document gates
         run: |

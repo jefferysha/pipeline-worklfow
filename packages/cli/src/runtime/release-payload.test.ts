@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { defaultRuntimeCommandRunner } from './release-payload.js'
+import { defaultRuntimeCommandRunner, inspectCandidatePayload } from './release-payload.js'
 import { parseManifest, runtimeReleaseIdV2 } from './release-store-codecs.js'
 
 describe('release payload subprocess boundary', () => {
@@ -42,4 +42,29 @@ describe('release payload subprocess boundary', () => {
       stableTarget,
     }))).toBeNull()
   })
+
+  test('uses and revalidates a frozen Node path before every candidate Node spawn', async () => {
+    const frozenNode = '/trusted/frozen/node'
+    const frozenBash = '/trusted/frozen/bash'
+    let nodeProofs = 0
+    const nodeSpawns: Array<{ readonly file: string; readonly proof: number }> = []
+
+    await inspectCandidatePayload(process.cwd(), {
+      nodePath: frozenNode,
+      bashPath: frozenBash,
+      verifyNode: () => { nodeProofs += 1 },
+      runner: {
+        run: async (file) => {
+          if (file === frozenNode || file === process.execPath) {
+            nodeSpawns.push({ file, proof: nodeProofs })
+          }
+          return { code: 0, stdout: '', stderr: '' }
+        },
+      },
+    })
+
+    expect(nodeSpawns).toHaveLength(4)
+    expect(nodeSpawns.every(({ file }) => file === frozenNode)).toBe(true)
+    expect(nodeSpawns.map(({ proof }) => proof)).toEqual([1, 2, 3, 4])
+  }, 30_000)
 })

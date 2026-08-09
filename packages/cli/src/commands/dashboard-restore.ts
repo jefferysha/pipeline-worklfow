@@ -17,6 +17,8 @@ export async function restorePreviousReleasedDashboard(
   starter: ReleasedDashboardStarter,
   dashboardPort: number,
   restoreTransactionId: string,
+  trustedNodePath?: string,
+  verifyTrustedNode?: () => void,
 ): Promise<PreviousReleasedDashboardRestoreOutcome> {
   const previousRelease = activation.selection.previousRelease
   if (previousRelease === null) return { state: 'not-required' }
@@ -25,6 +27,8 @@ export async function restorePreviousReleasedDashboard(
     openBrowser: false,
     port: dashboardPort,
     transactionId: restoreTransactionId,
+    ...(trustedNodePath === undefined ? {} : { trustedNodePath }),
+    ...(verifyTrustedNode === undefined ? {} : { verifyTrustedNode }),
   })
   if (outcome.state !== 'ready') return outcome
   const ownership = outcome.session.ownership

@@ -91,13 +91,16 @@ tenon document status <change>
 
 只有明确选择 Change 才恢复。多个候选不能按 mtime 猜测；独立新目标应创建新 Change。
 
-### 5. 卸载宿主集成
+### 5. 卸载 Codex 宿主集成
 
 ```bash
-tenon uninstall --codex
+codex plugin remove tenon@tenon --json
+codex plugin marketplace remove tenon --json
 ```
 
-卸载 scrubber 只删除自己拥有且未被用户修改的资产。项目内 Change、Archive、OpenSpec、ADR 和用户自定义 Workflow 默认保留。
+以上命令只删除 Codex 的 Tenon 插件登记和 Marketplace 登记。项目内 Change、Archive、OpenSpec、ADR 和用户自定义 Workflow 默认保留。
+
+`tenon uninstall --yes` 是项目资产 scrubber，不是宿主插件卸载命令；它只删除当前项目中由 Tenon 管理且未被用户修改的资产。
 
 ## 更新不应修改什么
 

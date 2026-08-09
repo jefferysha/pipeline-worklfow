@@ -17,6 +17,11 @@
 - [x] 编写版本化安装、更新、回滚、幂等重装和 Dashboard 提示的 delta spec。 (spec)
 - [x] 形成可执行实施计划、失败恢复策略与版本升级清单。 (spec)
 - [x] 根据 Verify 事实修订 v1.0.1 legacy bridge、候选复证、旧 WAL 与可信可执行文件契约。 (spec)
+- [x] 冻结一次性 Review 验收矩阵，覆盖发布身份、状态机/并发、可信执行、N-1、Dashboard、文档、架构与 dist。 (spec)
+- [x] 为每个开放条目绑定规格、失败测试、实现边界、验证命令和退出条件，并禁止移动候选出 verdict。 (spec)
+- [x] 定义任意 Workflow/Pipeline 的 `review_budget`、attempt begin/complete、实例 override 与耗尽行为。 (spec)
+- [x] 明确 Review lane 分类与计数口径：独立 code/spec/security/E2E/browser 验证聚合为一次候选 attempt，Build 紧反馈不扣次。 (spec)
+- [x] 登记并重读修订后的 proposal/design/delta spec/plan/tasks，以 delegated review receipt 推进 Build。 (spec)
 
 ## 实现
 
@@ -49,6 +54,25 @@
 - [x] 让稳定 runtime bootstrap 严格双读 v1 legacy 与 v2 framed release identity，并用真实稳定 launcher 验证新激活 v2 与旧 v1 rollback。 (build)
 - [x] 按宿主边界、候选准备与完成报告拆分 `update.ts`，保持公开命令契约且所有 CLI 生产文件低于硬性长度上限。 (build)
 - [x] 兼容真实磁盘 v1.0.1 `setup/update` advanced WAL：successor 证明前原字节不变，证明后同 transaction 单次迁移。 (build)
+- [x] 修复 rollback 与 stable launcher 崩溃边界：保留 hardened bootstrap，精确恢复 old/new partial launcher pair，第三状态失败关闭。 (build)
+- [x] 修复 runtime audit 提交顺序、损坏尾行诊断、update failure audit warning 与公开 runtime identity 投影。 (build)
+- [x] 将 installer/native executable 冻结升级为可复验的物理文件/父目录信任，覆盖 symlink/inode swap 与同 owner Homebrew 路径。 (build)
+- [x] 修正 plugin-distribution/plugin-runtime 的 `MODIFIED Requirements`，并让 archive rehearsal 消除 `main/install.sh` 与 `pipeline` launcher 矛盾。 (build)
+- [x] 固定真实公开 v1.0.1 N-1 payload/commit/digest，修复 workflow plan 兼容投影并让 `tools/test-bundle.sh` 全绿。 (build)
+- [x] 将 `runtime repair --rollback` 绑定冻结 Bash 物理证明，并让 payload 的每次 Node spawn 使用冻结 nodePath。 (build)
+- [x] 拒绝 executable 自身不可信 owner/write 位并绑定同 inode 原地改写 identity，保持 Homebrew/sticky 根兼容。 (build)
+- [x] 用 capture-and-validate + exclusive publication 消除 launcher proof/write 覆盖第三方字节的 TOCTOU。 (build)
+- [x] 用 `MODIFIED Requirements` 明确补偿保留当前 hardened bootstrap，并验证 archive 后 canonical 唯一。 (build)
+- [x] 让 stable launcher 在 capture 后 public path 缺失的崩溃窗口按 owner marker/previous 精确恢复，并为 exact launcher 提供无副作用 fast-path。 (build)
+- [x] 将冻结 Node 绑定贯穿 Dashboard spawn/restore/compensation，且 Doctor 对 Host/Bash/Git/Node 每次执行前复验物理身份。 (build)
+- [x] 禁止 native lifecycle 从 physical binding 降级为 pathname，并在 Windows 冻结 batch host 与 `cmd.exe` 双重身份。 (build)
+- [x] 为公开 installer host bridge 增加 durable phase journal、存活 owner lease、崩溃续跑与第三状态保护。 (build)
+- [x] 在正式 Release published 事件执行公网版本化安装、重复安装、`tenon update --codex` 与 Dashboard/runtime 身份验收。 (build)
+- [x] 按冻结矩阵 R01-R07 修复受控 dist、当前 Run V3、正式 Release/commit proof、launcher Node identity 与宿主并发边界。 (build)
+- [x] 按冻结矩阵 R08-R14 修复 terminal audit、公网验收并发/超时、架构门、断言与中英文发布文档。 (build)
+- [x] 对 R01-R14 逐项完成失败测试先红、最小实现转绿和定向验证，不接受弱化断言。 (build)
+- [x] 在源码停止变更后双重构建，证明受控 dist 新鲜且候选 fingerprint 前后相同。 (build)
+- [x] 实现并验证 R15：Workflow/Pipeline 可配置 Review 次数，显式 Review lanes 共用候选 attempt，跨进程持久且耗尽后在任何 Skill/agent/E2E 派发前停止。 (build)
 
 ## 验证
 

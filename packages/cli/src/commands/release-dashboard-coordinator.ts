@@ -43,6 +43,8 @@ export async function coordinateReleaseDashboard(
   openBrowser: boolean,
   dashboardPort: number,
   starter: ReleasedDashboardStarter | undefined,
+  trustedNodePath?: string,
+  verifyTrustedNode?: () => void,
 ): Promise<DashboardCoordination> {
   let journal = initialJournal
   if (journal.dashboardPort !== undefined && journal.dashboardPort !== dashboardPort) {
@@ -331,6 +333,8 @@ export async function coordinateReleaseDashboard(
           port: dashboardPort,
           transactionId: journal.transactionId,
           expectedServerVersion: activation.release.source.pluginVersion,
+          ...(trustedNodePath === undefined ? {} : { trustedNodePath }),
+          ...(verifyTrustedNode === undefined ? {} : { verifyTrustedNode }),
         },
       )
     }

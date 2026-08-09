@@ -67,16 +67,21 @@ export async function runManagedHostCommand(
         isEquivalentDesired: injected.isEquivalentDesired,
         isCompletedCompatible: injected.isCompletedCompatible,
       }
-  const raw = await transaction.runStep(stepId, {
-    desired: desired.serialized,
-    isEquivalentDesired: desired.isEquivalentDesired,
-    observe: injected?.observe ?? (() => observeNativeHost(env, host)),
-    isDesired: desired.isDesired,
-    ...(desired.isCompletedCompatible === undefined
-      ? {}
-      : { isCompletedCompatible: desired.isCompletedCompatible }),
-    execute: () => JSON.stringify(env.runCommand(command.cmd, [...command.args])),
-  })
+  const reconcile = () => transaction.runStep(stepId, {
+      desired: desired.serialized,
+      isEquivalentDesired: desired.isEquivalentDesired,
+      observe: injected?.observe ?? (() => observeNativeHost(env, host)),
+      isDesired: desired.isDesired,
+      ...(desired.isCompletedCompatible === undefined
+        ? {}
+        : { isCompletedCompatible: desired.isCompletedCompatible }),
+      execute: () => JSON.stringify(env.runCommand(command.cmd, [...command.args])),
+    })
+  // The lock covers before/WAL/pre-execute-CAS/mutation/postcondition as one host-owned step. The
+  // public bootstrap uses the exact same path, so two entrypoints cannot both authorize a delete.
+  const raw = await (env.withHostMutationLock === undefined
+    ? reconcile()
+    : env.withHostMutationLock(host, reconcile))
   // The fresh host observation is the commit fact. A host CLI may report non-zero after reaching
   // the desired state (for example an idempotent "already installed" diagnostic); retaining that
   // raw result in the WAL is useful for audit, but it must not permanently fail first-run or

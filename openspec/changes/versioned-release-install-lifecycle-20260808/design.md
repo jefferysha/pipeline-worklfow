@@ -22,23 +22,65 @@
 - PATH 中空项、相对项或当前目录可劫持裸 `node`/`bash`；安装器和稳定 launcher 必须冻结并执行可信绝对路径。
 - 自动打开浏览器在 CI、远程主机或无图形环境中可能失败或造成干扰。
 - 发布/Tag 是外部状态；必须在完整验证和用户授权范围内执行，并保留失败恢复路径。
+- rollback 若把 previous payload 的旧 bootstrap 重新安装为 active，会同时恢复旧 schema 限制与 PATH 裸 shell 攻击面；rollback 只能切 selection，不能降级 bootstrap。
+- selection 与两个 stable launcher 分别原子仍可形成撕裂 pair；恢复必须识别精确 old/new partial，不能将第三状态视为可修复。
+- audit terminal 事件早于 selection 提交或静默忽略损坏尾行，会把未成功/旧事件冒充为 latest 成功。
+- 真实公开 v1.0.1 不识别当前 workflow plan v3；Release 门禁必须固定公开 N-1 身份并拒绝缺失时 skip。
 
 ## 架构边界
 
 - GitHub Releases resolver 只读发现 latest stable，失败时零 mutation；Git 标签/peeled commit 提供 ref 身份证明。
 - Codex CLI 独占 marketplace/plugin 写入；Tenon WAL 冻结 desired-state 并验证 inventory，不直接编辑宿主 cache。
+- 公开 `install.sh` 在 packaged CLI 尚不可用的窄 bridge 内使用独立 machine-state journal 与存活 owner
+  lease：先记录 frozen target 和 before inventory，再逐 phase remove/add；恢复只接纳精确 before/desired，
+  第三状态不删除。进入 packaged setup 后继续使用 managed release WAL。
 - managed runtime coordinator 独占候选发布、selection、Dashboard ownership/readiness、ready evidence 与补偿。
 - candidate journal 只保存恢复输入，不是永久证明；每次从 `candidate-resolved` 恢复以及 activation 前都重新验证候选资产、冻结标签和宿主 marketplace/plugin identity。
 - journal codec 向后读取 v1.0.1 `setup/update` WAL 与 Dashboard identity；缺失字段只能触发 successor 证明和重新探测，任何 successor 证明前的 WAL 改写都被禁止。
 - 安装器在 mutation 前冻结可信 `node`、`bash`、`git` 与宿主 CLI 的绝对路径；生成 launcher 使用绝对 Node 路径与系统绝对 shell，不再依赖运行时 PATH 搜索。
+- 可执行冻结还必须记录 realpath、device/inode/mode/owner、size/change identity 与完整父目录身份，每次 spawn 前复验；executable 自身 group/world-write、非 root/当前用户 owner、非 sticky world-write 父目录和不同 owner 的 group-write 父目录失败关闭，同 owner package-manager 根保留兼容，否则 Homebrew 新用户路径会被错误拒绝。
+- Windows 不套用 POSIX uid/mode 信任判据，而以 realpath/file identity/change identity 复验；batch host
+  shim 的 `cmd.exe` 作为第二个冻结 executable。Doctor 与 Dashboard 必须消费与 setup/update 相同的
+  Host/Bash/Git/Node 绑定，不得从 pathname 或 `process.execPath` 重解析。
+- stable launcher 替换使用 capture-and-validate + no-replace publication：先原子移走实际当前对象并复核它仍属于 checkpoint/committed 字节，再以 exclusive publish 写入；proof 后出现的第三方对象不得被 rename 覆盖。
 - release workflows 独占 tag/Release 创建；`main` 是候选资格，不是发行通道。
+- stable Release `published` 事件触发只读、无 secrets 的公网验收，从该 tag 原样安装两次，再执行
+  `tenon update --codex` 并复证 runtime/doctor/Dashboard identity 与外部用户状态零漂移。
 
 ## 状态与恢复
 
 `unresolved -> resolved -> host-rebinding -> candidate-verified -> runtime-active -> dashboard-ready -> evidence-committed`。
 resolved 前失败不产生写入；重绑定中断保留 WAL 且旧 stable launcher/runtime 可用；候选或 Dashboard 身份不可证明时不提交 ready evidence；同版 latest update 幂等返回。
 
-`candidate-resolved` 是可恢复 checkpoint 而不是信任终点。恢复必须重新观察宿主、重新检查候选 payload，并再次证明 frozen tag；旧 Dashboard identity 缺版本时必须经过健康探测补齐当前证据。任何第三状态都保留 WAL 并失败关闭。
+`candidate-resolved` 是可恢复 checkpoint 而不是信任终点。恢复必须重新观察宿主、重新检查候选 payload，并再次证明 frozen tag；旧 Dashboard identity 缺版本时必须经过健康探测补齐当前证据。任何第三状态都保留 WAL 并失败关闭。rollback 与 candidate/stored payload 校验必须消费冻结的 Bash/Node 物理证明，不能以 `process.execPath` 或 pathname 相等代替。
+
+## Review 闭集协议
+
+为避免把末端 Review 当成需求发现阶段，本 Change 采用以下固定顺序：
+
+1. Spec 先冻结语义、失败模型和验收矩阵；矩阵同时覆盖 Release/Tag、宿主并发、managed WAL、可信可执行文件、N-1、Dashboard、公开文档、架构门和受控 dist。
+2. 前置 Review 期间源码保持冻结；所有 C/H/M 先去重、定级并映射到规格、文件、失败测试和验证命令，形成唯一 Build 闭集。
+3. Build 只处理冻结条目，每项严格执行 red → green → refactor；不得在实现中临时扩大成功语义或降低断言。
+4. 只有源码、测试、文档和 dist 全部稳定且 fingerprint 固定后才进入最终 Review。最终 Review 只接受两类阻断：冻结条目未满足，或本轮 diff 新引入且直接违反已冻结规格的回归。
+5. 与当前规格无直接关系的相邻改进进入 backlog，不滚入本轮；若发现新的安全 Critical 或确需改变已冻结语义，则只允许通过一次官方 `requirements-changed` 回到 Spec，更新矩阵后重新冻结。
+6. 任一审查对移动 checkout 不得给出 PASS/FAIL；所有 verdict 必须绑定单一 HEAD、完整 fingerprint 和零漂移复算。
+
+该协议不降低质量门：它把发现前移、标准冻结并限制末端范围，从而避免“修一批、扩一批、反复回 Build”。
+
+## 可配置 Review 预算
+
+- Workflow 定义增加版本化 `review_budget`，缺省也使用有限默认值；effective plan 与 V3 snapshot 冻结它，避免运行中随 live workflow 漂移。
+- Workflow 的每个自动复核 step 显式声明 `review_lanes`；默认轨的 Skill manifest 与自定义 Workflow
+  SkillRef 都使用显式 Review 分类，禁止从 `review`/`verify`/`e2e` 等名称片段推断。
+- Pipeline 可对尚未开始的 scope 做审计化 override，范围固定为 1–20；不能低于已用次数，也不能在 active attempt 中途改写。
+- 自动 Review 采用 begin/complete 两阶段：begin 在 Change 锁内占用次数并绑定 step、candidate fingerprint、冻结 lane 集与 attempt id；complete 绑定 pass/fail、聚合 lane 结果、报告路径与 digest。
+- 同一 candidate 恢复复用 active attempt，不重复计数；不同 candidate 和并发 contender 不得共享 attempt。
+- Standards/Spec reviewer、安全复核、E2E/API/browser/visual acceptance 和发布候选验收是同一候选
+  attempt 的并行 lanes，不按工具数量分别扣次；Build 内 TDD/unit/typecheck/lint 是实现反馈，不扣 Review 次数。
+- 官方 Review Skill、reviewer agent 与 E2E runner 的派发前置条件统一为 active attempt；第三方 Skill
+  通过 Workflow 显式分类进入 lane，因此不依赖 Tenon 预知其名字。
+- 预算耗尽先于 Reviewer 派发失败关闭。持续自主授权不能自行提高上限；只能输出显式的需求回退、审计化 override、人工接受风险或终止入口。
+- 人类 `review request/acknowledge` 继续只表达出口授权；自动 attempt budget 是独立事实，两者不得合并成一个状态字段。
 
 ## Dashboard 决策
 

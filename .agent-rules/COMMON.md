@@ -56,6 +56,16 @@
 - 修改公共契约、schema/migration、鉴权/权限、支付/账务、基础设施、CI、生成代码、共享类型或跨端 API 时，说明影响范围并按风险执行验证；只有超出用户授权、难以回退或会改变外部/生产状态时才先确认。
 - 运行命令需要网络、外部服务、密钥或长时间任务时，遵循当前环境权限并选择风险匹配的验证方式；破坏性或授权不清晰的操作必须先确认。
 
+## Playwright MCP 与浏览器复用
+
+- 任一 agent、subagent 或并行任务准备调用 Playwright MCP、浏览器验收或浏览器自动化前，必须先检查当前宿主是否已有项目专用的 Playwright MCP endpoint、browser owner、活动 browser root、profile 和连接；普通串行验收必须复用同一个长期运行的专用 MCP 与浏览器，不得按 tool call、turn、task 或 agent 重复启动 `npx @playwright/mcp`、新 Chrome 或临时 profile。
+- 项目专用浏览器与用户日常 Chrome 必须隔离。除非用户当次明确要求并知晓共享登录态、Cookie、标签页和误操作风险，不得通过扩展、CDP 或其他方式接管用户日常 Chrome。
+- 多个 agent 需要浏览器时，默认由一个 browser-owner 串行执行并共享结果；其他 agent 不得并行驱动同一 context、页面或标签页。确有多角色、并行隔离或破坏性测试需求时，才可创建额外 context 或浏览器实例，并必须在启动前声明用途、数量和清理责任，在完成后关闭额外实例。
+- 若宿主仅提供会为每个连接启动独立 stdio 服务的 Playwright MCP，且无法连接项目专用的长期 endpoint，agent 不得盲目调用并制造重复实例；必须改用可复用的现有 Browser/Chrome connector、由 browser-owner 代执行，或向用户报告宿主限制。不得直接修改 `.codex/plugins/cache/`、`.claude/plugins/cache/` 等托管缓存来伪造持久配置。
+- 浏览器任务开始前必须至少记录可核验的 endpoint、owner 或 session identity；本机进程可观察时，还必须记录 browser root PID、profile 和现有实例数，结束前复查同类证据。普通串行任务不得增加遗留的 MCP server、browser root、Dock 窗口或临时 profile；若本次确有新增，最终回复必须说明原因、存活范围和清理结果。
+- 发现重复或疑似孤儿 Playwright/Chrome 时，必须先核对 PPID/PGID、启动参数、profile、活动连接和所属任务，再仅终止确认无主且无客户端的精确进程树；不得误杀用户日常 Chrome、共享 browser-owner 或仍在验收的实例。无法安全判定归属时，保留进程并报告阻塞。
+- 长期 Playwright MCP 服务必须固定经过验证的版本，并通过受支持的用户级或项目级配置连接；不得把 `@latest` 作为要求可重复的共享运行时。仅使用 `--headless` 隐藏窗口不算解决实例泄漏，验收必须同时检查 MCP 与浏览器进程是否被复用和回收。
+
 ## 修改权限边界
 
 - 可以直接执行：用户请求已授权、范围内且可合理回退的代码、测试、依赖、schema、配置、CI、文档和文件修改；按风险说明影响并验证。

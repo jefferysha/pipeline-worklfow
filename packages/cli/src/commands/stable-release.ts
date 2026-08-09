@@ -1,4 +1,7 @@
 import { PRODUCT_IDENTITY } from '@tenon/kernel'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { SetupEnv } from './setup.js'
 
 const STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
@@ -109,9 +112,39 @@ function tagCommit(env: SetupEnv, tag: string): string {
     if (refs.has(ref)) throw new Error('stable Release tag proof is ambiguous')
     refs.set(ref, oid)
   }
-  const commit = refs.get(peeledRef) ?? refs.get(directRef)
-  if (commit === undefined) throw new Error('stable Release tag proof is missing')
-  return commit
+  const advertisedCommit = refs.get(peeledRef) ?? refs.get(directRef)
+  if (advertisedCommit === undefined) throw new Error('stable Release tag proof is missing')
+
+  const proofRoot = mkdtempSync(join(tmpdir(), 'tenon-stable-tag-'))
+  try {
+    const initialized = env.runCommand('git', ['init', '--bare', proofRoot], { timeoutMs: 10_000 })
+    if (initialized.code !== 0) {
+      throw new Error(`stable Release object proof could not initialize: ${initialized.stderr.trim() || `exit ${initialized.code}`}`)
+    }
+    const fetched = env.runCommand(
+      'git',
+      ['-C', proofRoot, 'fetch', '--no-tags', '--depth=1', RELEASE_REPOSITORY, directRef],
+      { timeoutMs: 10_000 },
+    )
+    if (fetched.code !== 0) {
+      throw new Error(`stable Release object proof failed: ${fetched.stderr.trim() || `exit ${fetched.code}`}`)
+    }
+    const resolved = env.runCommand('git', ['-C', proofRoot, 'rev-parse', 'FETCH_HEAD^{commit}'], { timeoutMs: 10_000 })
+    const commit = resolved.stdout.trim()
+    if (resolved.code !== 0 || !GIT_OID.test(commit)) {
+      throw new Error('stable Release tag does not resolve to a commit object')
+    }
+    const objectType = env.runCommand('git', ['-C', proofRoot, 'cat-file', '-t', commit], { timeoutMs: 10_000 })
+    if (objectType.code !== 0 || objectType.stdout.trim() !== 'commit') {
+      throw new Error('stable Release tag final object is not a commit')
+    }
+    if (commit !== advertisedCommit) {
+      throw new Error('stable Release tag object proof does not match its advertised peeled commit')
+    }
+    return commit
+  } finally {
+    rmSync(proofRoot, { recursive: true, force: true })
+  }
 }
 
 /** Resolve an explicitly selected packaged stable version without consulting a mutable branch. */

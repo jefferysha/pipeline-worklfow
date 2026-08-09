@@ -4,6 +4,24 @@ export type NativeRuntimeHost = 'codex' | 'claude'
 
 export type RuntimePaths = ProductPaths
 
+export interface TrustedPathProof {
+  readonly path: string
+  readonly dev: number
+  readonly ino: number
+  readonly mode: number
+  readonly uid: number
+  readonly size: number
+}
+
+export interface TrustedExecutableProof {
+  readonly version: 1
+  readonly platform: NodeJS.Platform
+  readonly requestedPath: string
+  readonly executable: TrustedPathProof
+  readonly parents: readonly TrustedPathProof[]
+  readonly sha256: string
+}
+
 export interface RuntimeReleaseSource {
   readonly host: NativeRuntimeHost | 'adapter' | 'manual'
   readonly pluginVersion: string
@@ -59,8 +77,10 @@ export interface RuntimeAuditEntry {
   readonly version: 1
   readonly at: string
   readonly kind:
+    | 'activation-prepared'
     | 'activated'
     | 'activation-rejected'
+    | 'rollback-prepared'
     | 'rolled-back'
     | 'rollback-rejected'
     | 'update-rejected'
@@ -78,6 +98,8 @@ export interface RuntimeActivation {
   readonly launcherSnapshot?: RuntimeLauncherSnapshot
   /** Exact launcher state written by this activation; compensation uses it as a CAS ownership proof. */
   readonly launcherCommitted?: RuntimeLauncherSnapshot
+  /** Selection committed, but the terminal audit append still requires durable recovery. */
+  readonly auditPending?: true
 }
 
 export interface RuntimeInspection {
@@ -87,6 +109,10 @@ export interface RuntimeInspection {
   readonly activeValid: boolean
   readonly previousValid: boolean
   readonly lastAudit: RuntimeAuditEntry | null
+  /** True when audit.jsonl is present but cannot be consumed as one complete append-only log. */
+  readonly auditCorrupt?: boolean
+  /** The latest prepared audit matches committed state but its terminal event could not be appended. */
+  readonly auditPending?: boolean
 }
 
 export class RuntimeFailure extends Error {

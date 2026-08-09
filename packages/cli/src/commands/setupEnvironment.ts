@@ -1,7 +1,7 @@
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, win32 } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { readAutomationJson } from '@tenon/automation'
-import { PREREQ_HINTS } from '@tenon/kernel'
+import { PREREQ_HINTS, withLock } from '@tenon/kernel'
 import { errMsg, type CliDeps } from '../deps.js'
 import { nodeExecDocker, probeAfkReadiness, type AfkReadiness, type CredLight, type ExecDockerFn } from '../afkReadiness.js'
 import { REAL_RUNTIME_INSTALLER, type RuntimeInstaller } from '../runtime/installer.js'
@@ -30,6 +30,7 @@ import { commandExistsOnPath, resolveCommandOnPath } from './commandExists.js'
 import {
   nativeHostCommandBinding,
 } from './native-host-command-binding.js'
+import { freezeTrustedExecutable } from './trusted-executable.js'
 import type { SetupEnv } from './setup-env-types.js'
 export type { SetupEnv } from './setup-env-types.js'
 
@@ -85,18 +86,42 @@ export const REAL_SETUP_ENV: SetupEnv = {
     const executable = resolveCommandOnPath(host, {
       requireAbsolutePathEntries: true,
     })
-    return executable === undefined ? undefined : nativeHostCommandBinding(executable)
+    if (executable === undefined) return undefined
+    const trusted = freezeTrustedExecutable(executable)
+    const commandInterpreter = process.platform === 'win32'
+      && /\.(?:cmd|bat)$/iu.test(trusted?.executable ?? '')
+      ? freezeTrustedExecutable(
+          process.env.ComSpec && win32.isAbsolute(process.env.ComSpec)
+            ? process.env.ComSpec
+            : win32.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe'),
+        )
+      : undefined
+    return trusted === undefined
+      ? undefined
+      : nativeHostCommandBinding(
+          trusted.executable,
+          process.platform,
+          process.env,
+          trusted,
+          commandInterpreter,
+        )
   },
-  resolveTrustedCommand: (name) => resolveCommandOnPath(name, {
-    requireAbsolutePathEntries: true,
-  }),
-  codexAuthStatus: (codexExecutable) => {
+  resolveTrustedCommand: (name) => {
+    const candidate = resolveCommandOnPath(name, { requireAbsolutePathEntries: true })
+    return candidate === undefined ? undefined : freezeTrustedExecutable(candidate)?.executable
+  },
+  resolveTrustedCommandBinding: (name) => {
+    const candidate = resolveCommandOnPath(name, { requireAbsolutePathEntries: true })
+    return candidate === undefined ? undefined : freezeTrustedExecutable(candidate)
+  },
+  codexAuthStatus: (codexExecutable, commandBinding) => {
     if (codexExecutable === undefined) return probeCodexAuth()
-    const plan = codexStatusSpawnPlan(
-      process.platform,
-      process.env,
-      () => codexExecutable,
-    )
+    const invocation = commandBinding?.invocation(['login', 'status'])
+    const plan = commandBinding === undefined
+      ? codexStatusSpawnPlan(process.platform, process.env, () => codexExecutable)
+      : invocation === undefined
+        ? { unavailableReason: 'cli-missing' as const }
+        : { status: invocation }
     return probeCodexAuth(createCodexAuthExec({ plan }))
   },
   listDir: (dir) => {
@@ -143,6 +168,11 @@ export const REAL_SETUP_ENV: SetupEnv = {
         stderr: err.stderr != null ? String(err.stderr) : errMsg(e),
       }
     }
+  },
+  withHostMutationLock: (host, operation) => {
+    const homeDir = homedir()
+    const paths = resolveRuntimePaths({ homeDir, env: { ...process.env } })
+    return withLock(join(paths.stateRoot, 'host-mutation', host), operation)
   },
   confirm: (question) => {
     process.stdout.write(question)

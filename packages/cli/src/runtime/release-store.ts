@@ -24,7 +24,7 @@ import { RuntimeFailure } from './types.js'
 import { compensateActivation } from './activation-compensation.js'
 import {
   isExistingReleaseCollision,
-  lastAudit,
+  readAuditState,
   readReleaseManifest,
   readSelection,
   runtimeReleaseIdV2,
@@ -58,6 +58,10 @@ export interface RuntimeReleaseStoreOptions {
   readonly runner?: RuntimeCommandRunner
   /** Native setup/update inject the absolute Bash path frozen before any host mutation. */
   readonly bashPath?: string
+  /** Physical identity proof captured before native mutation and replayed before every Bash spawn. */
+  readonly verifyBash?: () => void
+  readonly nodePath?: string
+  readonly verifyNode?: () => void
   readonly retainedReleases?: number
   readonly auditWriter?: RuntimeAuditWriter
 }
@@ -66,14 +70,25 @@ export class RuntimeReleaseStore {
   private readonly now: () => string
   private readonly runner: RuntimeCommandRunner
   private readonly bashPath: string
+  private readonly nodePath: string
   private readonly retainedReleases: number
   private readonly auditWriter: RuntimeAuditWriter
 
   constructor(options: RuntimeReleaseStoreOptions) {
     this.paths = options.paths
     this.now = options.now ?? (() => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'))
-    this.runner = options.runner ?? defaultRuntimeCommandRunner()
+    const runner = options.runner ?? defaultRuntimeCommandRunner()
     this.bashPath = options.bashPath ?? 'bash'
+    this.nodePath = options.nodePath ?? process.execPath
+    this.runner = options.verifyBash === undefined && options.verifyNode === undefined
+      ? runner
+      : {
+          run: async (file, args, cwd) => {
+            if (file === this.bashPath) options.verifyBash?.()
+            if (file === this.nodePath) options.verifyNode?.()
+            return runner.run(file, args, cwd)
+          },
+        }
     this.retainedReleases = Math.max(2, options.retainedReleases ?? 3)
     this.auditWriter = options.auditWriter ?? writeAudit
   }
@@ -97,17 +112,22 @@ export class RuntimeReleaseStore {
 
   async inspect(): Promise<RuntimeInspection> {
     await this.prepareRoots()
-    const selection = await readSelection(this.paths)
-    const active = selection.activeRelease === null ? null : await this.validateStoredRelease(selection.activeRelease)
-    const previous = selection.previousRelease === null ? null : await this.validateStoredRelease(selection.previousRelease)
-    return {
-      selection,
-      active,
-      previous,
-      activeValid: selection.activeRelease === null ? false : active !== null,
-      previousValid: selection.previousRelease === null ? false : previous !== null,
-      lastAudit: await lastAudit(this.paths),
-    }
+    return withLock(this.paths.stateRoot, async () => {
+      const selection = await readSelection(this.paths)
+      const active = selection.activeRelease === null ? null : await this.validateStoredRelease(selection.activeRelease)
+      const previous = selection.previousRelease === null ? null : await this.validateStoredRelease(selection.previousRelease)
+      const audit = await this.reconcilePendingAudit(selection)
+      return {
+        selection,
+        active,
+        previous,
+        activeValid: selection.activeRelease === null ? false : active !== null,
+        previousValid: selection.previousRelease === null ? false : previous !== null,
+        lastAudit: audit.lastAudit,
+        auditCorrupt: audit.auditCorrupt,
+        auditPending: audit.auditPending,
+      }
+    })
   }
 
   async rollbackToPrevious(): Promise<RuntimeActivation> {
@@ -130,18 +150,32 @@ export class RuntimeReleaseStore {
         updatedAt: this.now(),
       }
       try {
-        // Write-ahead audit: an audit failure must occur before either bootstrap or selection moves.
+        // Rollback changes only the verified selection. The active bootstrap is the current
+        // backward-compatible security boundary and must never be downgraded to payload bytes.
+        let auditPending = false
+        await this.auditWriter(this.paths, {
+          version: 1,
+          at: this.now(),
+          kind: 'rollback-prepared',
+          releaseId: manifest.releaseId,
+          previousRelease: selection.activeRelease,
+          detail: 'verified rollback prepared; selection publication follows under the same lock',
+        })
+        await atomicWriteFile(this.paths.selectionPath, stableJson(next))
         await this.auditWriter(this.paths, {
           version: 1,
           at: this.now(),
           kind: 'rolled-back',
           releaseId: manifest.releaseId,
           previousRelease: selection.activeRelease,
-          detail: 'verified rollback prepared; selection publication follows under the same lock',
-        })
-        await this.installBootstrap(previousRoot)
-        await atomicWriteFile(this.paths.selectionPath, stableJson(next))
-        return { selection: next, release: manifest, releaseRoot: previousRoot }
+          detail: 'verified rollback selection committed',
+        }).catch(() => { auditPending = true })
+        return {
+          selection: next,
+          release: manifest,
+          releaseRoot: previousRoot,
+          ...(auditPending ? { auditPending: true as const } : {}),
+        }
       } catch (error) {
         await this.auditWriter(this.paths, {
           version: 1,
@@ -166,7 +200,6 @@ export class RuntimeReleaseStore {
         now: this.now,
         audit: (entry) => this.auditWriter(this.paths, entry),
         validateRelease: (releaseId) => this.validateStoredRelease(releaseId),
-        installBootstrap: (releaseId) => this.installBootstrap(this.releaseRoot(releaseId)),
       })
     })
   }
@@ -195,12 +228,13 @@ export class RuntimeReleaseStore {
     try {
       await mkdir(payloadRoot, { recursive: true })
       await copyReleasePayload(candidateRoot, payloadRoot)
-      await verifyReleasePayload(payloadRoot, this.runner, this.bashPath)
+      await verifyReleasePayload(payloadRoot, this.runner, this.bashPath, this.nodePath)
       const payloadDigest = await hashReleasePayload(payloadRoot)
       const pluginVersion = await releaseCandidateVersion(payloadRoot)
       const currentCandidate = await inspectCandidatePayload(candidateRoot, {
         runner: this.runner,
         bashPath: this.bashPath,
+        nodePath: this.nodePath,
       })
       if (currentCandidate.pluginVersion !== pluginVersion
         || currentCandidate.payloadDigest !== payloadDigest) {
@@ -256,17 +290,31 @@ export class RuntimeReleaseStore {
       await this.auditWriter(this.paths, {
         version: 1,
         at: this.now(),
-        kind: 'activated',
+        kind: 'activation-prepared',
         releaseId,
         previousRelease: selection.activeRelease,
         detail: `verified ${host} candidate activation prepared; publication follows under the same lock`,
       })
       await this.installBootstrap(finalRoot)
       await atomicWriteFile(this.paths.selectionPath, stableJson(next))
+      let auditPending = false
+      await this.auditWriter(this.paths, {
+        version: 1,
+        at: this.now(),
+        kind: 'activated',
+        releaseId,
+        previousRelease: selection.activeRelease,
+        detail: `verified ${host} candidate selection committed`,
+      }).catch(() => { auditPending = true })
       // Retention is post-commit housekeeping. A pruning/audit problem must not turn a successful
       // activation into a reported failure after the canonical selection has already changed.
       await this.prune(next).catch(() => {})
-      return { selection: next, release: effectiveManifest, releaseRoot: finalRoot }
+      return {
+        selection: next,
+        release: effectiveManifest,
+        releaseRoot: finalRoot,
+        ...(auditPending ? { auditPending: true as const } : {}),
+      }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)
       await this.auditWriter(this.paths, {
@@ -293,6 +341,40 @@ export class RuntimeReleaseStore {
     ])
   }
 
+  private async reconcilePendingAudit(selection: RuntimeSelection): Promise<{
+    readonly lastAudit: RuntimeAuditEntry | null
+    readonly auditCorrupt: boolean
+    readonly auditPending: boolean
+  }> {
+    const audit = await readAuditState(this.paths)
+    const prepared = audit.lastAudit
+    if (audit.auditCorrupt || prepared === null
+      || (prepared.kind !== 'activation-prepared' && prepared.kind !== 'rollback-prepared')) {
+      return { ...audit, auditPending: false }
+    }
+    const committed = prepared.releaseId !== undefined
+      && selection.activeRelease === prepared.releaseId
+      && (prepared.kind !== 'rollback-prepared'
+        || selection.previousRelease === (prepared.previousRelease ?? null))
+    if (!committed) return { ...audit, auditPending: true }
+    const terminal: RuntimeAuditEntry = {
+      version: 1,
+      at: this.now(),
+      kind: prepared.kind === 'activation-prepared' ? 'activated' : 'rolled-back',
+      releaseId: prepared.releaseId,
+      ...(prepared.previousRelease === undefined ? {} : { previousRelease: prepared.previousRelease }),
+      detail: prepared.kind === 'activation-prepared'
+        ? 'recovered terminal audit for committed verified activation'
+        : 'recovered terminal audit for committed verified rollback',
+    }
+    try {
+      await this.auditWriter(this.paths, terminal)
+      return { lastAudit: terminal, auditCorrupt: false, auditPending: false }
+    } catch {
+      return { ...audit, auditPending: true }
+    }
+  }
+
   private releaseRoot(releaseId: string): string {
     if (!validReleaseId(releaseId)) throw new RuntimeFailure('runtime-corrupt', `非法 runtime release id: ${releaseId}`)
     return join(this.paths.releasesRoot, releaseId)
@@ -309,7 +391,7 @@ export class RuntimeReleaseStore {
         ? await hashLegacyReleasePayload(payloadRoot)
         : await hashReleasePayload(payloadRoot)
       if (digest !== manifest.payloadDigest) return null
-      await verifyReleasePayload(payloadRoot, this.runner, this.bashPath)
+      await verifyReleasePayload(payloadRoot, this.runner, this.bashPath, this.nodePath)
       return manifest
     } catch {
       return null
@@ -319,7 +401,7 @@ export class RuntimeReleaseStore {
   private async installBootstrap(releaseRoot: string): Promise<void> {
     const source = join(releaseRoot, 'payload', 'runtime', 'tenon-bootstrap.mjs')
     await assertFile(source, 'runtime bootstrap')
-    await runChecked(this.runner, process.execPath, ['--check', source], releaseRoot, 'runtime bootstrap syntax')
+    await runChecked(this.runner, this.nodePath, ['--check', source], releaseRoot, 'runtime bootstrap syntax')
     const active = join(this.paths.bootstrapRoot, 'active.mjs')
     const previous = join(this.paths.bootstrapRoot, 'previous.mjs')
     try {

@@ -6,17 +6,64 @@ import {
   effectiveWorkflowPlanFromSnapshot,
   workflowPlanSnapshot,
 } from './effective-plan.js'
+import { DEFAULT_WORKFLOW_DECOMPOSITION_POLICY, DEFAULT_WORKFLOW_REVIEW_BUDGET_POLICY } from './policy.js'
 
 describe('workflow policy snapshot v3', () => {
-  it('writes explicit normalized frozen policies and restores them', () => {
+  it('freezes default policies in the self-contained V3 projection', () => {
     const plan = compileEffectiveWorkflowPlan('default')
     const snapshot = workflowPlanSnapshot(plan)
 
     expect(snapshot.version).toBe(3)
     if (snapshot.version !== 3) throw new Error('expected v3 snapshot')
-    expect(snapshot.decomposition).toEqual(plan.workflow.decomposition)
-    expect(snapshot.interaction).toEqual(plan.workflow.interaction)
-    expect(effectiveWorkflowPlanFromSnapshot(snapshot).workflow.decomposition).toEqual(snapshot.decomposition)
+    expect(snapshot.decomposition).toEqual(DEFAULT_WORKFLOW_DECOMPOSITION_POLICY)
+    expect(snapshot.interaction).toEqual({ version: 'v1', mode: 'interactive' })
+    expect(snapshot.reviewBudget).toEqual(DEFAULT_WORKFLOW_REVIEW_BUDGET_POLICY)
+    expect(effectiveWorkflowPlanFromSnapshot(snapshot).workflow.decomposition)
+      .toEqual(DEFAULT_WORKFLOW_DECOMPOSITION_POLICY)
+    expect(effectiveWorkflowPlanFromSnapshot(snapshot).reviewBudget)
+      .toEqual(DEFAULT_WORKFLOW_REVIEW_BUDGET_POLICY)
+  })
+
+  it('keeps a custom workflow with default policies self-contained in V3', () => {
+    const snapshot = workflowPlanSnapshot(compileEffectiveWorkflowPlan('custom-default-policy', {
+      name: 'custom-default-policy',
+      steps: [{
+        id: 'one', label: 'One', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [],
+      }],
+    }))
+
+    expect(snapshot.version).toBe(3)
+    if (snapshot.version !== 3) throw new Error('expected v3 snapshot')
+    expect(snapshot.decomposition).toEqual(DEFAULT_WORKFLOW_DECOMPOSITION_POLICY)
+    expect(snapshot.interaction).toEqual({ version: 'v1', mode: 'interactive' })
+    expect(snapshot.reviewBudget).toEqual(DEFAULT_WORKFLOW_REVIEW_BUDGET_POLICY)
+  })
+
+  it('freezes explicit Review lanes and third-party Review Skill classification in V3', () => {
+    const plan = compileEffectiveWorkflowPlan('review-lanes', {
+      name: 'review-lanes',
+      reviewBudget: { version: 'v1', max_attempts: 4 },
+      steps: [{
+        id: 'verify', label: 'Verify', gate: 'review', reviewLanes: ['standards', 'e2e'],
+        skills: [
+          { id: 'acme-quality-gate', kind: 'review', review_lane: 'standards' },
+          { id: 'test-driven-development', kind: 'work' },
+        ],
+        inputs: [], outputs: [], guards: [], transitions: [],
+      }],
+    })
+    const snapshot = workflowPlanSnapshot(plan)
+    if (snapshot.version !== 3) throw new Error('expected v3 snapshot')
+
+    expect(snapshot.workflow.steps[0]).toMatchObject({
+      reviewLanes: ['standards', 'e2e'],
+      skills: [
+        { id: 'acme-quality-gate', kind: 'review', review_lane: 'standards' },
+        { id: 'test-driven-development', kind: 'work' },
+      ],
+    })
+    expect(effectiveWorkflowPlanFromSnapshot(snapshot).capabilities.review.laneScopes)
+      .toEqual([{ stepId: 'verify', lanes: ['standards', 'e2e'] }])
   })
 
   it('changes the workflow fingerprint for policy changes but not Track overlay changes', () => {
@@ -29,6 +76,7 @@ describe('workflow policy snapshot v3', () => {
     const changed = compileEffectiveWorkflowPlan('policy-fingerprint', {
       name: 'policy-fingerprint',
       interaction: { version: 'v1', mode: 'recommended-defaults' },
+      reviewBudget: { version: 'v1', max_attempts: 3 },
       steps: [{
         id: 'one', label: 'One', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [],
       }],
@@ -45,18 +93,31 @@ describe('workflow policy snapshot v3', () => {
   })
 
   it('rejects V3 policy tampering even when only the redundant frozen policy field changes', () => {
-    const snapshot = workflowPlanSnapshot(compileEffectiveWorkflowPlan('default'))
+    const snapshot = workflowPlanSnapshot(compileEffectiveWorkflowPlan('policy-v3', {
+      name: 'policy-v3',
+      interaction: { version: 'v1', mode: 'afk' },
+      steps: [{ id: 'one', label: 'One', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] }],
+    }))
     if (snapshot.version !== 3) throw new Error('expected v3 snapshot')
 
     expect(() => effectiveWorkflowPlanFromSnapshot({
       ...snapshot,
-      interaction: { version: 'v1', mode: 'afk' },
+      interaction: { version: 'v1', mode: 'recommended-defaults' },
     })).toThrow(DocumentGovernanceBindingError)
   })
 
   it('validates historical V2 with its old hash before projecting safe defaults without rehashing', () => {
     const current = compileEffectiveWorkflowPlan('default')
-    const { decomposition: _decomposition, interaction: _interaction, ...legacyWorkflow } = current.workflow
+    const {
+      decomposition: _decomposition,
+      interaction: _interaction,
+      reviewBudget: _reviewBudget,
+      ...currentWithoutPolicies
+    } = current.workflow
+    const legacyWorkflow = {
+      ...currentWithoutPolicies,
+      steps: currentWithoutPolicies.steps.map(({ reviewLanes: _reviewLanes, ...step }) => step),
+    }
     const restored = effectiveWorkflowPlanFromSnapshot({
       version: 2,
       workflowId: 'default',
@@ -70,11 +131,17 @@ describe('workflow policy snapshot v3', () => {
       .toBe('e0a5f815ec73ffe72c082ed7ca4b2f92ede3623d6d2ccdbe8bde97ceb678e35f')
     expect(restored.workflow.decomposition.mode).toBe('off')
     expect(restored.workflow.interaction.mode).toBe('interactive')
+    expect(restored.capabilities.review.laneScopes).toEqual([
+      { stepId: 'verify', lanes: ['standards', 'spec', 'e2e'] },
+    ])
 
     const persistedAgain = workflowPlanSnapshot(restored)
     expect(persistedAgain.version).toBe(2)
     const restoredAgain = effectiveWorkflowPlanFromSnapshot(persistedAgain)
     expect(restoredAgain.workflowFingerprint).toBe(restored.workflowFingerprint)
     expect(restoredAgain.workflow.decomposition.mode).toBe('off')
+    expect(restoredAgain.capabilities.review.laneScopes).toEqual([
+      { stepId: 'verify', lanes: ['standards', 'spec', 'e2e'] },
+    ])
   })
 })

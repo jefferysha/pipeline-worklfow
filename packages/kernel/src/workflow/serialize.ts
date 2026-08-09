@@ -13,11 +13,14 @@ import type {
   FieldRef, SkillRef, StepDef, StepTransition, WorkflowActionConfig, WorkflowArtifactConfig, WorkflowDef,
   WorkflowDecompositionPolicyV1, WorkflowDocumentContractV1, WorkflowGuardConfig,
   WorkflowInteractionPolicyV1,
+  WorkflowReviewBudgetPolicyV1,
 } from './types.js'
 import type { TrackPredicate } from './predicates.js'
 
 function serializeSkill(s: SkillRef): string[] {
   const lines = [`      - id: ${s.id}`]
+  if (s.kind !== undefined) lines.push(`        kind: ${s.kind}`)
+  if (s.review_lane !== undefined) lines.push(`        review_lane: ${s.review_lane}`)
   if (s.depends_on !== undefined) {
     lines.push(`        depends_on: [${s.depends_on.join(', ')}]`)
   }
@@ -47,6 +50,16 @@ function serializeInteraction(
     'interaction:',
     `  version: ${policy.version}`,
     ...(policy.mode === undefined ? [] : [`  mode: ${policy.mode}`]),
+  ]
+}
+
+function serializeReviewBudget(
+  policy: Omit<Partial<WorkflowReviewBudgetPolicyV1>, 'version'> & { readonly version: 'v1' },
+): string[] {
+  return [
+    'review_budget:',
+    `  version: ${policy.version}`,
+    ...(policy.max_attempts === undefined ? [] : [`  max_attempts: ${policy.max_attempts}`]),
   ]
 }
 
@@ -143,6 +156,9 @@ function serializeStep(step: StepDef): string[] {
     lines.push('    prompt: |-')
     lines.push(...step.prompt.split('\n').map((line) => `      ${line}`))
   }
+  if (step.reviewLanes !== undefined) {
+    lines.push(`    review_lanes: [${step.reviewLanes.join(', ')}]`)
+  }
   lines.push(...serializeBlockField('skills', step.skills, serializeSkill))
   lines.push(...serializeBlockField('inputs', step.inputs, serializeFieldRef))
   lines.push(...serializeBlockField('outputs', step.outputs, serializeFieldRef))
@@ -182,6 +198,7 @@ export function serializeWorkflow(wf: WorkflowDef): string {
     `name: ${wf.name}`,
     ...(wf.decomposition === undefined ? [] : serializeDecomposition(wf.decomposition)),
     ...(wf.interaction === undefined ? [] : serializeInteraction(wf.interaction)),
+    ...(wf.reviewBudget === undefined ? [] : serializeReviewBudget(wf.reviewBudget)),
     ...(wf.openspecContract === undefined ? [] : [`openspec_contract: ${wf.openspecContract}`]),
     ...(wf.documentContract === undefined ? [] : serializeDocumentContract(wf.documentContract)),
     'steps:',

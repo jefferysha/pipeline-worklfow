@@ -107,7 +107,8 @@ async function activeReleaseRoot(roots: CodexSkillTrustRoots): Promise<TrustedSk
   if (rel.length !== 2 || !/^sha256-[a-f0-9]{64}$/.test(rel[0] ?? '') || rel[1] !== 'payload') return undefined
   if (!await ordinaryDirectoryChain(runtimeData, logical)) return undefined
   try {
-    const releaseId = rel[0]!
+    const releaseId = rel.at(0)
+    if (releaseId === undefined) return undefined
     const selection = JSON.parse(await readFile(join(runtimeState, 'selection.json'), 'utf8')) as unknown
     const manifest = parseManifest(
       await readFile(join(runtimeData, 'releases', releaseId, 'release.json'), 'utf8'),

@@ -1,5 +1,6 @@
 import { posix, win32 } from 'node:path'
 import type { NativePipelineHost } from './plugin-host.js'
+import type { TrustedExecutable } from './trusted-executable.js'
 
 export interface HostCommandInvocation {
   readonly file: string
@@ -10,6 +11,8 @@ export interface HostCommandInvocation {
 export interface NativeHostCommandBinding {
   /** Exact PATH object selected once for this setup/update lifecycle. */
   readonly executable: string
+  /** Re-prove the frozen physical file immediately before every spawn. */
+  readonly verify: () => boolean
   /** Build a shell-free native invocation or a strictly encoded Windows batch invocation. */
   invocation(args: readonly string[]): HostCommandInvocation | undefined
 }
@@ -18,12 +21,19 @@ export interface NativeHostCommandEnvironment {
   resolveHostCommand(host: NativePipelineHost): NativeHostCommandBinding | undefined
   /** Security-sensitive lifecycle tools use only absolute PATH entries and are frozen once. */
   resolveTrustedCommand?(name: TrustedLifecycleCommand): string | undefined
-  codexAuthStatus(codexExecutable?: string): Promise<unknown>
+  /** Production-only physical identity seam; legacy injected tests may omit it. */
+  resolveTrustedCommandBinding?(name: TrustedLifecycleCommand): TrustedExecutable | undefined
+  codexAuthStatus(
+    codexExecutable?: string,
+    commandBinding?: NativeHostCommandBinding,
+  ): Promise<unknown>
   runCommand(
     cmd: string,
     args: string[],
     options?: { readonly cwd?: string; readonly timeoutMs?: number },
   ): { code: number; stdout: string; stderr: string }
+  /** Cross-process lease shared with the public installer for every host-owned mutation step. */
+  withHostMutationLock?<T>(host: NativePipelineHost, operation: () => Promise<T>): Promise<T>
   managedHostReconciliation?(
     host: NativePipelineHost,
     stepId: string,
@@ -37,29 +47,44 @@ export interface NativeHostCommandEnvironment {
   }
 }
 
-export type TrustedLifecycleCommand = 'bash' | 'git'
+export type TrustedLifecycleCommand = 'bash' | 'git' | 'node'
 
 export interface FrozenTrustedLifecycleCommands {
   /** False only for legacy injected test/adapter environments without the resolver capability. */
   readonly enforced: boolean
   readonly bash?: string
   readonly git?: string
+  readonly node?: string
+  readonly bashBinding?: TrustedExecutable
+  readonly gitBinding?: TrustedExecutable
+  readonly nodeBinding?: TrustedExecutable
   readonly missing: readonly TrustedLifecycleCommand[]
 }
 
 export function freezeTrustedLifecycleCommands(
   env: NativeHostCommandEnvironment,
 ): FrozenTrustedLifecycleCommands {
-  if (env.resolveTrustedCommand === undefined) return { enforced: false, missing: [] }
-  const bash = env.resolveTrustedCommand('bash')
-  const git = env.resolveTrustedCommand('git')
+  // Production exposes the physical resolver. Legacy injected adapters that only know how to
+  // return a pathname are deliberately not upgraded into a false trust claim.
+  if (env.resolveTrustedCommandBinding === undefined) return { enforced: false, missing: [] }
+  const bashBinding = env.resolveTrustedCommandBinding?.('bash')
+  const gitBinding = env.resolveTrustedCommandBinding?.('git')
+  const nodeBinding = env.resolveTrustedCommandBinding?.('node')
+  const bash = bashBinding?.executable
+  const git = gitBinding?.executable
+  const node = nodeBinding?.executable
   return {
     enforced: true,
     ...(bash === undefined ? {} : { bash }),
     ...(git === undefined ? {} : { git }),
+    ...(node === undefined ? {} : { node }),
+    ...(bashBinding === undefined ? {} : { bashBinding }),
+    ...(gitBinding === undefined ? {} : { gitBinding }),
+    ...(nodeBinding === undefined ? {} : { nodeBinding }),
     missing: [
       ...(bash === undefined ? ['bash' as const] : []),
       ...(git === undefined ? ['git' as const] : []),
+      ...(node === undefined ? ['node' as const] : []),
     ],
   }
 }
@@ -76,30 +101,43 @@ export function nativeHostCommandBinding(
   executable: string,
   platform: NodeJS.Platform = process.platform,
   runtimeEnv: NodeJS.ProcessEnv = process.env,
+  trustedExecutable?: TrustedExecutable,
+  trustedCommandInterpreter?: TrustedExecutable,
 ): NativeHostCommandBinding | undefined {
   const pathApi = platform === 'win32' ? win32 : posix
-  const cwd = pathApi.dirname(executable)
-  const extension = pathApi.extname(executable).toLowerCase()
+  const boundExecutable = trustedExecutable?.executable ?? executable
+  const cwd = pathApi.dirname(boundExecutable)
+  const extension = pathApi.extname(boundExecutable).toLowerCase()
   if (platform !== 'win32' || (extension !== '.cmd' && extension !== '.bat')) {
     return {
-      executable,
-      invocation: (args) => ({ file: executable, args: [...args], cwd }),
+      executable: boundExecutable,
+      verify: trustedExecutable?.verify ?? (() => true),
+      invocation: (args) => (trustedExecutable?.verify() ?? true)
+        ? { file: boundExecutable, args: [...args], cwd }
+        : undefined,
     }
   }
-  if (WINDOWS_BATCH_PATH_UNSAFE.test(executable)) return undefined
+  if (WINDOWS_BATCH_PATH_UNSAFE.test(boundExecutable)) return undefined
   const systemRoot = runtimeEnv.SystemRoot && win32.isAbsolute(runtimeEnv.SystemRoot)
     ? runtimeEnv.SystemRoot
     : 'C:\\Windows'
   const commandInterpreter = runtimeEnv.ComSpec && win32.isAbsolute(runtimeEnv.ComSpec)
     ? runtimeEnv.ComSpec
     : win32.join(systemRoot, 'System32', 'cmd.exe')
+  if (trustedExecutable !== undefined
+    && (trustedCommandInterpreter === undefined
+      || trustedCommandInterpreter.requestedPath !== commandInterpreter)) return undefined
+  const boundCommandInterpreter = trustedCommandInterpreter?.executable ?? commandInterpreter
   return {
-    executable,
+    executable: boundExecutable,
+    verify: trustedExecutable?.verify ?? (() => true),
     invocation: (args) => {
+      if (!(trustedExecutable?.verify() ?? true)
+        || !(trustedCommandInterpreter?.verify() ?? true)) return undefined
       if (args.some((arg) => arg === '' || WINDOWS_BATCH_ARG_UNSAFE.test(arg))) return undefined
-      const command = [`"${executable}"`, ...args].join(' ')
+      const command = [`"${boundExecutable}"`, ...args].join(' ')
       return {
-        file: commandInterpreter,
+        file: boundCommandInterpreter,
         args: ['/d', '/s', '/c', `"${command}"`],
         cwd,
       }
@@ -119,9 +157,16 @@ export function bindNativeHostCommand<T extends NativeHostCommandEnvironment>(
 ): T {
   const invocation = (command: string, args: readonly string[]): HostCommandInvocation | undefined => {
     if (command === host) return binding.invocation(args)
-    if ((command === 'bash' || command === 'git') && frozenTrustedCommands.enforced) {
+    if ((command === 'bash' || command === 'git' || command === 'node') && frozenTrustedCommands.enforced) {
       const file = frozenTrustedCommands[command]
-      return file === undefined ? undefined : { file, args: [...args] }
+      const physical = command === 'bash'
+        ? frozenTrustedCommands.bashBinding
+        : command === 'git'
+          ? frozenTrustedCommands.gitBinding
+          : frozenTrustedCommands.nodeBinding
+      return file === undefined || (physical !== undefined && !physical.verify())
+        ? undefined
+        : { file, args: [...args] }
     }
     return { file: command, args: [...args] }
   }
@@ -134,8 +179,17 @@ export function bindNativeHostCommand<T extends NativeHostCommandEnvironment>(
     resolveTrustedCommand: frozenTrustedCommands.enforced
       ? (name) => frozenTrustedCommands[name]
       : env.resolveTrustedCommand,
+    resolveTrustedCommandBinding: frozenTrustedCommands.enforced
+      ? (name) => name === 'bash'
+        ? frozenTrustedCommands.bashBinding
+        : name === 'git'
+          ? frozenTrustedCommands.gitBinding
+          : frozenTrustedCommands.nodeBinding
+      : env.resolveTrustedCommandBinding,
     codexAuthStatus: host === 'codex'
-      ? () => env.codexAuthStatus(binding.executable)
+      ? () => binding.verify()
+        ? env.codexAuthStatus(binding.executable, binding)
+        : Promise.reject(new Error(`可信宿主可执行文件身份已漂移: ${binding.executable}`))
       : env.codexAuthStatus,
     runCommand: (command, args, options) => {
       const plan = invocation(command, args)

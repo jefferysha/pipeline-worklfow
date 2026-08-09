@@ -112,6 +112,12 @@ remove → 完整后证明 → completed v4”，completed 永远晚于清理后
     remove/add 收敛之前错误拒绝。
 14. 旧 WAL/receipt 的迁移不得补造历史 frozen target；successor target 必须先证明，任何 Dashboard stop、
     旧插件 cleanup 或 completed receipt 都必须发生在对应证明与 durable checkpoint 之后。
+15. Runtime rollback 只切换已验证 previous selection，必须保留当前 hardened 且向后兼容的 bootstrap，不得重装 previous payload 中的旧 bootstrap。
+16. Selection 与 `tenon`/`tenon-hook` launcher pair 是同一可恢复事务；精确 old/new partial 可幂等收敛，任何第三字节或 mode 失败关闭。
+17. Activation/rollback audit 只有在 selection 提交后才能写 terminal success；audit 尾行损坏必须显式报 degraded，不得回退到更早 latest。
+18. `tenon runtime status --json` 是公开身份证明面，active/previous 都输出经验证的 release id/digest/host/source version 和 v2 stable target。
+19. Host/Node/Bash/Git 信任冻结必须绑定 realpath、device/inode/mode/owner 和完整父目录身份，每次 spawn 前复验；非 sticky world-write、不同 owner group-write 拒绝，同 owner Homebrew `0775` 根兼容。
+20. Release gate 必须用固定 commit/digest 的真实公开 N-1 完整 payload；缺失 N-1、本机 previous 替代或不可读写当前 Change 均是发布失败。
 
 ## 状态与失败模型
 
@@ -147,6 +153,8 @@ indeterminate，不发布 ready evidence；`evidence-committed` 后清理失败�
 - 决策：当前插件的真实卸载与正式重装放在版本发布后执行，确保验收的是公众可复制命令。
 - 决策：v1.0.1 的一次性迁移使用同一条官方 `v1.0.2/install.sh`；完成后所有更新回到 `tenon update`。
 - 决策：首次 setup 是否打开浏览器由命令开始前的 managed runtime 状态决定，不由候选是否已验证推断。
+- 决策：Review 发现前移到 Spec 并冻结为 R01-R15 闭集；Build 期间不扩展审查标准，最终 Review 只检查闭集落实和本轮直接回归。新的语义只能通过官方 `requirements-changed` 更新矩阵。
+- 决策：把闭集纪律产品化为 `review_budget`。任何 Workflow/Pipeline 都有有限次数；Standards/Spec/security/E2E/browser 等通过显式 `review_lanes` 聚合到同一候选 attempt，自动 Skill/agent/runner 派发前必须先 begin；耗尽后停止自动循环并等待显式人工处置。
 
 ## 红队自检
 
@@ -163,6 +171,10 @@ indeterminate，不发布 ready evidence；`evidence-committed` 后清理失败�
   v1.0.2 起的真实单命令 update。
 - `candidate-resolved` 后修改 host root、ref、HEAD、clean 状态或同版本 payload，恢复必须在 activation 前拒绝。
 - PATH 含空/相对项且 cwd 提供恶意 `node`/`bash` 时，安装器与 launcher 仍只执行预先冻结的绝对程序。
+- 冻结后可执行 symlink/inode、父目录身份或 owner/write 约束漂移时，首个相关 spawn 前必须失败且零后续 mutation。
+- rollback 到真实 v1.0.1 后，active bootstrap 字节保持当前版本，恶意 PATH 不能劫持 hook shell。
+- selection 提交后在任一 launcher rename/chmod 边界崩溃，重试可恢复精确 partial pair；外部修改仍 indeterminate。
+- 真实公开 v1.0.1 payload 必须通过当前 `status`/`set`/bundle compatibility gate，不允许 fixture 或 skip 代替。
 
 ## 验收矩阵
 
@@ -173,6 +185,13 @@ asset 不一致、candidate-resolved 后漂移、v1 journal 兼容、可信可�
 build、bundle、skills、docs、release-workflow 与 clean-install 门禁；发布后在真实用户配置上执行官方卸载、
 标签一行安装、重复安装、`tenon update --codex`、doctor、plugin inventory、runtime status、Dashboard
 `/api/health`/`/api/snapshot` 和开放 PR 为零的终验。
+
+执行层再增加以下约束：前置四轴 Review 必须绑定同一 HEAD/fingerprint 且期间源码零漂移；每个阻断必须
+先映射到规格、失败测试、实现边界和验证命令；完成实现、测试、文档和 dist 后才冻结最终候选。移动
+checkout 不得给出 verdict，相邻非规格改进进入 backlog，避免末端逐轮扩大范围。完整 R01-R14 闭集
+记录在 `docs/superpowers/plans/2026-08-08-versioned-release-install-lifecycle.md` 的 Build 准入章节；R15
+进一步要求 review 次数限制由 workflow policy、step lane 声明、默认 manifest/自定义 SkillRef 分类、
+pipeline override 和持久 attempt ledger 机器执行；不得用 Skill 名称启发式识别 Review。
 
 ```coverage
 touches: release-distribution, native-host-plugin, managed-runtime, dashboard-lifecycle

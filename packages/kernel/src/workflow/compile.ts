@@ -1,44 +1,7 @@
 /**
- * compileWorkflow（G2 P1）——v1 WorkflowDef（./types.ts 旧 DTO）→ WorkflowIR（./ir.ts，
- * 已补默认值、深冻结）的编译期翻译 + 全量 fail-loud 校验（malformed 抛带结构路径的错误，
- * 如 `steps[1].guards[0].n`；validate.ts 收集错误面向编辑 UX，本层首错即抛面向调用方契约）。
- *
- * 下沉规则（裁决原话「v1 guard 编译时下沉成基础 guard」）：
- *   · nonempty-output → 按 step.outputs 逐字段下沉（when 原样传播到每一条；outputs 为空则零条）：
- *     已知非列表字段 → field-nonempty；列表字段 / 未知惰性字段 → output-present（G2 P2 兼容回退，
- *     保留 v1 旧运行期失败语义，见 ir.ts OutputPresentGuard）。经本编译器产出的 IR 里不存在定义层
- *     nonempty-output——运行期注册表对它只有 fail-loud 兜底（guard-handlers.ts）。
- *   · tasks-at-least → 原样保留（IR 一等变体）。
- *
- * 字段闭集闸（G2 P2 兼容回退——pre-P2 的 FieldRef.field 是 string）：
- *   · inputs/outputs：三种 type（string|boolean|file_path）的 field 一律允许未知惰性字段
- *     （compileFieldRef 原样保留在 IR）——惰性 ref 不参与状态写入，但保留供依赖校验/展示，恢复
- *     pre-P2 惰性 output/input 能加载能跑（含未知 file_path output）。字符集/往返合法性由 validate.ts
- *     的 IDENT_RE 把关。artifact 只在「已知 file_path output」派生（阻断 1：新增 artifact IR 不倒推
- *     收窄旧 definition 合法域），未知 file_path 不派生 artifact。
- *   · 新 typed guard（field-nonempty/file-exists/field-equals/field-in/build-head-unchanged）与
- *     artifact 的 field 仍严格 ∈ FIELD_ORDER 且非列表（scalarField / knownField 闸）——guard 要真
- *     求值必须是真字段，列表字段 scalar guard 编译期拒、运行期数组 fail-loud（P1 决策保留）。
- *     唯 v1 兼容 guard nonempty-output 下沉到列表/惰性字段走 output-present，不受此严格闸约束。
- *   · field-equals 的 value 必须经 serialize→parse 往返域（representable.ts，阻断 2），否则拒。
- *
- * 缺省口径：guards/actions 的 undefined（真未声明）→ []；null/非数组等显式 malformed →
- * fail-loud（不被默认值吞）。inputs/outputs/transitions 是 v1 必备键，无默认值。
- *
- * artifact 面：
- *   · 派生默认——outputs 里每个**已知**（∈ FIELD_ORDER）type:'file_path' 的 FieldRef 编译出一条
- *     {kind:'file', field, producerPolicy:'effective-step-skills'}；未知 file_path 是惰性 ref 不派生
- *     （阻断 1）；同一已知 field 的 file_path output 重复出现 → 抛错（重复声明），不静默合并。
- *   · 显式声明（step.artifacts，v1 DTO 之外的结构化输入）——逐条校验后**替换**同 field 的
- *     派生条目（显式声明是携带 requiredWhen 的唯一途径）；只许挂在本 step outputs 里
- *     type:'file_path' 的 FieldRef 上，其余形态拒绝。
- *
- * 输入宽容面：参数类型是 v1 WorkflowDef（两 guard 变体、边无 guards/actions），但运行时
- * 输入可能是越过 parse.ts 的结构化数据（扩展 guard、edge 级 guards/actions、artifacts）——
- * 一律按 unknown 走同一闭集校验，未知形状抛错，绝不静默丢弃。
- *
- * 冻结面：产出全部是新建对象（输入 def 的任何对象引用都不进 IR），深冻结只作用于产物；
- * 调用方的 def 不被本函数冻结或改动。
+ * WorkflowDef → immutable WorkflowIR. Structured input is decoded against closed key/value
+ * sets and fails loudly. Legacy lazy fields remain loadable, while typed guards and explicit
+ * artifacts still require known scalar fields. Default/custom artifact policies stay separate.
  */
 import { FIELD_ORDER, type FieldName } from '../types.js'
 import type {
@@ -46,7 +9,11 @@ import type {
   WorkflowDocumentContractV1, WorkflowDocumentRead, WorkflowDocumentSlot,
 } from './types.js'
 import { compileGuards, compileStepGuards, compileWhen } from './compile-guards.js'
-import { compileWorkflowDecompositionPolicy, compileWorkflowInteractionPolicy } from './policy.js'
+import {
+  compileWorkflowDecompositionPolicy,
+  compileWorkflowInteractionPolicy,
+  compileWorkflowReviewBudgetPolicy,
+} from './policy.js'
 import type {
   ActionConfig,
   ArtifactDeclaration,
@@ -76,12 +43,12 @@ const PRODUCER_POLICIES: ReadonlySet<string> = new Set<ArtifactProducerPolicy>([
 const CUSTOM_PRODUCER_POLICIES: ReadonlySet<string> = new Set<ArtifactProducerPolicy>(['effective-step-skills'])
 const DEFAULT_PRODUCER_POLICIES: ReadonlySet<string> = new Set<ArtifactProducerPolicy>(['effective-step-skills', 'effective-phase-skills'])
 const WORKFLOW_KEYS: ReadonlySet<string> = new Set([
-  'name', 'decomposition', 'interaction', 'openspecContract', 'documentContract', 'steps',
+  'name', 'decomposition', 'interaction', 'reviewBudget', 'openspecContract', 'documentContract', 'steps',
 ])
 const STEP_KEYS: ReadonlySet<string> = new Set([
-  'id', 'label', 'gate', 'prompt', 'skills', 'inputs', 'outputs', 'artifacts', 'guards', 'transitions',
+  'id', 'label', 'gate', 'prompt', 'reviewLanes', 'skills', 'inputs', 'outputs', 'artifacts', 'guards', 'transitions',
 ])
-const SKILL_KEYS: ReadonlySet<string> = new Set(['id', 'depends_on'])
+const SKILL_KEYS: ReadonlySet<string> = new Set(['id', 'kind', 'review_lane', 'depends_on'])
 const FIELD_REF_KEYS: ReadonlySet<string> = new Set(['field', 'type'])
 const ARTIFACT_KEYS: ReadonlySet<string> = new Set(['field', 'type', 'kind', 'producerPolicy', 'requiredWhen'])
 const TRANSITION_KEYS: ReadonlySet<string> = new Set(['event', 'to', 'guards', 'actions'])
@@ -180,12 +147,45 @@ function compileFieldRef(raw: FieldRef, path: string): FieldRef {
   return { field, type }
 }
 
-function compileSkillRef(raw: SkillRef, path: string): SkillRef {
+function compileReviewLanes(raw: unknown, path: string): readonly string[] {
+  if (raw === undefined) return []
+  const lanes = stringArray(raw, path)
+  const seen = new Set<string>()
+  for (const lane of lanes) {
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/u.test(lane)) {
+      compileError(path, `Review lane '${lane}' 含非法字符`)
+    }
+    if (seen.has(lane)) compileError(path, `Review lane '${lane}' 重复声明`)
+    seen.add(lane)
+  }
+  return lanes
+}
+
+function compileSkillRef(raw: SkillRef, path: string, reviewLanes: readonly string[]): SkillRef {
   const rec = asRecord(raw, path)
   rejectExtraKeys(rec, SKILL_KEYS, path)
   const id = nonemptyString(rec.id, `${path}.id`)
-  if (rec.depends_on === undefined) return { id }
-  return { id, depends_on: stringArray(rec.depends_on, `${path}.depends_on`) }
+  const kind = rec.kind ?? 'work'
+  if (kind !== 'work' && kind !== 'review') {
+    compileError(`${path}.kind`, `必须是 'work' | 'review'（实际 ${JSON.stringify(kind)}）`)
+  }
+  if (kind === 'review') {
+    const reviewLane = nonemptyString(rec.review_lane, `${path}.review_lane`)
+    if (!reviewLanes.includes(reviewLane)) {
+      compileError(`${path}.review_lane`, `Review lane '${reviewLane}' 未在所属 step.reviewLanes 声明`)
+    }
+    return {
+      id, kind, review_lane: reviewLane,
+      ...(rec.depends_on === undefined ? {} : { depends_on: stringArray(rec.depends_on, `${path}.depends_on`) }),
+    }
+  }
+  if (rec.review_lane !== undefined) {
+    compileError(`${path}.review_lane`, 'kind=work 不得声明 review_lane')
+  }
+  return {
+    id, kind,
+    ...(rec.depends_on === undefined ? {} : { depends_on: stringArray(rec.depends_on, `${path}.depends_on`) }),
+  }
 }
 
 /** 显式 artifact 声明的编译。kind 只一个合法值；producerPolicy 属 PRODUCER_POLICIES 闭集，缺省补
@@ -291,7 +291,10 @@ function compileStep(step: unknown, index: number, allowedPolicies: ReadonlySet<
       compileError(`${path}.prompt`, '含未配对 UTF-16 surrogate，UTF-8 落盘无法往返')
     }
   }
-  const skills = asArray(rec.skills, `${path}.skills`).map((s, j) => compileSkillRef(s as SkillRef, `${path}.skills[${j}]`))
+  const reviewLanes = compileReviewLanes(rec.reviewLanes, `${path}.reviewLanes`)
+  const skills = asArray(rec.skills, `${path}.skills`).map((s, j) =>
+    compileSkillRef(s as SkillRef, `${path}.skills[${j}]`, reviewLanes),
+  )
   const inputs = asArray(rec.inputs, `${path}.inputs`).map((r, j) => compileFieldRef(r as FieldRef, `${path}.inputs[${j}]`))
   const outputs = asArray(rec.outputs, `${path}.outputs`).map((r, j) => compileFieldRef(r as FieldRef, `${path}.outputs[${j}]`))
   // 不预折 `?? []`：null/非数组的显式 malformed 必须进 compileGuards 被 fail-loud 拒绝，
@@ -314,7 +317,7 @@ function compileStep(step: unknown, index: number, allowedPolicies: ReadonlySet<
   return {
     id, label: rec.label, gate: gate as GateKind,
     ...(prompt === undefined ? {} : { prompt }),
-    skills, inputs, outputs, guards, artifacts, transitions,
+    reviewLanes, skills, inputs, outputs, guards, artifacts, transitions,
   }
 }
 
@@ -369,6 +372,7 @@ function compileWith(def: unknown, allowedPolicies: ReadonlySet<string>): Workfl
   const name = nonemptyString(rec.name, 'name')
   const decomposition = compileWorkflowDecompositionPolicy(rec.decomposition)
   const interaction = compileWorkflowInteractionPolicy(rec.interaction)
+  const reviewBudget = compileWorkflowReviewBudgetPolicy(rec.reviewBudget)
   const openspecContract = rec.openspecContract
   if (openspecContract !== undefined && openspecContract !== 'required') {
     compileError('openspecContract', `必须是 'required'（实际 ${JSON.stringify(openspecContract)}）`)
@@ -382,6 +386,7 @@ function compileWith(def: unknown, allowedPolicies: ReadonlySet<string>): Workfl
     name,
     decomposition,
     interaction,
+    reviewBudget,
     ...(openspecContract === undefined ? {} : { openspecContract }),
     ...(documentContract === undefined ? {} : { documentContract }),
     steps,

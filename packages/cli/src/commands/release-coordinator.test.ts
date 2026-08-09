@@ -233,6 +233,46 @@ function request(candidateRoot: string) {
 }
 
 describe('managed release coordinator', () => {
+  test('threads the frozen Node binding into managed Dashboard startup', async () => {
+    const events: string[] = []
+    const verifyTrustedNode = () => { events.push('node:verify') }
+    let receivedNodePath: string | undefined
+    let receivedVerifier: (() => void) | undefined
+    const starter: ReleasedDashboardStarter = {
+      inspect: async () => null,
+      adopt: async () => null,
+      start: async (_deps, payloadRoot, opts) => {
+        receivedNodePath = opts.trustedNodePath
+        receivedVerifier = opts.verifyTrustedNode
+        return readyDashboard(
+          payloadRoot.includes('a'.repeat(64))
+            ? `sha256-${'a'.repeat(64)}`
+            : `sha256-${'b'.repeat(64)}`,
+          opts.transactionId,
+          opts.port,
+        )
+      },
+    }
+    const managedRequest = {
+      ...request('/candidate/one'),
+      runtime: {
+        homeDir: '/home/test',
+        env: {},
+        trustedNodePath: '/trusted/node',
+        verifyTrustedNode,
+      },
+    }
+
+    expect(await publishManagedRelease(
+      makeDeps(),
+      managedRequest,
+      serializedInstaller(events),
+      starter,
+    )).toMatchObject({ ok: true, state: 'ready' })
+    expect(receivedNodePath).toBe('/trusted/node')
+    expect(receivedVerifier).toBe(verifyTrustedNode)
+  })
+
   test('previous Dashboard restore rejects a ready session with mismatched ownership', async () => {
     const activation = activationFor('/candidate/one', 'codex')
     const previousRelease = `sha256-${'f'.repeat(64)}`

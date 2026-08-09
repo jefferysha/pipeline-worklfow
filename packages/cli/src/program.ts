@@ -49,6 +49,7 @@ import { registerInstallCommands } from './program-install.js'
 import { registerTrackCommands } from './program-tracks.js'
 import { registerHandoffCommand, registerWorkflowCommands } from './program-workflows.js'
 import { registerSkillInvocationInternalCommands } from './program-skill-invocations.js'
+import { registerAutomatedReviewCommands } from './program-review.js'
 import { LOOPS_HELP } from './program-help.js'
 export { CliExit } from './program-exit.js'
 
@@ -173,6 +174,8 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .option('--delegated', '仅用户已明确委托当前 Change 连续执行时，按该委托写审计化 review receipt')
     .action(async (sub: string, name: string | undefined, opts: { event?: string; delegated?: boolean }) =>
       bail(await cmdReview(deps, sub, name, opts)))
+
+  registerAutomatedReviewCommands(program, deps)
 
   program
     .command('check <name>')

@@ -4,6 +4,7 @@ import { LEGACY_PLUGIN_IDENTITY, TENON_PLUGIN_IDENTITY } from '../migration/lega
 import type { RuntimeInstaller } from '../runtime/installer.js'
 import type { RuntimeActivation } from '../runtime/types.js'
 import type { SetupEnv } from './setupEnvironment.js'
+import { nativeRuntimeInstallerScope } from './native-runtime-installer-scope.js'
 import {
   nativeInstallPlan,
   nativePluginRemovalPlan,
@@ -170,12 +171,7 @@ export async function finalizePendingHostPluginConflictWithinTransaction(
   host: NativePipelineHost,
   receipt: HostPluginConvergenceReceipt,
 ): Promise<ConvergenceFinalizeResult> {
-  const trustedBashPath = env.resolveTrustedCommand?.('bash')
-  const inspection = await installer.inspect({
-    homeDir: env.homeDir(),
-    env: env.runtimeEnv(),
-    ...(trustedBashPath === undefined ? {} : { trustedBashPath }),
-  })
+  const inspection = await installer.inspect(nativeRuntimeInstallerScope(env))
   if (
     !inspection.activeValid
     || inspection.selection.activeRelease !== receipt.releaseId

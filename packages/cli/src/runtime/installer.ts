@@ -1,201 +1,51 @@
-import { mkdir } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
+import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { withLock } from '@tenon/kernel'
+import { atomicWriteFile, withLock } from '@tenon/kernel'
 import {
   captureStableLaunchers,
+  convergeStableLaunchers,
   expectedLegacyStableLaunchersV101,
   expectedStableLaunchers,
   restoreStableLaunchers,
   writeStableLaunchers,
 } from './launchers.js'
-import { resolveRuntimePaths } from './paths.js'
-import type { RuntimePathInput } from './paths.js'
 import { RuntimeReleaseStore } from './release-store.js'
 import type {
   RuntimeActivation,
-  RuntimeInspection,
-  RuntimeLauncherSnapshot,
   RuntimePaths,
   RuntimeReleaseSource,
   RuntimeStableReleaseTarget,
   RuntimeSelection,
+  TrustedExecutableProof,
 } from './types.js'
 import { createManagedReleaseJournal } from './managed-release-journal.js'
-
-/**
- * Boundary between the mutable marketplace checkout and the managed local runtime.
- *
- * Setup/update may inspect a host-owned checkout, but only this boundary can promote it into an
- * executable release.  The release store verifies a staged copy before atomically publishing the
- * selection; stable launchers are written only after that publication succeeds.
- */
-export interface ManagedRuntimeTransaction {
-  checkpointActivation(): Promise<RuntimeActivationCheckpoint>
-  activate(
-    candidateRoot: string,
-    host: RuntimeReleaseSource['host'],
-    expectedPluginVersion?: string,
-    stableTarget?: RuntimeStableReleaseTarget,
-  ): Promise<RuntimeActivation>
-  recoverActivation(
-    checkpoint: RuntimeActivationCheckpoint,
-    host: RuntimeReleaseSource['host'],
-  ): Promise<{ readonly state: 'not-started' } | { readonly state: 'activated'; readonly activation: RuntimeActivation }>
-  revertActivation(activation: RuntimeActivation): Promise<void>
-  proveActivation(activation: RuntimeActivation): Promise<boolean>
-  readonly journal: ManagedReleaseJournal
-}
-
-export interface ManagedHostStepJournalRecord {
-  readonly id: string
-  readonly state: 'started' | 'completed'
-  /** Canonical host-owned inventory captured and committed before the mutation. */
-  readonly before?: string
-  /** Canonical postcondition which must be proven from a fresh host observation. */
-  readonly desired?: string
-  readonly replayPolicy?: 'observe-before-replay-v1'
-  /** Fresh canonical observation which proved the completed checkpoint. */
-  readonly observedAfter?: string
-  /** Bounded diagnostic output only; never treated as proof that the mutation committed. */
-  readonly result?: string
-}
-
-export interface ManagedDashboardIdentity {
-  readonly version: 1
-  readonly serverVersion: string
-  readonly port: number
-  readonly pid: number
-  readonly releaseId: string
-  readonly stateScopeId: string
-  /** Absent only for an ordinary `tenon dashboard` process. */
-  readonly transactionId?: string
-}
-
-export interface ManagedDashboardJournalRecord extends ManagedDashboardIdentity {
-  readonly owner: 'transaction' | 'preexisting'
-}
-
-export type ManagedStableReleaseTarget = RuntimeStableReleaseTarget
-
-export type ManagedReleaseOperation = 'setup' | 'update' | 'adapter'
-export type ManagedReleaseJournalPhase =
-  | 'preparing-host'
-  | 'candidate-resolved'
-  | 'activating-runtime'
-  | 'runtime-activated'
-  | 'starting-dashboard'
-  | 'dashboard-ready'
-  | 'stopping-candidate'
-  | 'reverting-activation'
-  | 'restoring-previous'
-  | 'previous-restored'
-  | 'evidence-committed'
-
-export interface ManagedReleaseJournalRecord {
-  readonly version: 1
-  readonly transactionId: string
-  readonly operation: ManagedReleaseOperation
-  readonly source: RuntimeReleaseSource['host']
-  readonly phase: ManagedReleaseJournalPhase
-  readonly startedAt: string
-  readonly updatedAt: string
-  /** Concrete port frozen when the transaction is created and reused for every recovery. */
-  readonly dashboardPort?: number
-  /** Stable target frozen before the first host mutation and reused by every recovery. */
-  readonly stableTarget?: ManagedStableReleaseTarget
-  readonly candidateRoot?: string
-  /** Candidate-specific browser policy persisted for recovery (for example first setup only). */
-  readonly candidateOpenBrowser?: boolean
-  /** Host inventory snapshot or another small serializable input for the final receipt. */
-  readonly evidence?: string
-  readonly hostSteps?: readonly ManagedHostStepJournalRecord[]
-  readonly activationCheckpoint?: RuntimeActivationCheckpoint
-  readonly activation?: RuntimeActivation
-  /** Exact service observed before activation. */
-  readonly dashboardBefore?: ManagedDashboardIdentity
-  /** Durable proof that the pre-activation Dashboard probe observed an empty port. */
-  readonly dashboardBeforeAbsent?: true
-  /** Durable permission to retire only the exact frozen wrong-version Dashboard before retry. */
-  readonly dashboardBeforeRetiring?: true
-  readonly dashboard?: ManagedDashboardJournalRecord
-  /** Bounded failure detail carried through crash-safe compensation. */
-  readonly compensationReason?: string
-  /** Exact previous Dashboard identity restored under this transaction's restore identity. */
-  readonly dashboardRestored?: ManagedDashboardIdentity
-}
-
-export interface RuntimeActivationCheckpoint {
-  readonly selection: RuntimeSelection
-  readonly launchers: RuntimeLauncherSnapshot
-}
-
-export interface ManagedReleaseJournal {
-  create(
-    operation: ManagedReleaseOperation,
-    source: RuntimeReleaseSource['host'],
-    now: string,
-  ): ManagedReleaseJournalRecord
-  read(): Promise<ManagedReleaseJournalRecord | null>
-  write(record: ManagedReleaseJournalRecord): Promise<void>
-  clear(expectedTransactionId: string): Promise<void>
-}
-
-export interface RuntimeInstallerScope {
-  readonly homeDir: string
-  readonly env: NonNullable<RuntimePathInput['env']>
-  readonly platform?: NodeJS.Platform
-  /** Absolute Bash executable frozen by native setup/update before any host mutation. */
-  readonly trustedBashPath?: string
-}
-
-export interface RuntimeInstaller {
-  /** Read-only WAL probe used before network resolution; it must not create runtime roots. */
-  peekManagedJournal?(scope: RuntimeInstallerScope): Promise<ManagedReleaseJournalRecord | null>
-  withManagedTransaction<T>(
-    scope: RuntimeInstallerScope,
-    operation: (transaction: ManagedRuntimeTransaction) => Promise<T>,
-  ): Promise<T>
-  inspect(scope: RuntimeInstallerScope): Promise<RuntimeInspection>
-  rollback(scope: RuntimeInstallerScope): Promise<RuntimeActivation>
-  recordUpdateFailure?(scope: RuntimeInstallerScope, detail: string): Promise<void>
-}
-
-export class ManagedRuntimeIndeterminateError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options)
-    this.name = 'ManagedRuntimeIndeterminateError'
-  }
-}
-
-function pathsFor(scope: RuntimeInstallerScope): RuntimePaths {
-  return resolveRuntimePaths({
-    homeDir: scope.homeDir,
-    env: scope.env,
-    ...(scope.platform === undefined ? {} : { platform: scope.platform }),
-  })
-}
-
-function storeFor(scope: RuntimeInstallerScope): RuntimeReleaseStore {
-  return new RuntimeReleaseStore({
-    paths: pathsFor(scope),
-    ...(scope.trustedBashPath === undefined ? {} : { bashPath: scope.trustedBashPath }),
-  })
-}
-
-function transactionStore(
-  paths: RuntimePaths,
-  trustedBashPath: string | undefined,
-): RuntimeReleaseStore {
-  return new RuntimeReleaseStore({
-    paths,
-    ...(trustedBashPath === undefined ? {} : { bashPath: trustedBashPath }),
-  })
-}
-
+import {
+  readRollbackJournal,
+  rollbackJournalPath,
+  selectionMatchesRollbackTarget,
+} from './runtime-rollback-journal.js'
+import {
+  runtimePathsFor as pathsFor,
+  runtimeStoreFor as storeFor,
+  transactionRuntimeStore as transactionStore,
+} from './runtime-installer-store.js'
+import {
+  ManagedRuntimeIndeterminateError,
+  type ManagedRuntimeTransaction,
+  type RuntimeActivationCheckpoint,
+  type RuntimeInstaller,
+  type RuntimeInstallerScope,
+} from './installer-contract.js'
+export * from './installer-contract.js'
 async function activateWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
   trustedBashPath: string | undefined,
+  verifyTrustedBash: (() => void) | undefined,
+  trustedNodePath: string | undefined,
+  trustedNodeProof: TrustedExecutableProof | undefined,
+  verifyTrustedNode: (() => void) | undefined,
   candidateRoot: string,
   host: RuntimeReleaseSource['host'],
   expectedPluginVersion?: string,
@@ -204,12 +54,21 @@ async function activateWithinTransaction(
   const store = new RuntimeReleaseStore({
     paths,
     ...(trustedBashPath === undefined ? {} : { bashPath: trustedBashPath }),
+    ...(verifyTrustedBash === undefined ? {} : { verifyBash: verifyTrustedBash }),
+    ...(trustedNodePath === undefined ? {} : { nodePath: trustedNodePath }),
+    ...(verifyTrustedNode === undefined ? {} : { verifyNode: verifyTrustedNode }),
   })
   const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
-  const launcherCommitted = expectedStableLaunchers(paths, homeDir)
+  verifyTrustedNode?.()
+  const launcherCommitted = expectedStableLaunchers(paths, homeDir, trustedNodePath, trustedNodeProof)
   const activation = await store.stageAndActivate(candidateRoot, host, expectedPluginVersion, stableTarget)
   try {
-    await writeStableLaunchers(paths, homeDir)
+    await writeStableLaunchers(paths, homeDir, {
+      checkpoint: launcherSnapshot,
+      ...(trustedNodePath === undefined ? {} : { nodeExecutable: trustedNodePath }),
+      ...(trustedNodeProof === undefined ? {} : { nodeProof: trustedNodeProof }),
+      ...(verifyTrustedNode === undefined ? {} : { verifyNode: verifyTrustedNode }),
+    })
     return { ...activation, launcherSnapshot, launcherCommitted }
   } catch (error) {
     try {
@@ -231,14 +90,17 @@ async function activateWithinTransaction(
     throw new Error(`稳定 launcher 写入失败，已恢复 activation 前 runtime：${String(error)}`)
   }
 }
-
 async function revertWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
   trustedBashPath: string | undefined,
+  verifyTrustedBash: (() => void) | undefined,
+  trustedNodePath: string | undefined,
+  trustedNodeProof: TrustedExecutableProof | undefined,
+  verifyTrustedNode: (() => void) | undefined,
   activation: RuntimeActivation,
 ): Promise<void> {
-  const store = transactionStore(paths, trustedBashPath)
+  const store = transactionStore(paths, trustedBashPath, verifyTrustedBash, trustedNodePath, verifyTrustedNode)
   const compensatedSelection = {
     version: 1 as const,
     revision: activation.selection.revision + 1,
@@ -265,7 +127,21 @@ async function revertWithinTransaction(
       await restoreStableLaunchers(activation.launcherSnapshot, activation.launcherCommitted)
     } else {
       const inspection = await store.inspect()
-      if (inspection.selection.activeRelease !== null) await writeStableLaunchers(paths, homeDir)
+      if (inspection.selection.activeRelease !== null) {
+        const current = await captureStableLaunchers(paths, homeDir)
+        const legacy = expectedLegacyStableLaunchersV101(paths, homeDir)
+        verifyTrustedNode?.()
+        const committed = expectedStableLaunchers(paths, homeDir, trustedNodePath, trustedNodeProof)
+        const checkpoint = sameJson(current, legacy) || sameJson(current, committed)
+          ? current
+          : (() => { throw new ManagedRuntimeIndeterminateError('legacy launcher 状态不可证明，拒绝覆盖') })()
+        await writeStableLaunchers(paths, homeDir, {
+          checkpoint,
+          ...(trustedNodePath === undefined ? {} : { nodeExecutable: trustedNodePath }),
+          ...(trustedNodeProof === undefined ? {} : { nodeProof: trustedNodeProof }),
+          ...(verifyTrustedNode === undefined ? {} : { verifyNode: verifyTrustedNode }),
+        })
+      }
     }
   } catch (error) {
     throw new ManagedRuntimeIndeterminateError(
@@ -293,14 +169,24 @@ async function revertWithinTransaction(
     }
   }
 }
-
 async function proveActivationWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
   trustedBashPath: string | undefined,
+  verifyTrustedBash: (() => void) | undefined,
+  trustedNodePath: string | undefined,
+  _trustedNodeProof: TrustedExecutableProof | undefined,
+  verifyTrustedNode: (() => void) | undefined,
   activation: RuntimeActivation,
 ): Promise<boolean> {
-  const inspection = await transactionStore(paths, trustedBashPath).inspect()
+  const inspection = await transactionStore(
+    paths,
+    trustedBashPath,
+    verifyTrustedBash,
+    trustedNodePath,
+    verifyTrustedNode,
+  ).inspect()
+  if (inspection.auditPending === true) return false
   if (
     !inspection.activeValid
     || !sameJson(inspection.selection, activation.selection)
@@ -311,19 +197,27 @@ async function proveActivationWithinTransaction(
   const currentLaunchers = await captureStableLaunchers(paths, homeDir)
   return JSON.stringify(currentLaunchers) === JSON.stringify(activation.launcherCommitted)
 }
-
 async function checkpointActivationWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
   trustedBashPath: string | undefined,
+  verifyTrustedBash: (() => void) | undefined,
+  trustedNodePath: string | undefined,
+  _trustedNodeProof: TrustedExecutableProof | undefined,
+  verifyTrustedNode: (() => void) | undefined,
 ): Promise<RuntimeActivationCheckpoint> {
-  const selection = (await transactionStore(paths, trustedBashPath).inspect()).selection
+  const selection = (await transactionStore(
+    paths,
+    trustedBashPath,
+    verifyTrustedBash,
+    trustedNodePath,
+    verifyTrustedNode,
+  ).inspect()).selection
   return {
     selection,
     launchers: await captureStableLaunchers(paths, homeDir),
   }
 }
-
 function sameJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
 }
@@ -332,11 +226,20 @@ async function recoverActivationWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
   trustedBashPath: string | undefined,
+  verifyTrustedBash: (() => void) | undefined,
+  trustedNodePath: string | undefined,
+  trustedNodeProof: TrustedExecutableProof | undefined,
+  verifyTrustedNode: (() => void) | undefined,
   checkpoint: RuntimeActivationCheckpoint,
   host: RuntimeReleaseSource['host'],
 ): Promise<{ readonly state: 'not-started' } | { readonly state: 'activated'; readonly activation: RuntimeActivation }> {
-  const store = transactionStore(paths, trustedBashPath)
+  const store = transactionStore(paths, trustedBashPath, verifyTrustedBash, trustedNodePath, verifyTrustedNode)
   const inspection = await store.inspect()
+  if (inspection.auditPending === true) {
+    throw new ManagedRuntimeIndeterminateError(
+      'activation selection 已提交，但 terminal audit 尚未持久化；保留 WAL 并等待同一命令恢复',
+    )
+  }
   const launchers = await captureStableLaunchers(paths, homeDir)
   if (sameJson(inspection.selection, checkpoint.selection) && sameJson(launchers, checkpoint.launchers)) {
     return { state: 'not-started' }
@@ -359,7 +262,12 @@ async function recoverActivationWithinTransaction(
     && active.source.pluginVersion === '1.0.1'
     && sameJson(launchers, expectedLegacyStableLaunchersV101(paths, homeDir))) {
     try {
-      await writeStableLaunchers(paths, homeDir)
+      await writeStableLaunchers(paths, homeDir, {
+        checkpoint: expectedLegacyStableLaunchersV101(paths, homeDir),
+        ...(trustedNodePath === undefined ? {} : { nodeExecutable: trustedNodePath }),
+        ...(trustedNodeProof === undefined ? {} : { nodeProof: trustedNodeProof }),
+        ...(verifyTrustedNode === undefined ? {} : { verifyNode: verifyTrustedNode }),
+      })
       committedLaunchers = await captureStableLaunchers(paths, homeDir)
     } catch (error) {
       throw new ManagedRuntimeIndeterminateError(
@@ -368,7 +276,21 @@ async function recoverActivationWithinTransaction(
     }
   }
   if (activationCoordinatesMatch
-    && sameJson(committedLaunchers, expectedStableLaunchers(paths, homeDir))) {
+    && !sameJson(committedLaunchers, expectedStableLaunchers(paths, homeDir, trustedNodePath, trustedNodeProof))) {
+    try {
+      committedLaunchers = await convergeStableLaunchers(paths, checkpoint.launchers, homeDir, {
+        ...(trustedNodePath === undefined ? {} : { nodeExecutable: trustedNodePath }),
+        ...(trustedNodeProof === undefined ? {} : { nodeProof: trustedNodeProof }),
+        ...(verifyTrustedNode === undefined ? {} : { verifyNode: verifyTrustedNode }),
+      })
+    } catch (error) {
+      throw new ManagedRuntimeIndeterminateError(
+        `selection 已提交，但 stable launcher partial pair 无法证明或收敛：${String(error)}`,
+      )
+    }
+  }
+  if (activationCoordinatesMatch
+    && sameJson(committedLaunchers, expectedStableLaunchers(paths, homeDir, trustedNodePath, trustedNodeProof))) {
     return {
       state: 'activated',
       activation: {
@@ -389,32 +311,83 @@ async function rollbackWithinTransaction(
   paths: RuntimePaths,
   homeDir: string,
   trustedBashPath: string | undefined,
+  verifyTrustedBash: (() => void) | undefined,
+  trustedNodePath: string | undefined,
+  trustedNodeProof: TrustedExecutableProof | undefined,
+  verifyTrustedNode: (() => void) | undefined,
 ): Promise<RuntimeActivation> {
-  const store = transactionStore(paths, trustedBashPath)
-  const launcherSnapshot = await captureStableLaunchers(paths, homeDir)
-  const launcherCommitted = expectedStableLaunchers(paths, homeDir)
-  const activation = await store.rollbackToPrevious()
+  const store = transactionStore(paths, trustedBashPath, verifyTrustedBash, trustedNodePath, verifyTrustedNode)
+  let journal = await readRollbackJournal(paths)
+  if (journal === null) {
+    const before = await store.inspect()
+    if (!before.previousValid || before.previous === null || before.selection.previousRelease === null) {
+      throw new ManagedRuntimeIndeterminateError(
+        '没有可回滚的已验证 runtime release；请重新运行 tenon setup --<host>',
+      )
+    }
+    journal = {
+      version: 1,
+      transactionId: randomUUID(),
+      beforeSelection: before.selection,
+      target: {
+        revision: before.selection.revision + 1,
+        activeRelease: before.selection.previousRelease,
+        previousRelease: before.selection.activeRelease,
+      },
+      launchers: await captureStableLaunchers(paths, homeDir),
+    }
+    await atomicWriteFile(rollbackJournalPath(paths), `${JSON.stringify(journal, null, 2)}\n`)
+  }
+  const launcherSnapshot = journal.launchers
+  verifyTrustedNode?.()
+  const launcherCommitted = expectedStableLaunchers(paths, homeDir, trustedNodePath, trustedNodeProof)
+  let inspection = await store.inspect()
+  if (sameJson(inspection.selection, journal.beforeSelection)) {
+    const committed = await store.rollbackToPrevious()
+    if (!selectionMatchesRollbackTarget(committed.selection, journal.target)
+      || committed.release.releaseId !== journal.target.activeRelease) {
+      throw new ManagedRuntimeIndeterminateError('runtime rollback selection 未提交冻结目标')
+    }
+    inspection = await store.inspect()
+  }
+  if (inspection.auditPending === true) {
+    throw new ManagedRuntimeIndeterminateError(
+      'runtime rollback selection 已提交，但 terminal audit 尚未持久化；保留 rollback journal',
+    )
+  }
+  if (!selectionMatchesRollbackTarget(inspection.selection, journal.target)
+    || !inspection.activeValid || inspection.active?.releaseId !== journal.target.activeRelease) {
+    throw new ManagedRuntimeIndeterminateError(
+      'runtime rollback journal 与当前 selection 不一致；拒绝再次翻转或覆盖并发状态',
+    )
+  }
   try {
-    await writeStableLaunchers(paths, homeDir)
-    return { ...activation, launcherSnapshot, launcherCommitted }
+    await writeStableLaunchers(paths, homeDir, {
+      checkpoint: launcherSnapshot,
+      ...(trustedNodePath === undefined ? {} : { nodeExecutable: trustedNodePath }),
+      ...(trustedNodeProof === undefined ? {} : { nodeProof: trustedNodeProof }),
+      ...(verifyTrustedNode === undefined ? {} : { verifyNode: verifyTrustedNode }),
+    })
+    const exactLaunchers = await captureStableLaunchers(paths, homeDir)
+    if (!sameJson(exactLaunchers, launcherCommitted)) {
+      throw new ManagedRuntimeIndeterminateError('runtime rollback launcher pair 未收敛到冻结 Node 身份')
+    }
+    const persisted = await readRollbackJournal(paths)
+    if (persisted === null || persisted.transactionId !== journal.transactionId) {
+      throw new ManagedRuntimeIndeterminateError('runtime rollback journal owner 在提交前发生漂移')
+    }
+    await rm(rollbackJournalPath(paths))
+    return {
+      selection: inspection.selection,
+      release: inspection.active,
+      releaseRoot: join(paths.releasesRoot, inspection.active.releaseId),
+      launcherSnapshot,
+      launcherCommitted,
+    }
   } catch (error) {
-    try {
-      await store.revertActivation(activation.selection)
-    } catch (rollbackError) {
-      throw new ManagedRuntimeIndeterminateError(
-        `runtime repair 的 launcher 提交失败，且 selection CAS 补偿失败；未覆盖 launcher：`
-        + `${String(error)}；selection=${String(rollbackError)}`,
-      )
-    }
-    try {
-      await restoreStableLaunchers(launcherSnapshot, launcherCommitted)
-    } catch (rollbackError) {
-      throw new ManagedRuntimeIndeterminateError(
-        `runtime repair 的 selection 已恢复，但 launcher 精确恢复失败：`
-        + `${String(error)}；launcher=${String(rollbackError)}`,
-      )
-    }
-    throw new Error(`runtime repair 的 launcher 提交失败，已恢复 repair 前状态：${String(error)}`)
+    throw new ManagedRuntimeIndeterminateError(
+      `runtime rollback selection 已冻结；launcher 尚未收敛，请重跑同一 repair 命令：${String(error)}`,
+    )
   }
 }
 
@@ -424,14 +397,32 @@ async function withExclusiveRuntimeTransaction<T>(
 ): Promise<T> {
   const paths = pathsFor(scope)
   await mkdir(paths.managedTransactionRoot, { recursive: true })
-  return withLock(paths.managedTransactionRoot, () => operation({
+  return withLock(paths.managedTransactionRoot, async () => {
+    if (await readRollbackJournal(paths) !== null) {
+      throw new ManagedRuntimeIndeterminateError(
+        '存在未完成的 runtime rollback；请先重跑 tenon runtime repair --rollback',
+      )
+    }
+    return operation({
     checkpointActivation: () =>
-      checkpointActivationWithinTransaction(paths, scope.homeDir, scope.trustedBashPath),
+      checkpointActivationWithinTransaction(
+        paths,
+        scope.homeDir,
+        scope.trustedBashPath,
+        scope.verifyTrustedBash,
+        scope.trustedNodePath,
+        scope.trustedNodeProof,
+        scope.verifyTrustedNode,
+      ),
     activate: (candidateRoot, host, expectedPluginVersion, stableTarget) =>
       activateWithinTransaction(
         paths,
         scope.homeDir,
         scope.trustedBashPath,
+        scope.verifyTrustedBash,
+        scope.trustedNodePath,
+        scope.trustedNodeProof,
+        scope.verifyTrustedNode,
         candidateRoot,
         host,
         expectedPluginVersion,
@@ -442,15 +433,38 @@ async function withExclusiveRuntimeTransaction<T>(
         paths,
         scope.homeDir,
         scope.trustedBashPath,
+        scope.verifyTrustedBash,
+        scope.trustedNodePath,
+        scope.trustedNodeProof,
+        scope.verifyTrustedNode,
         checkpoint,
         host,
       ),
     revertActivation: (activation) =>
-      revertWithinTransaction(paths, scope.homeDir, scope.trustedBashPath, activation),
+      revertWithinTransaction(
+        paths,
+        scope.homeDir,
+        scope.trustedBashPath,
+        scope.verifyTrustedBash,
+        scope.trustedNodePath,
+        scope.trustedNodeProof,
+        scope.verifyTrustedNode,
+        activation,
+      ),
     proveActivation: (activation) =>
-      proveActivationWithinTransaction(paths, scope.homeDir, scope.trustedBashPath, activation),
-    journal: createManagedReleaseJournal(paths),
-  }))
+      proveActivationWithinTransaction(
+        paths,
+        scope.homeDir,
+        scope.trustedBashPath,
+        scope.verifyTrustedBash,
+        scope.trustedNodePath,
+        scope.trustedNodeProof,
+        scope.verifyTrustedNode,
+        activation,
+      ),
+      journal: createManagedReleaseJournal(paths),
+    })
+  })
 }
 
 export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
@@ -468,7 +482,15 @@ export const REAL_RUNTIME_INSTALLER: RuntimeInstaller = {
     await mkdir(paths.managedTransactionRoot, { recursive: true })
     return withLock(
       paths.managedTransactionRoot,
-      () => rollbackWithinTransaction(paths, scope.homeDir, scope.trustedBashPath),
+      () => rollbackWithinTransaction(
+        paths,
+        scope.homeDir,
+        scope.trustedBashPath,
+        scope.verifyTrustedBash,
+        scope.trustedNodePath,
+        scope.trustedNodeProof,
+        scope.verifyTrustedNode,
+      ),
     )
   },
   recordUpdateFailure(scope, detail) {

@@ -113,10 +113,17 @@ export function cmdSetupHost(
       return 1
     }
     const lifecycleEnv = bindNativeHostCommand(env, host, hostBinding, trustedCommands)
+    const trustedBash = trustedCommands.bashBinding
+    const trustedNode = trustedCommands.nodeBinding
     const inspectCandidate = candidateInspector !== inspectCandidatePayload
       ? candidateInspector
       : lifecycleEnv.inspectCandidatePayload
-        ?? ((root: string) => inspectCandidatePayload(root, { bashPath: trustedCommands.bash }))
+        ?? ((root: string) => inspectCandidatePayload(root, {
+          bashPath: trustedCommands.bash,
+          ...(trustedBash === undefined ? {} : { verifyBash: trustedBash.assert }),
+          nodePath: trustedCommands.node,
+          ...(trustedNode === undefined ? {} : { verifyNode: trustedNode.assert }),
+        }))
     return (async () => {
       const convergence = readHostPluginConvergenceReceipt(lifecycleEnv, host)
       if (convergence.state === 'invalid') {

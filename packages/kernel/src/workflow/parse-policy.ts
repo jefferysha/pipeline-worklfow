@@ -1,11 +1,13 @@
 import {
   compileWorkflowDecompositionPolicy,
   compileWorkflowInteractionPolicy,
+  compileWorkflowReviewBudgetPolicy,
 } from './policy.js'
 import type {
   WorkflowDecompositionPolicyV1,
   WorkflowDef,
   WorkflowInteractionPolicyV1,
+  WorkflowReviewBudgetPolicyV1,
 } from './types.js'
 import type { WorkflowParseCursor } from './parse-document-contract.js'
 
@@ -28,7 +30,7 @@ function inlineList(raw: string): string[] {
 
 function parsePolicyBlock(
   cur: WorkflowParseCursor,
-  key: 'decomposition' | 'interaction',
+  key: 'decomposition' | 'interaction' | 'review_budget',
   allowedKeys: readonly string[],
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {}
@@ -44,7 +46,7 @@ function parsePolicyBlock(
     if (Object.hasOwn(result, field)) throw new Error(`workflow 解析错误：${key}.${field} 重复声明`)
     if (raw === '') throw new Error(`workflow 解析错误：${key}.${field} 缺值`)
     if (field === 'auto_when' || field === 'ask_when') result[field] = inlineList(raw)
-    else if (field === 'max_items' || field === 'max_depth') {
+    else if (field === 'max_items' || field === 'max_depth' || field === 'max_attempts') {
       if (!/^-?\d+$/.test(raw)) throw new Error(`workflow 解析错误：${key}.${field} 必须是整数`)
       result[field] = Number(raw)
     } else result[field] = raw
@@ -65,4 +67,14 @@ export function parseInteractionPolicy(cur: WorkflowParseCursor): WorkflowDef['i
   const raw = parsePolicyBlock(cur, 'interaction', ['version', 'mode'])
   compileWorkflowInteractionPolicy(raw)
   return raw as Omit<Partial<WorkflowInteractionPolicyV1>, 'version'> & { readonly version: 'v1' }
+}
+
+export function parseReviewBudgetPolicy(cur: WorkflowParseCursor): WorkflowDef['reviewBudget'] {
+  const raw = parsePolicyBlock(cur, 'review_budget', ['version', 'max_attempts'])
+  const definitionShape = {
+    version: raw.version,
+    max_attempts: raw.max_attempts,
+  }
+  compileWorkflowReviewBudgetPolicy(definitionShape)
+  return definitionShape as Omit<Partial<WorkflowReviewBudgetPolicyV1>, 'version'> & { readonly version: 'v1' }
 }

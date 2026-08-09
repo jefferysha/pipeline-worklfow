@@ -121,6 +121,7 @@ export function nativeHostMatchesStableTarget(
     && current.marketplace.head === target.commit
     && current.marketplace.ref === target.tag
     && current.marketplace.clean
+    && current.plugin.enabled
     && current.plugin.version === target.version
     && pluginVersionAtMarketplace(env, {
       ...current.marketplace,
@@ -262,6 +263,7 @@ export function desiredNativeHostPostcondition(
         && current.marketplace.ref === desired.marketplace.ref
         && current.marketplace.clean === desired.marketplace.clean
         && (desired.pluginRoot === null || current.plugin?.root === desired.pluginRoot)
+        && current.plugin?.enabled === true
         && current.plugin?.version === desired.pluginVersion
     },
     ...(desired.kind !== 'plugin-absent' && desired.kind !== 'marketplace-absent'
@@ -272,12 +274,14 @@ export function desiredNativeHostPostcondition(
             if (desired.kind === 'plugin-absent') {
               return current.plugin === null
                 || (matchesFrozenMarketplace(current, desired)
+                  && current.plugin.enabled
                   && current.plugin.version === desired.targetVersion)
             }
             return (current.marketplace === null && current.plugin === null)
               || (matchesFrozenMarketplace(current, desired)
                 && (current.plugin === null
-                  || current.plugin.version === desired.targetVersion))
+                  || (current.plugin.enabled
+                    && current.plugin.version === desired.targetVersion)))
           },
         }),
   }

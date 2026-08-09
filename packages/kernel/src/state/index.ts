@@ -3,6 +3,23 @@
  * 本 barrel 由根 src/index.ts re-export（见 CONTRACT §4）。
  */
 export { atomicWriteFile, createStateStore, StateProjectionDriftError, STATE_FILE_NAME } from './store.js'
+export {
+  createReviewAttemptBudgetStore,
+  ReviewAttemptBudgetError,
+} from './review-attempt-budget.js'
+export type {
+  ReviewAttemptBeginInput,
+  ReviewAttemptBeginResult,
+  ReviewAttemptBudgetSnapshot,
+  ReviewAttemptBudgetStore,
+  ReviewAttemptCompleteInput,
+  ReviewAttemptCompletion,
+  ReviewAttemptIdentity,
+  ReviewAttemptLaneInput,
+  ReviewAttemptResult,
+  ReviewBudgetOverrideInput,
+  ReviewLaneEvidence,
+} from './review-attempt-budget.js'
 export { readPipelineStateFromSync } from './sync-reader.js'
 export { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
 export { ensureTrustedProjectDirectory } from './trusted-project-path.js'

@@ -9,7 +9,16 @@ import {
   type StableReleaseHttp,
 } from './stable-release.js'
 
-function envFor(output: string, code = 0): SetupEnv {
+function envFor(
+  output: string,
+  code = 0,
+  objectType: 'commit' | 'tree' | 'blob' = 'commit',
+): SetupEnv {
+  const advertised = output.trim().split(/\r?\n/u)
+    .map((line) => line.trim().split(/\s+/u))
+  const commit = advertised.find((row) => row[1] === 'refs/tags/v1.2.3^{}')?.[0]
+    ?? advertised.find((row) => row[1] === 'refs/tags/v1.2.3')?.[0]
+    ?? ''
   return {
     homeDir: () => '/home/test',
     runtimeEnv: () => ({}),
@@ -27,14 +36,25 @@ function envFor(output: string, code = 0): SetupEnv {
     writeTextAtomic: () => undefined,
     runCommand: (cmd, args, options) => {
       expect(cmd).toBe('git')
-      expect(args).toEqual([
-        'ls-remote',
-        'https://github.com/jefferysha/tenon.git',
-        'refs/tags/v1.2.3',
-        'refs/tags/v1.2.3^{}',
-      ])
       expect(options).toEqual({ timeoutMs: 10_000 })
-      return { code, stdout: output, stderr: code === 0 ? '' : 'network failed' }
+      if (args[0] === 'ls-remote') {
+        expect(args).toEqual([
+          'ls-remote',
+          'https://github.com/jefferysha/tenon.git',
+          'refs/tags/v1.2.3',
+          'refs/tags/v1.2.3^{}',
+        ])
+        return { code, stdout: output, stderr: code === 0 ? '' : 'network failed' }
+      }
+      if (args[0] === 'init') return { code: 0, stdout: '', stderr: '' }
+      if (args[2] === 'fetch') return { code: 0, stdout: '', stderr: '' }
+      if (args[2] === 'rev-parse') {
+        return objectType === 'commit'
+          ? { code: 0, stdout: `${commit}\n`, stderr: '' }
+          : { code: 1, stdout: '', stderr: `not a commit: ${objectType}` }
+      }
+      if (args[2] === 'cat-file') return { code: 0, stdout: `${objectType}\n`, stderr: '' }
+      throw new Error(`unexpected git command: ${args.join(' ')}`)
     },
     confirm: () => false,
   }
@@ -97,6 +117,14 @@ describe('stable Release identity', () => {
       http,
     )).rejects.toThrow(/tag proof/i)
     await expect(resolveStableReleaseTarget(envFor('', 1), http)).rejects.toThrow(/tag proof/i)
+  })
+
+  test.each(['tree', 'blob'] as const)('rejects a tag whose final object is %s', (objectType) => {
+    const oid = 'f'.repeat(40)
+    expect(() => resolveStableTagTarget(
+      envFor(`${oid}\trefs/tags/v1.2.3\n`, 0, objectType),
+      '1.2.3',
+    )).toThrow(/commit object/i)
   })
 
   test('fails before Git proof when Release metadata cannot be fetched', async () => {

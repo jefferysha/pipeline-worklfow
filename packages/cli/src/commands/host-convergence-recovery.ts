@@ -4,6 +4,7 @@ import {
   inspectCandidatePayload,
   type CandidatePayloadIdentity,
 } from '../runtime/release-store.js'
+import type { CandidatePayloadValidationOptions } from '../runtime/release-payload.js'
 import type { ReleasedDashboardStarter } from './dashboard.js'
 import {
   finalizePendingHostPluginConflictWithinTransaction,
@@ -15,19 +16,19 @@ import { decodeNativeHostObservation, observeNativeHost } from './managed-host-s
 import type { NativePipelineHost } from './plugin-host.js'
 import type { SetupEnv } from './setupEnvironment.js'
 import { compareStableVersions, resolveStableTagTarget, type StableReleaseTarget } from './stable-release.js'
+import {
+  nativeCandidateValidationOptions,
+  nativeRuntimeInstallerScope,
+} from './native-runtime-installer-scope.js'
 
 interface ProvenConvergenceIdentity {
   readonly target: StableReleaseTarget
 }
 
-function runtimeScope(env: SetupEnv) {
-  const trustedBashPath = env.resolveTrustedCommand?.('bash')
-  return {
-    homeDir: env.homeDir(),
-    env: env.runtimeEnv(),
-    ...(trustedBashPath === undefined ? {} : { trustedBashPath }),
-  }
-}
+type CandidateInspector = (
+  root: string,
+  options?: CandidatePayloadValidationOptions,
+) => Promise<CandidatePayloadIdentity>
 
 async function proveConvergenceIdentity(
   deps: CliDeps,
@@ -37,9 +38,9 @@ async function proveConvergenceIdentity(
   host: NativePipelineHost,
   receipt: HostPluginConvergenceReceipt,
   dashboardPort: number,
-  candidateInspector: (root: string) => Promise<CandidatePayloadIdentity>,
+  candidateInspector: CandidateInspector,
 ): Promise<ProvenConvergenceIdentity> {
-  const runtime = await installer.inspect(runtimeScope(env))
+  const runtime = await installer.inspect(nativeRuntimeInstallerScope(env))
   const active = runtime.active
   if (!runtime.activeValid
     || active === null
@@ -67,7 +68,10 @@ async function proveConvergenceIdentity(
   }
   const observation = decodeNativeHostObservation(observeNativeHost(env, host))
   if (observation.plugin === null) throw new Error('宿主 inventory 缺少 Tenon plugin root')
-  const candidate = await candidateInspector(observation.plugin.root)
+  const candidate = await candidateInspector(
+    observation.plugin.root,
+    nativeCandidateValidationOptions(env),
+  )
   if (candidate.pluginVersion !== target.version || candidate.payloadDigest !== active.payloadDigest) {
     throw new Error('宿主 plugin payload 与 active managed runtime digest 不一致')
   }
@@ -87,10 +91,10 @@ export async function hostConvergenceHasNewerStableCandidate(
   installer: RuntimeInstaller,
   host: NativePipelineHost,
   receipt: HostPluginConvergenceReceipt,
-  candidateInspector: (root: string) => Promise<CandidatePayloadIdentity> = inspectCandidatePayload,
+  candidateInspector: CandidateInspector = inspectCandidatePayload,
 ): Promise<boolean> {
   try {
-    const runtime = await installer.inspect(runtimeScope(env))
+    const runtime = await installer.inspect(nativeRuntimeInstallerScope(env))
     const active = runtime.active
     if (!runtime.activeValid
       || active === null
@@ -102,7 +106,10 @@ export async function hostConvergenceHasNewerStableCandidate(
       || compareStableVersions(observation.plugin.version, active.source.pluginVersion) <= 0) return false
     const target = resolveStableTagTarget(env, observation.plugin.version)
     if (!nativeHostMatchesStableTarget(env, host, target)) return false
-    const candidate = await candidateInspector(observation.plugin.root)
+    const candidate = await candidateInspector(
+      observation.plugin.root,
+      nativeCandidateValidationOptions(env),
+    )
     return candidate.pluginVersion === target.version
   } catch {
     return false
@@ -118,11 +125,11 @@ export async function recoverPendingHostConvergence(
   host: NativePipelineHost,
   receipt: HostPluginConvergenceReceipt,
   dashboardPort: number,
-  candidateInspector: (root: string) => Promise<CandidatePayloadIdentity> = inspectCandidatePayload,
+  candidateInspector: CandidateInspector = inspectCandidatePayload,
 ): Promise<boolean> {
   try {
     return await installer.withManagedTransaction(
-      { homeDir: env.homeDir(), env: env.runtimeEnv() },
+      nativeRuntimeInstallerScope(env),
       async () => {
         let upgradedReceipt = receipt
         try {

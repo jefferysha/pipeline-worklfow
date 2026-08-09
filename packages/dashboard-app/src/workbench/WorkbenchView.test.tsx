@@ -1118,6 +1118,21 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
     expect(body.steps).toHaveLength(RELEASE_TRAIN.steps.length)
   })
 
+  it('仅修改 Review 次数也启用策略保存并持久化', async () => {
+    renderView()
+    await screen.findByTestId('workflow-policy-editor')
+
+    const savePolicy = screen.getByRole('button', { name: '保存策略' })
+    expect(savePolicy).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('最大 Review 次数'), { target: { value: '3' } })
+    expect(savePolicy).toBeEnabled()
+    fireEvent.click(savePolicy)
+
+    await waitFor(() => expect(screen.getByTestId('wb-save-ok')).toHaveTextContent('已保存'))
+    expect((lastSaveCall()?.body as { reviewBudget?: unknown }).reviewBudget)
+      .toEqual({ version: 'v1', max_attempts: 3 })
+  })
+
   it('策略取消只恢复策略字段，并保留其他 Workflow 草稿', async () => {
     renderView()
     await screen.findByTestId('workflow-policy-editor')
@@ -1196,6 +1211,7 @@ describe('WorkbenchView T13 编辑 → 保存（验收①）', () => {
         max_items: 16, max_depth: 2, auto_when: [], ask_when: [],
       },
       interaction: { version: 'v1', mode: 'interactive' },
+      reviewBudget: { version: 'v1', max_attempts: 2 },
       steps: [
         { ...RELEASE_TRAIN.steps[0], label: '初稿' },
         RELEASE_TRAIN.steps[1],

@@ -28,6 +28,8 @@ export async function resumeManagedReleaseCompensation(
   initialJournal: ManagedReleaseJournalRecord,
   dashboardStarter: ReleasedDashboardStarter | undefined,
   liveCandidate?: ReleasedDashboardSession,
+  trustedNodePath?: string,
+  verifyTrustedNode?: () => void,
 ): Promise<ManagedReleaseOutcome> {
   let journal = initialJournal
   const activation = journal.activation
@@ -129,6 +131,8 @@ export async function resumeManagedReleaseCompensation(
               dashboardStarter,
               port,
               restoreTransactionId,
+              trustedNodePath,
+              verifyTrustedNode,
             )
             if (outcome.state !== 'ready') {
               return fail(outcome.state === 'not-required'

@@ -80,10 +80,17 @@ export function cmdUpdate(
     return 1
   }
   const lifecycleEnv = bindNativeHostCommand(env, host, hostBinding, trustedCommands)
+  const trustedBash = trustedCommands.bashBinding
+  const trustedNode = trustedCommands.nodeBinding
   const inspectCandidate = candidateInspector !== inspectCandidatePayload
     ? candidateInspector
     : lifecycleEnv.inspectCandidatePayload
-      ?? ((root: string) => inspectCandidatePayload(root, { bashPath: trustedCommands.bash }))
+      ?? ((root: string) => inspectCandidatePayload(root, {
+        bashPath: trustedCommands.bash,
+        ...(trustedBash === undefined ? {} : { verifyBash: trustedBash.assert }),
+        nodePath: trustedCommands.node,
+        ...(trustedNode === undefined ? {} : { verifyNode: trustedNode.assert }),
+      }))
   return runNativeUpdate({
     deps,
     env: lifecycleEnv,
@@ -94,6 +101,10 @@ export function cmdUpdate(
     host,
     hostExecutable: hostBinding.executable,
     trustedBashPath: trustedCommands.bash,
+    verifyTrustedBash: trustedBash?.assert,
+    trustedNodePath: trustedCommands.node,
+    trustedNodeProof: trustedNode?.proof,
+    verifyTrustedNode: trustedNode?.assert,
     auto: opts.auto === true,
   })
 }

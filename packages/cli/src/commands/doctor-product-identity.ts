@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { win32 } from 'node:path'
 import { machineStateScopeId } from '@tenon/kernel'
 import type { DoctorCheck } from './doctor-check.js'
 import { green, red } from './doctor-check.js'
@@ -16,22 +17,63 @@ import { decodeNativeHostObservation, observeNativeHost } from './managed-host-s
 import type { SetupEnv } from './setupEnvironment.js'
 import { inspectCandidatePayload } from '../runtime/release-store.js'
 import { resolveStableTagTarget } from './stable-release.js'
+import {
+  nativeHostCommandBinding,
+  type NativeHostCommandBinding,
+} from './native-host-command-binding.js'
+import { freezeTrustedExecutable, type TrustedExecutable } from './trusted-executable.js'
 
 interface DoctorProductIdentityProbeRuntime {
-  resolveCommand(command: 'bash' | 'git' | 'codex' | 'claude', scope: RuntimeScopeSnapshot): string | undefined
+  resolveHostCommand(
+    command: 'codex' | 'claude',
+    scope: RuntimeScopeSnapshot,
+  ): NativeHostCommandBinding | undefined
+  resolveTrustedCommand(
+    command: 'bash' | 'git' | 'node',
+    scope: RuntimeScopeSnapshot,
+  ): TrustedExecutable | undefined
   readText(path: string): string | undefined
-  run(file: string, args: readonly string[]): { readonly code: number; readonly stdout: string; readonly stderr: string }
+  run(
+    file: string,
+    args: readonly string[],
+    cwd?: string,
+  ): { readonly code: number; readonly stdout: string; readonly stderr: string }
   inspectCandidate: typeof inspectCandidatePayload
   probeDashboard: typeof probeHealthyDashboard
 }
 
 const REAL_PRODUCT_IDENTITY_RUNTIME: DoctorProductIdentityProbeRuntime = {
-  resolveCommand(command, scope) {
-    return resolveCommandOnPath(command, {
+  resolveTrustedCommand(command, scope) {
+    const candidate = resolveCommandOnPath(command, {
       pathValue: scope.env.PATH,
       platform: process.platform,
       requireAbsolutePathEntries: true,
     })
+    return candidate === undefined ? undefined : freezeTrustedExecutable(candidate)
+  },
+  resolveHostCommand(command, scope) {
+    const candidate = resolveCommandOnPath(command, {
+      pathValue: scope.env.PATH,
+      platform: process.platform,
+      requireAbsolutePathEntries: true,
+    })
+    if (candidate === undefined) return undefined
+    const trusted = freezeTrustedExecutable(candidate)
+    if (trusted === undefined) return undefined
+    const interpreter = process.platform === 'win32' && /\.(?:cmd|bat)$/iu.test(trusted.executable)
+      ? freezeTrustedExecutable(
+          scope.env.ComSpec && win32.isAbsolute(scope.env.ComSpec)
+            ? scope.env.ComSpec
+            : win32.join(scope.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe'),
+        )
+      : undefined
+    return nativeHostCommandBinding(
+      trusted.executable,
+      process.platform,
+      scope.env,
+      trusted,
+      interpreter,
+    )
   },
   readText(path) {
     try {
@@ -40,7 +82,7 @@ const REAL_PRODUCT_IDENTITY_RUNTIME: DoctorProductIdentityProbeRuntime = {
       return undefined
     }
   },
-  run(file, args) {
+  run(file, args, cwd) {
     const asText = (value: unknown): string => Buffer.isBuffer(value)
       ? value.toString('utf8')
       : typeof value === 'string' ? value : ''
@@ -51,6 +93,7 @@ const REAL_PRODUCT_IDENTITY_RUNTIME: DoctorProductIdentityProbeRuntime = {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
           timeout: 5_000,
+          ...(cwd === undefined ? {} : { cwd }),
         }),
         stderr: '',
       }
@@ -109,14 +152,26 @@ export function createDoctorProductIdentityProbe(
   return async () => {
     const scope = runtimeScope()
     try {
-      const trustedBashPath = runtime.resolveCommand('bash', scope)
-      if (trustedBashPath === undefined) {
+      const trustedBash = runtime.resolveTrustedCommand('bash', scope)
+      const trustedGit = runtime.resolveTrustedCommand('git', scope)
+      const trustedNode = runtime.resolveTrustedCommand('node', scope)
+      if (trustedBash === undefined) {
         return { state: 'unavailable', detail: '可信 Bash 不可执行' }
+      }
+      if (trustedGit === undefined) {
+        return { state: 'unavailable', detail: '可信 Git 不可执行' }
+      }
+      if (trustedNode === undefined) {
+        return { state: 'unavailable', detail: '可信 Node 不可执行' }
       }
       const inspection = await installer.inspect({
         homeDir: scope.homeDir,
         env: scope.env,
-        trustedBashPath,
+        trustedBashPath: trustedBash.executable,
+        verifyTrustedBash: trustedBash.assert,
+        trustedNodePath: trustedNode.executable,
+        trustedNodeProof: trustedNode.proof,
+        verifyTrustedNode: trustedNode.assert,
       })
       const active = inspection.activeValid ? inspection.active : null
       const host = active?.source.host
@@ -126,22 +181,28 @@ export function createDoctorProductIdentityProbe(
       if (active.version !== 2 || active.stableTarget === undefined) {
         return { state: 'unavailable', detail: 'active runtime manifest 缺少持久化 stable tag/commit 证明' }
       }
-      const executable = runtime.resolveCommand(host, scope)
-      if (executable === undefined) {
+      const hostBinding = runtime.resolveHostCommand(host, scope)
+      if (hostBinding === undefined) {
         return { state: 'unavailable', detail: `${host} 宿主不可执行` }
-      }
-      const gitExecutable = runtime.resolveCommand('git', scope)
-      if (gitExecutable === undefined) {
-        return { state: 'unavailable', detail: '可信 Git 不可执行' }
       }
       const diagnosticEnv = {
         homeDir: () => scope.homeDir,
         runtimeEnv: () => scope.env,
         readText: (path: string) => runtime.readText(path),
         runCommand: (command: string, args: string[]) => {
-          const file = command === host ? executable : command === 'git' ? gitExecutable : undefined
-          if (file === undefined) return { code: 127, stdout: '', stderr: 'untrusted command' }
-          return runtime.run(file, args)
+          if (command === host) {
+            const invocation = hostBinding.invocation(args)
+            return invocation === undefined
+              ? { code: 127, stdout: '', stderr: 'trusted host identity drifted' }
+              : runtime.run(invocation.file, invocation.args, invocation.cwd)
+          }
+          if (command !== 'git') return { code: 127, stdout: '', stderr: 'untrusted command' }
+          try {
+            trustedGit.assert()
+          } catch {
+            return { code: 127, stdout: '', stderr: 'trusted git identity drifted' }
+          }
+          return runtime.run(trustedGit.executable, args)
         },
       } as SetupEnv
       const observation = decodeNativeHostObservation(observeNativeHost(diagnosticEnv, host))
@@ -150,9 +211,19 @@ export function createDoctorProductIdentityProbe(
         host,
         active.stableTarget,
       )
-      const candidate = observation.plugin === null
+      const candidateRoot = observation.plugin?.root
+      const candidate = candidateRoot === undefined
         ? null
-        : await runtime.inspectCandidate(observation.plugin.root, { bashPath: trustedBashPath })
+        : await (async () => {
+            trustedBash.assert()
+            trustedNode.assert()
+            return runtime.inspectCandidate(candidateRoot, {
+              bashPath: trustedBash.executable,
+              verifyBash: trustedBash.assert,
+              nodePath: trustedNode.executable,
+              verifyNode: trustedNode.assert,
+            })
+          })()
       const hostTargetExactAfterPayload = nativeHostMatchesStableTarget(
         diagnosticEnv,
         host,

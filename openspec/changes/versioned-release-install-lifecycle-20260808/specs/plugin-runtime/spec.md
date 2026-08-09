@@ -58,3 +58,98 @@ Setup/update SHALL 始终从新 active managed payload 启动或收养 Dashboard
 - **WHEN** 目标端口存在无法证明属于当前或前一 managed transaction 的 listener
 - **THEN** coordinator 不 stop、adopt 或覆盖该进程
 - **AND** 保留 journal 并返回不可证明诊断
+
+### Requirement: Runtime audit SHALL 只把已提交状态报告为成功
+
+Activation 和 rollback SHALL 先持久化 prepared 事件，完成 selection 原子提交后才 SHALL
+追加 terminal success 事件。尾部任一非空 audit 记录损坏、截断或无法读取时，runtime
+status 与 doctor SHALL 报告 `auditCorrupt`/degraded，不得把更早记录冒充为 latest。
+
+#### Scenario: 进程在 selection 提交前崩溃
+
+- **WHEN** activation 或 rollback 已写 prepared audit，但 selection 尚未提交
+- **THEN** runtime status 不报告 activation/rollback 成功
+- **AND** 重试只在确认 selection 后追加 terminal success
+
+#### Scenario: audit 尾行被截断
+
+- **WHEN** audit 最后一条非空记录不能完整解码
+- **THEN** CLI 与 stable bootstrap 都报告 audit 已损坏
+- **AND** 不返回更早记录作为 `lastAudit`
+
+## MODIFIED Requirements
+
+### Requirement: Native installation activates a verified managed release
+
+For `tenon setup --codex` and `tenon setup --claude`, the system SHALL treat the native
+host's reported plugin root as a candidate. It SHALL stage and verify that candidate before
+publishing a managed runtime release, and it SHALL install only the selected native-host adapter.
+All default-workflow skills distributed in the plugin SHALL remain available from the selected
+release without a second workflow package or external skill install.
+
+#### Scenario: First native installation succeeds
+
+- **WHEN** a user runs `tenon setup --codex` and the host reports a complete plugin root
+- **THEN** the system validates the candidate, publishes one managed release, writes stable
+  `tenon` and `tenon-hook` launchers, and reports the required Codex hook-trust step
+- **AND** it does not create the removed `pipeline` launcher or modify Claude configuration.
+
+#### Scenario: Candidate validation fails during setup
+
+- **WHEN** the host reports a candidate with a missing bundle, malformed hook, invalid manifest,
+  symlinked payload entry, or failed CLI smoke check
+- **THEN** setup exits non-zero and does not change active release selection or either stable launcher
+- **AND** it reports the specific verification failure.
+
+### Requirement: Active runtime selection is atomic and recoverable
+
+The system SHALL store releases in immutable content-addressed directories and SHALL atomically
+replace a selection record containing an active release and optional previous verified release.
+Selection and the `tenon`/`tenon-hook` launcher pair SHALL form one recoverable transaction: after
+any per-file rename or chmod interruption, exact old/new partial states SHALL converge to the
+committed selection, while any third-party byte or mode state SHALL fail closed. All setup, update,
+rollback, and retention mutations SHALL run under a cross-process lock and append an audit record.
+The active and previous release SHALL never be pruned.
+
+#### Scenario: Candidate update activates atomically
+
+- **WHEN** `tenon update --claude` obtains and verifies a new candidate
+- **THEN** the candidate is fully published before the active selection points to it
+- **AND** the former active release becomes the previous verified release
+- **AND** both stable launchers are exact for the committed selection before success is reported.
+
+#### Scenario: Update is interrupted before selection publication
+
+- **WHEN** staging or validation fails, or the process stops before selection publication
+- **THEN** the previously active release remains selected and executable
+- **AND** incomplete staging is not considered a managed release.
+
+#### Scenario: Update is interrupted during launcher publication
+
+- **WHEN** selection is committed and the process stops after either launcher rename or chmod
+- **THEN** retry recognizes only an exact installer-owned old/new partial pair and completes both launchers
+- **AND** an externally modified launcher remains indeterminate and is not overwritten.
+
+### Requirement: Runtime corruption has recovery-only authority
+
+If the bootstrap cannot validate or load the active release, it SHALL distinguish that condition
+from a valid payload policy denial. It SHALL deny normal write-capable project operations and
+accept only the exact local command `tenon runtime repair --rollback`. That recovery operation
+SHALL validate and select only the persisted previous verified release; it SHALL retain the current
+hardened, backward-compatible bootstrap instead of copying the previous payload's bootstrap, and
+it SHALL not accept a path, download arbitrary code, delete project markers, or modify OpenSpec
+workflow state.
+
+#### Scenario: Previous release repairs an invalid active release
+
+- **WHEN** active release integrity validation fails and a valid previous release exists
+- **THEN** `tenon runtime repair --rollback` atomically selects the previous release
+- **AND** the current hardened bootstrap remains byte-identical and can execute the verified v1 payload
+- **AND** records a rollback audit event only after selection commit
+- **AND** normal policy enforcement resumes from that release without PATH-resolved shell execution.
+
+#### Scenario: No verified recovery release exists
+
+- **WHEN** active release validation fails and there is no valid previous release
+- **THEN** the recovery command exits non-zero with a reinstall instruction
+- **AND** the bootstrap does not silently allow ordinary mutation.

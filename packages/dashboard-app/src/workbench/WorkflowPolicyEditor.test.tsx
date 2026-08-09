@@ -18,6 +18,7 @@ const DEFINITION: WbWorkflowDef = {
     ask_when: ['hard-boundary'],
   },
   interaction: { version: 'v1', mode: 'interactive' },
+  reviewBudget: { version: 'v1', max_attempts: 3 },
   steps: [],
 }
 
@@ -67,6 +68,10 @@ describe('WorkflowPolicyEditor', () => {
     expect(screen.getByLabelText('拆分目标')).toHaveValue('child-pipelines')
     expect(screen.getByLabelText('上下文预算风险')).toBeChecked()
     expect(screen.getByLabelText('硬边界')).toBeChecked()
+    expect(screen.getByLabelText('最大 Review 次数')).toHaveValue(3)
+
+    fireEvent.change(screen.getByLabelText('最大 Review 次数'), { target: { value: '4' } })
+    expect(screen.getByLabelText('最大 Review 次数')).toHaveValue(4)
   })
 
   it('supports condition toggles, bounded limits, Enter save, and Escape cancel with focus recovery', () => {
@@ -82,6 +87,8 @@ describe('WorkflowPolicyEditor', () => {
     expect(screen.getByLabelText('最大项目数')).toHaveAttribute('max', '32')
     expect(screen.getByLabelText('最大深度')).toHaveAttribute('min', '0')
     expect(screen.getByLabelText('最大深度')).toHaveAttribute('max', '4')
+    expect(screen.getByLabelText('最大 Review 次数')).toHaveAttribute('min', '1')
+    expect(screen.getByLabelText('最大 Review 次数')).toHaveAttribute('max', '20')
 
     fireEvent.keyDown(mode, { key: 'Enter' })
     expect(onSave).toHaveBeenCalledTimes(1)
@@ -114,6 +121,7 @@ describe('WorkflowPolicyEditor', () => {
     expect(screen.getByText(/内置 default 策略为只读镜像/)).toBeInTheDocument()
     expect(screen.getByLabelText('拆分模式')).toBeDisabled()
     expect(screen.getByLabelText('互动模式')).toBeDisabled()
+    expect(screen.getByLabelText('最大 Review 次数')).toBeDisabled()
     expect(screen.queryByRole('button', { name: '保存策略' })).toBeNull()
   })
 })

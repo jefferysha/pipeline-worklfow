@@ -1,4 +1,7 @@
 name: default
+review_budget:
+  version: v1
+  max_attempts: 2
 steps:
   - id: open
     label: 立项
@@ -76,6 +79,7 @@ steps:
   - id: verify
     label: 验证
     gate: review
+    review_lanes: [standards, spec, e2e]
     skills: []
     inputs:
       - field: build_sha

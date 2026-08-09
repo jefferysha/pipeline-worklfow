@@ -90,6 +90,9 @@ export async function prepareManagedReleaseCandidate(
         transaction,
         journal,
         dashboardStarter,
+        undefined,
+        request.runtime.trustedNodePath,
+        request.runtime.verifyTrustedNode,
       ),
     }
   }

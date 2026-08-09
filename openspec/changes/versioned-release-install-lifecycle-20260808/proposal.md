@@ -11,6 +11,7 @@
 - 确保新用户无需 clone、安装依赖或本地编译即可完成 Codex 插件、CLI、Skills、hooks、managed runtime 和 Dashboard 安装。
 - 用真实“卸载当前安装 → 官方版本化命令全新安装 → 一键更新”路径验收新用户一致性。
 - 明确 Dashboard 在交互安装、非交互/CI 更新和后续手动访问中的启动与提示行为。
+- 在进入 Build 前一次性冻结跨规格、并发、安全、N-1、发布、文档、架构与生成资产的验收矩阵；Build 只按该闭集实施，末端 Review 只检查未落实项和本轮回归。
 - 不删除项目中的 Change、Archive、OpenSpec、用户规则、截图或其他用户数据。
 
 ## Capabilities
@@ -18,6 +19,7 @@
 ### New Capabilities
 
 - `versioned-plugin-release-lifecycle`：以稳定版本号统一安装、更新、回滚和运行时身份。
+- `review-attempt-budget`：为任意 Workflow/Pipeline 提供可配置、持久化、候选绑定且可耗尽的自动 Review 次数限制；code/spec/security/E2E/browser 等显式 lanes 聚合为一次候选 Review，不靠 Skill 名称猜测。
 
 ### Modified Capabilities
 

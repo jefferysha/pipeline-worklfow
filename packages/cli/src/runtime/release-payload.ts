@@ -261,6 +261,7 @@ export async function verifyReleasePayload(
   payloadRoot: string,
   runner: RuntimeCommandRunner,
   bashPath = 'bash',
+  nodePath = process.execPath,
 ): Promise<void> {
   const verifier = join(payloadRoot, 'tools', 'verify-skills.sh')
   const cli = join(payloadRoot, 'packages', 'cli', 'dist', 'tenon.mjs')
@@ -279,9 +280,9 @@ export async function verifyReleasePayload(
     await runChecked(runner, bashPath, ['-n', file], payloadRoot, `adapter 语法 ${basename(file)}`)
   }
   for (const file of [cli, server, bootstrap]) {
-    await runChecked(runner, process.execPath, ['--check', file], payloadRoot, `Node 语法 ${basename(file)}`)
+    await runChecked(runner, nodePath, ['--check', file], payloadRoot, `Node 语法 ${basename(file)}`)
   }
-  await runChecked(runner, process.execPath, [cli, '--help'], payloadRoot, 'CLI smoke')
+  await runChecked(runner, nodePath, [cli, '--help'], payloadRoot, 'CLI smoke')
 }
 
 export async function releaseCandidateVersion(candidateRoot: string): Promise<string> {
@@ -306,23 +307,40 @@ export interface CandidatePayloadIdentity {
   readonly pluginVersion: string
 }
 
+export interface CandidatePayloadValidationOptions {
+  readonly runner?: RuntimeCommandRunner
+  readonly bashPath?: string
+  readonly verifyBash?: () => void
+  readonly nodePath?: string
+  readonly verifyNode?: () => void
+}
+
 /** Verify and hash exactly the payload entries that activation would publish, without selection mutation. */
 export async function inspectCandidatePayload(
   candidateRoot: string,
-  options: {
-    readonly runner?: RuntimeCommandRunner
-    readonly bashPath?: string
-  } = {},
+  options: CandidatePayloadValidationOptions = {},
 ): Promise<CandidatePayloadIdentity> {
   const stageRoot = await mkdtemp(join(tmpdir(), 'tenon-candidate-inspect-'))
   const payloadRoot = join(stageRoot, 'payload')
   try {
     await mkdir(payloadRoot, { recursive: true })
     await copyReleasePayload(resolve(candidateRoot), payloadRoot)
+    const bashPath = options.bashPath ?? 'bash'
+    const nodePath = options.nodePath ?? process.execPath
+    const runner = options.runner ?? defaultRuntimeCommandRunner()
     await verifyReleasePayload(
       payloadRoot,
-      options.runner ?? defaultRuntimeCommandRunner(),
-      options.bashPath ?? 'bash',
+      options.verifyBash === undefined && options.verifyNode === undefined
+        ? runner
+        : {
+            run: async (file, args, cwd) => {
+              if (file === bashPath) options.verifyBash?.()
+              if (file === nodePath) options.verifyNode?.()
+              return runner.run(file, args, cwd)
+            },
+          },
+      bashPath,
+      nodePath,
     )
     return {
       payloadDigest: await hashReleasePayload(payloadRoot),

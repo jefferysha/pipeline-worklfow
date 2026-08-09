@@ -12,12 +12,13 @@ import type { ReleasedDashboardStarter } from '../commands/dashboard.js'
 import { makeDeps } from '../test-support.js'
 import { resolveRuntimePaths } from './paths.js'
 import { REAL_RUNTIME_INSTALLER } from './installer.js'
+import { captureStableLaunchers, expectedStableLaunchers } from './launchers.js'
 import {
   copyReleasePayload,
   hashLegacyReleasePayload,
   hashReleasePayload,
 } from './release-payload.js'
-import { stableJson } from './release-store-codecs.js'
+import { stableJson, writeAudit } from './release-store-codecs.js'
 import { RuntimeReleaseStore } from './release-store.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
@@ -393,6 +394,21 @@ describe('RuntimeReleaseStore', () => {
     expect(invocations).not.toContain('bash')
   }, 30_000)
 
+  it('revalidates the frozen Node identity when no Bash verifier is configured', async () => {
+    const root = await freshRoot('trusted-node-only-revalidation')
+    const candidate = await candidateCopy(root)
+    let verifications = 0
+    const store = new RuntimeReleaseStore({
+      paths: pathsFor(root),
+      nodePath: process.execPath,
+      verifyNode: () => { verifications += 1 },
+    })
+
+    await store.stageAndActivate(candidate, 'codex')
+
+    expect(verifications).toBeGreaterThan(0)
+  }, 30_000)
+
   it('recovers an activation crash window from the pre-activation selection and launcher checkpoint', async () => {
     const root = await freshRoot('activation-checkpoint')
     const home = join(root, 'home')
@@ -417,6 +433,64 @@ describe('RuntimeReleaseStore', () => {
           launcherSnapshot: checkpoint.launchers,
         },
       })
+    })
+  }, 30_000)
+
+  it.each(['tenon', 'hook'] as const)(
+    'converges an installer-owned partial stable launcher pair after %s publication',
+    async (published) => {
+      const root = await freshRoot(`activation-partial-launcher-${published}`)
+      const home = join(root, 'home')
+      const candidate = await candidateCopy(root)
+      const scope = isolatedScope(home)
+      const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+
+      await REAL_RUNTIME_INSTALLER.withManagedTransaction(scope, async (transaction) => {
+        const checkpoint = await transaction.checkpointActivation()
+        await new RuntimeReleaseStore({ paths }).stageAndActivate(candidate, 'codex')
+        const expected = expectedStableLaunchers(paths, home)
+        const file = expected[published]
+        if (file.state.kind !== 'file') throw new Error('expected launcher fixture must be a file')
+        await mkdir(dirname(file.path), { recursive: true })
+        await writeFile(file.path, file.state.content, 'utf8')
+        await chmod(file.path, 0o600)
+
+        const recovered = await transaction.recoverActivation(checkpoint, 'codex')
+
+        expect(recovered.state).toBe('activated')
+        for (const name of ['tenon', 'hook'] as const) {
+          const launcher = expected[name]
+          if (launcher.state.kind !== 'file') throw new Error('expected launcher fixture must be a file')
+          expect(await readFile(launcher.path, 'utf8')).toBe(launcher.state.content)
+          expect((await stat(launcher.path)).mode & 0o777).toBe(0o755)
+        }
+      })
+    },
+    30_000,
+  )
+
+  it('fails closed when activation recovery sees an external launcher in a partial pair', async () => {
+    const root = await freshRoot('activation-third-party-launcher')
+    const home = join(root, 'home')
+    const candidate = await candidateCopy(root)
+    const scope = isolatedScope(home)
+    const paths = resolveRuntimePaths({ homeDir: home, env: {} })
+
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(scope, async (transaction) => {
+      const checkpoint = await transaction.checkpointActivation()
+      await new RuntimeReleaseStore({ paths }).stageAndActivate(candidate, 'codex')
+      const expected = expectedStableLaunchers(paths, home)
+      const tenon = expected.tenon
+      if (tenon.state.kind !== 'file') throw new Error('expected launcher fixture must be a file')
+      await mkdir(dirname(tenon.path), { recursive: true })
+      await writeFile(tenon.path, tenon.state.content, 'utf8')
+      await chmod(tenon.path, 0o600)
+      await writeFile(expected.hook.path, '#!/bin/sh\necho external-owner\n', 'utf8')
+      await chmod(expected.hook.path, 0o755)
+
+      await expect(transaction.recoverActivation(checkpoint, 'codex'))
+        .rejects.toThrow(/partial pair 无法证明|third-party byte/)
+      expect(await readFile(expected.hook.path, 'utf8')).toContain('external-owner')
     })
   }, 30_000)
 
@@ -1066,6 +1140,75 @@ describe('RuntimeReleaseStore', () => {
     expect(rolledBack.selection.previousRelease).toBe(second.release.releaseId)
   }, 30_000)
 
+  it('keeps the current hardened bootstrap bytes when rolling back to a previous payload', async () => {
+    const root = await freshRoot('rollback-keeps-bootstrap')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(firstCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(firstCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// previous-bootstrap\n`,
+      'utf8',
+    )
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// hardened-current-bootstrap\n`,
+      'utf8',
+    )
+    const store = storeFor(root)
+    await store.stageAndActivate(firstCandidate, 'codex')
+    await store.stageAndActivate(secondCandidate, 'codex')
+    const activeBootstrap = join(pathsFor(root).bootstrapRoot, 'active.mjs')
+    const before = await readFile(activeBootstrap, 'utf8')
+
+    await store.rollbackToPrevious()
+
+    expect(await readFile(activeBootstrap, 'utf8')).toBe(before)
+    expect(before).toContain('hardened-current-bootstrap')
+    expect(before).not.toContain('previous-bootstrap')
+  }, 60_000)
+
+  it('keeps the current hardened bootstrap and commits audit only after activation compensation selection', async () => {
+    const root = await freshRoot('compensation-keeps-bootstrap')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(firstCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(firstCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// previous-bootstrap\n`,
+      'utf8',
+    )
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// hardened-current-bootstrap\n`,
+      'utf8',
+    )
+    const healthy = storeFor(root)
+    const first = await healthy.stageAndActivate(firstCandidate, 'codex')
+    const second = await healthy.stageAndActivate(secondCandidate, 'codex')
+    const paths = pathsFor(root)
+    const activeBootstrap = join(paths.bootstrapRoot, 'active.mjs')
+    const before = await readFile(activeBootstrap, 'utf8')
+    const observed: Array<{ readonly kind: string; readonly activeRelease: string | null }> = []
+    const compensating = new RuntimeReleaseStore({
+      paths,
+      auditWriter: async (_paths, entry) => {
+        const selection = JSON.parse(await readFile(paths.selectionPath, 'utf8')) as {
+          readonly activeRelease: string | null
+        }
+        observed.push({ kind: entry.kind, activeRelease: selection.activeRelease })
+      },
+    })
+
+    await compensating.revertActivation(second.selection)
+
+    expect(await readFile(activeBootstrap, 'utf8')).toBe(before)
+    expect(before).toContain('hardened-current-bootstrap')
+    expect(before).not.toContain('previous-bootstrap')
+    expect(observed).toEqual([
+      { kind: 'rollback-prepared', activeRelease: second.release.releaseId },
+      { kind: 'rolled-back', activeRelease: first.release.releaseId },
+    ])
+  }, 60_000)
+
   it('compensates only the exact activation, including a failed first-install readiness gate', async () => {
     const root = await freshRoot('revert-activation')
     const candidate = await candidateCopy(root)
@@ -1130,6 +1273,114 @@ describe('RuntimeReleaseStore', () => {
     expect((await store.inspect()).lastAudit).toMatchObject({
       kind: 'update-rejected',
       detail: 'host marketplace refresh failed',
+    })
+  })
+
+  it('records prepared then terminal audit events around committed activation and rollback', async () => {
+    const root = await freshRoot('audit-commit-order')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// second-audit-release\n`,
+      'utf8',
+    )
+    const events: string[] = []
+    const store = new RuntimeReleaseStore({
+      paths: pathsFor(root),
+      auditWriter: async (_paths, entry) => { events.push(entry.kind) },
+    })
+
+    await store.stageAndActivate(firstCandidate, 'codex')
+    await store.stageAndActivate(secondCandidate, 'codex')
+    await store.rollbackToPrevious()
+
+    expect(events).toEqual([
+      'activation-prepared', 'activated',
+      'activation-prepared', 'activated',
+      'rollback-prepared', 'rolled-back',
+    ])
+  }, 60_000)
+
+  it('marks a committed activation degraded and recovers its missing terminal audit on inspect', async () => {
+    const root = await freshRoot('activation-terminal-audit-recovery')
+    const candidate = await candidateCopy(root)
+    let failTerminalOnce = true
+    const store = new RuntimeReleaseStore({
+      paths: pathsFor(root),
+      auditWriter: async (paths, entry) => {
+        if (entry.kind === 'activated' && failTerminalOnce) {
+          failTerminalOnce = false
+          throw new Error('injected terminal audit failure')
+        }
+        await writeAudit(paths, entry)
+      },
+    })
+
+    const activation = await store.stageAndActivate(candidate, 'codex')
+    expect(activation.auditPending).toBe(true)
+    expect((await readFile(pathsFor(root).auditPath, 'utf8'))).toContain('activation-prepared')
+
+    const recovered = await store.inspect()
+    expect(recovered.auditPending).toBe(false)
+    expect(recovered.lastAudit).toMatchObject({
+      kind: 'activated',
+      releaseId: activation.release.releaseId,
+    })
+    expect(recovered.selection).toEqual(activation.selection)
+  }, 30_000)
+
+  it('marks a committed rollback degraded and recovers its missing terminal audit on inspect', async () => {
+    const root = await freshRoot('rollback-terminal-audit-recovery')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// second-terminal-audit\n`,
+      'utf8',
+    )
+    const healthy = storeFor(root)
+    const first = await healthy.stageAndActivate(firstCandidate, 'codex')
+    await healthy.stageAndActivate(secondCandidate, 'codex')
+    let failTerminalOnce = true
+    const store = new RuntimeReleaseStore({
+      paths: pathsFor(root),
+      auditWriter: async (paths, entry) => {
+        if (entry.kind === 'rolled-back' && failTerminalOnce) {
+          failTerminalOnce = false
+          throw new Error('injected terminal audit failure')
+        }
+        await writeAudit(paths, entry)
+      },
+    })
+
+    const activation = await store.rollbackToPrevious()
+    expect(activation.release.releaseId).toBe(first.release.releaseId)
+    expect(activation.auditPending).toBe(true)
+
+    const recovered = await store.inspect()
+    expect(recovered.auditPending).toBe(false)
+    expect(recovered.lastAudit).toMatchObject({
+      kind: 'rolled-back',
+      releaseId: first.release.releaseId,
+    })
+    expect(recovered.selection).toEqual(activation.selection)
+  }, 60_000)
+
+  it('reports a truncated audit tail as corrupt instead of returning an older event as latest', async () => {
+    const root = await freshRoot('audit-corrupt-tail')
+    const paths = pathsFor(root)
+    await mkdir(paths.stateRoot, { recursive: true })
+    await writeFile(paths.auditPath, `${JSON.stringify({
+      version: 1,
+      at: '2026-07-24T00:00:00Z',
+      kind: 'update-rejected',
+      detail: 'older valid event',
+    })}\n{"version":1`, 'utf8')
+
+    expect(await storeFor(root).inspect()).toMatchObject({
+      lastAudit: null,
+      auditCorrupt: true,
     })
   })
 
@@ -1253,6 +1504,93 @@ describe('RuntimeReleaseStore', () => {
       (await REAL_RUNTIME_INSTALLER.inspect(stableScope)).selection.activeRelease,
     )
     expect(runtimeRootReads).toBe(1)
+  }, 60_000)
+
+  it('resumes the same explicit rollback target after selection committed before launcher convergence', async () => {
+    const root = await freshRoot('installer-rollback-selection-crash')
+    const home = join(root, 'home')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// second\n`,
+      'utf8',
+    )
+    const scope = isolatedScope(home)
+    const first = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      scope,
+      (transaction) => transaction.activate(firstCandidate, 'codex'),
+    )
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      scope,
+      (transaction) => transaction.activate(secondCandidate, 'codex'),
+    )
+    const paths = resolveRuntimePaths({ homeDir: home, env: scope.env })
+    const before = await REAL_RUNTIME_INSTALLER.inspect(scope)
+    const launchers = await captureStableLaunchers(paths, home)
+    const committed = await new RuntimeReleaseStore({ paths }).rollbackToPrevious()
+    const journalPath = join(paths.managedTransactionRoot, 'runtime-rollback.json')
+    await writeFile(journalPath, `${JSON.stringify({
+      version: 1,
+      transactionId: '11111111-1111-4111-8111-111111111111',
+      beforeSelection: before.selection,
+      target: {
+        revision: before.selection.revision + 1,
+        activeRelease: before.selection.previousRelease,
+        previousRelease: before.selection.activeRelease,
+      },
+      launchers,
+    }, null, 2)}\n`)
+
+    const resumed = await REAL_RUNTIME_INSTALLER.rollback(scope)
+
+    expect(resumed.release.releaseId).toBe(first.release.releaseId)
+    expect(resumed.selection).toEqual(committed.selection)
+    expect((await REAL_RUNTIME_INSTALLER.inspect(scope)).selection).toEqual(committed.selection)
+    await expect(readFile(journalPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  }, 60_000)
+
+  it('explicit rollback with exact hardened launchers never opens a capture transition', async () => {
+    const root = await freshRoot('installer-rollback-exact-launchers')
+    const home = join(root, 'home')
+    const firstCandidate = await candidateCopy(root, '-one')
+    const secondCandidate = await candidateCopy(root, '-two')
+    await writeFile(
+      join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'),
+      `${await readFile(join(secondCandidate, 'runtime', 'tenon-bootstrap.mjs'), 'utf8')}\n// second\n`,
+      'utf8',
+    )
+    const scope = isolatedScope(home)
+    const first = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      scope,
+      (transaction) => transaction.activate(firstCandidate, 'codex'),
+    )
+    await REAL_RUNTIME_INSTALLER.withManagedTransaction(
+      scope,
+      (transaction) => transaction.activate(secondCandidate, 'codex'),
+    )
+    const paths = resolveRuntimePaths({ homeDir: home, env: scope.env })
+    const expected = expectedStableLaunchers(paths, home)
+    const bootstrapBefore = await readFile(join(paths.bootstrapRoot, 'active.mjs'), 'utf8')
+    await writeFile(`${expected.tenon.path}.tenon-transition-owner`, 'unrelated-owner\n', 'utf8')
+    await writeFile(`${expected.hook.path}.tenon-transition-owner`, 'unrelated-owner\n', 'utf8')
+
+    const rolledBack = await REAL_RUNTIME_INSTALLER.rollback(scope)
+
+    expect(rolledBack.release.releaseId).toBe(first.release.releaseId)
+    expect((await REAL_RUNTIME_INSTALLER.inspect(scope)).selection.activeRelease)
+      .toBe(first.release.releaseId)
+    expect(await readFile(join(paths.bootstrapRoot, 'active.mjs'), 'utf8')).toBe(bootstrapBefore)
+    expect(await readFile(expected.tenon.path, 'utf8')).toBe(expected.tenon.state.kind === 'file'
+      ? expected.tenon.state.content
+      : '')
+    expect(await readFile(expected.hook.path, 'utf8')).toBe(expected.hook.state.kind === 'file'
+      ? expected.hook.state.content
+      : '')
+    expect(await readFile(`${expected.tenon.path}.tenon-transition-owner`, 'utf8'))
+      .toBe('unrelated-owner\n')
+    expect(await readFile(`${expected.hook.path}.tenon-transition-owner`, 'utf8'))
+      .toBe('unrelated-owner\n')
   }, 60_000)
 
   it('keeps the real same-release selection and preexisting Dashboard aligned when evidence fails', async () => {

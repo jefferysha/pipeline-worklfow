@@ -2,7 +2,9 @@ import { mkdir, mkdtemp, readdir, readFile, rmdir, rm, stat, utimes, writeFile }
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { LOCK_DIR_NAME, LOCK_OWNER_FILE, STALE_LOCK_MS, withLock } from './lock.js'
+import {
+  LEGACY_LOCK_OWNER_FILE, LOCK_DIR_NAME, LOCK_OWNER_FILE, STALE_LOCK_MS, withLock,
+} from './lock.js'
 
 let dir: string
 
@@ -62,7 +64,7 @@ describe('withLock（mkdir 原子锁）', () => {
   it('新鲜外部锁：等待持有者释放后才进入', async () => {
     const lockDir = path.join(dir, LOCK_DIR_NAME)
     await mkdir(lockDir)
-    const t = setTimeout(() => void rmdir(lockDir), 120)
+    const t = setTimeout(() => void rmdir(lockDir).catch(() => {}), 120)
     const start = Date.now()
     expect(await withLock(dir, async () => 'waited')).toBe('waited')
     expect(Date.now() - start).toBeGreaterThanOrEqual(100)
@@ -74,7 +76,11 @@ describe('withLock —— owner token + token 守卫的回收/释放（B1）', (
   it('持锁期间锁目录内写有非空 owner token', async () => {
     await withLock(dir, async () => {
       const owner = await readFile(path.join(dir, LOCK_DIR_NAME, LOCK_OWNER_FILE), 'utf8')
-      expect(owner.trim().length).toBeGreaterThan(0)
+      expect(JSON.parse(owner)).toMatchObject({
+        version: 1,
+        pid: process.pid,
+      })
+      expect(JSON.parse(owner).owner).toMatch(/^[0-9a-f-]{36}$/u)
     })
   })
 
@@ -101,9 +107,10 @@ describe('withLock —— owner token + token 守卫的回收/释放（B1）', (
     const start = Date.now()
     expect(await withLock(dir, async () => 'reclaimed')).toBe('reclaimed')
     expect(Date.now() - start).toBeLessThan(2_000)
-    // 接管后锁被正常释放，且无 .stale 坟墓残留
+    // 接管后 active lock 被正常释放；generation tombstone 保留以 fence 同代并发回收者。
     const entries = await readdir(dir)
-    expect(entries.filter((e) => e.startsWith(LOCK_DIR_NAME))).toEqual([])
+    expect(entries).not.toContain(LOCK_DIR_NAME)
+    expect(entries.some((e) => e.startsWith(`${LOCK_DIR_NAME}.stale-`))).toBe(true)
   })
 
   it('新鲜锁的 owner PID 已退出时立即接管，不等待陈旧阈值', async () => {
@@ -115,7 +122,12 @@ describe('withLock —— owner token + token 守卫的回收/释放（B1）', (
     await mkdir(lockDir)
     await writeFile(
       path.join(lockDir, LOCK_OWNER_FILE),
-      `${String(pid)}.abandoned.${Date.now()}\n`,
+      `${JSON.stringify({
+        version: 1,
+        owner: '11111111-1111-4111-8111-111111111111',
+        pid,
+        createdAt: Date.now(),
+      })}\n`,
       'utf8',
     )
 
@@ -124,11 +136,31 @@ describe('withLock —— owner token + token 守卫的回收/释放（B1）', (
     expect(Date.now() - start).toBeLessThan(2_000)
   })
 
+  it('存活 owner 即使心跳陈旧也不得被接管', async () => {
+    const lockDir = path.join(dir, LOCK_DIR_NAME)
+    await mkdir(lockDir)
+    const ownerFile = path.join(lockDir, LOCK_OWNER_FILE)
+    await writeFile(ownerFile, `${JSON.stringify({
+      version: 1,
+      owner: '22222222-2222-4222-8222-222222222222',
+      pid: process.pid,
+      createdAt: Date.now() - STALE_LOCK_MS - 30_000,
+    })}\n`, 'utf8')
+    const past = (Date.now() - STALE_LOCK_MS - 30_000) / 1000
+    await utimes(lockDir, past, past)
+    await utimes(ownerFile, past, past)
+    const release = setTimeout(() => void rm(lockDir, { recursive: true, force: true }), 120)
+    const start = Date.now()
+    expect(await withLock(dir, async () => 'waited')).toBe('waited')
+    expect(Date.now() - start).toBeGreaterThanOrEqual(100)
+    clearTimeout(release)
+  })
+
   it('新鲜锁的 owner PID 含非十进制后缀时不截断为可探测 PID', async () => {
     const lockDir = path.join(dir, LOCK_DIR_NAME)
     await mkdir(lockDir)
     await writeFile(
-      path.join(lockDir, LOCK_OWNER_FILE),
+      path.join(lockDir, LEGACY_LOCK_OWNER_FILE),
       `99999999junk.abandoned.${Date.now()}\n`,
       'utf8',
     )
@@ -165,7 +197,8 @@ describe('withLock —— owner token + token 守卫的回收/释放（B1）', (
     expect(maxInside).toBe(1) // 从不双持
     expect(runs.sort()).toEqual([1, 2, 3])
     const entries = await readdir(dir)
-    expect(entries.filter((e) => e.startsWith(LOCK_DIR_NAME))).toEqual([])
+    expect(entries).not.toContain(LOCK_DIR_NAME)
+    expect(entries.some((e) => e.startsWith(`${LOCK_DIR_NAME}.stale-`))).toBe(true)
   })
 })
 import { spawn } from 'node:child_process'

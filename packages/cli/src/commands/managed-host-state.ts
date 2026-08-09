@@ -20,6 +20,7 @@ export interface TenonPluginState {
   readonly id: string
   readonly version: string
   readonly root: string
+  readonly enabled: boolean
 }
 
 export interface NativeHostObservation {
@@ -233,9 +234,6 @@ function pluginState(host: NativePipelineHost, value: unknown): TenonPluginState
     if (item.enabled !== undefined && typeof item.enabled !== 'boolean') {
       throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin enabled 状态非法`)
     }
-    if (item.enabled === false) {
-      throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin identity 未启用`)
-    }
     const root = host === 'codex'
       && typeof item.source === 'object'
       && item.source !== null
@@ -247,7 +245,7 @@ function pluginState(host: NativePipelineHost, value: unknown): TenonPluginState
       || normalize(root) !== root) {
       throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin identity 不完整`)
     }
-    matches.push({ id, version: item.version, root })
+    matches.push({ id, version: item.version, root, enabled: item.enabled !== false })
   }
   if (matches.length > 1) {
     throw new ManagedRuntimeIndeterminateError(`${host} tenon plugin identity 重复`)

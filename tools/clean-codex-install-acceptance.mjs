@@ -566,7 +566,12 @@ async function createIsolatedReleaseRepository(repoRoot, fixture, env, version) 
   await git(['config', 'user.email', 'acceptance@invalid.example'])
   await git(['add', '--all'])
   await git(['commit', '--quiet', '-m', `fixture v${version}`])
-  await git(['tag', '-a', `v${version}`, '-m', `fixture v${version}`])
+  // A lightweight tag makes the local GitHub ref fixture resolve directly to a commit object.
+  await git(['tag', `v${version}`])
+  const targetCommit = (await git(['rev-parse', 'HEAD'])).stdout.trim()
+  if (!/^[a-f0-9]{40}$/u.test(targetCommit)) {
+    throw new Error('acceptance release fixture did not produce a Git commit identity')
+  }
   await git(['clone', '--quiet', '--bare', releaseWork, releaseBare])
 
   const rewriteKey = `url.file://${releaseBare}.insteadOf`
@@ -594,6 +599,38 @@ async function createIsolatedReleaseRepository(repoRoot, fixture, env, version) 
     'utf8',
   )
   await chmod(gitWrapper, 0o755)
+
+  const realCurl = (await runCommand('which', ['curl'], {
+    cwd: releaseWork,
+    env: process.env,
+    timeoutMs: 10_000,
+  })).stdout.trim()
+  if (!isAbsolute(realCurl)) throw new Error('acceptance could not resolve the real curl executable')
+  const curlWrapper = join(fixtureBin, 'curl')
+  const tag = `v${version}`
+  const releaseUrl = `https://api.github.com/repos/jefferysha/tenon/releases/tags/${tag}`
+  const refUrl = `https://api.github.com/repos/jefferysha/tenon/git/ref/tags/${tag}`
+  const releaseJson = JSON.stringify({
+    tag_name: tag,
+    draft: false,
+    prerelease: false,
+    html_url: `https://github.com/jefferysha/tenon/releases/tag/${tag}`,
+    published_at: '2026-08-09T00:00:00Z',
+  })
+  const refJson = JSON.stringify({
+    ref: `refs/tags/${tag}`,
+    object: { type: 'commit', sha: targetCommit },
+  })
+  await writeFile(
+    curlWrapper,
+    '#!/bin/sh\n'
+      + 'url=""\nfor arg do url="$arg"; done\n'
+      + `if [ "$url" = ${JSON.stringify(releaseUrl)} ]; then printf '%s\\n' ${JSON.stringify(releaseJson)}; exit 0; fi\n`
+      + `if [ "$url" = ${JSON.stringify(refUrl)} ]; then printf '%s\\n' ${JSON.stringify(refJson)}; exit 0; fi\n`
+      + `exec ${JSON.stringify(realCurl)} "$@"\n`,
+    'utf8',
+  )
+  await chmod(curlWrapper, 0o755)
 }
 
 async function installPublic(env, cwd, ref) {
@@ -622,23 +659,23 @@ export async function assertInstalledRuntime(
     ['runtime', 'status', '--json'],
     { cwd, env, timeoutMs: 30_000 },
   )).stdout, 'tenon runtime status'), 'tenon runtime status')
-  const activeRelease = runtime.active?.releaseId ?? runtime.selection?.activeRelease
+  const active = requireJsonObject(runtime.active, 'tenon runtime status active release')
+  const activeRelease = active.releaseId
   if (runtime.activeValid !== true
     || typeof activeRelease !== 'string'
-    || activeRelease !== runtime.selection?.activeRelease) {
+    || activeRelease !== runtime.selection?.activeRelease
+    || active.version !== 2
+    || !/^sha256-[a-f0-9]{64}$/u.test(activeRelease)
+    || typeof active.payloadDigest !== 'string'
+    || !/^[a-f0-9]{64}$/u.test(active.payloadDigest)
+    || active.source?.host !== 'codex'
+    || typeof active.source?.pluginVersion !== 'string'
+    || !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(active.source.pluginVersion)
+    || active.stableTarget?.version !== active.source.pluginVersion
+    || active.stableTarget?.tag !== `v${active.source.pluginVersion}`
+    || typeof active.stableTarget?.commit !== 'string'
+    || !/^[a-f0-9]{40}$/u.test(active.stableTarget.commit)) {
     throw new Error('managed runtime is not active and verified')
-  }
-  const runtimeHome = env.TENON_RUNTIME_HOME
-  if (typeof runtimeHome !== 'string' || !isAbsolute(runtimeHome)) {
-    throw new Error('isolated TENON_RUNTIME_HOME is required for release identity proof')
-  }
-  const activeManifest = requireJsonObject(parseJson(await readFile(
-    join(runtimeHome, 'data', 'releases', activeRelease, 'release.json'),
-    'utf8',
-  ), 'active runtime release manifest'), 'active runtime release manifest')
-  if (activeManifest.releaseId !== activeRelease
-    || typeof activeManifest.source?.pluginVersion !== 'string') {
-    throw new Error('active runtime release manifest does not prove its release identity')
   }
   const doctor = requireJsonObject(parseJson((await runCommand(
     launcher,
@@ -648,7 +685,7 @@ export async function assertInstalledRuntime(
   if (doctor.summary?.red !== 0) throw new Error(`doctor reported ${doctor.summary?.red} red checks`)
 
   const health = await waitForHealth(port)
-  assertDashboardHealthIdentity(health, activeRelease, activeManifest.source.pluginVersion)
+  assertDashboardHealthIdentity(health, activeRelease, active.source.pluginVersion)
   registerOwnedHealth(health)
   const dashboardUrl = `http://127.0.0.1:${port}/`
   const { response: htmlResponse, body: html } = await fetchWithTimeout(
@@ -1027,15 +1064,36 @@ export async function main(argv = process.argv.slice(2)) {
       throw new Error('content-addressed release changed across identical installation')
     }
     await runCodexDiscovery(env, work)
+    let final = second
+    if (mode === 'public') {
+      const launcher = join(home, '.local', 'bin', 'tenon')
+      await runCommand(launcher, ['update', '--codex'], {
+        cwd: work,
+        env,
+        timeoutMs: 180_000,
+      })
+      final = await assertInstalledRuntime(
+        env,
+        work,
+        port,
+        registerOwnedHealth,
+      )
+      assertSameDashboardIdentity(second.health, final.health)
+      if (final.activeRelease !== second.activeRelease) {
+        throw new Error('same-version public update changed the content-addressed release')
+      }
+      await runCodexDiscovery(env, work)
+    }
     await stopOwnedDashboard(port, ownedHealth)
     cleanupComplete = true
     successPayload = {
       ok: true,
       mode,
       ...(mode === 'public' ? { publicRef } : {}),
-      releaseId: second.activeRelease,
+      releaseId: final.activeRelease,
       dashboardPort: port,
       repeatedDashboardPid: second.health.pid,
+      ...(mode === 'public' ? { updateDashboardPid: final.health.pid } : {}),
       hookTrust: 'untrusted',
     }
   } finally {

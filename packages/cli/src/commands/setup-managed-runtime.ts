@@ -40,6 +40,14 @@ export async function publishSetupManagedRuntime(
 ): Promise<number> {
   const source = isNativePipelineHost(host) ? host : 'adapter'
   const dashboardPort = parseDashboardPort(env.runtimeEnv().TENON_DASHBOARD_PORT)
+  const trustedBash = isNativePipelineHost(host)
+    ? env.resolveTrustedCommandBinding?.('bash')
+    : undefined
+  const trustedBashPath = trustedBash?.executable
+  const trustedNode = isNativePipelineHost(host)
+    ? env.resolveTrustedCommandBinding?.('node')
+    : undefined
+  const trustedNodePath = trustedNode?.executable
   const outcome = await publishManagedRelease(
     deps,
     {
@@ -64,9 +72,13 @@ export async function publishSetupManagedRuntime(
       runtime: {
         homeDir: env.homeDir(),
         env: env.runtimeEnv(),
-        ...(isNativePipelineHost(host)
-          ? { trustedBashPath: env.resolveTrustedCommand?.('bash') }
-          : {}),
+        ...(trustedBashPath === undefined ? {} : { trustedBashPath }),
+        ...(trustedBash === undefined ? {} : { verifyTrustedBash: trustedBash.assert }),
+        ...(trustedNodePath === undefined ? {} : { trustedNodePath }),
+        ...(trustedNode === undefined ? {} : {
+          trustedNodeProof: trustedNode.proof,
+          verifyTrustedNode: trustedNode.assert,
+        }),
       },
       openBrowser: openDashboard,
       ...(dashboardPort === null ? {} : { dashboardPort }),

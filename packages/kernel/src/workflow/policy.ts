@@ -12,26 +12,21 @@ import type {
   WorkflowDecompositionTarget,
   WorkflowInteractionMode,
   WorkflowInteractionPolicyV1,
+  WorkflowReviewBudgetPolicyV1,
 } from './types.js'
 
 export const WORKFLOW_DECOMPOSITION_MODES = Object.freeze([
   'off', 'suggest', 'auto-safe', 'require-review',
 ] as const) satisfies readonly WorkflowDecompositionMode[]
-export const WORKFLOW_DECOMPOSITION_TARGETS = Object.freeze([
-  'work-items', 'child-pipelines',
-] as const) satisfies readonly WorkflowDecompositionTarget[]
-export const WORKFLOW_DECOMPOSITION_STRATEGIES = Object.freeze([
-  'balanced', 'breadth-first', 'depth-first',
-] as const) satisfies readonly WorkflowDecompositionStrategy[]
+export const WORKFLOW_DECOMPOSITION_TARGETS = Object.freeze(['work-items', 'child-pipelines'] as const) satisfies readonly WorkflowDecompositionTarget[]
+export const WORKFLOW_DECOMPOSITION_STRATEGIES = Object.freeze(['balanced', 'breadth-first', 'depth-first'] as const) satisfies readonly WorkflowDecompositionStrategy[]
 export const WORKFLOW_DECOMPOSITION_AUTO_CONDITIONS = Object.freeze([
   'independent-work-items', 'cross-component-boundary', 'context-budget-risk',
 ] as const) satisfies readonly WorkflowDecompositionAutoCondition[]
 export const WORKFLOW_DECOMPOSITION_ASK_CONDITIONS = Object.freeze([
   'ambiguous-requirements', 'hard-boundary', 'missing-authorization', 'limit-exceeded',
 ] as const) satisfies readonly WorkflowDecompositionAskCondition[]
-export const WORKFLOW_INTERACTION_MODES = Object.freeze([
-  'interactive', 'recommended-defaults', 'afk',
-] as const) satisfies readonly WorkflowInteractionMode[]
+export const WORKFLOW_INTERACTION_MODES = Object.freeze(['interactive', 'recommended-defaults', 'afk'] as const) satisfies readonly WorkflowInteractionMode[]
 
 export const DEFAULT_WORKFLOW_DECOMPOSITION_POLICY: WorkflowDecompositionPolicyV1 = Object.freeze({
   version: 'v1',
@@ -45,28 +40,27 @@ export const DEFAULT_WORKFLOW_DECOMPOSITION_POLICY: WorkflowDecompositionPolicyV
 })
 
 export const DEFAULT_WORKFLOW_INTERACTION_POLICY: WorkflowInteractionPolicyV1 = Object.freeze({
-  version: 'v1',
-  mode: 'interactive',
+  version: 'v1', mode: 'interactive',
 })
 
+export const DEFAULT_WORKFLOW_REVIEW_BUDGET_POLICY: WorkflowReviewBudgetPolicyV1 = Object.freeze({
+  version: 'v1', max_attempts: 2,
+})
 function policyError(path: string, message: string): never {
   throw new Error(`compileWorkflow: ${path}: ${message}`)
 }
-
 function ownRecord(value: unknown, path: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     policyError(path, `必须是对象（实际 ${JSON.stringify(value)}）`)
   }
   return value as Record<string, unknown>
 }
-
 function rejectUnknownKeys(record: Record<string, unknown>, keys: readonly string[], path: string): void {
   const allowed = new Set(keys)
   for (const key of Object.keys(record)) {
     if (!allowed.has(key)) policyError(path, `未知字段 '${key}'`)
   }
 }
-
 function closedValue<T extends string>(
   value: unknown,
   allowed: readonly T[],
@@ -79,7 +73,6 @@ function closedValue<T extends string>(
   }
   return resolved as T
 }
-
 function boundedInteger(value: unknown, fallback: number, min: number, max: number, path: string): number {
   const resolved = value === undefined ? fallback : value
   if (!Number.isInteger(resolved) || typeof resolved !== 'number' || resolved < min || resolved > max) {
@@ -87,7 +80,6 @@ function boundedInteger(value: unknown, fallback: number, min: number, max: numb
   }
   return resolved
 }
-
 function closedList<T extends string>(
   value: unknown,
   allowed: readonly T[],
@@ -143,6 +135,19 @@ export function compileWorkflowInteractionPolicy(value: unknown): WorkflowIntera
   }
 }
 
+export function compileWorkflowReviewBudgetPolicy(value: unknown): WorkflowReviewBudgetPolicyV1 {
+  if (value === undefined) return structuredClone(DEFAULT_WORKFLOW_REVIEW_BUDGET_POLICY)
+  const record = ownRecord(value, 'reviewBudget')
+  rejectUnknownKeys(record, ['version', 'max_attempts'], 'reviewBudget')
+  if (record.version !== 'v1') {
+    policyError('reviewBudget.version', `必须是 'v1'（实际 ${JSON.stringify(record.version)}）`)
+  }
+  return {
+    version: 'v1',
+    max_attempts: boundedInteger(record.max_attempts, 2, 1, 20, 'reviewBudget.max_attempts'),
+  }
+}
+
 export const WORKFLOW_ACTIONS = Object.freeze([
   'suggest-decomposition',
   'materialize-work-items',
@@ -161,7 +166,6 @@ export const WORKFLOW_ACTIONS = Object.freeze([
   'perform-irreversible-action',
 ] as const)
 export type WorkflowAction = typeof WORKFLOW_ACTIONS[number]
-
 export type WorkflowActionClassification =
   | 'routine-reversible'
   | 'safety-sensitive'

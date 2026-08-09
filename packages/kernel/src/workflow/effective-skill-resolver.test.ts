@@ -8,6 +8,7 @@ import { createEffectiveSkillResolver, type EffectiveSkillSlot } from './effecti
 import type { SkillTable } from '../flow/manifest.js'
 import type { StepIR } from './ir.js'
 import type { TrackRegistry } from '../tracks/types.js'
+import { compileEffectiveWorkflowPlan } from './effective-plan.js'
 
 /** 最小 SkillTable 夹具（缺相位 → skillsFor 返 []，无须补全 Record<Phase,…>）。 */
 function table(rows: Record<string, Record<string, readonly string[]>>): SkillTable {
@@ -136,6 +137,43 @@ describe('resolveDefault —— manifest mandatory + recommended', () => {
       recommendedSkills: table({}),
     })
     expect(() => dup.resolveDefault('explore', 'frontend')).toThrow(/重复 alternative branch/)
+  })
+})
+
+describe('explicit Review Skill classification', () => {
+  it('default manifest map classifies by data, not by skill id text', () => {
+    const resolver = createEffectiveSkillResolver({
+      mandatorySkills: table({}),
+      recommendedSkills: table({}),
+      reviewSkillLanes: {
+        'acme-quality-gate': 'standards',
+        'e2e-looking-work': 'e2e',
+      },
+    })
+    const plan = compileEffectiveWorkflowPlan('default')
+    expect(resolver.reviewLaneFor?.(plan.capabilities.skills, 'verify', 'acme-quality-gate'))
+      .toBe('standards')
+    expect(resolver.reviewLaneFor?.(plan.capabilities.skills, 'verify', 'ordinary-work'))
+      .toBeUndefined()
+  })
+
+  it('custom SkillRef kind/review_lane is frozen in the effective capability', () => {
+    const resolver = createEffectiveSkillResolver({ mandatorySkills: table({}), recommendedSkills: table({}) })
+    const plan = compileEffectiveWorkflowPlan('custom-review', {
+      name: 'custom-review',
+      steps: [{
+        id: 'verify', label: 'Verify', gate: null, reviewLanes: ['standards'],
+        skills: [
+          { id: 'acme-quality-gate', kind: 'review', review_lane: 'standards' },
+          { id: 'review-looking-work', kind: 'work' },
+        ],
+        inputs: [], outputs: [], guards: [], transitions: [],
+      }],
+    })
+    expect(resolver.reviewLaneFor?.(plan.capabilities.skills, 'verify', 'acme-quality-gate'))
+      .toBe('standards')
+    expect(resolver.reviewLaneFor?.(plan.capabilities.skills, 'verify', 'review-looking-work'))
+      .toBeUndefined()
   })
 })
 

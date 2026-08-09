@@ -15,6 +15,8 @@ function probeFixture(options: {
   readonly candidateDigest?: string
   readonly driftHeadAfterCandidate?: string
   readonly remoteCommit?: string
+  readonly driftGitAfterCandidate?: boolean
+  readonly verificationCounts?: Record<'host' | 'bash' | 'git' | 'node', number>
 } = {}) {
   let head = options.head ?? target.commit
   const ref = options.ref ?? target.tag
@@ -22,6 +24,19 @@ function probeFixture(options: {
   const homeDir = '/home/doctor-identity-test'
   const env = { PATH: '/trusted/bin' }
   const paths = resolveRuntimePaths({ homeDir, env })
+  let gitExact = true
+  const trusted = (name: 'bash' | 'git' | 'node') => ({
+    executable: `/trusted/${name}`,
+    requestedPath: `/trusted/${name}`,
+    verify: () => {
+      if (options.verificationCounts !== undefined) options.verificationCounts[name] += 1
+      return name !== 'git' || gitExact
+    },
+    assert: () => {
+      if (options.verificationCounts !== undefined) options.verificationCounts[name] += 1
+      if (name === 'git' && !gitExact) throw new Error('git drift')
+    },
+  })
   const installer = {
     inspect: async () => ({
       selection: {
@@ -49,7 +64,18 @@ function probeFixture(options: {
     () => ({ homeDir, env, paths }),
     installer,
     {
-      resolveCommand: (command) => `/trusted/${command}`,
+      resolveHostCommand: (command) => ({
+        executable: `/trusted/${command}`,
+        verify: () => {
+          if (options.verificationCounts !== undefined) options.verificationCounts.host += 1
+          return true
+        },
+        invocation: (args) => {
+          if (options.verificationCounts !== undefined) options.verificationCounts.host += 1
+          return { file: `/trusted/${command}`, args }
+        },
+      }),
+      resolveTrustedCommand: (command) => trusted(command),
       readText: (path) => path === '/marketplace/.codex-plugin/plugin.json'
         || path === '/marketplace/.claude-plugin/plugin.json'
         ? JSON.stringify({ version: target.version })
@@ -93,6 +119,18 @@ function probeFixture(options: {
             stderr: '',
           }
         }
+        if (text.startsWith('init --bare ')) {
+          return { code: 0, stdout: '', stderr: '' }
+        }
+        if (/^-C .+ fetch --no-tags --depth=1 https:\/\/github\.com\/jefferysha\/tenon\.git refs\/tags\/v1\.0\.2$/u.test(text)) {
+          return { code: 0, stdout: '', stderr: '' }
+        }
+        if (/^-C .+ rev-parse FETCH_HEAD\^\{commit\}$/u.test(text)) {
+          return { code: 0, stdout: `${options.remoteCommit ?? target.commit}\n`, stderr: '' }
+        }
+        if (/^-C .+ cat-file -t [a-f0-9]{40}$/u.test(text)) {
+          return { code: 0, stdout: 'commit\n', stderr: '' }
+        }
         if (text === '-C /marketplace diff --quiet HEAD --'
           || text === '-C /marketplace ls-files --others --exclude-standard') {
           return { code: 0, stdout: '', stderr: '' }
@@ -101,6 +139,7 @@ function probeFixture(options: {
       },
       inspectCandidate: async () => {
         if (options.driftHeadAfterCandidate !== undefined) head = options.driftHeadAfterCandidate
+        if (options.driftGitAfterCandidate === true) gitExact = false
         return {
           pluginVersion: target.version,
           payloadDigest: candidateDigest,
@@ -166,5 +205,17 @@ describe('doctor native immutable product identity probe', () => {
       hostTargetExact: false,
       payloadDigestExact: true,
     })
+  })
+
+  test('physically re-verifies host, Bash, Git and Node and fails closed on later Git drift', async () => {
+    const verificationCounts = { host: 0, bash: 0, git: 0, node: 0 }
+    await expect(probeFixture({
+      driftGitAfterCandidate: true,
+      verificationCounts,
+    })()).resolves.toMatchObject({ state: 'unavailable' })
+    expect(verificationCounts.host).toBeGreaterThan(0)
+    expect(verificationCounts.git).toBeGreaterThan(1)
+    expect(verificationCounts.bash).toBeGreaterThan(0)
+    expect(verificationCounts.node).toBeGreaterThan(0)
   })
 })

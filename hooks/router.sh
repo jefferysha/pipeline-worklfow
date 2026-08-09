@@ -269,7 +269,7 @@ _GEN_MJS="$PLUGIN_ROOT/hooks/router-gen.mjs"
 # This release-owned digest is checked on every cache hit with bash builtins only. A unit test
 # pins it to kernel.routerContractRevision(manifest), so builtin/skill/breadcrumb changes cannot
 # silently retain a prior project cache even when plugin mtimes are older than that cache.
-ROUTER_CONTRACT_REV="c22e1dcd60fa8419350307c49afd6b8b0f9f88ae5492ac7f2a8531a7b268d55b"
+ROUTER_CONTRACT_REV="743507eef120b7ca7af5cb161af274e75d61d511ef329e720c82bd77e014fc99"
 
 # Bash 3.2-compatible parallel arrays（不使用 associative array 或动态变量名）。
 _router_clear_cache() {

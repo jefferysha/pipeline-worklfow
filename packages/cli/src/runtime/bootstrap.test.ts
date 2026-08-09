@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -137,10 +137,13 @@ async function runBootstrap(
   input = '',
   extraEnv: NodeJS.ProcessEnv = {},
 ): Promise<{ stdout: string; stderr: string; code: number }> {
+  const home = join(runtimeHome, 'home')
+  await mkdir(home, { recursive: true })
   return new Promise((resolveResult) => {
     const child = spawn(process.execPath, [bootstrap, ...args], {
       env: {
         ...process.env,
+        HOME: home,
         TENON_RUNTIME_ROOTS: JSON.stringify({
           version: 1,
           dataRoot: join(runtimeHome, 'data'),
@@ -219,6 +222,40 @@ describe('stable runtime bootstrap', () => {
     expect(delegated.stdout).not.toContain('UNVERIFIED_V2_EXECUTED')
   })
 
+  it('projects verified v2 active identity through public runtime status', async () => {
+    const root = await freshRoot('v2-public-status')
+    const release = await createV2Release(root, 'V2_STATUS')
+    const bootstrap = await installBootstrap(root)
+    const state = join(root, 'state')
+    await mkdir(state, { recursive: true })
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify({
+      version: 1,
+      revision: 1,
+      activeRelease: release.releaseId,
+      previousRelease: null,
+      updatedAt: '2026-07-24T00:00:00Z',
+    })}\n`, 'utf8')
+
+    const status = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'status', '--json'])
+    const manifest = JSON.parse(await readFile(release.manifestPath, 'utf8')) as V2FixtureManifest & {
+      version: 2
+      payloadDigest: string
+    }
+
+    expect(JSON.parse(status.stdout)).toMatchObject({
+      activeValid: true,
+      active: {
+        version: 2,
+        releaseId: release.releaseId,
+        payloadDigest: manifest.payloadDigest,
+        source: manifest.source,
+        stableTarget: manifest.stableTarget,
+      },
+      previous: null,
+      auditCorrupt: false,
+    })
+  })
+
   it('can roll back while the active payload is unavailable, after verifying the previous release digest', async () => {
     const root = await freshRoot('rollback')
     const activeRelease = await createRelease(root, 'active')
@@ -244,6 +281,211 @@ describe('stable runtime bootstrap', () => {
       activeRelease: previousRelease,
       previousRelease: activeRelease,
     })
+  })
+
+  it('keeps the rollback journal and recovers a terminal audit append failure without swapping twice', async () => {
+    const root = await freshRoot('rollback-terminal-audit')
+    const activeRelease = await createRelease(root, 'active')
+    const previousRelease = await createRelease(root, 'previous')
+    const bootstrap = await installBootstrap(root)
+    const state = join(root, 'state')
+    await mkdir(state, { recursive: true })
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify({
+      version: 1,
+      revision: 2,
+      activeRelease,
+      previousRelease,
+      updatedAt: '2026-07-24T00:00:00Z',
+    })}\n`, 'utf8')
+    const marker = join(root, 'fail-terminal-audit-once')
+
+    const first = await runBootstrap(
+      root,
+      bootstrap,
+      ['cli', 'runtime', 'repair', '--rollback'],
+      '',
+      { TENON_TEST_FAIL_ROLLBACK_TERMINAL_AUDIT_ONCE: marker },
+    )
+    expect(first.code).toBe(1)
+    expect(first.stderr).toMatch(/terminal audit failure/iu)
+    expect(JSON.parse(await readFile(join(state, 'selection.json'), 'utf8'))).toMatchObject({
+      activeRelease: previousRelease,
+      previousRelease: activeRelease,
+      revision: 3,
+    })
+    await expect(readFile(join(state, 'managed-release-transaction', 'runtime-rollback.json'), 'utf8'))
+      .resolves.toContain(previousRelease)
+
+    const second = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'repair', '--rollback'])
+    expect(second.code).toBe(0)
+    expect(JSON.parse(second.stdout)).toMatchObject({
+      ok: true,
+      selection: { activeRelease: previousRelease, previousRelease: activeRelease, revision: 3 },
+    })
+    await expect(readFile(join(state, 'managed-release-transaction', 'runtime-rollback.json'), 'utf8'))
+      .rejects.toThrow(/ENOENT/u)
+    expect(await readFile(join(state, 'audit.jsonl'), 'utf8')).toMatch(/"kind":"rolled-back"/u)
+  })
+
+  it('does not reclaim a live runtime lock merely because its heartbeat is stale', async () => {
+    const root = await freshRoot('live-stale-runtime-lock')
+    const activeRelease = await createRelease(root, 'active')
+    const previousRelease = await createRelease(root, 'previous')
+    const bootstrap = await installBootstrap(root)
+    const state = join(root, 'state')
+    await mkdir(state, { recursive: true })
+    const selection = {
+      version: 1,
+      revision: 2,
+      activeRelease,
+      previousRelease,
+      updatedAt: '2026-07-24T00:00:00Z',
+    }
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify(selection)}\n`, 'utf8')
+    const lock = join(state, 'managed-release-transaction', '.pipeline.lock')
+    await mkdir(lock, { recursive: true })
+    const owner = join(lock, 'owner')
+    const token = `${process.pid}.abcdef0123456789.${Date.now() - 120_000}`
+    const original = `${JSON.stringify({
+      version: 1,
+      token,
+      pid: process.pid,
+      createdAt: Date.now() - 120_000,
+    })}\n`
+    await writeFile(owner, original)
+    const stale = new Date(Date.now() - 120_000)
+    await utimes(owner, stale, stale)
+
+    const result = await runBootstrap(
+      root,
+      bootstrap,
+      ['cli', 'runtime', 'repair', '--rollback'],
+      '',
+      { TENON_TEST_STATE_LOCK_TIMEOUT_MS: '200' },
+    )
+
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/lock acquisition timed out/iu)
+    expect(await readFile(owner, 'utf8')).toBe(original)
+    expect(JSON.parse(await readFile(join(state, 'selection.json'), 'utf8'))).toEqual(selection)
+  })
+
+  it('keeps the hardened bootstrap bytes across rollback instead of installing the previous payload bootstrap', async () => {
+    const root = await freshRoot('rollback-bootstrap-bytes')
+    const activeRelease = await createRelease(root, 'active')
+    const previousRelease = await createRelease(root, 'previous')
+    const previousBootstrap = join(root, 'data', 'releases', previousRelease, 'payload', 'runtime', 'tenon-bootstrap.mjs')
+    await writeFile(previousBootstrap, `${await readFile(previousBootstrap, 'utf8')}\n// unsafe-previous-bootstrap\n`, 'utf8')
+    const previousPayload = join(root, 'data', 'releases', previousRelease, 'payload')
+    const previousManifestPath = join(root, 'data', 'releases', previousRelease, 'release.json')
+    const previousManifest = JSON.parse(await readFile(previousManifestPath, 'utf8')) as Record<string, unknown>
+    previousManifest.payloadDigest = await payloadDigest(previousPayload)
+    const replacementRelease = `sha256-${String(previousManifest.payloadDigest)}`
+    previousManifest.releaseId = replacementRelease
+    const replacementRoot = join(root, 'data', 'releases', replacementRelease)
+    await import('node:fs/promises').then(({ rename }) => rename(
+      join(root, 'data', 'releases', previousRelease), replacementRoot,
+    ))
+    await writeFile(join(replacementRoot, 'release.json'), `${JSON.stringify(previousManifest)}\n`, 'utf8')
+    const bootstrap = await installBootstrap(root)
+    const before = await readFile(bootstrap, 'utf8')
+    const state = join(root, 'state')
+    await mkdir(state, { recursive: true })
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify({
+      version: 1,
+      revision: 2,
+      activeRelease,
+      previousRelease: replacementRelease,
+      updatedAt: '2026-07-24T00:00:00Z',
+    })}\n`, 'utf8')
+
+    const result = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'repair', '--rollback'])
+
+    expect(result.code).toBe(0)
+    expect(await readFile(bootstrap, 'utf8')).toBe(before)
+    expect(await readFile(bootstrap, 'utf8')).not.toContain('unsafe-previous-bootstrap')
+
+    const attackerBin = join(root, 'rollback-attacker-bin')
+    const attackerMarker = join(root, 'rollback-attacker-bash-ran')
+    await mkdir(attackerBin, { recursive: true })
+    await writeFile(join(attackerBin, 'bash'), `#!/bin/sh\nprintf compromised > ${JSON.stringify(attackerMarker)}\n`, 'utf8')
+    await chmod(join(attackerBin, 'bash'), 0o755)
+
+    const hook = await runBootstrap(root, bootstrap, ['hook', 'probe'], '', {
+      PATH: `${attackerBin}:${process.env.PATH ?? ''}`,
+    })
+
+    expect(hook).toMatchObject({ code: 0, stdout: 'TRUSTED_HOOK' })
+    await expect(readFile(attackerMarker, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('resumes a committed rollback target without a second swap and repairs a partial launcher pair', async () => {
+    const root = await freshRoot('rollback-selection-crash')
+    const activeRelease = await createRelease(root, 'active')
+    const previousRelease = await createRelease(root, 'previous')
+    const bootstrap = await installBootstrap(root)
+    const state = join(root, 'state')
+    const home = join(root, 'home')
+    await mkdir(state, { recursive: true })
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify({
+      version: 1,
+      revision: 2,
+      activeRelease,
+      previousRelease,
+      updatedAt: '2026-07-24T00:00:00Z',
+    })}\n`, 'utf8')
+    expect((await runBootstrap(root, bootstrap, ['cli', 'runtime', 'repair', '--rollback'])).code).toBe(0)
+
+    const tenon = join(home, '.local', 'bin', 'tenon')
+    const hook = join(home, '.local', 'bin', 'tenon-hook')
+    const launcherSnapshot = {
+      tenon: {
+        path: tenon,
+        state: { kind: 'file', content: await readFile(tenon, 'utf8'), mode: (await stat(tenon)).mode & 0o777 },
+      },
+      hook: {
+        path: hook,
+        state: { kind: 'file', content: await readFile(hook, 'utf8'), mode: (await stat(hook)).mode & 0o777 },
+      },
+    }
+    const beforeSelection = {
+      version: 1,
+      revision: 4,
+      activeRelease,
+      previousRelease,
+      updatedAt: '2026-07-24T00:00:00Z',
+    }
+    const targetSelection = {
+      version: 1,
+      revision: 5,
+      activeRelease: previousRelease,
+      previousRelease: activeRelease,
+      updatedAt: '2026-07-24T00:01:00Z',
+    }
+    const transactionRoot = join(state, 'managed-release-transaction')
+    const journalPath = join(transactionRoot, 'runtime-rollback.json')
+    await mkdir(transactionRoot, { recursive: true })
+    await writeFile(journalPath, `${JSON.stringify({
+      version: 1,
+      transactionId: '11111111-1111-4111-8111-111111111111',
+      beforeSelection,
+      target: {
+        revision: 5,
+        activeRelease: previousRelease,
+        previousRelease: activeRelease,
+      },
+      launchers: launcherSnapshot,
+    }, null, 2)}\n`)
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify(targetSelection)}\n`)
+    await rm(hook)
+
+    const resumed = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'repair', '--rollback'])
+
+    expect(resumed.code, resumed.stderr).toBe(0)
+    expect(JSON.parse(resumed.stdout).selection).toEqual(targetSelection)
+    expect(JSON.parse(await readFile(join(state, 'selection.json'), 'utf8'))).toEqual(targetSelection)
+    expect(await readFile(hook, 'utf8')).toBe(launcherSnapshot.hook.state.content)
+    await expect(readFile(journalPath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
   it('refuses a rollback whose previous payload no longer matches its stored digest', async () => {
@@ -303,6 +545,34 @@ describe('stable runtime bootstrap', () => {
     expect(JSON.parse(status.stdout)).toMatchObject({
       activeValid: false,
       lastAudit: { kind: 'update-rejected', detail: 'host refresh failed' },
+    })
+  })
+
+  it('reports a truncated audit tail instead of presenting an older event as lastAudit', async () => {
+    const root = await freshRoot('audit-corrupt-tail')
+    const activeRelease = await createRelease(root, 'ACTIVE')
+    const bootstrap = await installBootstrap(root)
+    const state = join(root, 'state')
+    await mkdir(state, { recursive: true })
+    await writeFile(join(state, 'selection.json'), `${JSON.stringify({
+      version: 1,
+      revision: 1,
+      activeRelease,
+      previousRelease: null,
+      updatedAt: '2026-07-24T00:00:00Z',
+    })}\n`, 'utf8')
+    await writeFile(join(state, 'audit.jsonl'), `${JSON.stringify({
+      version: 1,
+      at: '2026-07-24T00:00:00Z',
+      kind: 'update-rejected',
+      detail: 'older valid event',
+    })}\n{"version":1`, 'utf8')
+
+    const status = await runBootstrap(root, bootstrap, ['cli', 'runtime', 'status', '--json'])
+
+    expect(JSON.parse(status.stdout)).toMatchObject({
+      lastAudit: null,
+      auditCorrupt: true,
     })
   })
 

@@ -116,6 +116,19 @@ export function createManagedHostStepRunner(context: {
       decision = decideManagedHostRecovery(existing.before, observed, step.isDesired)
     }
 
+    if (decision === 'execute') {
+      const checkpoint = context.journal().hostSteps?.find((item) => item.id === id)
+      if (checkpoint?.before === undefined) {
+        throw new ManagedRuntimeIndeterminateError(
+          `host step '${id}' 在 mutation 前缺少已持久化 before proof`,
+        )
+      }
+      // Committing the started checkpoint is an await boundary. Re-observe immediately before the
+      // host CLI mutation so a concurrent third state cannot be deleted using an older snapshot.
+      const beforeExecute = await step.observe()
+      assertManagedHostObservation(beforeExecute, `host step '${id}' pre-execute observation`)
+      decision = decideManagedHostRecovery(checkpoint.before, beforeExecute, step.isDesired)
+    }
     const result = decision === 'execute' ? await step.execute() : ''
     if (result.length > HOST_OBSERVATION_LIMIT) {
       throw new Error(`host step '${id}' 结果超过 journal 上限`)
