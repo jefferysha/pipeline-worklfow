@@ -6,43 +6,28 @@
  * matrix without making the workflow domain depend on Node I/O.
  */
 import type { WorkflowDef } from './types.js'
-
-export const DOCUMENT_CONTRACT_PHASES = [
-  'open', 'explore', 'spec', 'build', 'verify', 'ship', 'archive',
-] as const
-
-export type DocumentContractPhase = (typeof DOCUMENT_CONTRACT_PHASES)[number]
-
-export const DOCUMENT_KINDS = [
-  'proposal',
-  'openspec-design',
-  'tasks',
-  'superpower-design',
-  'adr',
-  'delta-spec',
-  'superpower-plan',
-  'plan',
-  'verification-report',
-  'applied-spec',
-] as const
-
-export type DocumentKind = (typeof DOCUMENT_KINDS)[number]
-
-export type OpenSpecContract = 'required'
-
-export interface DocumentOutputRequirement {
-  readonly kind: DocumentKind
-  /** Specific skills that are allowed to author and register this document kind. */
-  readonly producerCandidates: readonly string[]
-}
-
-export interface DocumentGovernancePolicy {
-  readonly id: 'openspec-v1' | 'document-v1'
-  readonly steps: readonly string[]
-  readonly outputsByStep: Readonly<Record<string, readonly DocumentOutputRequirement[]>>
-  readonly mutableByStep: Readonly<Record<string, readonly DocumentOutputRequirement[]>>
-  readonly readsByStep: Readonly<Record<string, readonly DocumentKind[]>>
-}
+import {
+  DOCUMENT_CONTRACT_PHASES,
+  DOCUMENT_KINDS,
+  isDocumentContractPhase,
+  isDocumentKind,
+  type DocumentContractPhase,
+  type DocumentGovernancePolicy,
+  type DocumentKind,
+  type DocumentOutputRequirement,
+  type OpenSpecContract,
+} from './document-contract-model.js'
+export {
+  DOCUMENT_CONTRACT_PHASES,
+  DOCUMENT_KINDS,
+  isDocumentContractPhase,
+  isDocumentKind,
+  type DocumentContractPhase,
+  type DocumentGovernancePolicy,
+  type DocumentKind,
+  type DocumentOutputRequirement,
+  type OpenSpecContract,
+} from './document-contract-model.js'
 
 const OUTPUTS_BY_PHASE: Readonly<Record<DocumentContractPhase, readonly DocumentOutputRequirement[]>> = {
   open: [
@@ -143,18 +128,6 @@ export const LEGACY_DOCUMENT_GOVERNANCE_POLICY: DocumentGovernancePolicy = {
   outputsByStep: OUTPUTS_BY_PHASE,
   mutableByStep: MUTABLE_RECORDS_BY_PHASE,
   readsByStep: READS_BY_PHASE,
-}
-
-function includes<T extends readonly string[]>(values: T, value: string): value is T[number] {
-  return values.includes(value)
-}
-
-export function isDocumentContractPhase(value: string): value is DocumentContractPhase {
-  return includes(DOCUMENT_CONTRACT_PHASES, value)
-}
-
-export function isDocumentKind(value: string): value is DocumentKind {
-  return includes(DOCUMENT_KINDS, value)
 }
 
 export function documentGovernancePolicy(

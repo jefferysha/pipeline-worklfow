@@ -11,9 +11,9 @@ import {
   migrateLegacyDeltaDocument,
   parseDocumentLedger,
   readDocumentLedger,
-  recordDocument as recordDocumentState,
   recordDocumentReads,
 } from './document-ledger.js'
+import { recordDocument as recordDocumentState } from '../documents/document-recording.js'
 import { evaluateDocumentEvidence } from './document-evidence.js'
 import {
   MAX_DOCUMENT_SOURCE_BYTES,

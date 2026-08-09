@@ -4,7 +4,7 @@ import {
   isDocumentKind,
   type DocumentContractPhase,
   type DocumentKind,
-} from './document-contract.js'
+} from './document-contract-model.js'
 
 const CANONICAL_TRANSITIONS: Readonly<Record<DocumentContractPhase, readonly DocumentContractPhase[]>> = {
   open: ['explore'],

@@ -1,0 +1,227 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-09T16:19:24Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/issue-45-kernel-cycle-gate/proposal.md",
+      "sha256": "1101e86fb04d0d39ded484f4f9c662eb39f1566eebac6aded5e09dbb7f7816e7",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-09T16:36:37Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-37801b566997efdd543e28a3c82f11ac6026cd4e5e5ba8353b232e7cbb7b69e8",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "1101e86fb04d0d39ded484f4f9c662eb39f1566eebac6aded5e09dbb7f7816e7",
+          "readAt": "2026-08-09T16:36:46Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "1101e86fb04d0d39ded484f4f9c662eb39f1566eebac6aded5e09dbb7f7816e7",
+          "readAt": "2026-08-09T16:40:03Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1101e86fb04d0d39ded484f4f9c662eb39f1566eebac6aded5e09dbb7f7816e7",
+          "readAt": "2026-08-09T16:40:46Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/issue-45-kernel-cycle-gate/design.md",
+      "sha256": "d1c0e19ccbcf375e4a920347b530d1da8d148194951a280c9dfef12475b52a76",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-09T16:36:37Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-97e4b9b268d5deb9c121a929c3aec11424e5d26beddc32eb80da0dbf2eab20e1",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "d1c0e19ccbcf375e4a920347b530d1da8d148194951a280c9dfef12475b52a76",
+          "readAt": "2026-08-09T16:36:46Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "d1c0e19ccbcf375e4a920347b530d1da8d148194951a280c9dfef12475b52a76",
+          "readAt": "2026-08-09T16:40:03Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d1c0e19ccbcf375e4a920347b530d1da8d148194951a280c9dfef12475b52a76",
+          "readAt": "2026-08-09T16:40:46Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-08-10-issue-45-kernel-runtime-cycle-gate-explore.md",
+      "sha256": "52c6eff9ba3560881bdb1474088e37cb9e926734c2187ec7764f6f97ea6683b4",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-09T16:36:39Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-3440f6106634e2e2633d4fd17946a3c9a2e872e349609a71ffc22153ed3bec0e",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "52c6eff9ba3560881bdb1474088e37cb9e926734c2187ec7764f6f97ea6683b4",
+          "readAt": "2026-08-09T16:40:03Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "52c6eff9ba3560881bdb1474088e37cb9e926734c2187ec7764f6f97ea6683b4",
+          "readAt": "2026-08-09T16:40:46Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/issue-45-kernel-cycle-gate/specs/repository-architecture-compliance/spec.md",
+      "sha256": "4820ae9f0b020c40d0551ccf98b527d06e8b6a7d94e5befaa73023e75fc81460",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-09T16:39:56Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-87aea455191ac37c4e6e2acfc598c3c060744a522f6fda795ba657e85c344c6f",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "4820ae9f0b020c40d0551ccf98b527d06e8b6a7d94e5befaa73023e75fc81460",
+          "readAt": "2026-08-09T16:40:46Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-08-10-kernel-runtime-cycle-gate.md",
+      "sha256": "157155ff7b6a8bb78c0858a60052d9fb52d569b4e21153a65a5c1e062f9437d6",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T16:39:57Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-17cc8ba6b84146f14464308b343bb8f6a52bb4ae20234edfa69b1595680d5486",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "157155ff7b6a8bb78c0858a60052d9fb52d569b4e21153a65a5c1e062f9437d6",
+          "readAt": "2026-08-09T16:40:46Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-08-10-kernel-runtime-cycle-gate.md",
+      "sha256": "157155ff7b6a8bb78c0858a60052d9fb52d569b4e21153a65a5c1e062f9437d6",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T16:39:57Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-17e0a5bb93fe7216ed89cccd5037c60d250c47b7b30d35c6f4ef064196384e8b",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "157155ff7b6a8bb78c0858a60052d9fb52d569b4e21153a65a5c1e062f9437d6",
+          "readAt": "2026-08-09T16:40:46Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-08-10-kernel-runtime-cycle-gate-design.md",
+      "sha256": "e9d415d7591e6a977750b900f28b84b25097f0355b6d54f979b1e68480b57368",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-09T16:39:58Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-a618d679c0ae1d72c05b4d2cfe031b95c03b23a5419efcbe8fd24fb737a48d5f",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "e9d415d7591e6a977750b900f28b84b25097f0355b6d54f979b1e68480b57368",
+          "readAt": "2026-08-09T16:40:03Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "e9d415d7591e6a977750b900f28b84b25097f0355b6d54f979b1e68480b57368",
+          "readAt": "2026-08-09T16:40:46Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/issue-45-kernel-cycle-gate/tasks.md",
+      "sha256": "bdd430d8b73f4dcc74b35e6655d115cb9cfa3f734ef7824079923cf947b0f917",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-09T17:02:44Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-05c97eeb0e0186cb3d17aa57cf7b5ad72c43f7361fc7c49ec396cb07362acf0f",
+        "evidenceScope": "build",
+        "stepVisit": {
+          "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+          "transitionSequence": 3
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "bdd430d8b73f4dcc74b35e6655d115cb9cfa3f734ef7824079923cf947b0f917",
+          "readAt": "2026-08-09T17:02:45Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        }
+      ]
+    }
+  ]
+}

@@ -16,7 +16,8 @@ import { readTaskPlanForChange } from './task-plan-store.js'
 const CHILD_SOURCE = `
 import { existsSync } from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { publishTaskPlanRevision, TaskPlanRevisionConflictError } from './task-plan-store.ts'
+import { TaskPlanRevisionConflictError } from './task-plan-store.ts'
+import { publishTaskPlanRevision } from '../task-plan/publication.ts'
 import { withTaskPlanPublicationFaultForTest } from './task-plan-publication-test-harness.ts'
 
 const [changeDir, revisionId, barrierPath, mode = 'contend'] = process.argv.slice(2)
@@ -125,7 +126,7 @@ describe('TaskPlan store cross-process CAS', () => {
   it('allows exactly one independent contender and gives the loser a stable CAS conflict', async () => {
     const root = await mkdtemp(join(tmpdir(), 'task-plan-cas-change-'))
     try {
-      const { publishTaskPlanRevision } = await import('./task-plan-store.js')
+      const { publishTaskPlanRevision } = await import('../task-plan/publication.js')
       await publishTaskPlanRevision(root, initialRevision(), { expected_current_revision_id: null })
       const barrier = join(scriptDir, `barrier-${Date.now()}`)
       const alpha = runChild(script, root, 'revision-alpha', barrier)
@@ -149,7 +150,7 @@ describe('TaskPlan store cross-process CAS', () => {
   it('recovers a dead-process lock and byte-identical orphan after a real immutable/current crash', async () => {
     const root = await mkdtemp(join(tmpdir(), 'task-plan-crash-change-'))
     try {
-      const { publishTaskPlanRevision } = await import('./task-plan-store.js')
+      const { publishTaskPlanRevision } = await import('../task-plan/publication.js')
       await publishTaskPlanRevision(root, initialRevision(), { expected_current_revision_id: null })
       const barrier = join(scriptDir, `crash-barrier-${Date.now()}`)
       const crashing = runChild(script, root, 'revision-crash', barrier, 'crash')

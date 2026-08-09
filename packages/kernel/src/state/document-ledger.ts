@@ -1,5 +1,4 @@
 /** OpenSpec document evidence sidecar; callers hold the Change lock while mutating it. */
-import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   DOCUMENT_CONTRACT_PHASES,
@@ -20,12 +19,9 @@ import {
   type DocumentKind,
 } from '../workflow/document-contract.js'
 import { atomicLinkPublish, atomicReplaceFile } from './atomic-publish.js'
-import {
-  currentDocumentStepVisitId,
-  parseDocumentProducerInvocation,
-  requiredDocumentProducerInvocation,
-  type DocumentProducerInvocationAnchor,
-} from './document-producer-invocation.js'
+import { currentDocumentStepVisitId } from './document-step-visit.js'
+import type { DocumentProducerInvocationAnchor } from './document-producer-invocation-model.js'
+import { parseDocumentProducerInvocation } from './document-producer-invocation-model.js'
 import {
   deltaSpecSlot,
   documentSlot,
@@ -36,13 +32,9 @@ import {
   resolveDocument,
   type BoundedFileHandleReader,
 } from './document-path.js'
-import { HISTORY_FILE } from './history.js'
-import {
-  currentSpecVisitEnteredViaRequirementsChanged, requiresRequirementsChangedForSpecAdr,
-  skillsEquivalent,
-} from './document-record-policy.js'
-export { currentDocumentStepVisitId } from './document-producer-invocation.js'
+import { currentSpecVisitEnteredViaRequirementsChanged, requiresRequirementsChangedForSpecAdr } from './document-record-policy.js'
 export { DocumentLedgerError } from './document-path.js'
+export { currentDocumentStepVisitId } from './document-step-visit.js'
 export const DOCUMENT_LEDGER_FILE = '.pipeline-documents.json'
 export const MAX_DOCUMENT_LEDGER_BYTES = 1024 * 1024
 export const MAX_DOCUMENT_LEDGER_RECORDS = 256
@@ -130,7 +122,11 @@ function parseRecord(value: unknown, index: number): DocumentRecord {
     throw new DocumentLedgerError(`document ledger records[${index}].producer 非法`)
   }
   if (!recordedAt) throw new DocumentLedgerError(`document ledger records[${index}].recordedAt 必须是非空字符串`)
-  const producerInvocation = parseDocumentProducerInvocation(item.producerInvocation, index)
+  const producerInvocation = parseDocumentProducerInvocation(
+    item.producerInvocation,
+    index,
+    (message) => new DocumentLedgerError(message),
+  )
   if (!Array.isArray(item.reads)) throw new DocumentLedgerError(`document ledger records[${index}].reads 必须是数组`)
   const reads = item.reads.map((receipt, receiptIndex) => parseReceipt(receipt, index, receiptIndex))
   const readVisits = new Set<string>()
@@ -209,59 +205,7 @@ async function writeDocumentLedger(changeDir: string, ledger: DocumentLedger): P
   await atomicReplaceFile(join(changeDir, DOCUMENT_LEDGER_FILE), content)
 }
 
-async function hasSkillEvidence(
-  changeDir: string,
-  producer: string,
-  phase: string,
-  allowEarlierPhaseEvidence: boolean,
-): Promise<boolean> {
-  let text: string
-  try {
-    text = await readFile(join(changeDir, HISTORY_FILE), 'utf8')
-  } catch (error) {
-    if (errorCode(error) === 'ENOENT') return false
-    throw error
-  }
-  const entries: Record<string, unknown>[] = []
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    try {
-      const entry = object(JSON.parse(trimmed))
-      if (entry) entries.push(entry)
-    } catch {
-      // JSONL history is intentionally append-only and may contain pre-existing malformed lines.
-      // A malformed line cannot satisfy evidence, but it must not conceal a later valid Skill row.
-    }
-  }
-  // A normal record must be backed by a Skill invocation from the current visit to the phase.
-  // `--backfill` is the sole migration exception because an upgraded Change may already have
-  // crossed the document's owning phase before this ledger existed.
-  let start = 0
-  if (!allowEarlierPhaseEvidence) {
-    for (let index = entries.length - 1; index >= 0; index -= 1) {
-      const entry = entries[index]
-      if (entry?.kind === 'transition' && entry.to === phase) {
-        start = index + 1
-        break
-      }
-    }
-  }
-  for (const entry of entries.slice(start)) {
-    if (entry.kind !== 'tool') continue
-    try {
-      const raw = string(entry.raw)
-      // Claude exposes a first-class Skill event, while Codex exposes a completed, restricted
-      // bundled SKILL.md read as host-observed evidence. The hook records those two provenance
-      // labels distinctly; both are valid proof that the exact packaged producer was loaded.
-      const match = raw ? /^(?:Skill|CodexSkillRead): (.+)$/.exec(raw) : null
-      if (match && skillsEquivalent(match[1] ?? '', producer)) return true
-    } catch { /* malformed legacy tool entry cannot satisfy evidence */ }
-  }
-  return false
-}
-
-export interface RecordDocumentInput {
+export interface RecordDocumentLedgerInput {
   readonly repoRoot: string
   readonly changeDir: string
   readonly phase: string
@@ -270,18 +214,13 @@ export interface RecordDocumentInput {
   readonly path: string
   readonly producer: string
   readonly recordedAt: string
-  /**
-   * Explicitly adopt an already-existing document from an earlier governed phase.
-   *
-   * This is intentionally opt-in for upgrades: normal authoring may only register outputs in its
-   * owning phase, while a Change created before the ledger existed may already be at spec/build.
-   * It never permits future-phase records and still requires the same real Skill history evidence
-   * and digest-bound file validation as a normal record.
-   */
   readonly allowBackfill?: boolean
+  readonly producerInvocation?: DocumentProducerInvocationAnchor
+  readonly validateOnly?: boolean
 }
 
-export async function recordDocument(input: RecordDocumentInput): Promise<DocumentLedger> {
+/** Internal core: only the document recording service may supply a verified producer anchor. */
+export async function recordDocumentLedger(input: RecordDocumentLedgerInput): Promise<DocumentLedger> {
   const ownerPhase = input.policy
     ? documentOwnerPolicyStep(input.policy, input.kind)
     : documentOwnerPhase(input.kind)
@@ -357,21 +296,13 @@ export async function recordDocument(input: RecordDocumentInput): Promise<Docume
       )
     }
   }
-  if (!await hasSkillEvidence(input.changeDir, input.producer, input.phase, input.allowBackfill === true)) {
-    throw new DocumentLedgerError(
-      `缺少 Skill 调用证据（当前 phase）: '${input.producer}'；先由宿主在本 phase 实际调用该 skill，确认完成态证据已写入 history 后再登记 '${input.kind}'`,
-    )
-  }
-  const producerInvocation = await requiredDocumentProducerInvocation(
-    input.changeDir, input.producer, input.phase, input.recordedAt, input.allowBackfill === true,
-  )
   const replacement: DocumentRecord = {
     kind: input.kind,
     path: resolved.relativePath,
     sha256: resolved.digest,
     producer: input.producer,
     recordedAt: input.recordedAt,
-    ...(producerInvocation === undefined ? {} : { producerInvocation }),
+    ...(input.producerInvocation === undefined ? {} : { producerInvocation: input.producerInvocation }),
     reads: old?.sha256 === resolved.digest ? old.reads : [],
   }
   // Singleton kinds use one named slot. Delta specs use one slot per canonical capability.
@@ -384,6 +315,7 @@ export async function recordDocument(input: RecordDocumentInput): Promise<Docume
   })
   records.push(replacement)
   const next: DocumentLedger = { ...current, records }
+  if (input.validateOnly === true) return current
   await writeDocumentLedger(input.changeDir, next)
   return next
 }

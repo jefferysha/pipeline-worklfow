@@ -2,6 +2,11 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { extname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  analyzeImportGraph,
+  assertNoRuntimeCycles,
+  formatImportGraphReport,
+} from './kernel-runtime-import-graph.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const failures = []
@@ -429,6 +434,18 @@ if (JSON.stringify(cliPkg.exports) !== '{}') {
 }
 if (JSON.stringify(cliPkg.files) !== JSON.stringify(['dist/tenon.mjs'])) {
   failures.push('packages/cli/package.json: CLI package must publish only the bundled binary')
+}
+
+try {
+  const graph = await analyzeImportGraph({ rootDir: root })
+  console.log(formatImportGraphReport(graph))
+  try {
+    assertNoRuntimeCycles(graph)
+  } catch (error) {
+    failures.push(error instanceof Error ? error.message : String(error))
+  }
+} catch (error) {
+  failures.push(`kernel runtime import graph could not be analyzed: ${error instanceof Error ? error.message : String(error)}`)
 }
 
 if (failures.length > 0) {
