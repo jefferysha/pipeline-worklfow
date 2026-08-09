@@ -1,6 +1,7 @@
 import { join } from 'node:path'
 import type { CliDeps } from '../deps.js'
 import { decodePluginManifestVersion } from '../runtime/plugin-manifest-version.js'
+import { provenanceVerifierBinding } from './native-host-command-binding.js'
 import type { SetupEnv } from './setupEnvironment.js'
 
 export function verifyUpdatedRoot(
@@ -9,10 +10,9 @@ export function verifyUpdatedRoot(
   root: string,
   targetVersion?: string,
 ): boolean {
-  const nodePath = env.resolveTrustedCommandBinding?.('node')?.executable
-    ?? env.resolveTrustedCommand?.('node')
-    ?? process.execPath
-  const result = env.runCommand('bash', [
+  const provenance = provenanceVerifierBinding(env)
+  const nodePath = provenance.nodePath || '<unavailable>'
+  const result = provenance.run([
     join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root, '--node', nodePath,
   ])
   if (result.code === 0) {

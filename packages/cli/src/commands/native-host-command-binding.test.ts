@@ -7,11 +7,65 @@ import {
   bindNativeHostCommand,
   freezeTrustedLifecycleCommands,
   nativeHostCommandBinding,
+  provenanceVerifierBinding,
   type NativeHostCommandEnvironment,
 } from './native-host-command-binding.js'
 import { freezeTrustedExecutable } from './trusted-executable.js'
 
 describe('native lifecycle command binding', () => {
+  test('replays frozen Bash then Node immediately before every provenance spawn', () => {
+    const events: string[] = []
+    const trusted = (name: string) => ({
+      executable: `/trusted/${name}`,
+      requestedPath: `/trusted/${name}`,
+      verify: () => { events.push(`${name}-proof`); return true },
+      assert: () => {},
+    })
+    const env: NativeHostCommandEnvironment = {
+      resolveHostCommand: () => nativeHostCommandBinding('/trusted/codex', 'darwin', {}),
+      resolveTrustedCommandBinding: (name) => trusted(name),
+      codexAuthStatus: async () => ({ state: 'authenticated' }),
+      runCommand: (file) => {
+        events.push(`${file.slice('/trusted/'.length)}-spawn`)
+        return { code: 0, stdout: '', stderr: '' }
+      },
+    }
+    const binding = provenanceVerifierBinding(env)
+    expect(binding.nodePath).toBe('/trusted/node')
+    expect(binding.run(['verify-skills.sh', '--node', binding.nodePath]).code).toBe(0)
+    expect(binding.run(['verify-skills.sh', '--node', binding.nodePath]).code).toBe(0)
+    expect(events).toEqual([
+      'bash-proof', 'node-proof', 'bash-spawn',
+      'bash-proof', 'node-proof', 'bash-spawn',
+    ])
+  })
+
+  test('fails closed on Node drift before invoking the Bash runner', () => {
+    const events: string[] = []
+    let nodeTrusted = true
+    const env: NativeHostCommandEnvironment = {
+      resolveHostCommand: () => nativeHostCommandBinding('/trusted/codex', 'darwin', {}),
+      resolveTrustedCommandBinding: (name) => ({
+        executable: `/trusted/${name}`,
+        requestedPath: `/trusted/${name}`,
+        verify: () => {
+          events.push(`${name}-proof`)
+          return name !== 'node' || nodeTrusted
+        },
+        assert: () => {},
+      }),
+      codexAuthStatus: async () => ({ state: 'authenticated' }),
+      runCommand: () => {
+        events.push('spawn')
+        return { code: 0, stdout: '', stderr: '' }
+      },
+    }
+    const binding = provenanceVerifierBinding(env)
+    nodeTrusted = false
+    expect(binding.run(['verify-skills.sh', '--node', binding.nodePath]).code).not.toBe(0)
+    expect(events).toEqual(['bash-proof', 'node-proof'])
+  })
+
   test('freezes host, bash, and git to absolute executable objects before later PATH drift', () => {
     const calls: Array<readonly [string, readonly string[]]> = []
     let prefix = '/trusted/one'

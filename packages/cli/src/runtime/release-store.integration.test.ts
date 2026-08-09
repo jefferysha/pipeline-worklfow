@@ -394,6 +394,46 @@ describe('RuntimeReleaseStore', () => {
     expect(invocations).not.toContain('bash')
   }, 30_000)
 
+  it('replays Bash then Node for provenance and preserves selection on Node drift', async () => {
+    const root = await freshRoot('trusted-node-provenance-drift')
+    const candidate = await candidateCopy(root)
+    const events: string[] = []
+    let nodeTrusted = false
+    let runnerCalls = 0
+    const trustedBash = '/trusted/runtime/bash'
+    const trustedNode = '/trusted/runtime/node'
+    const runtimePaths = pathsFor(root)
+    const store = new RuntimeReleaseStore({
+      paths: runtimePaths,
+      bashPath: trustedBash,
+      nodePath: trustedNode,
+      verifyBash: () => { events.push('bash-proof') },
+      verifyNode: () => {
+        events.push('node-proof')
+        if (!nodeTrusted) throw new Error('trusted Node identity drifted')
+      },
+      runner: {
+        run: async () => {
+          runnerCalls += 1
+          events.push('spawn')
+          return { code: 0, stdout: '', stderr: '' }
+        },
+      },
+    })
+    const before = await store.inspect()
+    const launchersBefore = await captureStableLaunchers(runtimePaths, root)
+
+    await expect(store.stageAndActivate(candidate, 'codex')).rejects.toThrow('trusted Node identity drifted')
+    expect(events).toEqual(['bash-proof', 'node-proof'])
+    expect(runnerCalls).toBe(0)
+    expect((await store.inspect()).selection).toEqual(before.selection)
+    expect(await captureStableLaunchers(runtimePaths, root)).toEqual(launchersBefore)
+
+    nodeTrusted = true
+    await expect(store.stageAndActivate(candidate, 'codex')).resolves.toBeDefined()
+    expect(events.slice(2, 5)).toEqual(['bash-proof', 'node-proof', 'spawn'])
+  }, 30_000)
+
   it('revalidates the frozen Node identity when no Bash verifier is configured', async () => {
     const root = await freshRoot('trusted-node-only-revalidation')
     const candidate = await candidateCopy(root)

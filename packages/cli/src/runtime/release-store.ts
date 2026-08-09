@@ -84,8 +84,19 @@ export class RuntimeReleaseStore {
       ? runner
       : {
           run: async (file, args, cwd) => {
-            if (file === this.bashPath) options.verifyBash?.()
-            if (file === this.nodePath) options.verifyNode?.()
+            const isBash = file === this.bashPath
+            const isNode = file === this.nodePath
+            const isProvenanceVerifier = isBash && args.some((arg) => arg.endsWith('verify-skills.sh'))
+            // Keep the callbacks synchronous and adjacent to the runner call.  A provenance Bash
+            // delegate owns both proofs; ordinary Bash owns only Bash, and direct Node owns only
+            // Node.  Throwing from either callback prevents the runner (and all later mutation)
+            // from being entered.
+            if (isBash) {
+              options.verifyBash?.()
+              if (isProvenanceVerifier) options.verifyNode?.()
+            } else if (isNode) {
+              options.verifyNode?.()
+            }
             return runner.run(file, args, cwd)
           },
         }

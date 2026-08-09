@@ -23,6 +23,7 @@ import {
   cmdSetupSkills,
   REAL_RUNTIME_ENV,
   scrubLegacyCodexAdapterHooks,
+  verifyPackagedAssets,
   type PlannedCommand,
   type RuntimeEnv,
   type SetupEnv,
@@ -40,6 +41,7 @@ import {
   recordPendingHostPluginConflict,
 } from './host-plugin-convergence.js'
 import { parseHostPluginInventory } from './plugin-host.js'
+import type { TrustedExecutable } from './trusted-executable.js'
 
 // ── spy env:记录全部 fs mutation + exec 调用,断言「零副作用」/「未碰 PATH」/「零执行」──────
 interface SpyCalls {
@@ -48,6 +50,22 @@ interface SpyCalls {
   exec: Array<[string, string[]]>
 }
 type ExecStub = (cmd: string, args: string[]) => { code: number; stdout: string; stderr: string }
+
+function fakeTrustedExecutable(
+  executable: string,
+  verify: () => boolean = () => true,
+): TrustedExecutable {
+  return {
+    executable,
+    requestedPath: executable,
+    proof: {} as TrustedExecutable['proof'],
+    verify,
+    assert: () => {
+      if (!verify()) throw new Error(`trusted executable drifted: ${executable}`)
+    },
+  }
+}
+
 function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true): { env: SetupEnv; calls: SpyCalls } {
   const calls: SpyCalls = { mkdirp: [], writeText: [], exec: [] }
   const mutationBaselines = new Map<string, number>()
@@ -2974,16 +2992,167 @@ describe('⑩ registry 就绪门 —— 坏/缺 registry fail-loud（不空计�
   })
 })
 
+describe('caller-level provenance replay', () => {
+  test('verifyPackagedAssets replays frozen Bash and Node before the verifier spawn', () => {
+    const deps = makeDeps()
+    const root = '/plugin'
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return true
+    })
+    const { env, calls } = spyEnv({
+      pathExists: (path) => path === join(root, 'runtime', 'tenon-bootstrap.mjs'),
+    })
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    env.runTrustedLifecycleCommand = (command, args) => {
+      events.push('spawn')
+      expect(command).toBe('bash')
+      expect(args).toEqual([
+        join(root, 'tools', 'verify-skills.sh'),
+        '--quiet',
+        '--root',
+        root,
+        '--node',
+        frozenNode.executable,
+      ])
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(verifyPackagedAssets(deps, env, root, false)).toBe(0)
+    expect(events).toEqual(['bash-proof', 'node-proof', 'spawn'])
+    expect(calls.exec).toEqual([])
+  })
+
+  test('verifyPackagedAssets fails closed on Node drift without starting a runner', () => {
+    const deps = makeDeps()
+    const root = '/plugin'
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return false
+    })
+    const { env, calls } = spyEnv({
+      pathExists: (path) => path === join(root, 'runtime', 'tenon-bootstrap.mjs'),
+    })
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    let runnerCalls = 0
+    env.runTrustedLifecycleCommand = () => {
+      runnerCalls += 1
+      events.push('spawn')
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(verifyPackagedAssets(deps, env, root, false)).toBe(1)
+    expect(events).toEqual(['bash-proof', 'node-proof'])
+    expect(runnerCalls).toBe(0)
+    expect(calls.exec).toEqual([])
+  })
+})
+
 describe('canonical provenance setup gate', () => {
+  test('bundled setup replays frozen Bash and Node before a dry-run plan', () => {
+    const deps = makeDeps()
+    const root = process.cwd()
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return true
+    })
+    const { env, calls } = spyEnv({
+      pluginRoot: () => root,
+      selfPath: () => join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+    })
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    env.runTrustedLifecycleCommand = (command, args) => {
+      events.push('spawn')
+      expect(command).toBe('bash')
+      expect(args).toEqual([
+        join(root, 'tools', 'verify-skills.sh'),
+        '--quiet',
+        '--root',
+        root,
+        '--node',
+        frozenNode.executable,
+      ])
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(cmdSetupSkills(deps, { dryRun: true }, env)).toBe(0)
+    expect(events).toEqual(['bash-proof', 'node-proof', 'spawn'])
+    expect(calls.exec).toEqual([])
+    expect(deps.outLines.join('\n')).toContain('[setup skills] --dry-run')
+  })
+
+  test('bundled setup stops on Node drift before verifier runner or skill plan/install child', () => {
+    const deps = makeDeps()
+    const root = process.cwd()
+    const events: string[] = []
+    const frozenBash = fakeTrustedExecutable('/trusted/runtime/bash', () => {
+      events.push('bash-proof')
+      return true
+    })
+    const frozenNode = fakeTrustedExecutable('/trusted/runtime/node', () => {
+      events.push('node-proof')
+      return false
+    })
+    const { env, calls } = spyEnv({
+      pluginRoot: () => root,
+      selfPath: () => join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+    })
+    env.resolveTrustedCommandBinding = (name) => name === 'bash' ? frozenBash : frozenNode
+    let runnerCalls = 0
+    env.runTrustedLifecycleCommand = () => {
+      runnerCalls += 1
+      events.push('spawn')
+      return { code: 0, stdout: '', stderr: '' }
+    }
+
+    expect(cmdSetupSkills(deps, { dryRun: true }, env)).toBe(1)
+    expect(events).toEqual(['bash-proof', 'node-proof'])
+    expect(runnerCalls).toBe(0)
+    expect(calls.exec).toEqual([])
+    expect(calls.mkdirp).toEqual([])
+    expect(calls.writeText).toEqual([])
+    expect(deps.outLines.join('\n')).not.toContain('[setup skills] 技能安装计划')
+    expect(deps.errLines.join('\n')).toContain('canonical Skill provenance 校验失败')
+  })
+
   test('real bundled setup rejects Skill content drift before producing a plan', async () => {
     const root = mkdtempSync(join(tmpdir(), 'tenon-setup-provenance-'))
     try {
       await cp(join(process.cwd(), 'templates'), join(root, 'templates'), { recursive: true })
       await cp(join(process.cwd(), 'skills'), join(root, 'skills'), { recursive: true })
+      for (const rel of ['.claude-plugin', '.codex-plugin', '.agents', 'hooks', 'runtime', 'tools']) {
+        await cp(join(process.cwd(), rel), join(root, rel), { recursive: true })
+      }
       mkdirSync(join(root, 'packages', 'cli', 'dist'), { recursive: true })
       await cp(
         join(process.cwd(), 'packages', 'cli', 'dist', 'tenon.mjs'),
         join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
+      )
+      mkdirSync(join(root, 'packages', 'server', 'dist'), { recursive: true })
+      await cp(
+        join(process.cwd(), 'packages', 'server', 'dist', 'dashboard.mjs'),
+        join(root, 'packages', 'server', 'dist', 'dashboard.mjs'),
+      )
+      mkdirSync(join(root, 'packages', 'dashboard-app', 'dist'), { recursive: true })
+      await cp(
+        join(process.cwd(), 'packages', 'dashboard-app', 'dist'),
+        join(root, 'packages', 'dashboard-app', 'dist'),
+        { recursive: true },
       )
       const skillPath = join(root, 'skills', 'tenon', 'SKILL.md')
       await writeFile(skillPath, `${await readFile(skillPath, 'utf8')}\n# drift\n`, 'utf8')

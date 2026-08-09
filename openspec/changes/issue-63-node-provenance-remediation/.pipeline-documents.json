@@ -1,0 +1,289 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-09T19:28:20Z",
+  "records": [
+    {
+      "kind": "adr",
+      "path": "docs/adr/issue-63-node-provenance-remediation.md",
+      "sha256": "0e2e6ed9f616dec8d41fe42ee58503d1c258a03465132daebf0494bfc4b94bb2",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-09T19:34:57Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-42c3d858321bdf29b48324dc8c6999c26d176d7502f0ed3d6c228a44b93a3246",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "0e2e6ed9f616dec8d41fe42ee58503d1c258a03465132daebf0494bfc4b94bb2",
+          "readAt": "2026-08-09T19:40:19Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "0e2e6ed9f616dec8d41fe42ee58503d1c258a03465132daebf0494bfc4b94bb2",
+          "readAt": "2026-08-09T20:25:31Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "0e2e6ed9f616dec8d41fe42ee58503d1c258a03465132daebf0494bfc4b94bb2",
+          "readAt": "2026-08-09T20:50:40Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/issue-63-node-provenance-remediation/specs/plugin-distribution/spec.md",
+      "sha256": "384712a5dcfb5ef1d6a793503ed521aa2e03fe07a5a08d06f2217a7fda495aed",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-09T19:40:11Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-a7fbf89c1432ed0b8c39b8eef10e014a90d014f034c831705aed7c3d8e837150",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "384712a5dcfb5ef1d6a793503ed521aa2e03fe07a5a08d06f2217a7fda495aed",
+          "readAt": "2026-08-09T20:25:31Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "384712a5dcfb5ef1d6a793503ed521aa2e03fe07a5a08d06f2217a7fda495aed",
+          "readAt": "2026-08-09T20:50:40Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/issue-63-node-provenance-remediation.md",
+      "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T19:40:11Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-8f2dad3987941a9f283dbc9b323ad47fc8b2eefaa12d3fa4b9bd1b4a3d8cf858",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+          "readAt": "2026-08-09T20:25:31Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+          "readAt": "2026-08-09T20:50:40Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/issue-63-node-provenance-remediation.md",
+      "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T19:40:12Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-6b00c0cf2a885e4aeac611c92aac0abebdc243d2d8d6a2e1fbba56bb2ba1344e",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+          "readAt": "2026-08-09T20:25:31Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "0aca89ea67333b0027b6f42c6933f9e4466279256394dcf81cf4ff8a2cd3bc21",
+          "readAt": "2026-08-09T20:50:40Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        }
+      ]
+    },
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/issue-63-node-provenance-remediation/proposal.md",
+      "sha256": "f9fc5cfeb477ea689430613927fde9ab960af3e0d4686a742b4eef541d062ed9",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-09T19:40:12Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-f5919dc8478d722b140efcf0e4ac61da50f9280e3b95a9ba6b8b8396250288ee",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "f9fc5cfeb477ea689430613927fde9ab960af3e0d4686a742b4eef541d062ed9",
+          "readAt": "2026-08-09T19:40:19Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "f9fc5cfeb477ea689430613927fde9ab960af3e0d4686a742b4eef541d062ed9",
+          "readAt": "2026-08-09T20:25:31Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "f9fc5cfeb477ea689430613927fde9ab960af3e0d4686a742b4eef541d062ed9",
+          "readAt": "2026-08-09T20:50:40Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/issue-63-node-provenance-remediation/design.md",
+      "sha256": "32c758536594ecf564985cb90acb7ecfd5ec737cb8c604ba049b0f67fb717b0a",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-09T19:40:12Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-0829e3740092c7320b28a5a1708631ccff59548fc6a3f3ad39ca66c288f2f1b2",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "32c758536594ecf564985cb90acb7ecfd5ec737cb8c604ba049b0f67fb717b0a",
+          "readAt": "2026-08-09T19:40:19Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "32c758536594ecf564985cb90acb7ecfd5ec737cb8c604ba049b0f67fb717b0a",
+          "readAt": "2026-08-09T20:25:31Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "32c758536594ecf564985cb90acb7ecfd5ec737cb8c604ba049b0f67fb717b0a",
+          "readAt": "2026-08-09T20:50:40Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/issue-63-node-provenance-remediation-design.md",
+      "sha256": "1a42fdd721e48e3fbef37e6c772884830866cbe0608c676b6e1bef151063d19e",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-09T19:40:13Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-838d4ceb0887833837db13914e29840de1abb5217e21934b052a408a5fb02bd2",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "1a42fdd721e48e3fbef37e6c772884830866cbe0608c676b6e1bef151063d19e",
+          "readAt": "2026-08-09T19:40:19Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1a42fdd721e48e3fbef37e6c772884830866cbe0608c676b6e1bef151063d19e",
+          "readAt": "2026-08-09T20:25:31Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",3]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "1a42fdd721e48e3fbef37e6c772884830866cbe0608c676b6e1bef151063d19e",
+          "readAt": "2026-08-09T20:50:40Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-10-issue-63-node-provenance-remediation-verify.md",
+      "sha256": "099080a94eab5ed222ee69052d2bd4d7f4875dc68c9bf0f3af8dc3570ca79851",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-09T20:50:23Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-3cd1b5f11b40ad321ccf9d259aadc5c9a624faeab8f65948472f8e0427667fad",
+        "evidenceScope": "verify",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 4
+        }
+      },
+      "reads": []
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/issue-63-node-provenance-remediation/tasks.md",
+      "sha256": "6a62e9d72c93e8b23741092c5f4a71aa977819d1754c39125a7f2671952521c4",
+      "producer": "tenon-verify",
+      "recordedAt": "2026-08-09T20:50:26Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-9563a1c82f54c126f631b21eb5cc611bfe2745963b4e71706cc480315fec4bb6",
+        "evidenceScope": "verify",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 4
+        }
+      },
+      "reads": [
+        {
+          "phase": "verify",
+          "sha256": "6a62e9d72c93e8b23741092c5f4a71aa977819d1754c39125a7f2671952521c4",
+          "readAt": "2026-08-09T20:50:40Z",
+          "visitId": "[\"43d608c6-036b-4071-8db7-184417a0a358\",4]"
+        }
+      ]
+    },
+    {
+      "kind": "applied-spec",
+      "path": "openspec/changes/issue-63-node-provenance-remediation/applied-spec.md",
+      "sha256": "0ac6c99920ec02e33e0610639f838afd35dca24662abf24be9f3aaa0e8e517f5",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-08-09T20:53:20Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-3c5b8a9e08207042dae7e2d5684648aa58effd1afa35a946cdacd8dce1f700f6",
+        "evidenceScope": "ship",
+        "stepVisit": {
+          "runId": "43d608c6-036b-4071-8db7-184417a0a358",
+          "transitionSequence": 5
+        }
+      },
+      "reads": []
+    }
+  ]
+}

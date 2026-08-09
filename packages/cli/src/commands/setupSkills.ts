@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { readAutomationJson } from '@tenon/automation'
 import { PREREQ_HINTS } from '@tenon/kernel'
@@ -29,6 +28,7 @@ import {
   buildSkillsPlan, cmdStr, higherTier, renderSkillsPlan, skillInstalled,
   type PlannedCommand, type SkillsPlan,
 } from './setupSkillsPlan.js'
+import { provenanceVerifierBinding } from './native-host-command-binding.js'
 interface ExecOutcome {
   successes: PlannedCommand[]
   failures: Array<{ cmd: PlannedCommand; detail: string }>
@@ -106,23 +106,21 @@ function renderSummary(deps: CliDeps, o: ExecOutcome, plan: SkillsPlan): number 
 
 /**
  * 真实 bundled CLI 的 setup skills 入口必须先验证 exact plugin root 的完整 provenance。
- * verifier 本身是 async（并复用 automation 的 buildCanonicalManifest），而 setup skills 的
- * legacy/test seam 是同步命令函数，因此这里通过当前 bundled CLI 的 read-only hidden command
- * 同步执行 canonical verifier；不重新实现 hash，也不读取 cwd 或任何 lower-tier registry。
+ * verifier 通过冻结 Bash 同步执行完整 `tools/verify-skills.sh`；不重新实现 hash，也不读取
+ * cwd 或任何 lower-tier registry。复合 binding 在这一次 spawn 前重放 Bash 与委托 Node。
  * 显式注入 sources/loader 的单元测试保留原有 seam，不触发真实仓库 IO。
  */
 function verifyRealPluginRootBeforePlanning(deps: CliDeps, env: SetupEnv): number {
   const root = env.pluginRoot() ?? resolvePipelineRoot(env)
-  const self = resolve(env.selfPath())
-  const result = spawnSync(
-    process.execPath,
-    [self, 'internal-skill-provenance', 'verify', '--root', root, '--json'],
-    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 },
-  )
-  const stdout = typeof result.stdout === 'string' ? result.stdout.trim() : ''
-  const stderr = typeof result.stderr === 'string' ? result.stderr.trim() : ''
+  const provenance = provenanceVerifierBinding(env)
+  const nodePath = provenance.nodePath || '<unavailable>'
+  const result = provenance.run([
+    join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root, '--node', nodePath,
+  ], { timeoutMs: 30_000 })
+  const stdout = result.stdout.trim()
+  const stderr = result.stderr.trim()
   const output = stderr !== '' ? stderr : stdout
-  if (result.error !== undefined || result.status !== 0) {
+  if (result.code !== 0) {
     deps.io.err(
       `ERROR: canonical Skill provenance 校验失败（root=${root}）` +
         (output === '' ? '' : `\n${output}`),
@@ -145,9 +143,13 @@ export function cmdSetupSkills(
 ): number {
   const selfPath = resolve(env.selfPath())
   const isBundledCli = /(?:^|[\\/])packages[\\/]cli[\\/]dist[\\/]tenon\.mjs$/u.test(selfPath)
+  // Full native setup passes a bound lifecycle environment (a shallow copy of REAL_SETUP_ENV)
+  // so the physical proofs survive the first host mutation.  Treat that marker as production
+  // too; checking object identity alone would silently skip the exact-root gate in full setup.
+  const isProductionEnv = env === REAL_SETUP_ENV || env.runTrustedLifecycleCommand !== undefined
   const productionCanonicalSetup = sources === undefined
     && loadSources === loadCanonicalSkillSources
-    && env === REAL_SETUP_ENV
+    && isProductionEnv
     && isBundledCli
   if (productionCanonicalSetup) {
     const provenanceCode = verifyRealPluginRootBeforePlanning(deps, env)
