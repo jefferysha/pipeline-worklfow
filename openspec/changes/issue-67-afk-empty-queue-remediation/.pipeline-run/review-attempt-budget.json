@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "runId": "cf585986-3742-4155-b4e1-543f05594fff",
+  "workflowFingerprint": "0fea7ee8cdbe4adf1ddbc8a2022968d0774d138173319e89e1834f2b65be961c",
+  "scopes": [
+    {
+      "scope": "verify",
+      "defaultMaxAttempts": 2,
+      "override": null,
+      "used": 1,
+      "active": null,
+      "completed": [
+        {
+          "attemptId": "75a0aa9e-500f-48fa-bee4-b76a38aef715",
+          "sequence": 1,
+          "candidateFingerprint": "workspace:sha256:eae39e24e9020cf898fa1ce2433cd22c60a07c3ae31a436078d131479e9f773e",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T23:12:44Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-67-afk-empty-queue-remediation/.pipeline-run/review-attempt-reports/75a0aa9e-500f-48fa-bee4-b76a38aef715.standards.report",
+              "reportDigest": "sha256:940df3b940c1a58b6356432eb7757e0eaaabeeb967259f25dd68da7a370265cc",
+              "recordedAt": "2026-08-09T23:14:36Z"
+            },
+            {
+              "lane": "spec",
+              "result": "fail",
+              "reportPath": "openspec/changes/issue-67-afk-empty-queue-remediation/.pipeline-run/review-attempt-reports/75a0aa9e-500f-48fa-bee4-b76a38aef715.spec.report",
+              "reportDigest": "sha256:940df3b940c1a58b6356432eb7757e0eaaabeeb967259f25dd68da7a370265cc",
+              "recordedAt": "2026-08-09T23:14:36Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-67-afk-empty-queue-remediation/.pipeline-run/review-attempt-reports/75a0aa9e-500f-48fa-bee4-b76a38aef715.e2e.report",
+              "reportDigest": "sha256:940df3b940c1a58b6356432eb7757e0eaaabeeb967259f25dd68da7a370265cc",
+              "recordedAt": "2026-08-09T23:14:37Z"
+            }
+          ],
+          "completedAt": "2026-08-09T23:14:37Z",
+          "result": "fail",
+          "reportPath": "openspec/changes/issue-67-afk-empty-queue-remediation/.pipeline-run/review-attempt-reports/75a0aa9e-500f-48fa-bee4-b76a38aef715.aggregate.report",
+          "reportDigest": "sha256:d4e692d7d72d1aeca41b94a233fae599aedc960013a959a083eb9a8e16a605d3"
+        }
+      ]
+    }
+  ]
+}

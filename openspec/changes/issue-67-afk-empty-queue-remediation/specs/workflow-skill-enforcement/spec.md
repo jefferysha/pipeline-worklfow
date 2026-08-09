@@ -16,6 +16,14 @@ the empty-queue message, and make no Docker call. A Docker-unavailable candidate
 `status=docker-unavailable` and exit `1`; policy, capability, or Skill wiring failure SHALL return
 `status=configuration-error` (or its existing structured fail-closed classification) and exit non-zero.
 
+#### Scenario: Profile 存在但 phase Skill 缺失
+
+- **GIVEN** default AFK admission 的 profile 合法且 profile Skills 均可定位
+- **BUT** 当前 frozen phase requirement 的 Skill 内容不可定位
+- **WHEN** execution preparation 构造 bundle
+- **THEN** preparation 以 `skill-bundle-skill-not-found` 拒绝
+- **AND** 不发布一个缺少 phase slot 的空或部分 snapshot。
+
 #### Scenario: Empty queue succeeds after hermetic wiring
 
 - **GIVEN** active-loop wiring and the frozen phase Skill content are valid

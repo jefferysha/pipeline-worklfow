@@ -18,7 +18,7 @@
 ## 实现
 
 - [x] 由唯一 `luna_worker` 先 RED 后最小 GREEN，补齐所有同类 hermetic fixture。
-- [ ] 根代理逐行审查并完成定向 Build-readiness、生成物与文档同步。 (build)
+- [x] 根代理逐行审查并完成定向 Build-readiness、生成物与文档同步。 (build)
 
 ## 验证
 
