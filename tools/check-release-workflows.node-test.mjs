@@ -757,10 +757,13 @@ test('release automation never publishes to npm', async () => {
 
 test('published stable releases trigger an isolated public install, repeat, update and Dashboard acceptance', async () => {
   const workflow = await text('.github/workflows/release-public-acceptance.yml')
+  const writer = await text('.github/workflows/release-writer.yml')
   assert.match(workflow, /release:\s*\n\s+types: \[published\]/)
-  assert.match(workflow, /github\.event\.release\.draft == false/)
-  assert.match(workflow, /github\.event\.release\.prerelease == false/)
-  assert.match(workflow, /target_commitish/)
+  assert.match(workflow, /workflow_dispatch:\s*\n\s+inputs:\s*\n\s+tag:/)
+  assert.match(workflow, /gh release view "\$RELEASE_TAG"/)
+  assert.match(workflow, /\[ "\$RELEASE_DRAFT" = false \]/)
+  assert.match(workflow, /\[ "\$RELEASE_PRERELEASE" = false \]/)
+  assert.match(workflow, /\[ "\$RELEASE_TARGET" = main \]/)
   assert.match(workflow, /\.github\/workflows\/release-public-acceptance\.yml@refs\/heads\/main/)
   assert.match(workflow, /persist-credentials: false/)
   assert.match(
@@ -768,4 +771,11 @@ test('published stable releases trigger an isolated public install, repeat, upda
     /clean-codex-install-acceptance\.mjs --mode public --public-ref "\$RELEASE_TAG"/,
   )
   assert.doesNotMatch(workflow, /contents: write|\$\{\{\s*secrets\./)
+
+  assert.match(writer, /dispatch-public-acceptance:/)
+  assert.match(writer, /needs: \[create-tag, release\]/)
+  assert.match(writer, /actions: write/)
+  assert.match(writer, /gh workflow run release-public-acceptance\.yml/)
+  assert.match(writer, /--ref main/)
+  assert.match(writer, /-f tag="\$RELEASE_TAG"/)
 })
