@@ -27,8 +27,8 @@
 
 ## 验证
 
-- [ ] 对冻结 build SHA 执行最多两轮 code review 预算内的完整 review 与 issue 验收。
-- [ ] 运行定向测试、架构 gate、构建、集成测试、生成物/发行 freshness 与必要的最终门。
+- [x] 对冻结 build SHA 执行最多两轮 code review 预算内的完整 review 与 issue 验收。
+- [x] 运行定向测试、架构 gate、构建、集成测试、生成物/发行 freshness 与必要的最终门。
 
 ## 交付
 

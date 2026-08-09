@@ -1,0 +1,129 @@
+# issue #45 最终验证报告
+
+## 候选身份与结论
+
+- Issue：`#45 Remove kernel runtime import cycles and enforce a cycle gate`
+- Change：`issue-45-kernel-cycle-gate`
+- 编排起点：`2283992375ae5fb74b2b1ed8e1234c11ef99a1c7`
+- 冻结 Build SHA：`c2fd94e3ea5ed112fffbceb08947bf4f0b9bf675`
+- 冻结候选：`workspace:sha256:afb2bb7343ea8ea61814b78ff5c3128f631435bb2bd8b553b789aea9585ce30a`
+- Review attempt：`2/2`（最终预算已用尽）
+- Attempt ID：`8827248c-3e17-4d6d-8491-e92750f4d533`
+- 结论：`PASS`
+
+根代理逐项复核冻结 diff、公共 facade、锁与提交时序、fixture、受控 bundle 和全部 issue 验收，不采用
+实施 worker 的自审结论。仓库 `AGENTS.md` 与本 issue 的明确执行契约要求根代理亲自 review，因此未把
+code-review verdict 委派给 reviewer agent；根代理即当前 Codex reviewer。实施 worker 只完成被批准的
+Build 与第一次 finding 的窄修复，未判定最终 PASS。
+
+## Review 预算与 finding 闭环
+
+| Attempt | Build SHA | 结果 | 证据 |
+| --- | --- | --- | --- |
+| 1/2 | `9263762177671718cc4bd7fb40d522dc9aa9fe44` | FAIL | unresolved/ambiguous import 诊断泄漏绝对 checkout 路径，违反确定性仓库相对诊断契约；见 `2026-08-10-issue-45-kernel-cycle-gate-review-attempt-1.md`。 |
+| 2/2 | `c2fd94e3ea5ed112fffbceb08947bf4f0b9bf675` | PASS | resolver 接收稳定 repo-relative display path，候选排序固定；跨两个临时根的诊断完全相同且不含 fixture root。全 diff 无新增阻断 finding。 |
+
+第二轮定向 TDD：新增稳定诊断测试先得到 `9 pass / 1 fail`，随后最小修复得到 `10 pass / 0 fail`；
+真实 architecture scan 保持 runtime SCC 为零。第二轮是本 issue 最后一次 code-review attempt，后续只执行
+已冻结候选的验证、Ship 和 Archive，不再以换 skill 或 agent 重置预算。
+
+## Issue 验收映射
+
+| Acceptance / Measurement | 结果 | 证据 |
+| --- | --- | --- |
+| Kernel production value-import SCC = 0 | PASS | `npm run check:architecture`：226 files、518 runtime edges、`runtime SCC=0`；328 type-only edges、type-only SCC=1。 |
+| document ledger、producer confirmation、Skill receipt、native task-plan 行为不变 | PASS | document/Skill/state/task-plan 定向 unit、integration、cross-process、CLI/server 套件通过；公共 facade 与根导出保持。 |
+| checker 确定解析项目相对 TS import 并拒绝 seeded runtime cycle | PASS | AST graph fixture `10/10`，覆盖 seeded SCC、自环、static/re-export/dynamic、`.js` 映射、extensionless/index、unresolved/ambiguous fail-loud 与跨根稳定诊断。 |
+| type-only 分离且无误报 | PASS | `import type`、`export type`、named type-only 与 `ImportTypeNode` 只进入 type-only 图；mixed/value 进入 runtime；真实扫描单独报告 type-only SCC=1 且门禁成功。 |
+| architecture、unit、integration、generated artifact 全通过 | PASS | 全量 kernel/repo test、web、hooks、adapters、migration CAS、bundle、release freshness、docs 与 oracle 均通过，详见下节。 |
+| 依赖方向有 durable architecture note | PASS | `docs/adr/2026-08-10-issue-45-kernel-runtime-cycle-gate-explore.md` 与详细 design/spec 已登记。 |
+| Runtime cycles reaching main without CI rejection = 0 | PASS（候选） | 根 `check:architecture` 同时运行 fixture 与真实扫描；canonical CI/release workflow 继续调用该唯一根命令。最终还需等待 PR exact-head CI 成功，未自行 merge。 |
+
+## 最终门（一次性、隔离 clean clone）
+
+验证 clone：`/tmp/tenon-issue45-verify.IOGQuP/repo`，detached 于冻结 SHA
+`c2fd94e3ea5ed112fffbceb08947bf4f0b9bf675`。`npm ci` 安装 486 packages，审计 0 vulnerabilities。
+
+| 命令 / 验证面 | 结果 |
+| --- | --- |
+| `npm run check:dependencies` | PASS |
+| `npm run check:release-workflows` | PASS，28 tests |
+| `npm run check:openspec` | PASS，43 items |
+| `npm run check:comments` | PASS |
+| `npm run check:architecture` | PASS，graph fixture 10/10；850 production files，5 个既有 size-only exceptions；kernel runtime SCC=0 |
+| `npm run check:identity` | PASS |
+| `npm run check:repository-hygiene` | PASS |
+| `npm run check:npx-package` | PASS，66 tests |
+| `npm run check:legacy-bridge` | PASS |
+| `npm run check:default-workflow-freshness` | PASS |
+| `npm run build` | PASS，所有 package TypeScript、web、CLI `tenon.mjs`、server `dashboard.mjs` |
+| 受控产物 `git diff --exit-code` | PASS，build 后无 stale bundle diff |
+| `npm run test:clean-install` | PASS；隔离 HOME/CODEX_HOME/runtime，重复 dashboard PID 与 untrusted hook path 验证成功，真实外部安装状态未改变 |
+| `npm run check:docs`、`check:document-templates`、`docs:sync`、`docs:check`、`docs:build`、`docs:smoke` | 全部 PASS |
+| `npm test -- --minWorkers=4 --maxWorkers=4` | PASS，381 files；6686 passed、27 skipped、6713 total |
+| `npm run test:web` | PASS，98 files、1741 tests |
+| `bash tools/test-hooks.sh` | PASS，511 tests |
+| `bash tools/test-adapters.sh` | PASS，272 tests |
+| `bash tools/verify-skills.sh` | PASS，66 path references、62 skills、0 external dependencies |
+| `npm run test:migration-cas` | PASS，13 tests |
+| `bash tools/test-bundle.sh` | PASS，32 tests；使用精确 N-1 `v1.0.1` payload |
+| `npm run oracle` | PASS，0 mismatches；仅报告已验证/已知差异 |
+| `git diff --check` | PASS |
+
+构建前的定向反馈也全部通过：kernel 相关 12 个 unit/integration/cross-process 文件共 270 tests，CLI
+document-record、server task-plan/run/snapshot 和 bundle 相关共 97 tests，以及 document-ledger 31/31、
+CAS/repository 窄回归 16/16。
+
+## OpenSpec 独立可归档性
+
+- OpenSpec CLI：`1.6.0`。
+- 真实 worktree 的 Change：`show --deltas-only` 返回 4 条
+  `repository-architecture-compliance` ADDED requirements；`validate --strict` 1/1 PASS。
+- clean clone 中执行 `openspec archive issue-45-kernel-cycle-gate --yes --json`：归档为
+  `2026-08-09-issue-45-kernel-cycle-gate`，4 added、0 modified/removed/renamed，`specsUpdated=true`。
+- archive 后 `openspec validate --all --strict --json`：42/42 items PASS（40 specs、2 changes）。
+- 真实 worktree 的 40 个主 `spec.md` 使用路径、NUL 与 bytes 计算的摘要在演练前后均为
+  `92588edb763db2982c86f37a8a607ccb855e75c6be79d56844fa10418c174596`，证明隔离演练没有污染 canonical specs。
+- 演练后真实 HEAD 仍为冻结 SHA，`git diff -- tools packages package.json` 为空；仅存在 Tenon Verify
+  canonical ledger/revision/transition 写入。
+
+## 文件到能力 / spec 覆盖
+
+| 文件 | 能力与验证覆盖 |
+| --- | --- |
+| `package.json`、`tools/check-architecture.mjs` | 根 architecture 唯一入口先跑 deterministic graph fixtures，再跑真实仓库规则；CI/release 调用链与 release-workflow tests 覆盖。 |
+| `tools/kernel-runtime-import-graph.mjs` | TypeScript AST 分类、固定 resolver、Tarjan SCC、自环、runtime/type-only 指标、repo-relative deterministic fail-loud 诊断；10 个 node fixture tests 与真实 scan 覆盖。 |
+| `tools/kernel-runtime-import-graph.node-test.mjs` | seeded cycle、type-only、mixed、dynamic、ImportEquals、self-loop、`.js`/index、unresolved/ambiguous 和跨 root 稳定性回归。 |
+| `packages/kernel/src/documents/document-recording.ts`、`documents/index.ts` | 外层 recording service 强制 exact StepVisit confirmation；公共 `recordDocument` 保持；document/CLI tests 覆盖。 |
+| `packages/kernel/src/state/document-ledger.ts`、`document-ledger.test.ts` | 低层 validate/write core 不反向依赖 Skill runtime；原校验顺序、ledger bytes 与错误语义由 31 tests 覆盖。 |
+| `packages/kernel/src/state/document-producer-invocation-model.ts`、`document-producer-invocation.ts`、`document-step-visit.ts`、`state/index.ts` | 纯 anchor/parser 与 StepVisit 叶子、兼容 re-export；Skill evidence/confirmation tests 与 full suite 覆盖。 |
+| `packages/kernel/src/skill-invocation/document-producer.test.ts`、`repository.test.ts` | 调用方兼容、CAS 失败写 fail 而非 complete、lock 外 lifecycle 回归。 |
+| `packages/kernel/src/state/task-plan-store.ts`、`task-plan-store.test.ts`、`task-plan-store.crossprocess.integration.test.ts` | 原子 state publish/CAS/current/projection/跨进程锁；unit 与 cross-process tests 覆盖。 |
+| `packages/kernel/src/task-plan/publication.ts` | native Skill begin-before-lock、complete/fail-after-lock 的公共 `publishTaskPlanRevision` facade；repository 与 server tests 覆盖。 |
+| `packages/kernel/src/workflow/document-contract-model.ts`、`document-contract.ts`、`document-contract-validation.ts` | 无副作用 contract 叶子与兼容 validator facade；workflow/full suite 覆盖。 |
+| `packages/kernel/src/workflow/transition-application.test.ts` | recording service 新依赖方向下的 transition caller 兼容回归。 |
+| `packages/cli/dist/tenon.mjs`、`packages/server/dist/dashboard.mjs` | 受控交付 bundle；build、bundle 32/32、clean-install、CLI/server tests 与 freshness 验证。 |
+| `docs/adr/2026-08-10-issue-45-kernel-runtime-cycle-gate-explore.md`、`docs/superpowers/specs/2026-08-10-kernel-runtime-cycle-gate-design.md`、`docs/superpowers/plans/2026-08-10-kernel-runtime-cycle-gate.md` | 冻结依赖方向、语义与执行计划；docs 全门与 OpenSpec delta 对账。 |
+| `docs/superpowers/reports/2026-08-10-issue-45-kernel-cycle-gate-review-attempt-1.md`、本报告 | 两次 review 的真实 finding、修复和验收证据。 |
+| `openspec/changes/issue-45-kernel-cycle-gate/{proposal.md,design.md,tasks.md,specs/**}` | Issue scope、4 条 delta requirements、phase tasks 与验收；strict validate/archive rehearsal 覆盖。 |
+| `openspec/changes/issue-45-kernel-cycle-gate/.pipeline-{document-locale,documents,history,skill-confirmations,skill-invocations,workflow-governance,workflow-plan}.json*` | 正式 Tenon document、Skill 与 workflow ledger；只由 CLI 写入并通过 `tenon check` 审计。 |
+| `openspec/changes/issue-45-kernel-cycle-gate/.pipeline-run/{current.json,review-attempt-budget.json,pre-verify-review/000000..000022-*.json,revisions/000000..000022-*.json,review-attempt-reports/*}`、`.pipeline-transitions/000001..000006-*.json`、`.pipeline.yaml` | phase revision、两次 review 预算、receipt 与 transition 的 canonical 投影；不手改。 |
+
+以上覆盖冻结 base 到 Build SHA 的全部 95 个 tracked path；Verify/Ship/Archive 后续 canonical 文件和本报告
+将在各 phase 出口继续由 Tenon/OpenSpec 正式命令生成并单独提交。
+
+## 兼容、并发、安全与真实 skip
+
+- 兼容：公共名称、参数、返回、错误映射与 root exports 不变；ledger、Skill JSONL、task-plan
+  revision/current/projection 和 `tasks.md` 格式不变；受控 CLI/server bundle 已同步。
+- 并发：document CLI 仍只持有一把 SkillInvocation Change lock；TaskPlan native begin 在 state lock 之前，
+  complete/fail 在释放后；CAS/immutable/current/projection 失败恢复路径由 cross-process 与 fault tests 覆盖。
+- 安全：caller 不能注入 `producerInvocation`；unresolved、ambiguous 与非字面 dynamic import fail-loud；
+  未新增 dependency、allowlist、baseline、生成代码例外或产品运行时依赖。
+- 本机 Docker daemon 不可达（OrbStack socket 不存在），所以本地 sandcastle/container integration 被真实 skip；
+  PR exact-head Ubuntu CI 将提供 Docker 覆盖。
+- canonical PR CI 设计在没有 `TENON_REQUIRE_REAL_CODEX=1` secret 时跳过 real-Codex acceptance；本地未伪造该证据。
+- Windows 原生 trust 测试为平台专属，本机未运行，将由 exact-head Windows CI 覆盖。
+- 无用户可见 UI 改动，浏览器 E2E 不适用；web 测试仍全部通过。
+- 残余风险仅为本机不可提供的 Docker、real-Codex secret 与 Windows 平台覆盖；必须等待 PR exact-head CI，
+  在 CI 成功前不声明远端绿色、不合并、不发布。
