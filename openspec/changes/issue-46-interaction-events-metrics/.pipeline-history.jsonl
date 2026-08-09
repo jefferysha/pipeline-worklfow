@@ -64,3 +64,14 @@
 {"ts":"2026-08-09T18:52:08Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T16:19:48Z authority_host_session=019fe750-2345-7d01-a197-728b0017ba47"}
 {"ts":"2026-08-09T18:52:08Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"4dec48fd-768b-47e1-a25c-377cc5f066fb"}
 {"ts":"2026-08-09T19:49:38Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-09T19:54:36Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T19:54:36Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T19:54:36Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"79f14cbf-39d8-4c19-ac07-9c06441e28c3"}
+{"ts":"2026-08-09T20:08:07Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T20:08:07Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 0c180db0-1288-4ebb-9f02-b6e2dd352e3a 6"}
+{"ts":"2026-08-09T20:08:16Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-10-issue-46-interaction-events-metrics-verify-attempt-2.md"}
+{"ts":"2026-08-09T20:08:19Z","kind":"set","field":"agent_review_result","to":"fail"}
+{"ts":"2026-08-09T20:08:23Z","kind":"set","field":"codex_review_result","to":"fail"}
+{"ts":"2026-08-09T20:09:02Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T20:09:02Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 0c180db0-1288-4ebb-9f02-b6e2dd352e3a 6"}
+{"ts":"2026-08-09T20:09:06Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-10-issue-46-interaction-events-metrics-verify-attempt-2.md"}

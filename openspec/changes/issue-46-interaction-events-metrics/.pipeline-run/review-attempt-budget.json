@@ -7,7 +7,7 @@
       "scope": "verify",
       "defaultMaxAttempts": 2,
       "override": null,
-      "used": 1,
+      "used": 2,
       "active": null,
       "completed": [
         {
@@ -48,6 +48,45 @@
           "result": "fail",
           "reportPath": "openspec/changes/issue-46-interaction-events-metrics/.pipeline-run/review-attempt-reports/b3429eb2-5789-4045-a9b6-e1681d287405.aggregate.report",
           "reportDigest": "sha256:b29f78b342cc831466ef1c87f8a8224e2b8ca6e0a0f66fa93a70330c2485cd7e"
+        },
+        {
+          "attemptId": "1b9862f4-f32b-4f88-9a95-ceba7e4128d7",
+          "sequence": 2,
+          "candidateFingerprint": "workspace:sha256:c7f77c3b18c6ec56e3c37418f875d54c01b15c9f35983db6a596da7fc320fe81",
+          "maxAttempts": 2,
+          "startedAt": "2026-08-09T19:56:49Z",
+          "requiredLanes": [
+            "standards",
+            "spec",
+            "e2e"
+          ],
+          "lanes": [
+            {
+              "lane": "standards",
+              "result": "fail",
+              "reportPath": "openspec/changes/issue-46-interaction-events-metrics/.pipeline-run/review-attempt-reports/1b9862f4-f32b-4f88-9a95-ceba7e4128d7.standards.report",
+              "reportDigest": "sha256:f2f6e6233a4808569b5cda74c9b83f2e48f196a665800e4c0f61cbac68d799c8",
+              "recordedAt": "2026-08-09T20:07:21Z"
+            },
+            {
+              "lane": "spec",
+              "result": "fail",
+              "reportPath": "openspec/changes/issue-46-interaction-events-metrics/.pipeline-run/review-attempt-reports/1b9862f4-f32b-4f88-9a95-ceba7e4128d7.spec.report",
+              "reportDigest": "sha256:f2f6e6233a4808569b5cda74c9b83f2e48f196a665800e4c0f61cbac68d799c8",
+              "recordedAt": "2026-08-09T20:07:25Z"
+            },
+            {
+              "lane": "e2e",
+              "result": "pass",
+              "reportPath": "openspec/changes/issue-46-interaction-events-metrics/.pipeline-run/review-attempt-reports/1b9862f4-f32b-4f88-9a95-ceba7e4128d7.e2e.report",
+              "reportDigest": "sha256:f2f6e6233a4808569b5cda74c9b83f2e48f196a665800e4c0f61cbac68d799c8",
+              "recordedAt": "2026-08-09T20:07:28Z"
+            }
+          ],
+          "completedAt": "2026-08-09T20:07:32Z",
+          "result": "fail",
+          "reportPath": "openspec/changes/issue-46-interaction-events-metrics/.pipeline-run/review-attempt-reports/1b9862f4-f32b-4f88-9a95-ceba7e4128d7.aggregate.report",
+          "reportDigest": "sha256:d4c45d4977c185abd911c8583184c1657aa755f4e5610b0e96f33c1fe38bb807"
         }
       ]
     }
