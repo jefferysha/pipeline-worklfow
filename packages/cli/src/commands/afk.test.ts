@@ -262,7 +262,14 @@ describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
   })
 
   it('真实 CLI 分派：确实没有 ready candidate 的 empty 才保持 exit 0', async () => {
-    const d = makeDeps({ cwd, states: { w: mockState({ phase: 'open', automation: 'queued' }) } })
+    // `runAfkRound` validates active-loop wiring before scanning the queue. Keep this true-empty
+    // fixture hermetic too: without the temporary plugin root, a host-installed phase Skill can
+    // make local runs pass while a clean Linux runner fails closed before reaching the empty path.
+    const d = withEnterAfkSkillAuthority(makeDeps({
+      cwd,
+      doctor: { pluginRoot },
+      states: { w: mockState({ phase: 'open', automation: 'queued' }) },
+    }))
 
     expect(await runCli(d, ['afk', 'run'])).toBe(0)
     expect(d.outLines.join('\n')).toContain('就绪队列空')
