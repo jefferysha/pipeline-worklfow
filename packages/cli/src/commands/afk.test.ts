@@ -58,6 +58,19 @@ async function initializeCanonicalStepVisit(cwd: string, change = 'w'): Promise<
   }, '2026-08-04T00:00:00.000Z')
 }
 
+/**
+ * Hermetic bundled content for legacy AFK argv fixtures. The production preparation and locator
+ * remain real; only the temporary test plugin supplies the frozen default phase Skill that Linux
+ * CI cannot assume is installed on the host.
+ */
+async function seedDefaultPhaseSkill(cwd: string): Promise<string> {
+  const pluginRoot = join(cwd, '.test-plugin')
+  const skillDir = join(pluginRoot, 'skills', 'tenon-build')
+  await mkdir(skillDir, { recursive: true })
+  await writeFile(join(skillDir, 'SKILL.md'), '# hermetic tenon-build fixture\n', 'utf8')
+  return pluginRoot
+}
+
 /** fake exec 的 argv 记录（vi.mock 工厂被 hoist，必须用 vi.hoisted 共享可变引用）。 */
 const h = vi.hoisted(() => ({ calls: [] as string[][], executorCalls: 0, dockerAvailable: true }))
 
@@ -198,6 +211,7 @@ loops:
 
 describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
   let cwd: string
+  let pluginRoot: string
 
   beforeEach(async () => {
     h.calls.length = 0
@@ -207,6 +221,7 @@ describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
     await initializeCanonicalStepVisit(cwd)
+    pluginRoot = await seedDefaultPhaseSkill(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -217,7 +232,9 @@ describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
   })
 
   const deps = () =>
-    withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) } }))
+    withEnterAfkSkillAuthority(makeDeps({
+      cwd, doctor: { pluginRoot }, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) },
+    }))
 
   it('文本模式真实 CLI 分派：ready 非空但 Docker 不可用 → exit 1，诚实文案不能伪装成功', async () => {
     const d = deps()
@@ -253,6 +270,7 @@ describe("tenon afk run · H14 r1 P1-2 Docker 不可用退出码", () => {
 
 describe("cmdAfk('run') · image 同源三段链路（--image > automation.json > 内置默认）", () => {
   let cwd: string
+  let pluginRoot: string
   beforeEach(async () => {
     h.calls.length = 0
     h.executorCalls = 0
@@ -262,6 +280,7 @@ describe("cmdAfk('run') · image 同源三段链路（--image > automation.json 
     // scanReadyFromFs 真 readdir openspec/changes/*；字段值由 makeDeps 的 mockStore 供给
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
     await initializeCanonicalStepVisit(cwd)
+    pluginRoot = await seedDefaultPhaseSkill(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -270,7 +289,9 @@ describe("cmdAfk('run') · image 同源三段链路（--image > automation.json 
   })
 
   const deps = () =>
-    withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) } }))
+    withEnterAfkSkillAuthority(makeDeps({
+      cwd, doctor: { pluginRoot }, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) },
+    }))
 
   it('第二段（评审缺口）：无 --image 时 .pipeline/automation.json 的 image 真进 docker run argv', async () => {
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
@@ -323,12 +344,14 @@ describe("cmdAfk('run') · image 同源三段链路（--image > automation.json 
  */
 describe("cmdAfk('run') · 凭证注入(secrets 文件 × 宿主 env 合并)", () => {
   let cwd: string
+  let pluginRoot: string
   beforeEach(async () => {
     h.calls.length = 0
     cwd = await mkdtemp(join(tmpdir(), 'afk-cred-'))
     await execFileAsync('git', ['init', '-q'], { cwd })
     await mkdir(join(cwd, 'openspec', 'changes', 'w'), { recursive: true })
     await initializeCanonicalStepVisit(cwd)
+    pluginRoot = await seedDefaultPhaseSkill(cwd)
     await mkdir(join(cwd, '.pipeline'), { recursive: true })
     await writeFile(join(cwd, '.pipeline', 'loops.yaml'), W_LOOPS_YAML)
   })
@@ -338,7 +361,9 @@ describe("cmdAfk('run') · 凭证注入(secrets 文件 × 宿主 env 合并)", (
   })
 
   const deps = () =>
-    withEnterAfkSkillAuthority(makeDeps({ cwd, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) } }))
+    withEnterAfkSkillAuthority(makeDeps({
+      cwd, doctor: { pluginRoot }, states: { w: mockAfkState({ phase: 'build', automation: 'queued' }) },
+    }))
 
   it('secrets 文件有 token 而宿主 env 无(空串) → 文件值补位,docker run 注入 -e', async () => {
     vi.stubEnv('CLAUDE_CODE_OAUTH_TOKEN', '')
