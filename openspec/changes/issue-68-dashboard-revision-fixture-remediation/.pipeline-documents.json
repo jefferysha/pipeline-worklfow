@@ -47,6 +47,18 @@
           "sha256": "df11afd1c7fe050c7c6673d0696638fe120c9b429606d7288a525b1519211504",
           "readAt": "2026-08-09T22:58:39Z",
           "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "df11afd1c7fe050c7c6673d0696638fe120c9b429606d7288a525b1519211504",
+          "readAt": "2026-08-09T23:03:24Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "df11afd1c7fe050c7c6673d0696638fe120c9b429606d7288a525b1519211504",
+          "readAt": "2026-08-09T23:04:58Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",7]"
         }
       ]
     },
@@ -94,6 +106,18 @@
           "sha256": "eb087a13c0ef8a448c861f82ae1b97bd8753681f84511f2bd996202a0c6d43dd",
           "readAt": "2026-08-09T22:58:39Z",
           "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "eb087a13c0ef8a448c861f82ae1b97bd8753681f84511f2bd996202a0c6d43dd",
+          "readAt": "2026-08-09T23:03:24Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "eb087a13c0ef8a448c861f82ae1b97bd8753681f84511f2bd996202a0c6d43dd",
+          "readAt": "2026-08-09T23:04:58Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",7]"
         }
       ]
     },
@@ -135,6 +159,18 @@
           "sha256": "0db0ecf433153c4c880fea6e7b5d783437207e4d25c8f518d9895bfcb221dcfd",
           "readAt": "2026-08-09T22:58:39Z",
           "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "0db0ecf433153c4c880fea6e7b5d783437207e4d25c8f518d9895bfcb221dcfd",
+          "readAt": "2026-08-09T23:03:24Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "0db0ecf433153c4c880fea6e7b5d783437207e4d25c8f518d9895bfcb221dcfd",
+          "readAt": "2026-08-09T23:04:58Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",7]"
         }
       ]
     },
@@ -176,6 +212,18 @@
           "sha256": "cc41376fa70b1dea4caeb9461a145df8291582ea99bc46e33f0800f574d53460",
           "readAt": "2026-08-09T22:58:39Z",
           "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "cc41376fa70b1dea4caeb9461a145df8291582ea99bc46e33f0800f574d53460",
+          "readAt": "2026-08-09T23:03:24Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "cc41376fa70b1dea4caeb9461a145df8291582ea99bc46e33f0800f574d53460",
+          "readAt": "2026-08-09T23:04:58Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",7]"
         }
       ]
     },
@@ -211,6 +259,18 @@
           "sha256": "d85ea47622518eee8b7b266a079c7e8e1f983e2c58daf8fcfe5c2d89801a42a9",
           "readAt": "2026-08-09T22:58:39Z",
           "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "d85ea47622518eee8b7b266a079c7e8e1f983e2c58daf8fcfe5c2d89801a42a9",
+          "readAt": "2026-08-09T23:03:24Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "d85ea47622518eee8b7b266a079c7e8e1f983e2c58daf8fcfe5c2d89801a42a9",
+          "readAt": "2026-08-09T23:04:58Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",7]"
         }
       ]
     },
@@ -246,6 +306,18 @@
           "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
           "readAt": "2026-08-09T22:58:39Z",
           "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
+          "readAt": "2026-08-09T23:03:24Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
+          "readAt": "2026-08-09T23:04:58Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",7]"
         }
       ]
     },
@@ -281,56 +353,85 @@
           "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
           "readAt": "2026-08-09T22:58:39Z",
           "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",5]"
+        },
+        {
+          "phase": "verify",
+          "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
+          "readAt": "2026-08-09T23:03:24Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",6]"
+        },
+        {
+          "phase": "ship",
+          "sha256": "523124b3e34ca795eba978bf43f1cd2f7a984cb8ee8400f9d7aa994558abd39c",
+          "readAt": "2026-08-09T23:04:58Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",7]"
+        }
+      ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-10-issue-68-dashboard-revision-fixture-remediation-verify.md",
+      "sha256": "11c3b2e5d6a5a631d5775f841afcffc18002a1497d916d7ab65b0a9a5a1b04e2",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-09T23:03:22Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-9ec5150127e2120d7bd5f9bb1fedc3525cb6a794fb01bb032740f42e9395751c",
+        "evidenceScope": "verify",
+        "stepVisit": {
+          "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
+          "transitionSequence": 6
+        }
+      },
+      "reads": [
+        {
+          "phase": "ship",
+          "sha256": "11c3b2e5d6a5a631d5775f841afcffc18002a1497d916d7ab65b0a9a5a1b04e2",
+          "readAt": "2026-08-09T23:04:58Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",7]"
         }
       ]
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/tasks.md",
-      "sha256": "e52bd3ad38ad4e5c62a3f0002908abbfd8b777016de3dd129b7f745edf167351",
-      "producer": "tenon-build",
-      "recordedAt": "2026-08-09T21:36:29Z",
+      "sha256": "edede643f80067d5c18f588a75daeabf71d7d585d4da704ca0533b9b6907ddcb",
+      "producer": "tenon-verify",
+      "recordedAt": "2026-08-09T23:03:23Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-5f69bd3ace2a8b8573aa52e2730ad07ecb9cc5dcc9d072fa57b71db64d289e22",
-        "evidenceScope": "build",
+        "confirmationInvocationId": "invocation-1146c8282bc2b18879b8dd2d712e3569cad61f67aec0bb85aabc16e5e3502225",
+        "evidenceScope": "verify",
         "stepVisit": {
           "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
-          "transitionSequence": 3
+          "transitionSequence": 6
         }
       },
       "reads": [
         {
-          "phase": "build",
-          "sha256": "e52bd3ad38ad4e5c62a3f0002908abbfd8b777016de3dd129b7f745edf167351",
-          "readAt": "2026-08-09T21:36:32Z",
-          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",3]"
-        },
-        {
           "phase": "verify",
-          "sha256": "e52bd3ad38ad4e5c62a3f0002908abbfd8b777016de3dd129b7f745edf167351",
-          "readAt": "2026-08-09T22:54:31Z",
-          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",4]"
+          "sha256": "edede643f80067d5c18f588a75daeabf71d7d585d4da704ca0533b9b6907ddcb",
+          "readAt": "2026-08-09T23:03:24Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",6]"
         },
         {
-          "phase": "build",
-          "sha256": "e52bd3ad38ad4e5c62a3f0002908abbfd8b777016de3dd129b7f745edf167351",
-          "readAt": "2026-08-09T22:58:39Z",
-          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",5]"
+          "phase": "ship",
+          "sha256": "edede643f80067d5c18f588a75daeabf71d7d585d4da704ca0533b9b6907ddcb",
+          "readAt": "2026-08-09T23:04:58Z",
+          "visitId": "[\"140b7d7e-878f-426a-9775-8f25e7aff744\",7]"
         }
       ]
     },
     {
-      "kind": "verification-report",
-      "path": "docs/superpowers/reports/2026-08-10-issue-68-dashboard-revision-fixture-remediation-verify-attempt-1.md",
-      "sha256": "5f46369b07c905af00975de5ea5e91c2bea80842e7074dd6e0bf244f3eef8e8e",
-      "producer": "verification-before-completion",
-      "recordedAt": "2026-08-09T22:54:27Z",
+      "kind": "applied-spec",
+      "path": "openspec/changes/issue-68-dashboard-revision-fixture-remediation/applied-spec.md",
+      "sha256": "a69709a2ec6353c13a69ec867a35e536834dd5f5fa0003febd16b3ed5282b7b1",
+      "producer": "openspec-apply-change",
+      "recordedAt": "2026-08-09T23:05:10Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-7102662de38c01a262f2df4d0711f8a40c925f6e03fb997ce33bc43477cb38f5",
-        "evidenceScope": "verify",
+        "confirmationInvocationId": "invocation-6fd263f0e458a022e26453e1af5367c0fa260627241c2b7411f17cd92b43e9a0",
+        "evidenceScope": "ship",
         "stepVisit": {
           "runId": "140b7d7e-878f-426a-9775-8f25e7aff744",
-          "transitionSequence": 4
+          "transitionSequence": 7
         }
       },
       "reads": []

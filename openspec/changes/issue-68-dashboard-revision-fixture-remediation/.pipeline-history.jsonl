@@ -68,3 +68,25 @@
 {"ts":"2026-08-09T22:56:22Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
 {"ts":"2026-08-09T22:56:22Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"b8e1310f-a9fa-43ba-85e7-69c486b0f027"}
 {"ts":"2026-08-09T22:58:39Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-09T22:59:00Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe866-ddfb-7922-979d-1d153c7d09f2"}
+{"ts":"2026-08-09T22:59:53Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-09T23:01:31Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T23:01:31Z","kind":"tool","raw":"CodexSkillRead: frontend-design"}
+{"ts":"2026-08-09T23:01:31Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"af9d2eb9-6e22-43f6-bc2b-54325f4c2dfe"}
+{"ts":"2026-08-09T23:03:22Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-09T23:03:22Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion 140b7d7e-878f-426a-9775-8f25e7aff744 6"}
+{"ts":"2026-08-09T23:03:23Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-10-issue-68-dashboard-revision-fixture-remediation-verify.md"}
+{"ts":"2026-08-09T23:03:23Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-09T23:03:23Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify 140b7d7e-878f-426a-9775-8f25e7aff744 6"}
+{"ts":"2026-08-09T23:03:28Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-09T23:03:29Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-08-09T23:03:29Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-08-09T23:03:35Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-09T23:03:35Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-09T22:59:53Z authority_host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-09T23:03:56Z","kind":"tool","raw":"CodexSkillRead: e2e-testing"}
+{"ts":"2026-08-09T23:03:56Z","kind":"tool","raw":"CodexSkillRead: browser-qa"}
+{"ts":"2026-08-09T23:03:56Z","kind":"tool","raw":"CodexSkillRead: web-design-guidelines"}
+{"ts":"2026-08-09T23:03:56Z","kind":"tool","raw":"CodexSkillRead: design-taste-frontend"}
+{"ts":"2026-08-09T23:03:56Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"ee0cc52d-86cd-4b42-8398-84b53486b0e2"}
+{"ts":"2026-08-09T23:05:10Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-09T23:05:10Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change 140b7d7e-878f-426a-9775-8f25e7aff744 7"}

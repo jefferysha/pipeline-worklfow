@@ -26,9 +26,9 @@
 
 ## 验证
 
-- [ ] 对冻结候选执行最多 2 次正式 Review；E2E/CI 不计 Review，不得由 Skill 或 agent 重置预算。
-- [ ] 运行聚焦回归、`ProgressView` 相邻回归与一次稳定候选 `test:web` 完整门；按风险补 typecheck/build/共享门。
-- [ ] 以真实当前 phase receipt 登记 verification report；任何产品失败均 exact `verify-fail` 回 Build。
+- [x] 对冻结候选执行最多 2 次正式 Review；E2E/CI 不计 Review，不得由 Skill 或 agent 重置预算。
+- [x] 运行聚焦回归、`ProgressView` 相邻回归与一次稳定候选 `test:web` 完整门；按风险补 typecheck/build/共享门。
+- [x] 以真实当前 phase receipt 登记 verification report；任何产品失败均 exact `verify-fail` 回 Build。
 
 ## 交付
 
