@@ -7,6 +7,7 @@ import {
   cmdDashboard,
   REAL_DASHBOARD_RUNTIME,
   startReleasedDashboard,
+  type DashboardCommandEnvironment,
   type DashboardRuntime,
 } from './dashboard.js'
 import { createReleasedDashboardStarter } from './released-dashboard-starter.js'
@@ -20,6 +21,31 @@ interface Calls {
   expectedTransactionIds: Array<string | undefined>
   openedUrls: string[]
   terminated: number
+}
+
+const TEST_NODE_PATH = '/trusted/dashboard-test-node'
+const TEST_DASHBOARD_COMMAND_ENV: DashboardCommandEnvironment = {
+  resolveTrustedNode: () => ({
+    executable: TEST_NODE_PATH,
+    requestedPath: TEST_NODE_PATH,
+    proof: {
+      version: 1,
+      platform: process.platform,
+      requestedPath: TEST_NODE_PATH,
+      executable: {
+        path: TEST_NODE_PATH,
+        dev: 1,
+        ino: 1,
+        mode: 0o100755,
+        uid: 0,
+        size: 1,
+      },
+      parents: [],
+      sha256: '0'.repeat(64),
+    },
+    verify: () => true,
+    assert: () => {},
+  }),
 }
 
 function runtime(overrides: Partial<DashboardRuntime> = {}): { runtime: DashboardRuntime; calls: Calls } {
@@ -90,7 +116,7 @@ describe('tenon dashboard', () => {
     const deps = makeDeps()
     const { runtime: dashboard, calls } = runtime()
 
-    expect(await cmdDashboard(deps, {}, dashboard)).toBe(0)
+    expect(await cmdDashboard(deps, {}, dashboard, TEST_DASHBOARD_COMMAND_ENV)).toBe(0)
     expect(calls.launches).toHaveLength(1)
     expect(calls.launches[0]?.serverBundle).toBe('/plugin/tenon/packages/server/dist/dashboard.mjs')
     expect(calls.launches[0]?.env.TENON_DASHBOARD_PORT).toBe('18765')
@@ -102,7 +128,12 @@ describe('tenon dashboard', () => {
     const deps = makeDeps()
     const { runtime: dashboard, calls } = runtime()
 
-    expect(await cmdDashboard(deps, { port: '8765' }, dashboard)).toBe(0)
+    expect(await cmdDashboard(
+      deps,
+      { port: '8765' },
+      dashboard,
+      TEST_DASHBOARD_COMMAND_ENV,
+    )).toBe(0)
     expect(calls.launches[0]?.env.TENON_DASHBOARD_PORT).toBe('8765')
     expect(deps.outLines.join('\n')).toContain('http://127.0.0.1:8765/')
   })
@@ -111,7 +142,12 @@ describe('tenon dashboard', () => {
     const deps = makeDeps()
     const { runtime: dashboard, calls } = runtime()
 
-    expect(await cmdDashboard(deps, { background: true, open: true }, dashboard)).toBe(0)
+    expect(await cmdDashboard(
+      deps,
+      { background: true, open: true },
+      dashboard,
+      TEST_DASHBOARD_COMMAND_ENV,
+    )).toBe(0)
     expect(calls.launches).toEqual([])
     expect(calls.detached).toHaveLength(1)
     expect(calls.detached[0]?.serverBundle).toBe('/plugin/tenon/packages/server/dist/dashboard.mjs')
@@ -317,7 +353,12 @@ describe('tenon dashboard', () => {
     const deps = makeDeps()
     const { runtime: dashboard, calls } = runtime({ waitForHealthyServer: async () => null })
 
-    expect(await cmdDashboard(deps, { background: true, open: true }, dashboard)).toBe(1)
+    expect(await cmdDashboard(
+      deps,
+      { background: true, open: true },
+      dashboard,
+      TEST_DASHBOARD_COMMAND_ENV,
+    )).toBe(1)
     expect(calls.openedUrls).toEqual([])
     expect(calls.terminated).toBe(1)
     expect(deps.errLines.join('\n')).toContain('未通过健康检查')
