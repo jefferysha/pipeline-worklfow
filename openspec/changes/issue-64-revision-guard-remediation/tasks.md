@@ -23,12 +23,13 @@
 - [x] 同一 worker 补 server/SSE、Automation、Dashboard 成对投影回归，仅在测试证明旁路时改 adapter，并重建必要受控 dist。
 - [x] worker 停止写入并交接文件/命令/计数后，根代理逐文件 review；任何实现返工只发回同一 worker。
 - [x] 根代理跑完定向 Build readiness、架构/OpenSpec/comment 门，冻结新的 `build_sha` 候选。
+- [x] Review Attempt 1 的完整门暴露 4 个 revision capability fixture 失败；同一唯一 worker 仅补可信 assessor/capture 前置，根代理复核 6 files / 206 tests 全绿，未改生产语义。
 
 ## 验证
 
-- [ ] 根代理对精确候选执行 Review Attempt 1；E2E 独立计数，确认 rollback、fail-closed、跨入口与负向 fixture。
+- [x] 根代理对精确候选执行 Review Attempt 1；E2E 5 files / 435 passed，完整门 `npm test` 记录 5 failures，正式登记 FAIL 并 exact `verify-fail` 回 Build。
 - [ ] 若 Attempt 1 有 Medium/High，限定返工后执行最后的 Review Attempt 2；不得启动第 3 次。
-- [ ] 稳定候选只运行一次完整门，并以当前 host/phase 的真实 current-turn receipt 登记 verification report。
+- [ ] 不重复 Attempt 1 已执行的全仓 `npm test`；对最后候选跑修复定向矩阵与尚未执行的一次性门，并以当前 host/phase 的真实 receipt 登记 Attempt 2 report。
 
 ## 交付
 

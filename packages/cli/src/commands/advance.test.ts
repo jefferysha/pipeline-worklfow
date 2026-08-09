@@ -11,7 +11,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { BUILTIN_TRACK_DEFINITIONS, GATE_TTL_MS } from '@tenon/kernel'
+import { BUILTIN_TRACK_DEFINITIONS, createBuildRevisionToken, GATE_TTL_MS } from '@tenon/kernel'
 import type { FieldName, GuardResult, HistoryEntry, Phase, PipelineState, TrackRegistry } from '@tenon/kernel'
 import type { CliDeps, GateMarkerInfo } from '../deps.js'
 import {
@@ -37,6 +37,11 @@ const READY: Partial<Record<FieldName, string | string[]>> = {
   agent_review_result: 'pass',
   codex_review_result: 'pass',
 }
+
+const TEST_BUILD_TOKEN = createBuildRevisionToken('git', 'a'.repeat(40), {
+  repository: 'advance-test-repository',
+  worktree: 'advance-test-worktree',
+})
 
 const approvedReview = (
   phase: string,
@@ -119,6 +124,8 @@ function makeAdv(opts: {
     cwd: '/repo',
     io: { out: (l: string) => out.push(l), err: (l: string) => err.push(l) },
     clock: () => FIXED_CLOCK,
+    // Build's typed capture action must produce a canonical token; do not pre-seed build_sha.
+    captureBuildRevision: async () => TEST_BUILD_TOKEN.value,
     listChanges: async () => [],
     guardCtx: (name: string) => ({
       changeDirRel: `openspec/changes/${name}`,
@@ -171,6 +178,7 @@ describe('advance —— auto-transition 中间档停点规则（B14/D12，快�
     // 真推进一步进入 verify（复核相位）后停，绝不跑到 ship/archive
     expect(a.store.phase()).toBe('verify')
     expect(a.store.write.calls).toHaveLength(1)
+    expect(await a.store.get('/repo/openspec/changes/demo', 'build_sha')).toBe(TEST_BUILD_TOKEN.value)
     expect(a.out.some((l) => l.includes('[STOP]') && l.includes('复核相位'))).toBe(true)
   })
 
