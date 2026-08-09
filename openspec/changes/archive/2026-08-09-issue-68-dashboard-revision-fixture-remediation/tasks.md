@@ -32,10 +32,10 @@
 
 ## 交付
 
-- [ ] 应用 delta spec，提交并推送 #68 分支，创建含 `Closes #68`、`Closes #64`、`Closes #42` 的非草稿 PR。
-- [ ] 只允许一个 exact-head CI run，分别核对 mergeability、checks、review threads 与残余风险；不 merge、不发布。
+- [x] 应用 delta spec，提交并推送 #68 分支，创建含 `Closes #68`、`Closes #64`、`Closes #42` 的非草稿 PR。
+- [x] 只允许一个 exact-head CI run，分别核对 mergeability、checks、review threads 与残余风险；不 merge、不发布。
 
 ## 归档
 
-- [ ] 在 Ship 与 exact-head CI 证据完成后归档唯一 Change，保留 #42/#64 历史不变。
-- [ ] 最终回报 branch、exact HEAD、Change、Review 次数、测试、PR、CI 与残余风险。
+- [x] 在 Ship 与 exact-head CI 证据完成后归档唯一 Change，保留 #42/#64 历史不变。
+- [x] 最终回报 branch、exact HEAD、Change、Review 次数、测试、PR、CI 与残余风险。
