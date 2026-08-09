@@ -128,8 +128,13 @@ tenon document status <change-name> --json
 tenon check <change-name>
 ```
 
-At Build completion, status contains the frozen `build_sha` or in-place
-workspace fingerprint used by Verify.
+At Build completion, `build_sha` contains a canonical `build:v1` token bound to
+the revision, physical repository, and physical worktree. Old bare Git SHAs or
+workspace baselines are rejected and must be recaptured in Build; the runtime
+never backfills them. A missing, malformed, stale, or unproven token blocks
+Verify with `verify-build-revision-untrusted` and remediation
+`return-to-build-and-capture-current-revision`. The same closed blocker is
+used by readiness, HTTP/SSE projections, and AFK settlement.
 
 ## Common failures
 
@@ -146,6 +151,12 @@ documents from Build.
 
 Verify must inspect the frozen baseline. A correction belongs on the
 `verify-fail → build` return path.
+
+### Verify reports an untrusted build revision
+
+Return to Build and run `build-complete` to capture a fresh `build:v1` token.
+Do not set or backfill `build_sha` by hand; the transition record is part of
+the provenance proof.
 
 ## Next action
 

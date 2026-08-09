@@ -1,0 +1,273 @@
+{
+  "version": 1,
+  "contract": "openspec-v1",
+  "createdAt": "2026-08-09T16:19:12Z",
+  "records": [
+    {
+      "kind": "proposal",
+      "path": "openspec/changes/issue-42-trustworthy-build-revision/proposal.md",
+      "sha256": "3826b0ddfca6cd51b139175cbcf2fdeaf91f669b7c79701f46962d640e997218",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-09T16:34:39Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-00ffe6b30a0a45603033d8baac29789414a399817973734435af5aee09d5f837",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "3826b0ddfca6cd51b139175cbcf2fdeaf91f669b7c79701f46962d640e997218",
+          "readAt": "2026-08-09T16:35:03Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "3826b0ddfca6cd51b139175cbcf2fdeaf91f669b7c79701f46962d640e997218",
+          "readAt": "2026-08-09T16:38:35Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3826b0ddfca6cd51b139175cbcf2fdeaf91f669b7c79701f46962d640e997218",
+          "readAt": "2026-08-09T16:39:16Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "openspec-design",
+      "path": "openspec/changes/issue-42-trustworthy-build-revision/design.md",
+      "sha256": "4ca47e20a3bb55f18bbd9ddc574d6b36af27b20a6aedc3e9f583d79515f09835",
+      "producer": "tenon-explore",
+      "recordedAt": "2026-08-09T16:34:43Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-c0195a15d9b6d3764045be38e46d9e9a41723f3d1f38327b3959b07cc9452a10",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "explore",
+          "sha256": "4ca47e20a3bb55f18bbd9ddc574d6b36af27b20a6aedc3e9f583d79515f09835",
+          "readAt": "2026-08-09T16:35:03Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",1]"
+        },
+        {
+          "phase": "spec",
+          "sha256": "4ca47e20a3bb55f18bbd9ddc574d6b36af27b20a6aedc3e9f583d79515f09835",
+          "readAt": "2026-08-09T16:38:35Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4ca47e20a3bb55f18bbd9ddc574d6b36af27b20a6aedc3e9f583d79515f09835",
+          "readAt": "2026-08-09T16:39:16Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "adr",
+      "path": "docs/adr/2026-08-10-issue-42-trustworthy-build-revision-explore.md",
+      "sha256": "3b4d599b9297a64b6192a2b5b8ec3e4d2ed310a7e04922ad22c910db00c1cb2d",
+      "producer": "brainstorming",
+      "recordedAt": "2026-08-09T16:34:58Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-7c246d70533204f2f10f60056d5905890e2d774f07a6bd5ba0f7071013a5d7e2",
+        "evidenceScope": "explore",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 1
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "3b4d599b9297a64b6192a2b5b8ec3e4d2ed310a7e04922ad22c910db00c1cb2d",
+          "readAt": "2026-08-09T16:38:35Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "3b4d599b9297a64b6192a2b5b8ec3e4d2ed310a7e04922ad22c910db00c1cb2d",
+          "readAt": "2026-08-09T16:39:16Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/issue-42-trustworthy-build-revision/specs/trustworthy-build-revision/spec.md",
+      "sha256": "49dc409fe7179557f178e4be2e59ff7702efcffd10fbecccf9ead974ccb33bb1",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-09T16:37:56Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-1d82cfc948df65d8015052e4c6cc460e864b88331b2c2c8d890b4945db7d434d",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "49dc409fe7179557f178e4be2e59ff7702efcffd10fbecccf9ead974ccb33bb1",
+          "readAt": "2026-08-09T16:39:16Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/issue-42-trustworthy-build-revision/specs/workspace-verification-integrity/spec.md",
+      "sha256": "f17f5baca9b2c4e22ca4d3c8918f66ead2cd0552a19fc3d480628e529f8ba74a",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-09T16:38:00Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-1439e8149566ce1b20a6fb83387259e307c642577bd38788003fd0aa1231e5d8",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f17f5baca9b2c4e22ca4d3c8918f66ead2cd0552a19fc3d480628e529f8ba74a",
+          "readAt": "2026-08-09T16:39:16Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "delta-spec",
+      "path": "openspec/changes/issue-42-trustworthy-build-revision/specs/workflow-definition/spec.md",
+      "sha256": "f0759886ba662a3168f29328e262b861b5537c44dddc428d6f9b951abfb00600",
+      "producer": "openspec-propose",
+      "recordedAt": "2026-08-09T16:38:03Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-f8fbab0ea21a18723f4b5a85aaca2217eb6e47ba07e6f3ba8c048f528cffab62",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "f0759886ba662a3168f29328e262b861b5537c44dddc428d6f9b951abfb00600",
+          "readAt": "2026-08-09T16:39:16Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-plan",
+      "path": "docs/superpowers/plans/2026-08-10-issue-42-trustworthy-build-revision.md",
+      "sha256": "d8bf42109ba9e11303ceb231caf886d9c498decd5a97de935b19fd4f3e73705b",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T16:38:14Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-c8dbf093381027e0b44843744dd68027cf871147e0bb5d95f3fad1f159047f48",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "d8bf42109ba9e11303ceb231caf886d9c498decd5a97de935b19fd4f3e73705b",
+          "readAt": "2026-08-09T16:39:16Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "plan",
+      "path": "docs/superpowers/plans/2026-08-10-issue-42-trustworthy-build-revision.md",
+      "sha256": "d8bf42109ba9e11303ceb231caf886d9c498decd5a97de935b19fd4f3e73705b",
+      "producer": "writing-plans",
+      "recordedAt": "2026-08-09T16:38:19Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-f480774df072a91e14368e497cda77390d1cad70a596696cc00894c65cc6f157",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "d8bf42109ba9e11303ceb231caf886d9c498decd5a97de935b19fd4f3e73705b",
+          "readAt": "2026-08-09T16:39:16Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "superpower-design",
+      "path": "docs/superpowers/specs/2026-08-10-issue-42-trustworthy-build-revision-design.md",
+      "sha256": "5118e41735b96d9e29e49fb8abdb2ab4268dd7fa795a10937b9ee25d6545ec9f",
+      "producer": "tenon-spec",
+      "recordedAt": "2026-08-09T16:38:31Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-99727643532b7d0436f8bebb7fb71ac5f2a0a8438c1522863dedaf174b02e352",
+        "evidenceScope": "spec",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 2
+        }
+      },
+      "reads": [
+        {
+          "phase": "spec",
+          "sha256": "5118e41735b96d9e29e49fb8abdb2ab4268dd7fa795a10937b9ee25d6545ec9f",
+          "readAt": "2026-08-09T16:38:35Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",2]"
+        },
+        {
+          "phase": "build",
+          "sha256": "5118e41735b96d9e29e49fb8abdb2ab4268dd7fa795a10937b9ee25d6545ec9f",
+          "readAt": "2026-08-09T16:39:16Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/issue-42-trustworthy-build-revision/tasks.md",
+      "sha256": "aaf598fe6c6a2a70a996550a9c3775ed95a16cab0d82ba8b9423f9a349b7d209",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-09T18:18:13Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-1b0e790a27801542b983f9008d8c7302585ebc5bfc5ad73c872b8b171e16ee42",
+        "evidenceScope": "build",
+        "stepVisit": {
+          "runId": "e9974d7e-2344-4219-950b-35662fe5c703",
+          "transitionSequence": 3
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "aaf598fe6c6a2a70a996550a9c3775ed95a16cab0d82ba8b9423f9a349b7d209",
+          "readAt": "2026-08-09T18:18:17Z",
+          "visitId": "[\"e9974d7e-2344-4219-950b-35662fe5c703\",3]"
+        }
+      ]
+    }
+  ]
+}

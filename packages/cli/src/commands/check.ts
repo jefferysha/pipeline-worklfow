@@ -18,6 +18,10 @@ import {
   isDocumentPolicyStep,
   resolveStep,
   resolveWorkflowName,
+  assessBuildRevisionTrust,
+  probeBuildRevisionIdentity,
+  readValidatedTransitionHead,
+  safeRevisionHash,
   TASK_PLAN_CURRENT_FILE,
   TASK_PLAN_LIMITS,
   TASK_PLAN_STATE_DIR,
@@ -210,8 +214,9 @@ async function checkGraphWorkflow(
     deps.io.err(`ERROR: step '${currentStepId}' 不在 workflow '${plan.id}' 里`)
     return 1
   }
-  // 能力注入让 file-exists/build-head-unchanged 类新 guard 在预览里也忠实评估（缺注入 = 降级
-  // skipped）；tasks-at-least/nonempty-output 只用 readText/字段面，不受此影响。
+  // 能力注入让 file-exists/build-head-unchanged 类 guard 在预览里忠实评估；revision assessor
+  // 缺失时显式 fail-closed，不把 Verify 信任面降级为 skipped。tasks-at-least/nonempty-output
+  // 只用 readText/字段面，不受此影响。
   const result = await evaluateWorkflowIrStepGuards(state, step, {
     changeDirAbs: dir,
     fileExists: deps.guardCtx?.(name)?.fileExists,
@@ -223,6 +228,35 @@ async function checkGraphWorkflow(
         })
       : undefined,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(deps.cwd, dir, name),
+    assessBuildRevision: deps.assessBuildRevision ?? (async (request) => {
+      const identity = deps.buildRevisionIdentity === undefined
+        ? await probeBuildRevisionIdentity(deps.cwd)
+        : await deps.buildRevisionIdentity()
+      const observe = async () => {
+        const kind = request.isolation === 'in-place' ? 'workspace' as const : 'git' as const
+        const revision = kind === 'workspace'
+          ? await deps.workspaceFingerprint?.(name) ?? ''
+          : await deps.gitHeadSha?.() ?? ''
+        if (!identity) throw new Error('build revision identity unavailable')
+        return { kind, revision, identity }
+      }
+      const provenance = async () => {
+        const validated = await readValidatedTransitionHead(dir)
+        if (!validated) return undefined
+        const { current, record } = validated
+        const stateBuildSha = current.state.fields.build_sha
+        return {
+          currentStep: String(current.state.fields.phase ?? ''),
+          stateHash: safeRevisionHash(current.state.fields),
+          stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(',') : stateBuildSha,
+          recordTo: record.to,
+          buildShaEffects: record.effects
+            .filter((effect) => effect.field === 'build_sha')
+            .map((effect) => typeof effect.to === 'string' ? effect.to : ''),
+        }
+      }
+      return assessBuildRevisionTrust({ ...request, observe, provenance })
+    }),
   })
   const migration = str(state.fields.phase) === 'ship'
     && plan.capabilities.documents.governed

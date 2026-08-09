@@ -1,7 +1,18 @@
-import type { EffectiveWorkflowPlan, PipelineState } from '@tenon/kernel'
+import { parseBuildRevisionToken, type EffectiveWorkflowPlan, type PipelineState } from '@tenon/kernel'
 import type { CliDeps } from '../deps.js'
 
 const REVIEW_CANDIDATE = /^(?:sha256:|workspace:sha256:)[0-9a-f]{64}$|^git:[0-9a-f]{40}(?:[0-9a-f]{24})?$/
+
+/** Normalize the current Build token to the existing review-budget candidate ABI.  The token is
+ * accepted only in its canonical build:v1 grammar; legacy candidate fingerprints remain valid.
+ * No trimming or hash recomputation is performed here, so caller-supplied non-canonical values
+ * fail closed before they can be compared with or persisted as a candidate. */
+export function normalizeReviewCandidate(value: unknown): string | undefined {
+  const token = parseBuildRevisionToken(value)
+  if (token !== undefined) return `sha256:${token.revisionHash}`
+  if (typeof value === 'string' && REVIEW_CANDIDATE.test(value)) return value
+  return undefined
+}
 
 function scalar(value: unknown): string | null {
   if (typeof value === 'string') return value
@@ -22,7 +33,8 @@ export async function frozenReviewCandidate(
   if (step === undefined) throw new Error(`当前 Review step '${scope}' 不在 frozen workflow 中`)
   const declared = [...new Set(step.inputs.flatMap((input) => {
     const value = scalar(Reflect.get(state.fields, input.field))
-    return value !== null && REVIEW_CANDIDATE.test(value) ? [value] : []
+    const candidate = value === null ? undefined : normalizeReviewCandidate(value)
+    return candidate === undefined ? [] : [candidate]
   }))]
   if (declared.length > 1) throw new Error(`Review step '${scope}' 存在多个 candidate-shaped frozen input`)
   if (declared[0] !== undefined) return declared[0]
@@ -30,6 +42,7 @@ export async function frozenReviewCandidate(
     throw new Error(`Review step '${scope}' 未声明 candidate input，且缺少 workspace fingerprint capability`)
   }
   const current = (await deps.workspaceFingerprint(change)).trim()
-  if (!REVIEW_CANDIDATE.test(current)) throw new Error('workspace fingerprint capability 返回非法 candidate')
-  return current
+  const candidate = normalizeReviewCandidate(current)
+  if (candidate === undefined) throw new Error('workspace fingerprint capability 返回非法 candidate')
+  return candidate
 }

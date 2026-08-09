@@ -57,7 +57,13 @@ export type StepTransitionPlan =
   | { readonly ok: true; readonly from: string; readonly to: string; readonly actions: readonly ActionConfig[] }
   | { readonly ok: false; readonly kind: 'step-not-in-graph'; readonly stepId: string }
   | { readonly ok: false; readonly kind: 'event-unsupported'; readonly stepId: string; readonly available: readonly string[] }
-  | { readonly ok: false; readonly kind: 'guard-failed'; readonly stepId: string; readonly failures: readonly string[] }
+  | {
+      readonly ok: false
+      readonly kind: 'guard-failed'
+      readonly stepId: string
+      readonly failures: readonly string[]
+      readonly blockers?: readonly import('./build-revision.js').BuildRevisionBlocker[]
+    }
 
 /**
  * 非 default workflow 的转换判定编排（G2 P2：输入收编译产物 WorkflowIR，不再是裸 WorkflowDef）：
@@ -89,7 +95,13 @@ export async function planStepTransition(
   const guards = mergeLifecycleGuards([...step.guards, ...edge.guards], additionalGuards)
   const guardResult = await evaluateCompiledGuards(guards, stepId, buildStepGuardInput(state, ctx))
   if (!guardResult.pass) {
-    return { ok: false, kind: 'guard-failed', stepId, failures: guardResult.failures }
+    return {
+      ok: false,
+      kind: 'guard-failed',
+      stepId,
+      failures: guardResult.failures,
+      ...(guardResult.blockers === undefined ? {} : { blockers: guardResult.blockers }),
+    }
   }
   return { ok: true, from: stepId, to: edge.to, actions: edge.actions }
 }

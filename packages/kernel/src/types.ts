@@ -360,6 +360,8 @@ export interface TransitionResult {
 export interface GuardResult {
   pass: boolean
   failures: string[]
+  /** Structured hard blockers used by the revision trust boundary. */
+  blockers?: readonly import('./workflow/build-revision.js').BuildRevisionBlocker[]
   /**
    * 非阻断告警（BACKLOG #12 加法扩展）：老 guard 的 yellow 提示面
    * （coverage 豁免 / 覆盖阻塞层明细等）。无告警时省略本键（lite 调用面 toEqual 兼容）。

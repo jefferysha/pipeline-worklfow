@@ -47,7 +47,10 @@ description: "Pipeline Phase 5: Verify · 三轨并行验证。PM Track 做原�
 - `phase=verify`
 - `build_mode` / `isolation` 已设
 - `tasks.md` 全勾选
-- `build_sha` 已由 `build-complete` 冻结（`tenon get <name> build_sha`）：branch/worktree 为 Git SHA；in-place 为 `workspace:sha256:<内容基线>`
+- `build_sha` 已由 `build-complete` 冻结为 canonical token（`tenon get <name> build_sha`）：
+  `build:v1:<git|workspace>:<revision_hash>:<repository_hash>:<worktree_hash>`。token 是审查输入身份，
+  不是裸 SHA 或可回填的 workspace baseline；Verify 必须重新评估当前 HEAD/workspace、physical identity、
+  provenance 与 canonical state digest。
 
 ## 步骤
 
@@ -79,6 +82,10 @@ ATTEMPT_JSON="$(tenon review-attempt begin "$TENON_CHANGE_NAME" \
   --candidate "$BUILD_BASELINE" --json)" || exit $?
 ATTEMPT_ID="$(node -e 'const x=JSON.parse(process.argv[1]); process.stdout.write(x.attemptId)' "$ATTEMPT_JSON")"
 ```
+
+`review-attempt begin` 接受当前 canonical `build:v1` token，并在比较/存储前规范化为既有
+`sha256:<revision_hash>` candidate ABI；同一 token resume 不增加 `used`，token 变化必须产生新的
+candidate/attempt。非 canonical token、旧裸 SHA、任意 workspace baseline、空白包裹值或伪造输入均拒绝。
 
 同一候选重启或上下文恢复时，`begin` 返回相同 `ATTEMPT_ID` 且不增加 used。Standards/Spec reviewer、
 security、E2E/API/browser/visual/public acceptance、Codex 轨都消费这个 id；lane 重试、E2E shard 和进程
@@ -137,22 +144,27 @@ tenon set "$TENON_CHANGE_NAME" branch_status handled
 
 ⚡ **HARD RULE**：以下 3 轨**必须在同一条 Agent 消息**内并行 dispatch。
 
-> **三轨同读冻结的 `build_sha` 基线（barrier）**：verify 审的是 build-complete 时冻结的固定靶，不是漂移中的 working tree。先取基线并按类型分流：
+> **三轨同读冻结的 `build_sha` token（barrier）**：verify 审的是 build-complete 时冻结的固定靶，不是漂移中的 working tree。先取 token 并按 kind 分流：
 > ```bash
 > BUILD_BASELINE="$(tenon get "$TENON_CHANGE_NAME" build_sha)"
 > case "$BUILD_BASELINE" in
->   workspace:sha256:*)
->     # in-place：不把内容基线传给 git checkout/diff。验证期间不得改实现/配置；
->     # verify-pass 会重新计算同一工作区内容基线，任何漂移都会真实拒绝。
->     echo "[verify] in-place workspace baseline: $BUILD_BASELINE"
+>   build:v1:workspace:*)
+>     # in-place token：审查同一 workspace content identity；不得把 token 当作 raw path/baseline 回填。
+>     echo "[verify] workspace build token captured"
+>     ;;
+>   build:v1:git:*)
+>     # branch/worktree token：由 capability 读取当前 HEAD + physical repository/worktree identity，不能只比裸 SHA。
+>     echo "[verify] git build token captured"
 >     ;;
 >   *)
->     # branch/worktree：这是 Git revision，可作为提交区间/checkout 靶。
->     BUILD_SHA="$BUILD_BASELINE"
+>     echo "[verify] untrusted build revision; return to build and capture current revision" >&2
+>     exit 2
 >     ;;
 > esac
 > ```
-> reviewer agent / e2e 审该基线对应的代码状态；只有 Git 分支才可让 Codex 轨审 `BUILD_SHA` 提交区间 diff。in-place 的三轨审当前未漂移工作区，并由最终 `verify-pass` barrier 再次证明内容不变。
+> reviewer agent / e2e 审该 token 对应的代码状态；Git token 还需审当前 HEAD/identity 绑定，workspace token
+> 需审当前内容 identity。任一 assessment 失败都保留 `verify-build-revision-untrusted`、reason、stateHash/
+> revisionHash 与 remediation=`return-to-build-and-capture-current-revision`，不允许 set/backfill。
 
 **并发实现指南**：
 - 主 agent 一次性发起 3 个 tool 调用（2 个 Agent + 1 个 Bash）；含 UI 改动时再加第四轨 `tenon-design-reviewer` agent（视觉），同消息一并发起

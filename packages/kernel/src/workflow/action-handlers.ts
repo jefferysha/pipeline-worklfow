@@ -11,7 +11,7 @@
  * workflow 获得改 phase/workflow 等系统字段的通用脚本能力。
  */
 import type { ActionConfig, ActionInput, ActionOutcome } from './ir.js'
-import { isWorkspaceBaseline } from '../workspace/fingerprint.js'
+import { BuildRevisionCaptureError, safeRevisionHash } from './build-revision.js'
 
 function fieldString(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value.join(',') : (value ?? '')
@@ -28,24 +28,32 @@ export type ActionHandlerRegistry = {
 
 export const ACTION_HANDLERS: ActionHandlerRegistry = Object.freeze({
   /** build-complete 的不可变验证靶：
-   *  · branch/worktree 保持老仓语义：HEAD trim 后非空 → 冻结进 build_sha；取不到 → warning。
-   *  · in-place 不能用未变化的 HEAD 伪装实现未漂移：强制冻结内容寻址的 workspace baseline；能力
-   *    缺失或返回非法基线一律 fail-closed，绝不写一个无法复验的假 SHA。
+   *  · 所有 isolation 都必须由可信 capture capability 生成 canonical build:v1 token。
+   *  · in-place 绑定内容寻址的 workspace baseline；branch/worktree 绑定物理 Git identity 与 object ID。
+   *    能力缺失、返回非法 token 或求值异常一律 fail-closed，绝不写一个无法复验的假 SHA。
    */
   'freeze-build-sha': async (_config, input) => {
-    if (fieldString(input.fields.isolation) === 'in-place') {
-      if (!input.workspaceFingerprint) {
-        throw new Error('in-place build requires workspaceFingerprint capability')
-      }
-      const baseline = (await input.workspaceFingerprint()).trim()
-      if (!isWorkspaceBaseline(baseline)) {
-        throw new Error(`workspaceFingerprint 返回了非法基线: ${baseline}`)
-      }
-      return { patch: { build_sha: baseline }, signals: [] }
+    const isolation = fieldString(input.fields.isolation)
+    if (isolation !== 'branch' && isolation !== 'worktree' && isolation !== 'in-place') {
+      throw new BuildRevisionCaptureError('isolation-mismatch', safeRevisionHash(input.fields))
     }
-    const sha = (await input.gitHeadSha?.())?.trim() ?? ''
-    if (sha !== '') return { patch: { build_sha: sha }, signals: [] }
-    return { patch: {}, signals: [{ kind: 'build-sha-missing' }] }
+    if (!input.captureBuildRevision) {
+      throw new BuildRevisionCaptureError('capability-unavailable', safeRevisionHash(input.fields))
+    }
+    try {
+      // The capture capability already returns the canonical token.  Do not trim here: accepting
+      // surrounding whitespace would make a non-canonical value appear valid at the action seam,
+      // while the Verify assessor (and token parser) correctly rejects it.
+      const token = await input.captureBuildRevision(isolation)
+      const expectedKind = isolation === 'in-place' ? 'workspace' : 'git'
+      if (!new RegExp(`^build:v1:${expectedKind}:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$`).test(token)) {
+        throw new BuildRevisionCaptureError('malformed', safeRevisionHash(input.fields))
+      }
+      return { patch: { build_sha: token }, signals: [] }
+    } catch (error) {
+      if (error instanceof BuildRevisionCaptureError) throw error
+      throw new BuildRevisionCaptureError('evaluation-error', safeRevisionHash(input.fields))
+    }
   },
 
   /** 进入任一新的实现 visit 时，旧候选的 Build 收敛审查不得继承。 */

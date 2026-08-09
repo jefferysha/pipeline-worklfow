@@ -525,11 +525,14 @@ steps:
     })
 
     expect(await cmdCheck(deps, 'demo')).toBe(2)
-    expect(deps.outLines).toEqual([
-      '[CHECK] demo (phase=s1)',
-      `  [FAIL] step 's1' 要求当前工作区内容等于 build 冻结基线（build_sha=${baseline}，当前=workspace:sha256:${'b'.repeat(64)}）`,
-      '  [FAIL] 共 1 项未通过',
-    ])
+    expect(deps.outLines).toHaveLength(3)
+    expect(deps.outLines[0]).toBe('[CHECK] demo (phase=s1)')
+    expect(deps.outLines[1]).toMatch(
+      /^  \[FAIL\] verify-build-revision-untrusted reason=malformed remediation=return-to-build-and-capture-current-revision stateHash=sha256:[a-f0-9]{64}$/,
+    )
+    expect(deps.outLines[1]).not.toContain(baseline)
+    expect(deps.outLines[1]).not.toContain('workspace:sha256:bbbb')
+    expect(deps.outLines[2]).toBe('  [FAIL] 共 1 项未通过')
     expect(gitCalls).toBe(0)
   })
 

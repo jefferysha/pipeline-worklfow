@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   BUILTIN_TRACK_DEFINITIONS,
+  createBuildRevisionToken,
   createEffectiveSkillResolver,
   completedWorkflowSkillsSinceStepEntry,
   createFlowEngine,
@@ -35,6 +36,7 @@ import {
   stateStorageExistsSync,
   withTrackRegistryLock,
   type ExtendedManifestData,
+  type BuildRevisionIdentity,
   type FieldName,
   type TrackValidationContext,
 } from '@tenon/kernel'
@@ -74,6 +76,14 @@ function trackValidationContext(repoRoot: string, manifest: ExtendedManifestData
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 export const MANIFEST = join(REPO_ROOT, 'templates', 'manifest.yaml')
 export const FIXED_CLOCK = '2026-07-07T00:00:00Z'
+export const TEST_GIT_HEAD = 'd'.repeat(40)
+export const TEST_BUILD_REVISION_IDENTITY: BuildRevisionIdentity = {
+  repository: 'integration-test-repository',
+  worktree: 'integration-test-worktree',
+}
+export const TEST_GIT_BUILD_TOKEN = createBuildRevisionToken(
+  'git', TEST_GIT_HEAD, TEST_BUILD_REVISION_IDENTITY,
+).value
 
 export interface Harness {
   cwd: string
@@ -338,8 +348,14 @@ export function realDeps(cwd: string, out: string[], err: string[]): CliDeps {
     readHistoryRaw: async (dir) => { try { return await readFile(join(dir, '.pipeline-history.jsonl'), 'utf8') } catch { return '' } },
     writeBreadcrumb: (dir, content) => writeFile(join(dir, '.breadcrumb'), content, 'utf8'),
     history: createHistoryWriter(),
-    gitHeadSha: async () => 'DEADBEEF',
+    gitHeadSha: async () => TEST_GIT_HEAD,
     workspaceFingerprint: () => fingerprintWorkspace(cwd),
+    buildRevisionIdentity: async () => TEST_BUILD_REVISION_IDENTITY,
+    captureBuildRevision: async (isolation) => createBuildRevisionToken(
+      isolation === 'in-place' ? 'workspace' : 'git',
+      isolation === 'in-place' ? await fingerprintWorkspace(cwd) : TEST_GIT_HEAD,
+      TEST_BUILD_REVISION_IDENTITY,
+    ).value,
     writeReviewMarker: (content) => writeFile(join(cwd, '.pipeline-pending-review'), content, 'utf8'),
     clearReviewMarker: () => rm(join(cwd, '.pipeline-pending-review'), { force: true }),
     pluginVersion: '0.1.0',

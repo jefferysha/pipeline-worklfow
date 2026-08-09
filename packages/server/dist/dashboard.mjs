@@ -2,7 +2,7 @@
 import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);
 
 // packages/server/src/main.ts
-import { execFile as execFile6 } from "node:child_process";
+import { execFile as execFile7 } from "node:child_process";
 import { mkdirSync as mkdirSync5, unlinkSync as unlinkSync4, writeFileSync as writeFileSync6 } from "node:fs";
 import { dirname as dirname18, join as join68 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
@@ -4402,6 +4402,7 @@ function transitionRecordToHistoryEntry(record5) {
 }
 
 // packages/kernel/dist/state/run-revision-head-reader.js
+import { lstat as lstat5, readFile as readFile5 } from "node:fs/promises";
 import { join as join10 } from "node:path";
 var MAX_LEGACY_REVISIONS = 64;
 var MAX_SYNC_CANONICAL_BYTES = 8 * 1024 * 1024;
@@ -4413,6 +4414,20 @@ function previousRevisionIdFor2(revision) {
 }
 function revisionFileName2(revision, revisionId) {
   return `${String(revision).padStart(6, "0")}-${revisionId}.json`;
+}
+async function readRegularTextIfExists2(pathname) {
+  try {
+    const entry = await lstat5(pathname);
+    if (entry.isSymbolicLink() || !entry.isFile()) {
+      throw new RunStateCorruptError(`${pathname}: canonical \u6587\u4EF6\u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6`);
+    }
+    return await readFile5(pathname, "utf8");
+  } catch (error2) {
+    if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT") {
+      return void 0;
+    }
+    throw error2;
+  }
 }
 function transitionRelativePath(revision) {
   const metadata = revision.state.runMetadata;
@@ -4429,6 +4444,35 @@ function validateCommittingRecord(cursor, previous, raw) {
     throw new RunStateCorruptError(`TransitionRecord \u635F\u574F: ${String(error2)}`);
   }
   return assertTransitionRevisionLink(cursor, parsed, raw, previous);
+}
+async function readValidatedTransitionHead(changeDir) {
+  const current = await readCurrentRunRevision(changeDir);
+  const metadata = current?.state.runMetadata;
+  if (current === void 0 || metadata?.transitionHead === void 0 || metadata.transitionSequence < 1)
+    return void 0;
+  const anchored = await validateAnchoredTransitionHead(current, (relativePath) => readRegularTextIfExists2(join10(changeDir, relativePath)), changeDir);
+  if (anchored !== void 0)
+    return { current, record: anchored };
+  let cursor = current;
+  for (let traversed = 0; traversed < MAX_LEGACY_REVISIONS; traversed++) {
+    if (cursor.revision === 0)
+      break;
+    const previousId = previousRevisionIdFor2(cursor);
+    const previous = await readImmutableRunRevision(changeDir, cursor.revision - 1, previousId);
+    const bound = assertDirectPredecessor(cursor, previous);
+    if (cursor.mutation.kind === "transition" && cursor.mutation.transitionRecordId === metadata.transitionHead) {
+      const raw = await readRegularTextIfExists2(join10(changeDir, transitionRelativePath(cursor)));
+      if (raw === void 0)
+        throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
+      const record5 = validateCommittingRecord(cursor, bound, raw);
+      if (record5.sequence !== metadata.transitionSequence || record5.runId !== metadata.runId) {
+        throw new RunStateCorruptError("canonical transition head \u4E0E\u63D0\u4EA4 revision \u4E0D\u4E00\u81F4");
+      }
+      return { current, record: record5 };
+    }
+    cursor = bound;
+  }
+  throw new RunStateCorruptError("legacy canonical transition head \u8D85\u8FC7\u517C\u5BB9\u6821\u9A8C\u4E0A\u9650\u6216\u7F3A\u63D0\u4EA4 revision");
 }
 function readValidatedTransitionHeadFromSync(readText, sourceRoot = "canonical state") {
   let totalBytes = 0;
@@ -4499,7 +4543,7 @@ function skillsEquivalent(left, right) {
 }
 
 // packages/kernel/dist/skill-invocation/repository.js
-import { lstat as lstat7, open as open2, realpath as realpath3 } from "node:fs/promises";
+import { lstat as lstat8, open as open2, realpath as realpath3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute3, join as join13, relative as relative3, resolve as resolve3, sep as sep4 } from "node:path";
 
 // packages/kernel/dist/state/document-ledger.js
@@ -5136,7 +5180,7 @@ function initialDocumentLedgerContent(createdAt) {
 
 // packages/kernel/dist/state/lock.js
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { link as link2, lstat as lstat5, mkdir as mkdir4, readFile as readFile5, rename as rename2, rm, rmdir, unlink as unlink2, utimes, writeFile as writeFile2 } from "node:fs/promises";
+import { link as link2, lstat as lstat6, mkdir as mkdir4, readFile as readFile6, rename as rename2, rm, rmdir, unlink as unlink2, utimes, writeFile as writeFile2 } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -5163,7 +5207,7 @@ function ownRecord3(value) {
 async function processStartIdentity(pid) {
   try {
     if (process.platform === "linux") {
-      const raw = await readFile5(`/proc/${pid}/stat`, "utf8");
+      const raw = await readFile6(`/proc/${pid}/stat`, "utf8");
       const close = raw.lastIndexOf(")");
       if (close < 0)
         return null;
@@ -5240,7 +5284,7 @@ async function processState(pid, expectedStart) {
 async function observeLock(lockDir) {
   let dirItem;
   try {
-    dirItem = await lstat5(lockDir);
+    dirItem = await lstat6(lockDir);
   } catch {
     return null;
   }
@@ -5250,18 +5294,18 @@ async function observeLock(lockDir) {
   let ownerMtime = dirItem.mtimeMs;
   let ownerIdentity = null;
   try {
-    const item2 = await lstat5(ownerPathFor(lockDir));
+    const item2 = await lstat6(ownerPathFor(lockDir));
     if (!item2.isFile() || item2.isSymbolicLink()) {
       return { ageMs: Date.now() - item2.mtimeMs, processState: "unknown", retirementKey: `${dirItem.dev}-${dirItem.ino}` };
     }
     ownerMtime = item2.mtimeMs;
-    ownerIdentity = parseOwnerRecord(await readFile5(ownerPathFor(lockDir), "utf8"));
+    ownerIdentity = parseOwnerRecord(await readFile6(ownerPathFor(lockDir), "utf8"));
   } catch {
     try {
-      const item2 = await lstat5(legacyOwnerPathFor(lockDir));
+      const item2 = await lstat6(legacyOwnerPathFor(lockDir));
       if (item2.isFile() && !item2.isSymbolicLink()) {
         ownerMtime = item2.mtimeMs;
-        ownerIdentity = parseLegacyOwner(await readFile5(legacyOwnerPathFor(lockDir), "utf8"));
+        ownerIdentity = parseLegacyOwner(await readFile6(legacyOwnerPathFor(lockDir), "utf8"));
       }
     } catch {
     }
@@ -5352,7 +5396,7 @@ async function release(lockDir, held) {
   clearInterval(held.heartbeat);
   let owner = null;
   try {
-    owner = parseOwnerRecord(await readFile5(ownerPathFor(lockDir), "utf8"));
+    owner = parseOwnerRecord(await readFile6(ownerPathFor(lockDir), "utf8"));
   } catch {
     owner = null;
   }
@@ -5385,7 +5429,7 @@ async function withLock(changeDir, fn) {
 
 // packages/kernel/dist/state/task-plan-store.js
 import { createHash as createHash7 } from "node:crypto";
-import { lstat as lstat6, mkdir as mkdir5, opendir, realpath as realpath2 } from "node:fs/promises";
+import { lstat as lstat7, mkdir as mkdir5, opendir, realpath as realpath2 } from "node:fs/promises";
 import { isAbsolute as isAbsolute2, join as join12, relative as relative2, sep as sep3 } from "node:path";
 
 // packages/kernel/dist/workflow/default-workflow.generated.js
@@ -5561,7 +5605,7 @@ async function assertOwnedDirectory(base, candidate) {
   try {
     const [baseReal, candidateInfo, candidateReal] = await Promise.all([
       realpath2(base),
-      lstat6(candidate),
+      lstat7(candidate),
       realpath2(candidate)
     ]);
     const fromBase = relative2(baseReal, candidateReal);
@@ -5725,7 +5769,7 @@ async function readLedgerEvents(changeDir, options = {}) {
 }
 async function captureLedgerIdentity(path7) {
   try {
-    const info = await lstat7(path7);
+    const info = await lstat8(path7);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new SkillInvocationEvidenceCorruptError("SkillInvocation ledger must be a regular file");
     }
@@ -5851,7 +5895,7 @@ var MAX_HISTORY_BYTES = 2 * 1024 * 1024;
 // packages/kernel/dist/loops/ledger-store.js
 import { AsyncLocalStorage as AsyncLocalStorage2 } from "node:async_hooks";
 import { createHash as createHash8 } from "node:crypto";
-import { mkdir as mkdir6, open as open3, readFile as readFile6 } from "node:fs/promises";
+import { mkdir as mkdir6, open as open3, readFile as readFile7 } from "node:fs/promises";
 import { join as join16, resolve as resolve4 } from "node:path";
 
 // packages/kernel/dist/required.js
@@ -6126,9 +6170,9 @@ function extractEvidenceItem(raw) {
       const path7 = raw.path;
       if (path7 !== void 0)
         out.path = path7;
-      const sha256 = raw.sha256;
-      if (sha256 !== void 0)
-        out.sha256 = sha256;
+      const sha2562 = raw.sha256;
+      if (sha2562 !== void 0)
+        out.sha256 = sha2562;
       const revision_sha = raw.revision_sha;
       if (revision_sha !== void 0)
         out.revision_sha = revision_sha;
@@ -6997,6 +7041,7 @@ var RUN_REASONS = [
   "verification-untrusted",
   "verification-inconclusive",
   "verification-subject-mismatch",
+  "verify-build-revision-untrusted",
   // H7-S2（返工 r2 阻断4 custom fail-closed）：custom workflow 核验结果未真正落在 workflow-transition
   // binding 时的诊断成因。
   "verification-binding-unresolved",
@@ -7769,7 +7814,7 @@ function createLoopLedgerStore() {
   async function read(repoRoot) {
     let text3;
     try {
-      text3 = await readFile6(ledgerFilePath(repoRoot), "utf8");
+      text3 = await readFile7(ledgerFilePath(repoRoot), "utf8");
     } catch (e) {
       if (e.code === "ENOENT")
         return { records: [], rejected: [] };
@@ -7830,7 +7875,7 @@ function createLoopLedgerStore() {
 }
 
 // packages/kernel/dist/state/store.js
-import { readFile as readFile10 } from "node:fs/promises";
+import { readFile as readFile11 } from "node:fs/promises";
 import path4 from "node:path";
 
 // packages/kernel/dist/state/parse.js
@@ -7967,7 +8012,7 @@ function priorLogicalProjectionContent(revision) {
 }
 
 // packages/kernel/dist/state/state-init.js
-import { readFile as readFile7, stat } from "node:fs/promises";
+import { readFile as readFile8, stat } from "node:fs/promises";
 import path2 from "node:path";
 
 // packages/kernel/dist/workflow/builtin-workflows.js
@@ -10373,14 +10418,14 @@ async function detectBaseBranch(repoRoot) {
     let gitDir = gitPath;
     const entry = await stat(gitPath);
     if (!entry.isDirectory()) {
-      const pointer = await readFile7(gitPath, "utf8");
+      const pointer = await readFile8(gitPath, "utf8");
       const match = /^gitdir:\s*(.+)$/m.exec(pointer);
       const target = match?.[1]?.trim();
       if (!target)
         return "main";
       gitDir = path2.resolve(repoRoot, target);
     }
-    const head = await readFile7(path2.join(gitDir, "HEAD"), "utf8");
+    const head = await readFile8(path2.join(gitDir, "HEAD"), "utf8");
     const branch = /^ref: refs\/heads\/(\S+)$/.exec(head.trim())?.[1];
     if (branch)
       return branch;
@@ -10481,7 +10526,7 @@ function initialFields(opts, timestamp2, baseBranch, createdBy) {
 }
 
 // packages/kernel/dist/state/document-locale.js
-import { lstat as lstat8, readFile as readFile8 } from "node:fs/promises";
+import { lstat as lstat9, readFile as readFile9 } from "node:fs/promises";
 import { join as join18 } from "node:path";
 var DOCUMENT_LOCALE_FILE = ".pipeline-document-locale.json";
 function errorCode2(error2) {
@@ -10509,11 +10554,11 @@ function parseDocumentLocalePin(raw) {
 async function readDocumentLocalePin(changeDir) {
   const target = join18(changeDir, DOCUMENT_LOCALE_FILE);
   try {
-    const info = await lstat8(target);
+    const info = await lstat9(target);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`document locale pin \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
     }
-    return parseDocumentLocalePin(await readFile8(target, "utf8"));
+    return parseDocumentLocalePin(await readFile9(target, "utf8"));
   } catch (error2) {
     if (errorCode2(error2) === "ENOENT")
       return void 0;
@@ -10548,7 +10593,7 @@ async function ensureDocumentLocalePin(changeDir, locale) {
 }
 
 // packages/kernel/dist/state/workflow-plan-snapshot.js
-import { lstat as lstat9, readFile as readFile9 } from "node:fs/promises";
+import { lstat as lstat10, readFile as readFile10 } from "node:fs/promises";
 import { join as join19 } from "node:path";
 var WORKFLOW_PLAN_SNAPSHOT_FILE = ".pipeline-workflow-plan.json";
 function errorCode3(error2) {
@@ -10625,11 +10670,11 @@ function workflowPlanSnapshotContent(runId, snapshot) {
 async function readWorkflowPlanSnapshot(changeDir) {
   const target = join19(changeDir, WORKFLOW_PLAN_SNAPSHOT_FILE);
   try {
-    const info = await lstat9(target);
+    const info = await lstat10(target);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new Error(`workflow plan snapshot \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${target}`);
     }
-    return parseWorkflowPlanSnapshot(await readFile9(target, "utf8"));
+    return parseWorkflowPlanSnapshot(await readFile10(target, "utf8"));
   } catch (error2) {
     if (errorCode3(error2) === "ENOENT")
       return void 0;
@@ -10673,18 +10718,18 @@ function attachWorkflowPlanSnapshot(metadata, envelope) {
 
 // packages/kernel/dist/state/initial-change-publish.js
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { link as link3, lstat as lstat11, mkdir as mkdir8, readdir, rm as rm2, rmdir as rmdir2, unlink as unlink3, writeFile as writeFile3 } from "node:fs/promises";
+import { link as link3, lstat as lstat12, mkdir as mkdir8, readdir, rm as rm2, rmdir as rmdir2, unlink as unlink3, writeFile as writeFile3 } from "node:fs/promises";
 import path3 from "node:path";
 
 // packages/kernel/dist/state/trusted-project-path.js
-import { lstat as lstat10, mkdir as mkdir7, realpath as realpath4 } from "node:fs/promises";
+import { lstat as lstat11, mkdir as mkdir7, realpath as realpath4 } from "node:fs/promises";
 import { isAbsolute as isAbsolute4, relative as relative4, resolve as resolve5, sep as sep5 } from "node:path";
 function escaped(root, target) {
   const rel = relative4(root, target);
   return rel === ".." || rel.startsWith(`..${sep5}`) || isAbsolute4(rel);
 }
 async function ordinaryDirectory(target) {
-  const info = await lstat10(target);
+  const info = await lstat11(target);
   if (!info.isDirectory() || info.isSymbolicLink()) {
     throw new Error(`\u53EF\u4FE1\u8DEF\u5F84\u5FC5\u987B\u662F\u975E symlink \u76EE\u5F55: ${target}`);
   }
@@ -10743,7 +10788,7 @@ function contained(root, target) {
 }
 async function assertMissing(target) {
   try {
-    await lstat11(target);
+    await lstat12(target);
     throw alreadyInitialized(target);
   } catch (error2) {
     if (errorCode4(error2) !== "ENOENT")
@@ -10758,7 +10803,7 @@ function publicationOrder(name) {
   return 0;
 }
 async function rememberPublishedEntry(pathname, kind, published) {
-  const identity = await lstat11(pathname);
+  const identity = await lstat12(pathname);
   published.push({ pathname, dev: identity.dev, ino: identity.ino, kind });
 }
 async function publishTreeNoReplace(sourceDir, targetDir, published) {
@@ -10785,7 +10830,7 @@ async function publishTreeNoReplace(sourceDir, targetDir, published) {
 async function rollbackPublishedEntries(published) {
   for (const entry of [...published].reverse()) {
     try {
-      const current = await lstat11(entry.pathname);
+      const current = await lstat12(entry.pathname);
       if (current.dev !== entry.dev || current.ino !== entry.ino)
         continue;
       if (entry.kind === "directory")
@@ -10812,7 +10857,7 @@ async function acquireInitialNameLock(changesDir, name) {
       if (errorCode4(error2) !== "EEXIST")
         throw error2;
       try {
-        const info = await lstat11(lockDir);
+        const info = await lstat12(lockDir);
         if (!info.isDirectory() || info.isSymbolicLink()) {
           throw alreadyInitialized(lockDir);
         }
@@ -10951,7 +10996,7 @@ async function inspectProjectionAgainst(changeDir, current) {
   const identity = { revision: current.revision, revisionId: current.revisionId };
   let raw;
   try {
-    raw = await readFile10(stateFilePath(changeDir), "utf8");
+    raw = await readFile11(stateFilePath(changeDir), "utf8");
   } catch (error2) {
     if (error2.code === "ENOENT")
       return { status: "missing", ...identity };
@@ -11012,7 +11057,7 @@ var FsStateStore = class {
         ...metadata === void 0 ? {} : { runMetadata: metadata }
       };
     }
-    return parsePipeline(await readFile10(stateFilePath(changeDir), "utf8"));
+    return parsePipeline(await readFile11(stateFilePath(changeDir), "utf8"));
   }
   async write(changeDir, state, mutation = { kind: "replace" }) {
     return withLock(changeDir, () => this.writeUnderLock(changeDir, state, mutation));
@@ -11028,7 +11073,7 @@ var FsStateStore = class {
     serializePipeline(nextState);
     let current = await readCurrentRunRevision(changeDir);
     if (current === void 0) {
-      const legacy = parsePipeline(await readFile10(stateFilePath(changeDir), "utf8"));
+      const legacy = parsePipeline(await readFile11(stateFilePath(changeDir), "utf8"));
       current = await publishInitialRunRevision(changeDir, legacy, defaultStateClock(), "migration");
     } else {
       const status2 = await inspectProjectionAgainst(changeDir, current);
@@ -11119,7 +11164,7 @@ var FsStateStore = class {
       if (current === void 0) {
         throw new StateProjectionDriftError("import-legacy: canonical current \u4E0D\u5B58\u5728\uFF1B\u65E0\u9700\u89E3\u51B3\u53CC\u4E3B drift");
       }
-      const legacy = parsePipeline(await readFile10(stateFilePath(changeDir), "utf8"));
+      const legacy = parsePipeline(await readFile11(stateFilePath(changeDir), "utf8"));
       const imported = {
         fields: legacy.fields,
         ...current.state.runMetadata === void 0 ? {} : { runMetadata: structuredClone(current.state.runMetadata) },
@@ -11925,7 +11970,7 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
 
 // packages/kernel/dist/state/spec-migration-evidence.js
 import { createHash as createHash10 } from "node:crypto";
-import { lstat as lstat12, readFile as readFile11, realpath as realpath5 } from "node:fs/promises";
+import { lstat as lstat13, readFile as readFile12, realpath as realpath5 } from "node:fs/promises";
 import { isAbsolute as isAbsolute5, relative as relative5, resolve as resolve6, sep as sep6 } from "node:path";
 function digest4(content) {
   return createHash10("sha256").update(content).digest("hex");
@@ -11951,7 +11996,7 @@ async function trustedOrdinaryFile(repoRoot, candidate, optional = false) {
     cursor = resolve6(cursor, segment);
     let info;
     try {
-      info = await lstat12(cursor);
+      info = await lstat13(cursor);
     } catch (error2) {
       if (optional && errorCode5(error2) === "ENOENT")
         return void 0;
@@ -11969,7 +12014,7 @@ async function trustedOrdinaryFile(repoRoot, candidate, optional = false) {
   const [rootReal, targetReal] = await Promise.all([realpath5(root), realpath5(target)]);
   if (escaped2(rootReal, targetReal))
     throw new Error("\u8FC1\u79FB\u8BC1\u636E\u771F\u5B9E\u8DEF\u5F84\u8D8A\u8FC7\u9879\u76EE\u6839");
-  return readFile11(target);
+  return readFile12(target);
 }
 function record3(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -12469,111 +12514,172 @@ function evaluateGuard(state, ctx) {
   return result;
 }
 
-// packages/kernel/dist/workspace/fingerprint.js
+// packages/kernel/dist/workflow/build-revision.js
 import { createHash as createHash11 } from "node:crypto";
-import { lstat as lstat13, readdir as readdir2, readFile as readFile12, readlink } from "node:fs/promises";
-import { join as join21 } from "node:path";
-var WORKSPACE_BASELINE_PREFIX = "workspace:sha256:";
-var EXCLUDED_TOP_LEVEL = /* @__PURE__ */ new Set([
-  ".git",
-  ".pipeline",
-  ".agents",
-  ".codex",
-  ".impeccable",
-  ".superpowers",
-  ".worktrees",
-  "openspec",
-  "docs",
-  ".turbo",
-  ".playwright-mcp",
-  ".playwright-tmp",
-  ".sandcastle-build",
-  "e2e-runs"
-]);
-var EXCLUDED_ANY_SEGMENT = /* @__PURE__ */ new Set([
-  "node_modules",
-  "coverage",
-  "test-results",
-  "playwright-report",
-  ".cache",
-  ".pytest_cache",
-  "__pycache__"
-]);
-var EXCLUDED_BASENAMES = /* @__PURE__ */ new Set([
-  ".DS_Store",
-  ".pipeline-active",
-  ".pipeline-interaction-authority",
-  ".pipeline-pending-confirm",
-  ".pipeline-pending-interaction",
-  ".pipeline-pending-review"
-]);
-var EXCLUDED_RELATIVE_ROOTS = [".github/hooks"];
-var EXCLUDED_ROOT_ARTIFACTS = [
-  /^dashboard-progress-custom-spec\.png$/,
-  /^dashboard-acceptance-.*\.png$/,
-  /^workbench-.*\.png$/
-];
-function sortNames(names) {
-  return names.sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
-}
-function modeOf(stat4) {
-  return (stat4.mode & 511).toString(8);
-}
-function sameFileIdentity(before, after) {
-  return before.size === after.size && before.mode === after.mode && before.mtimeMs === after.mtimeMs && before.ino === after.ino;
-}
-function isExcluded(relativePath) {
-  const parts = relativePath.split("/");
-  return EXCLUDED_TOP_LEVEL.has(parts[0] ?? "") || parts.some((part) => EXCLUDED_ANY_SEGMENT.has(part)) || EXCLUDED_BASENAMES.has(parts.at(-1) ?? "") || EXCLUDED_RELATIVE_ROOTS.some((root) => relativePath === root || relativePath.startsWith(`${root}/`)) || !relativePath.includes("/") && EXCLUDED_ROOT_ARTIFACTS.some((pattern) => pattern.test(relativePath));
-}
-function writeRecord(hash, kind, relativePath, details = "") {
-  hash.update(kind);
-  hash.update("\0");
-  hash.update(relativePath);
-  hash.update("\0");
-  hash.update(details);
-  hash.update("\0");
-}
-async function fingerprintEntry(root, relativePath, hash) {
-  if (isExcluded(relativePath))
-    return;
-  const absolutePath = join21(root, ...relativePath.split("/"));
-  const before = await lstat13(absolutePath);
-  if (before.isDirectory()) {
-    writeRecord(hash, "D", relativePath, modeOf(before));
-    const names = sortNames(await readdir2(absolutePath));
-    for (const name of names)
-      await fingerprintEntry(root, `${relativePath}/${name}`, hash);
-    return;
+var BUILD_REVISION_TOKEN_PREFIX = "build:v1:";
+var BUILD_REVISION_CODE = "verify-build-revision-untrusted";
+var BUILD_REVISION_REMEDIATION = "return-to-build-and-capture-current-revision";
+var BuildRevisionCaptureError = class extends Error {
+  blocker;
+  constructor(reason, stateHash, revisionHash) {
+    super("build revision capture was not trusted");
+    this.name = "BuildRevisionCaptureError";
+    this.blocker = makeBuildRevisionBlocker(reason, stateHash, revisionHash);
   }
-  if (before.isFile()) {
-    writeRecord(hash, "F", relativePath, `${modeOf(before)}:${before.size}`);
-    hash.update(await readFile12(absolutePath));
-    const after = await lstat13(absolutePath);
-    if (!after.isFile() || !sameFileIdentity(before, after)) {
-      throw new Error(`workspace baseline capture raced with a file change: ${relativePath}`);
-    }
-    return;
-  }
-  if (before.isSymbolicLink()) {
-    writeRecord(hash, "L", relativePath, `${modeOf(before)}:${await readlink(absolutePath)}`);
-    return;
-  }
-  throw new Error(`workspace baseline does not support non-file entry: ${relativePath}`);
+};
+function makeBuildRevisionBlocker(reason, stateHash, revisionHash) {
+  return {
+    kind: "verify-build-revision-untrusted",
+    code: BUILD_REVISION_CODE,
+    reason,
+    remediation: BUILD_REVISION_REMEDIATION,
+    ...stateHash === void 0 ? {} : { stateHash },
+    ...revisionHash === void 0 ? {} : { revisionHash }
+  };
 }
-async function fingerprintWorkspace(root) {
-  const rootStat = await lstat13(root);
-  if (!rootStat.isDirectory())
-    throw new Error(`workspace root is not a directory: ${root}`);
-  const hash = createHash11("sha256");
-  writeRecord(hash, "D", ".", modeOf(rootStat));
-  const names = sortNames(await readdir2(root));
-  for (const name of names)
-    await fingerprintEntry(root, name, hash);
-  return `${WORKSPACE_BASELINE_PREFIX}${hash.digest("hex")}`;
+function sha256(domain, value) {
+  return createHash11("sha256").update(`${domain}\0${value}`, "utf8").digest("hex");
 }
-function isWorkspaceBaseline(value) {
-  return new RegExp(`^${WORKSPACE_BASELINE_PREFIX}[a-f0-9]{64}$`).test(value);
+function safeRevisionHash(value) {
+  let encoded;
+  try {
+    encoded = JSON.stringify(value) ?? "";
+  } catch {
+    encoded = "";
+  }
+  return `sha256:${sha256("tenon/build-revision/state/v1", encoded)}`;
+}
+function hashBuildRevisionIdentity(identity) {
+  return {
+    repositoryHash: sha256("tenon/build-revision/repository/v1", identity.repository),
+    worktreeHash: sha256("tenon/build-revision/worktree/v1", identity.worktree)
+  };
+}
+function hashRevision(kind, revision) {
+  return sha256(`tenon/build-revision/revision/${kind}/v1`, revision);
+}
+var TOKEN_RE = /^build:v1:(git|workspace):([a-f0-9]{64}):([a-f0-9]{64}):([a-f0-9]{64})$/;
+var GIT_REVISION_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
+var WORKSPACE_REVISION_RE = /^workspace:sha256:[a-f0-9]{64}$/;
+function createBuildRevisionToken(kind, revision, identity) {
+  if (kind !== "git" && kind !== "workspace")
+    throw new BuildRevisionCaptureError("malformed");
+  if (typeof revision !== "string")
+    throw new BuildRevisionCaptureError("malformed");
+  const normalized2 = revision.trim().toLowerCase();
+  if (kind === "git" && !GIT_REVISION_RE.test(normalized2)) {
+    throw new BuildRevisionCaptureError("malformed");
+  }
+  if (kind === "workspace" && !WORKSPACE_REVISION_RE.test(normalized2)) {
+    throw new BuildRevisionCaptureError("malformed");
+  }
+  if (identity === null || typeof identity !== "object" || typeof identity.repository !== "string" || typeof identity.worktree !== "string" || identity.repository.trim() === "" || identity.worktree.trim() === "") {
+    throw new BuildRevisionCaptureError("capability-unavailable");
+  }
+  const { repositoryHash, worktreeHash } = hashBuildRevisionIdentity(identity);
+  const revisionHash = hashRevision(kind, normalized2);
+  return {
+    kind,
+    revisionHash,
+    repositoryHash,
+    worktreeHash,
+    value: `${BUILD_REVISION_TOKEN_PREFIX}${kind}:${revisionHash}:${repositoryHash}:${worktreeHash}`
+  };
+}
+function parseBuildRevisionToken(value) {
+  if (typeof value !== "string")
+    return void 0;
+  const match = TOKEN_RE.exec(value);
+  if (!match)
+    return void 0;
+  const kind = match[1];
+  const revisionHash = match[2];
+  const repositoryHash = match[3];
+  const worktreeHash = match[4];
+  if (!revisionHash || !repositoryHash || !worktreeHash)
+    return void 0;
+  return {
+    kind,
+    revisionHash,
+    repositoryHash,
+    worktreeHash,
+    value
+  };
+}
+function blockerFor(reason, request, token) {
+  return makeBuildRevisionBlocker(reason, request.stateHash, token === void 0 ? void 0 : `sha256:${token.revisionHash}`);
+}
+async function assessBuildRevisionTrust(request) {
+  const candidate = request.buildSha;
+  if (candidate === void 0 || candidate === "") {
+    return { trusted: false, blocker: blockerFor("missing", request) };
+  }
+  if (candidate === null || candidate === "null") {
+    return { trusted: false, blocker: blockerFor("null", request) };
+  }
+  if (Array.isArray(candidate)) {
+    return { trusted: false, blocker: blockerFor("ambiguous", request) };
+  }
+  if (typeof candidate !== "string") {
+    return { trusted: false, blocker: blockerFor("malformed", request) };
+  }
+  const token = parseBuildRevisionToken(candidate);
+  if (token === void 0)
+    return { trusted: false, blocker: blockerFor("malformed", request) };
+  const expectedKind = request.isolation === "in-place" ? "workspace" : "git";
+  if (request.isolation !== "in-place" && request.isolation !== "branch" && request.isolation !== "worktree") {
+    return { trusted: false, blocker: blockerFor("isolation-mismatch", request, token) };
+  }
+  if (token.kind !== expectedKind) {
+    return { trusted: false, blocker: blockerFor("isolation-mismatch", request, token) };
+  }
+  let observation;
+  try {
+    observation = await request.observe();
+  } catch {
+    return { trusted: false, blocker: blockerFor("evaluation-error", request, token) };
+  }
+  if (!observation || typeof observation !== "object" || observation.kind !== "git" && observation.kind !== "workspace" || typeof observation.revision !== "string" || observation.kind !== token.kind || typeof observation.identity !== "object" || observation.identity === null || typeof observation.identity.repository !== "string" || typeof observation.identity.worktree !== "string" || observation.revision.trim() === "" || observation.identity.repository.trim() === "" || observation.identity.worktree.trim() === "") {
+    return { trusted: false, blocker: blockerFor("capability-unavailable", request, token) };
+  }
+  let fresh;
+  try {
+    fresh = createBuildRevisionToken(observation.kind, observation.revision, observation.identity);
+  } catch {
+    return { trusted: false, blocker: blockerFor("evaluation-error", request, token) };
+  }
+  if (fresh.repositoryHash !== token.repositoryHash) {
+    return { trusted: false, blocker: blockerFor("project-mismatch", request, token) };
+  }
+  if (fresh.worktreeHash !== token.worktreeHash) {
+    return { trusted: false, blocker: blockerFor("worktree-mismatch", request, token) };
+  }
+  if (fresh.revisionHash !== token.revisionHash) {
+    return { trusted: false, blocker: blockerFor("revision-stale", request, token) };
+  }
+  if (!request.provenance) {
+    return { trusted: false, blocker: blockerFor("provenance-missing", request, token) };
+  }
+  let provenance;
+  try {
+    provenance = await request.provenance();
+  } catch {
+    return { trusted: false, blocker: blockerFor("provenance-mismatch", request, token) };
+  }
+  if (provenance === void 0) {
+    return { trusted: false, blocker: blockerFor("provenance-missing", request, token) };
+  }
+  if (typeof provenance !== "object" || typeof provenance.currentStep !== "string" || provenance.stateBuildSha !== void 0 && typeof provenance.stateBuildSha !== "string" || provenance.stateHash !== void 0 && typeof provenance.stateHash !== "string" || typeof provenance.recordTo !== "string" || !Array.isArray(provenance.buildShaEffects) || provenance.buildShaEffects.some((effect) => typeof effect !== "string")) {
+    return { trusted: false, blocker: blockerFor("provenance-mismatch", request, token) };
+  }
+  if (request.stateHash !== void 0 && provenance.stateHash !== request.stateHash) {
+    return { trusted: false, blocker: blockerFor("state-stale", request, token) };
+  }
+  const matchingEffects = provenance.buildShaEffects.filter((effect) => effect === token.value);
+  if (provenance.currentStep !== (request.expectedStep ?? provenance.currentStep) || provenance.stateBuildSha !== token.value || provenance.recordTo !== provenance.currentStep || provenance.buildShaEffects.length !== 1 || matchingEffects.length !== 1) {
+    return { trusted: false, blocker: blockerFor("provenance-mismatch", request, token) };
+  }
+  return { trusted: true, token };
 }
 
 // packages/kernel/dist/workflow/guard-handlers.js
@@ -12656,45 +12762,44 @@ var GUARD_HANDLERS = Object.freeze({
     }
     return PASSED;
   },
-  /** 老仓 state-transition.sh verify-pass barrier（ADR 0005）：verify 审的必须是 build 冻结的基线。
-   *  IO 序镜像老代码：L149 先读 bsha，L150 gitHeadSha 注入即调用（HEAD 取值与异常都发生在
-   *  build_sha 判空之前；抛错原样上抛，老代码不 catch——build_sha 未设时同样先经历这次调用）。
-   *  `workspace:sha256:<digest>` 是 in-place 的强语义扩展：这种构建没有不可变 checkout，故改用
-   *  工作区内容基线而非同一个 Git HEAD。它走独立能力，绝不再调用 gitHeadSha。
-   *  L151 合取的三态映射：
-   *    · build_sha 未设 → passed（首个合取不成立 → 老代码放行，barrier 不适用）；
-   *    · gitHeadSha 未注入 / 注入但 trim 后空串（HEAD 不可取，非 git 仓）→ skipped
-   *      （L150 `?? ''` 与 L151 head!=='' 同归「HEAD 面不可用」，退化跳过）；
-   *    · head≠bsha → failed；相等 → passed。 */
+  /** Verify-like success barrier：只消费由 Build capture 写入的 canonical `build:v1` token。
+   *  assessor 缺失、输入不可信、物理 identity/provenance/evaluation 任一失败都返回 typed
+   *  `verify-build-revision-untrusted` blocker；不得把旧裸 SHA、workspace baseline 或缺能力
+   *  降级成 skipped/pass。in-place 仍通过 workspace assessor 求值，不读取 Git HEAD。 */
   "build-head-unchanged": async (config, input) => {
-    const bsha = scalarValue(input.fields, config.field);
-    if (isWorkspaceBaseline(bsha)) {
-      const current = input.workspaceFingerprint ? (await input.workspaceFingerprint()).trim() : void 0;
-      if (current === void 0 || current === "")
-        return { kind: "skipped", capability: "workspaceFingerprint" };
-      if (!isWorkspaceBaseline(current)) {
-        throw new Error(`workspaceFingerprint \u8FD4\u56DE\u4E86\u975E\u6CD5\u57FA\u7EBF: ${current}`);
-      }
-      if (current !== bsha) {
-        return {
-          kind: "failed",
-          guardType: "build-head-unchanged",
-          field: config.field,
-          actual: current,
-          expected: [bsha]
-        };
-      }
-      return PASSED;
+    const buildSha = config.field === "build_sha" && input.rawBuildSha !== void 0 ? input.rawBuildSha : input.fields[config.field];
+    const stateHash = input.stateHash ?? safeRevisionHash(input.fields);
+    if (!input.assessBuildRevision) {
+      return {
+        kind: "failed",
+        guardType: "build-head-unchanged",
+        field: config.field,
+        blocker: makeBuildRevisionBlocker("capability-unavailable", stateHash)
+      };
     }
-    const head = input.gitHeadSha ? (await input.gitHeadSha()).trim() : void 0;
-    if (isUnset(bsha))
-      return PASSED;
-    if (head === void 0 || head === "")
-      return { kind: "skipped", capability: "gitHeadSha" };
-    if (head !== bsha) {
-      return { kind: "failed", guardType: "build-head-unchanged", field: config.field, actual: head, expected: [bsha] };
+    try {
+      const result = await input.assessBuildRevision({
+        buildSha,
+        isolation: scalarValue(input.fields, "isolation"),
+        expectedStep: input.currentStep,
+        stateHash
+      });
+      if (result.trusted)
+        return PASSED;
+      return {
+        kind: "failed",
+        guardType: "build-head-unchanged",
+        field: config.field,
+        blocker: result.blocker
+      };
+    } catch {
+      return {
+        kind: "failed",
+        guardType: "build-head-unchanged",
+        field: config.field,
+        blocker: makeBuildRevisionBlocker("evaluation-error", stateHash)
+      };
     }
-    return PASSED;
   },
   /** Ship 迁移门禁是 fail-closed 能力：adapter 未绑定、证据损坏或目标摘要漂移都拒绝。 */
   "spec-migration-applied": async (_config, input) => {
@@ -12777,13 +12882,13 @@ var DEFAULT_EVENT_POLICY = {
       { type: "full-direct-override" },
       { type: "field-equals", field: "pre_verify_review_result", value: "pass" }
     ],
-    // 老仓 L156-161：git HEAD 冻结进 build_sha（取不到 → 留原值 + WARN 信号）。
+    // Build revision capture capability writes the canonical build:v1 token; capability failure is closed.
     actions: [{ type: "freeze-build-sha" }],
     enforceTaskExit: true
   },
   "verify-pass": {
     // 老仓 L163-199 首错优先：verification_report 非空且文件存在 → branch_status=handled →
-    // 非 pm 轨双 review=pass → barrier（HEAD==build_sha）。
+    // 非 pm 轨双 review=pass → trustworthy build revision barrier。
     guards: [
       { type: "file-exists", path: { kind: "field", field: "verification_report" } },
       { type: "field-equals", field: "branch_status", value: "handled" },
@@ -12828,6 +12933,12 @@ function normalizeDefaultGuardFields(fields) {
 }
 function renderPreconditionViolation(event, failure6, track) {
   const { guard, decision } = failure6;
+  if (decision.kind === "failed" && decision.blocker !== void 0) {
+    return [
+      `ERROR: ${event} revision trust blocked (code=${decision.blocker.code} reason=${decision.blocker.reason})`,
+      `  \u4FEE\u590D\uFF1A${decision.blocker.remediation}`
+    ];
+  }
   const actual = (decision.kind === "failed" ? decision.actual : void 0) ?? "";
   switch (event) {
     case "explore-complete":
@@ -12882,24 +12993,32 @@ function renderPreconditionViolation(event, failure6, track) {
   }
   throw new Error(`renderPreconditionViolation: \u672A\u8986\u76D6\u7684 (event=${event}, guardType=${guard.type})`);
 }
-async function checkDefaultEventPreconditions(event, state, ctx) {
+async function evaluateDefaultEventPreconditions(event, state, ctx) {
   const policy2 = DEFAULT_EVENT_POLICY[event];
   if (policy2.guards.length === 0)
     return null;
   const track = fieldStr(state, "track");
   const input = {
     fields: normalizeDefaultGuardFields(state.fields),
+    stateHash: safeRevisionHash(state.fields),
+    rawBuildSha: state.fields.build_sha,
     track,
     fileExists: ctx?.fileExists,
     gitHeadSha: ctx?.gitHeadSha,
     workspaceFingerprint: ctx?.workspaceFingerprint,
-    specMigrationStatus: ctx?.specMigrationStatus
+    specMigrationStatus: ctx?.specMigrationStatus,
+    assessBuildRevision: ctx?.assessBuildRevision,
+    currentStep: fieldStr(state, "phase")
   };
   const evaluations = await evaluateGuards(policy2.guards, input);
   const failed = evaluations.find((e) => e.decision.kind === "failed");
   if (!failed)
     return null;
-  return renderPreconditionViolation(event, failed, track);
+  const blockers = evaluations.flatMap((evaluation) => evaluation.decision.kind === "failed" && evaluation.decision.blocker !== void 0 ? [evaluation.decision.blocker] : []);
+  return {
+    lines: renderPreconditionViolation(event, failed, track),
+    ...blockers.length === 0 ? {} : { blockers }
+  };
 }
 
 // packages/kernel/dist/workflow/stepGuard.js
@@ -12916,19 +13035,24 @@ function readChangeText(changeDirAbs, rel) {
 function buildStepGuardInput(state, ctx) {
   return {
     fields: state.fields,
+    stateHash: safeRevisionHash(state.fields),
+    rawBuildSha: state.fields.build_sha,
     track: fieldStr2(state.fields.track),
     readText: (rel) => readChangeText(ctx.changeDirAbs, rel),
     fileExists: ctx.fileExists,
     gitHeadSha: ctx.gitHeadSha,
     workspaceFingerprint: ctx.workspaceFingerprint,
-    specMigrationStatus: ctx.specMigrationStatus
+    specMigrationStatus: ctx.specMigrationStatus,
+    assessBuildRevision: ctx.assessBuildRevision,
+    currentStep: ctx.currentStep ?? fieldStr2(state.fields.phase)
   };
 }
 function buildDefaultGuardInput(state, ctx) {
   return {
     ...buildStepGuardInput(state, ctx),
     fields: normalizeDefaultGuardFields(state.fields),
-    track: fieldStr2(state.fields.track)
+    track: fieldStr2(state.fields.track),
+    currentStep: ctx.currentStep ?? fieldStr2(state.fields.phase)
   };
 }
 function renderGuardFailure(ev, stepId) {
@@ -12952,6 +13076,16 @@ function renderGuardFailure(ev, stepId) {
     case "full-direct-override":
       return `step '${stepId}' \u8981\u6C42 preset=full \u4E14 build_mode=direct \u65F6 direct_override=true\uFF08\u5F53\u524D=${d.actual ?? ""}\uFF09`;
     case "build-head-unchanged":
+      if (d.blocker !== void 0) {
+        const blocker2 = d.blocker;
+        return [
+          blocker2.code,
+          `reason=${blocker2.reason}`,
+          `remediation=${blocker2.remediation}`,
+          ...blocker2.stateHash === void 0 ? [] : [`stateHash=${blocker2.stateHash}`],
+          ...blocker2.revisionHash === void 0 ? [] : [`revisionHash=${blocker2.revisionHash}`]
+        ].join(" ");
+      }
       if ((d.expected?.[0] ?? "").startsWith("workspace:sha256:")) {
         return `step '${stepId}' \u8981\u6C42\u5F53\u524D\u5DE5\u4F5C\u533A\u5185\u5BB9\u7B49\u4E8E build \u51BB\u7ED3\u57FA\u7EBF\uFF08build_sha=${d.expected?.[0] ?? ""}\uFF0C\u5F53\u524D=${d.actual ?? ""}\uFF09`;
       }
@@ -12967,7 +13101,12 @@ function renderGuardFailure(ev, stepId) {
 async function evaluateCompiledGuards(guards, stepId, input) {
   const evals = await evaluateGuards(guards, input, { stopOnFirstFailure: false });
   const failures = evals.filter((e) => e.decision.kind === "failed").map((e) => renderGuardFailure(e, stepId));
-  return { pass: failures.length === 0, failures };
+  const blockers = evals.flatMap((e) => e.decision.kind === "failed" && e.decision.blocker !== void 0 ? [e.decision.blocker] : []);
+  return {
+    pass: failures.length === 0,
+    failures,
+    ...blockers.length === 0 ? {} : { blockers }
+  };
 }
 
 // packages/kernel/dist/workflow/governed-lifecycle-policy.js
@@ -13004,6 +13143,17 @@ function mergeLifecycleActions(declared, required2) {
     return declared;
   return [...declared, ...required2.filter((candidate) => !declared.some((action) => action.type === candidate.type))];
 }
+function semanticRevisionLifecyclePolicy(from, edge2, to) {
+  const outputsBuildSha = from.outputs.some((output) => output.field === "build_sha");
+  const currentStepInputsBuildSha = from.inputs.some((input) => input.field === "build_sha");
+  const targetStepInputsBuildSha = to?.inputs.some((input) => input.field === "build_sha") ?? false;
+  const rollback = edge2.actions.some((action) => action.type === "mark-verification-failed");
+  const actions = outputsBuildSha && targetStepInputsBuildSha ? [{ type: "freeze-build-sha" }] : [];
+  const guards = currentStepInputsBuildSha && !rollback ? [{ type: "build-head-unchanged", field: "build_sha" }] : [];
+  if (actions.length === 0 && guards.length === 0)
+    return void 0;
+  return { actions, guards };
+}
 
 // packages/kernel/dist/workflow/engine.js
 function fieldStr3(state, k) {
@@ -13028,7 +13178,13 @@ async function planStepTransition(ir, state, event, ctx, additionalGuards = []) 
   const guards = mergeLifecycleGuards([...step.guards, ...edge2.guards], additionalGuards);
   const guardResult = await evaluateCompiledGuards(guards, stepId, buildStepGuardInput(state, ctx));
   if (!guardResult.pass) {
-    return { ok: false, kind: "guard-failed", stepId, failures: guardResult.failures };
+    return {
+      ok: false,
+      kind: "guard-failed",
+      stepId,
+      failures: guardResult.failures,
+      ...guardResult.blockers === void 0 ? {} : { blockers: guardResult.blockers }
+    };
   }
   return { ok: true, from: stepId, to: edge2.to, actions: edge2.actions };
 }
@@ -13039,7 +13195,7 @@ function applyStepTransition(state, to, clock) {
 // packages/kernel/dist/state/workflow-action-authority-record.js
 import { createHash as createHash13 } from "node:crypto";
 import { lstat as lstat14, readFile as readFile13 } from "node:fs/promises";
-import { join as join22 } from "node:path";
+import { join as join21 } from "node:path";
 
 // packages/kernel/dist/state/workflow-action-authority-snapshot.js
 import { createHash as createHash12 } from "node:crypto";
@@ -13232,7 +13388,7 @@ function errorCode6(error2) {
 }
 function workflowActionAuthorityRecordPath(changeDir, iterationId) {
   const identity = createHash13("sha256").update(iterationId).digest("hex");
-  return join22(changeDir, `${WORKFLOW_ACTION_AUTHORITY_RECORD_PREFIX}${identity}.json`);
+  return join21(changeDir, `${WORKFLOW_ACTION_AUTHORITY_RECORD_PREFIX}${identity}.json`);
 }
 async function readWorkflowActionAuthorityRecord(changeDir, iterationId) {
   const target = workflowActionAuthorityRecordPath(changeDir, iterationId);
@@ -14344,6 +14500,156 @@ function resolveProductPaths(input = {}) {
   };
 }
 
+// packages/kernel/dist/workspace/fingerprint.js
+import { createHash as createHash15 } from "node:crypto";
+import { lstat as lstat15, readdir as readdir2, readFile as readFile14, readlink } from "node:fs/promises";
+import { join as join22 } from "node:path";
+var WORKSPACE_BASELINE_PREFIX = "workspace:sha256:";
+var EXCLUDED_TOP_LEVEL = /* @__PURE__ */ new Set([
+  ".git",
+  ".pipeline",
+  ".agents",
+  ".codex",
+  ".impeccable",
+  ".superpowers",
+  ".worktrees",
+  "openspec",
+  "docs",
+  ".turbo",
+  ".playwright-mcp",
+  ".playwright-tmp",
+  ".sandcastle-build",
+  "e2e-runs"
+]);
+var EXCLUDED_ANY_SEGMENT = /* @__PURE__ */ new Set([
+  "node_modules",
+  "coverage",
+  "test-results",
+  "playwright-report",
+  ".cache",
+  ".pytest_cache",
+  "__pycache__"
+]);
+var EXCLUDED_BASENAMES = /* @__PURE__ */ new Set([
+  ".DS_Store",
+  ".pipeline-active",
+  ".pipeline-interaction-authority",
+  ".pipeline-pending-confirm",
+  ".pipeline-pending-interaction",
+  ".pipeline-pending-review"
+]);
+var EXCLUDED_RELATIVE_ROOTS = [".github/hooks"];
+var EXCLUDED_ROOT_ARTIFACTS = [
+  /^dashboard-progress-custom-spec\.png$/,
+  /^dashboard-acceptance-.*\.png$/,
+  /^workbench-.*\.png$/
+];
+function sortNames(names) {
+  return names.sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
+}
+function modeOf(stat4) {
+  return (stat4.mode & 511).toString(8);
+}
+function sameFileIdentity(before, after) {
+  return before.size === after.size && before.mode === after.mode && before.mtimeMs === after.mtimeMs && before.ino === after.ino;
+}
+function isExcluded(relativePath) {
+  const parts = relativePath.split("/");
+  return EXCLUDED_TOP_LEVEL.has(parts[0] ?? "") || parts.some((part) => EXCLUDED_ANY_SEGMENT.has(part)) || EXCLUDED_BASENAMES.has(parts.at(-1) ?? "") || EXCLUDED_RELATIVE_ROOTS.some((root) => relativePath === root || relativePath.startsWith(`${root}/`)) || !relativePath.includes("/") && EXCLUDED_ROOT_ARTIFACTS.some((pattern) => pattern.test(relativePath));
+}
+function writeRecord(hash, kind, relativePath, details = "") {
+  hash.update(kind);
+  hash.update("\0");
+  hash.update(relativePath);
+  hash.update("\0");
+  hash.update(details);
+  hash.update("\0");
+}
+async function fingerprintEntry(root, relativePath, hash) {
+  if (isExcluded(relativePath))
+    return;
+  const absolutePath = join22(root, ...relativePath.split("/"));
+  const before = await lstat15(absolutePath);
+  if (before.isDirectory()) {
+    writeRecord(hash, "D", relativePath, modeOf(before));
+    const names = sortNames(await readdir2(absolutePath));
+    for (const name of names)
+      await fingerprintEntry(root, `${relativePath}/${name}`, hash);
+    return;
+  }
+  if (before.isFile()) {
+    writeRecord(hash, "F", relativePath, `${modeOf(before)}:${before.size}`);
+    hash.update(await readFile14(absolutePath));
+    const after = await lstat15(absolutePath);
+    if (!after.isFile() || !sameFileIdentity(before, after)) {
+      throw new Error(`workspace baseline capture raced with a file change: ${relativePath}`);
+    }
+    return;
+  }
+  if (before.isSymbolicLink()) {
+    writeRecord(hash, "L", relativePath, `${modeOf(before)}:${await readlink(absolutePath)}`);
+    return;
+  }
+  throw new Error(`workspace baseline does not support non-file entry: ${relativePath}`);
+}
+async function fingerprintWorkspace(root) {
+  const rootStat = await lstat15(root);
+  if (!rootStat.isDirectory())
+    throw new Error(`workspace root is not a directory: ${root}`);
+  const hash = createHash15("sha256");
+  writeRecord(hash, "D", ".", modeOf(rootStat));
+  const names = sortNames(await readdir2(root));
+  for (const name of names)
+    await fingerprintEntry(root, name, hash);
+  return `${WORKSPACE_BASELINE_PREFIX}${hash.digest("hex")}`;
+}
+
+// packages/kernel/dist/workspace/build-revision-identity.js
+import { execFile } from "node:child_process";
+import { lstat as lstat16, realpath as realpath6 } from "node:fs/promises";
+import { isAbsolute as isAbsolute6, resolve as resolve8 } from "node:path";
+import { promisify } from "node:util";
+var execFileAsync = promisify(execFile);
+async function physicalDirectory(pathname) {
+  try {
+    const info = await lstat16(pathname);
+    if (!info.isDirectory() || info.isSymbolicLink())
+      return void 0;
+    const physical = await realpath6(pathname);
+    return resolve8(pathname) === physical ? physical : void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function probeBuildRevisionIdentity(root) {
+  try {
+    const rootInfo = await lstat16(root);
+    if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink())
+      return void 0;
+    const { stdout } = await execFileAsync("git", [
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+      "--show-toplevel",
+      "--git-dir"
+    ], { cwd: root, timeout: 1500, maxBuffer: 4096, windowsHide: true });
+    const lines = String(stdout).trim().split(/\r?\n/);
+    if (lines.length !== 3 || lines.some((line) => line === "" || !isAbsolute6(line)))
+      return void 0;
+    const [commonRaw, topRaw, gitRaw] = lines;
+    if (!commonRaw || !topRaw || !gitRaw)
+      return void 0;
+    const common = await physicalDirectory(commonRaw);
+    const top = await physicalDirectory(topRaw);
+    const git = await physicalDirectory(gitRaw);
+    if (!common || !top || !git)
+      return void 0;
+    return { repository: common, worktree: `${top}\0${git}` };
+  } catch {
+    return void 0;
+  }
+}
+
 // packages/kernel/dist/workspace/terminal-activity.js
 var TERMINAL_ACTIVITY_FILE = ".pipeline-terminal-activity.json";
 var TERMINAL_ACTIVITY_PROTOCOL = "pipeline-terminal-activity-v1";
@@ -15271,9 +15577,9 @@ function serializeTrackRegistry(config) {
 }
 
 // packages/kernel/dist/tracks/registry.js
-import { createHash as createHash15 } from "node:crypto";
+import { createHash as createHash16 } from "node:crypto";
 import { readFileSync as readFileSync9 } from "node:fs";
-import { mkdir as mkdir11, readFile as readFile14 } from "node:fs/promises";
+import { mkdir as mkdir11, readFile as readFile15 } from "node:fs/promises";
 import path6 from "node:path";
 var TENON_DIR = ".pipeline";
 var TRACKS_FILE = "tracks.yaml";
@@ -15282,7 +15588,7 @@ function trackRegistryPath(repoRoot) {
   return path6.join(repoRoot, TENON_DIR, TRACKS_FILE);
 }
 function registryRevision(config) {
-  return createHash15("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
+  return createHash16("sha256").update(serializeTrackRegistry(config), "utf8").digest("hex").slice(0, 16);
 }
 var RegistryRevisionConflictError = class extends Error {
   expected;
@@ -15389,7 +15695,7 @@ function assertWorkflowAllowed(track, workflowId) {
 async function freshReadUnderLock(file, context) {
   let text3 = null;
   try {
-    text3 = await readFile14(file, "utf8");
+    text3 = await readFile15(file, "utf8");
   } catch (e) {
     if (e.code !== "ENOENT")
       throw e;
@@ -15803,7 +16109,7 @@ function isHostSummaryTurn(turn) {
 }
 
 // packages/kernel/dist/mem/filter.js
-import { resolve as resolve8, sep as sep7 } from "node:path";
+import { resolve as resolve9, sep as sep7 } from "node:path";
 function parseIso(iso) {
   if (!iso)
     return null;
@@ -15832,8 +16138,8 @@ function sameProject(sessionCwd, target) {
     return true;
   if (!sessionCwd)
     return false;
-  const a = resolve8(sessionCwd);
-  const b = resolve8(target);
+  const a = resolve9(sessionCwd);
+  const b = resolve9(target);
   return a === b || a.startsWith(b + sep7);
 }
 function sameProjectForMemFs(fs, sessionCwd, target) {
@@ -16001,7 +16307,7 @@ function createChunkLocator(text3, maxChars) {
 }
 
 // packages/kernel/dist/mem/adapters/opencode-budget.js
-import { resolve as resolve9 } from "node:path";
+import { resolve as resolve10 } from "node:path";
 var sqliteSourceBudgets = /* @__PURE__ */ new WeakMap();
 function sqliteSourceBudget(fs, dbPath) {
   const budget = fs.contentReadBudget;
@@ -16137,7 +16443,7 @@ function projectIdsForFilter(fs, db, f, source, budget) {
   if (projects === null)
     return null;
   const directories = boundedProjectRows(db, "project_directory", source, budget) ?? [];
-  const target = f.cwd ? resolve9(f.cwd) : null;
+  const target = f.cwd ? resolve10(f.cwd) : null;
   const ids2 = /* @__PURE__ */ new Set();
   for (const row of [...projects, ...directories]) {
     if (typeof row.project_id !== "string" || typeof row.directory !== "string")
@@ -16825,7 +17131,7 @@ function findInJsonl(text3, predicate, maxLines = 200) {
 }
 
 // packages/kernel/dist/mem/paths.js
-import { join as join24, resolve as resolve10 } from "node:path";
+import { join as join24, resolve as resolve11 } from "node:path";
 var SEP_RE = /[/\\:_.]/g;
 var PI_SEP_RE = /[/\\:]/g;
 var PI_LEAD_RE = /^[/\\]/;
@@ -16850,7 +17156,7 @@ function piAgentDir(fs) {
   return expandHome(fs, env || join24(fs.home, ".pi", "agent"));
 }
 function piProjectDirFromCwd(fs, cwd) {
-  const resolved = resolve10(cwd);
+  const resolved = resolve11(cwd);
   const safe = "--" + resolved.replace(PI_LEAD_RE, "").replace(PI_SEP_RE, "-") + "--";
   return join24(piAgentDir(fs), "sessions", safe);
 }
@@ -16882,7 +17188,7 @@ function piSessionRoots(fs) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const root of roots) {
-    const normalized2 = resolve10(root);
+    const normalized2 = resolve11(root);
     if (seen.has(normalized2))
       continue;
     seen.add(normalized2);
@@ -17273,7 +17579,7 @@ function codexSearch(fs, s, kw) {
 }
 
 // packages/kernel/dist/mem/adapters/pi.js
-import { basename as basename4, join as join26, resolve as resolve11 } from "node:path";
+import { basename as basename4, join as join26, resolve as resolve12 } from "node:path";
 function piListSessions(fs, f) {
   const out = [];
   const files = candidateFiles(fs, f).sort((left, right) => (fs.mtimeMs(right) ?? 0) - (fs.mtimeMs(left) ?? 0));
@@ -17344,7 +17650,7 @@ function candidateFiles(fs, f) {
     for (const file of discovered) {
       if (!file.endsWith(".jsonl"))
         continue;
-      const normalized2 = resolve11(file);
+      const normalized2 = resolve12(file);
       if (seen.has(normalized2))
         continue;
       seen.add(normalized2);
@@ -17360,7 +17666,7 @@ function candidateFiles(fs, f) {
     const remainingRoots = roots.length - index;
     const remainingFiles = fs.contentReadBudget?.remainingDiscoveryFiles?.("pi");
     const fairLimit = remainingFiles === void 0 ? normalLimit : Math.min(normalLimit, Math.ceil(remainingFiles / remainingRoots));
-    if (f.cwd && resolve11(root) === resolve11(defaultRoot)) {
+    if (f.cwd && resolve12(root) === resolve12(defaultRoot)) {
       pushJsonl(fs.contentReadBudget ? root : piProjectDirFromCwd(fs, f.cwd), fairLimit);
     } else {
       pushJsonl(root, fairLimit);
@@ -18760,9 +19066,9 @@ function updateLoopInYaml(text3, loopId, patch) {
 }
 
 // packages/kernel/dist/loops/governance.js
-import { createHash as createHash16, randomBytes } from "node:crypto";
-import { mkdir as mkdir13, open as open4, readFile as readFile15, rename as rename6 } from "node:fs/promises";
-import { join as join28, resolve as resolve12 } from "node:path";
+import { createHash as createHash17, randomBytes } from "node:crypto";
+import { mkdir as mkdir13, open as open4, readFile as readFile16, rename as rename6 } from "node:fs/promises";
+import { join as join28, resolve as resolve13 } from "node:path";
 var LOOPS_REL = [".pipeline", "loops.yaml"];
 var GOVERNANCE_LOCK_BASE = [".pipeline", "loops", "governance"];
 var ABSENT_REGISTRY_EPOCH = "absent";
@@ -18773,21 +19079,21 @@ function governanceLockBase(repoRoot) {
   return join28(repoRoot, ...GOVERNANCE_LOCK_BASE);
 }
 async function withRegistryGovernanceLock(repoRoot, fn) {
-  const base = resolve12(governanceLockBase(repoRoot));
+  const base = resolve13(governanceLockBase(repoRoot));
   await mkdir13(base, { recursive: true });
   return withLock(base, fn);
 }
 async function readRegistrySnapshot(repoRoot) {
   let text3;
   try {
-    text3 = await readFile15(loopsYamlPath(repoRoot), "utf8");
+    text3 = await readFile16(loopsYamlPath(repoRoot), "utf8");
   } catch (e) {
     if (e.code === "ENOENT") {
       return { text: "", epoch: ABSENT_REGISTRY_EPOCH, registry: null, errors: [] };
     }
     throw new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${e.code ?? "IO"}\uFF09\uFF1A${e instanceof Error ? e.message : String(e)}`);
   }
-  const epoch = createHash16("sha256").update(text3, "utf8").digest("hex");
+  const epoch = createHash17("sha256").update(text3, "utf8").digest("hex");
   const { data, errors } = loadRegistry(repoRoot, { readText: () => text3 });
   return { text: text3, epoch, registry: data, errors };
 }
@@ -19324,8 +19630,8 @@ function renderHandoffSummary(doc, label, locale = "zh-CN") {
 }
 
 // packages/kernel/dist/compress/context-bundle.js
-import { createHash as createHash17 } from "node:crypto";
-import { isAbsolute as isAbsolute6 } from "node:path";
+import { createHash as createHash18 } from "node:crypto";
+import { isAbsolute as isAbsolute7 } from "node:path";
 var ContextBundleError = class extends Error {
   constructor(message) {
     super(message);
@@ -19338,7 +19644,7 @@ function contentBytes(input) {
   return input.content === void 0 ? 0 : Buffer.byteLength(input.content, "utf8");
 }
 function validRelativePath(path7) {
-  if (path7 === "" || isAbsolute6(path7) || path7.includes("\\"))
+  if (path7 === "" || isAbsolute7(path7) || path7.includes("\\"))
     return false;
   const parts = path7.split("/");
   return !parts.some((part) => part === "" || part === "." || part === "..");
@@ -19347,7 +19653,7 @@ function unsignedPayload(input) {
   return input;
 }
 function contextBundleAggregateDigest(bundle) {
-  return `sha256:${createHash17("sha256").update(JSON.stringify(unsignedPayload(bundle)), "utf8").digest("hex")}`;
+  return `sha256:${createHash18("sha256").update(JSON.stringify(unsignedPayload(bundle)), "utf8").digest("hex")}`;
 }
 function compileContextBundle(input) {
   if (!SAFE_ID.test(input.change))
@@ -19655,12 +19961,12 @@ async function compileLedgerContextBundleWithPorts(input) {
 }
 
 // packages/kernel/dist/compress/ledger-context-bundle-node-adapter.js
-import { createHash as createHash18 } from "node:crypto";
-import { isAbsolute as isAbsolute7, join as join29, posix as posix2 } from "node:path";
+import { createHash as createHash19 } from "node:crypto";
+import { isAbsolute as isAbsolute8, join as join29, posix as posix2 } from "node:path";
 var nodeLedgerContextBundlePrimitives = {
-  isAbsoluteRoot: isAbsolute7,
+  isAbsoluteRoot: isAbsolute8,
   ledgerPath: (change) => posix2.join("openspec", "changes", change, ".pipeline-documents.json"),
-  sha256: (text3) => createHash18("sha256").update(text3, "utf8").digest("hex"),
+  sha256: (text3) => createHash19("sha256").update(text3, "utf8").digest("hex"),
   utf8ByteLength: (text3) => Buffer.byteLength(text3, "utf8")
 };
 
@@ -20412,12 +20718,22 @@ function defaultEventGuards(event) {
 }
 function blocker(guard, decision) {
   if (decision.kind === "skipped") {
+    if (guard.type === "build-head-unchanged") {
+      return {
+        kind: "verify-build-revision-untrusted",
+        code: "verify-build-revision-untrusted",
+        reason: "capability-unavailable",
+        remediation: "return-to-build-and-capture-current-revision"
+      };
+    }
     return {
       kind: "capability-unavailable",
       guardType: guard.type,
       capability: decision.capability
     };
   }
+  if (decision.blocker !== void 0)
+    return decision.blocker;
   return {
     kind: "guard-failed",
     guardType: decision.guardType,
@@ -20434,7 +20750,12 @@ async function readinessByTransition(plan, state, context) {
   if (step === void 0)
     return {};
   const transitions = await Promise.all(step.transitions.map(async (transition) => {
-    const guards = plan.executionModel === "phase-manifest" ? defaultEventGuards(transition.event) : mergeLifecycleGuards([...step.guards, ...transition.guards], governedLifecyclePolicy(plan.capabilities.documents.policy !== void 0, step.id, transition.to)?.guards);
+    const guards = plan.executionModel === "phase-manifest" ? defaultEventGuards(transition.event) : (() => {
+      const fixed = governedLifecyclePolicy(plan.capabilities.documents.policy !== void 0, step.id, transition.to);
+      const target = plan.workflow.steps.find((candidate) => candidate.id === transition.to);
+      const semantic = semanticRevisionLifecyclePolicy(step, transition, target);
+      return mergeLifecycleGuards(mergeLifecycleGuards([...step.guards, ...transition.guards], fixed?.guards), semantic?.guards);
+    })();
     const evaluations = [];
     const errors = [];
     for (const guard of guards) {
@@ -20443,7 +20764,16 @@ async function readinessByTransition(plan, state, context) {
       } catch {
         const fieldValue = guard.type === "build-head-unchanged" ? state.fields[guard.field] : void 0;
         const scalar5 = Array.isArray(fieldValue) ? fieldValue.join(",") : fieldValue ?? "";
-        const capability = guard.type === "tasks-at-least" ? "readText" : guard.type === "file-exists" ? "fileExists" : guard.type === "build-head-unchanged" ? scalar5.startsWith("workspace:sha256:") ? "workspaceFingerprint" : "gitHeadSha" : guard.type === "spec-migration-applied" ? "specMigrationStatus" : void 0;
+        if (guard.type === "build-head-unchanged") {
+          errors.push({
+            kind: "verify-build-revision-untrusted",
+            code: "verify-build-revision-untrusted",
+            reason: "evaluation-error",
+            remediation: "return-to-build-and-capture-current-revision"
+          });
+          continue;
+        }
+        const capability = guard.type === "tasks-at-least" ? "readText" : guard.type === "file-exists" ? "fileExists" : guard.type === "spec-migration-applied" ? "specMigrationStatus" : void 0;
         errors.push({
           kind: "evaluation-error",
           guardType: guard.type,
@@ -20561,25 +20891,30 @@ function fieldString(value) {
 }
 var ACTION_HANDLERS = Object.freeze({
   /** build-complete 的不可变验证靶：
-   *  · branch/worktree 保持老仓语义：HEAD trim 后非空 → 冻结进 build_sha；取不到 → warning。
-   *  · in-place 不能用未变化的 HEAD 伪装实现未漂移：强制冻结内容寻址的 workspace baseline；能力
-   *    缺失或返回非法基线一律 fail-closed，绝不写一个无法复验的假 SHA。
+   *  · 所有 isolation 都必须由可信 capture capability 生成 canonical build:v1 token。
+   *  · in-place 绑定内容寻址的 workspace baseline；branch/worktree 绑定物理 Git identity 与 object ID。
+   *    能力缺失、返回非法 token 或求值异常一律 fail-closed，绝不写一个无法复验的假 SHA。
    */
   "freeze-build-sha": async (_config, input) => {
-    if (fieldString(input.fields.isolation) === "in-place") {
-      if (!input.workspaceFingerprint) {
-        throw new Error("in-place build requires workspaceFingerprint capability");
-      }
-      const baseline = (await input.workspaceFingerprint()).trim();
-      if (!isWorkspaceBaseline(baseline)) {
-        throw new Error(`workspaceFingerprint \u8FD4\u56DE\u4E86\u975E\u6CD5\u57FA\u7EBF: ${baseline}`);
-      }
-      return { patch: { build_sha: baseline }, signals: [] };
+    const isolation = fieldString(input.fields.isolation);
+    if (isolation !== "branch" && isolation !== "worktree" && isolation !== "in-place") {
+      throw new BuildRevisionCaptureError("isolation-mismatch", safeRevisionHash(input.fields));
     }
-    const sha = (await input.gitHeadSha?.())?.trim() ?? "";
-    if (sha !== "")
-      return { patch: { build_sha: sha }, signals: [] };
-    return { patch: {}, signals: [{ kind: "build-sha-missing" }] };
+    if (!input.captureBuildRevision) {
+      throw new BuildRevisionCaptureError("capability-unavailable", safeRevisionHash(input.fields));
+    }
+    try {
+      const token = await input.captureBuildRevision(isolation);
+      const expectedKind = isolation === "in-place" ? "workspace" : "git";
+      if (!new RegExp(`^build:v1:${expectedKind}:[a-f0-9]{64}:[a-f0-9]{64}:[a-f0-9]{64}$`).test(token)) {
+        throw new BuildRevisionCaptureError("malformed", safeRevisionHash(input.fields));
+      }
+      return { patch: { build_sha: token }, signals: [] };
+    } catch (error2) {
+      if (error2 instanceof BuildRevisionCaptureError)
+        throw error2;
+      throw new BuildRevisionCaptureError("evaluation-error", safeRevisionHash(input.fields));
+    }
   },
   /** 进入任一新的实现 visit 时，旧候选的 Build 收敛审查不得继承。 */
   "reset-pre-verify-review": () => ({
@@ -20636,9 +20971,13 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
   }
   const event = command.event;
   const policy2 = DEFAULT_EVENT_POLICY[event];
-  const violations = await checkDefaultEventPreconditions(event, state, command.context);
-  if (violations)
-    return { kind: "precondition-violated", lines: violations };
+  const preconditions = await evaluateDefaultEventPreconditions(event, state, command.context);
+  if (preconditions) {
+    const blocker2 = preconditions.blockers?.[0];
+    if (blocker2 !== void 0)
+      return { kind: "revision-untrusted", blocker: blocker2 };
+    return { kind: "precondition-violated", lines: [...preconditions.lines] };
+  }
   if (policy2.enforceTaskExit) {
     const tasks = await command.context.tasksThroughPhase?.(edge2.from);
     if (tasks && !tasks.pass) {
@@ -20656,12 +20995,29 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
   const warnings = [];
   let nextFields = result.state.fields;
   if (policy2.actions.length > 0) {
-    const outcome = await applyActions(policy2.actions, {
-      fields: result.state.fields,
-      clock,
-      gitHeadSha: command.context.gitHeadSha,
-      workspaceFingerprint: command.context.workspaceFingerprint
-    });
+    let outcome;
+    try {
+      outcome = await applyActions(policy2.actions, {
+        fields: result.state.fields,
+        clock,
+        gitHeadSha: command.context.gitHeadSha,
+        workspaceFingerprint: command.context.workspaceFingerprint,
+        captureBuildRevision: command.context.captureBuildRevision
+      });
+    } catch (error2) {
+      if (error2 instanceof BuildRevisionCaptureError) {
+        return {
+          kind: "revision-untrusted",
+          blocker: {
+            ...error2.blocker,
+            // Capture ran against the prospective target fields, but a rejected transition never
+            // commits that state. Always report the locked canonical pre-state digest.
+            stateHash: safeRevisionHash(state.fields)
+          }
+        };
+      }
+      throw error2;
+    }
     nextFields = { ...result.state.fields, ...outcome.patch };
     for (const signal of outcome.signals)
       warnings.push({ kind: signal.kind });
@@ -20696,13 +21052,21 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
   const edgeBeforePlan = terminalArchive ? planningIr.steps.find((step) => step.id === "archive")?.transitions[0] : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event);
   const documentPolicy = effectivePlan.capabilities.documents.policy;
   const governed = documentPolicy !== void 0;
-  const lifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
+  const fixedLifecycle = currentBeforePlan && edgeBeforePlan ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to) : void 0;
+  const targetStep = edgeBeforePlan === void 0 ? void 0 : resolveStep(planningIr, edgeBeforePlan.to);
+  const semanticLifecycle = currentBeforePlan && edgeBeforePlan ? semanticRevisionLifecyclePolicy(currentBeforePlan, edgeBeforePlan, targetStep ?? void 0) : void 0;
+  const lifecycle = fixedLifecycle === void 0 ? semanticLifecycle : semanticLifecycle === void 0 ? fixedLifecycle : {
+    guards: mergeLifecycleGuards(fixedLifecycle.guards, semanticLifecycle.guards),
+    actions: mergeLifecycleActions(fixedLifecycle.actions, semanticLifecycle.actions)
+  };
   const plan = await planStepTransition(planningIr, state, command.event, {
     changeDirAbs: command.changeDir,
     fileExists: command.context.fileExists,
     gitHeadSha: command.context.gitHeadSha,
     workspaceFingerprint: command.context.workspaceFingerprint,
-    specMigrationStatus: command.context.specMigrationStatus
+    specMigrationStatus: command.context.specMigrationStatus,
+    assessBuildRevision: command.context.assessBuildRevision,
+    currentStep: fieldStr4(state.fields.phase)
   }, lifecycle?.guards);
   if (!plan.ok) {
     if (plan.kind === "step-not-in-graph")
@@ -20716,7 +21080,10 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
         available: plan.available
       };
     }
-    return { kind: "step-guard-failed", workflowName, stepId: plan.stepId, failures: plan.failures };
+    const blocker2 = plan.blockers?.[0];
+    if (blocker2 !== void 0)
+      return { kind: "revision-untrusted", blocker: blocker2 };
+    return { kind: "step-guard-failed", workflowName, stepId: plan.stepId, failures: plan.failures, blockers: plan.blockers };
   }
   const currentStep = resolveStep(planningIr, plan.from);
   if (!currentStep)
@@ -20727,12 +21094,29 @@ async function planCustomTransition(state, effectivePlan, command, clock) {
   const warnings = [];
   let nextFields = closesRun ? { ...nextState.fields, phase_status: "done" } : nextState.fields;
   if (actions.length > 0) {
-    const outcome = await applyActions(actions, {
-      fields: nextState.fields,
-      clock,
-      gitHeadSha: command.context.gitHeadSha,
-      workspaceFingerprint: command.context.workspaceFingerprint
-    });
+    let outcome;
+    try {
+      outcome = await applyActions(actions, {
+        fields: nextState.fields,
+        clock,
+        gitHeadSha: command.context.gitHeadSha,
+        workspaceFingerprint: command.context.workspaceFingerprint,
+        captureBuildRevision: command.context.captureBuildRevision
+      });
+    } catch (error2) {
+      if (error2 instanceof BuildRevisionCaptureError) {
+        return {
+          kind: "revision-untrusted",
+          blocker: {
+            ...error2.blocker,
+            // Capture ran against the prospective target fields, but a rejected transition never
+            // commits that state. Always report the locked canonical pre-state digest.
+            stateHash: safeRevisionHash(state.fields)
+          }
+        };
+      }
+      throw error2;
+    }
     nextFields = { ...nextFields, ...outcome.patch };
     for (const signal of outcome.signals)
       warnings.push({ kind: signal.kind });
@@ -20984,9 +21368,9 @@ var CONTRACT_KEYS = Object.freeze([
 var ACTIONS2 = new Set(WORKFLOW_ACTIONS);
 
 // packages/automation/dist/skills/snapshot-manifest.js
-import { createHash as createHash19 } from "node:crypto";
+import { createHash as createHash20 } from "node:crypto";
 import { constants as constants3 } from "node:fs";
-import { chmod, lstat as lstat15, mkdir as mkdir14, open as open5, readdir as readdir3, realpath as realpath6, stat as stat2, writeFile as writeFile8 } from "node:fs/promises";
+import { chmod, lstat as lstat17, mkdir as mkdir14, open as open5, readdir as readdir3, realpath as realpath7, stat as stat2, writeFile as writeFile8 } from "node:fs/promises";
 import { dirname as dirname7, join as join30, relative as relative6, sep as sep8 } from "node:path";
 
 // packages/automation/dist/skills/types.js
@@ -21001,7 +21385,7 @@ var SkillContentInvalidError = class extends Error {
 };
 var EXEC_BITS = 73;
 function sha256Hex2(data) {
-  return createHash19("sha256").update(data).digest("hex");
+  return createHash20("sha256").update(data).digest("hex");
 }
 var EMPTY_FILE_SHA256 = sha256Hex2(Buffer.alloc(0));
 function byRelativePath(a, b) {
@@ -21020,7 +21404,7 @@ async function assertDirectoryIdentities(identities, onFailure) {
   for (const expected of identities) {
     let current;
     try {
-      current = await lstat15(expected.absPath);
+      current = await lstat17(expected.absPath);
     } catch (e) {
       throw onFailure(`\u7956\u5148\u76EE\u5F55\u4E0D\u53EF\u8BBF\u95EE\uFF1A${expected.absPath}\uFF08${e.message}\uFF09`);
     }
@@ -21050,7 +21434,7 @@ async function captureDirectoryIdentities(realRoot, absFile, rootIdentity, onFai
   for (const absPath of paths) {
     let current;
     try {
-      current = await lstat15(absPath);
+      current = await lstat17(absPath);
     } catch (e) {
       throw onFailure(`\u7956\u5148\u76EE\u5F55\u4E0D\u53EF\u8BBF\u95EE\uFF1A${absPath}\uFF08${e.message}\uFF09`);
     }
@@ -21095,7 +21479,7 @@ async function buildCanonicalManifest(skillId, sourceDir, hooks = {}) {
   assertSafeSkillId(skillId);
   let realRoot;
   try {
-    realRoot = await realpath6(sourceDir);
+    realRoot = await realpath7(sourceDir);
   } catch (e) {
     throw new SkillContentInvalidError(`skill '${skillId}' \u5185\u5BB9\u6839\u4E0D\u53EF\u89E3\u6790\uFF1A${sourceDir}\uFF08${e.message}\uFF09`);
   }
@@ -21135,7 +21519,7 @@ async function buildCanonicalManifest(skillId, sourceDir, hooks = {}) {
       if (d.isSymbolicLink()) {
         let real;
         try {
-          real = await realpath6(absPath);
+          real = await realpath7(absPath);
         } catch (e) {
           throw new SkillContentInvalidError(`skill '${skillId}' \u542B\u60AC\u7A7A symlink\uFF1A${relPath}\uFF08${e.message}\uFF09`);
         }
@@ -21158,7 +21542,7 @@ async function buildCanonicalManifest(skillId, sourceDir, hooks = {}) {
         continue;
       }
       if (d.isDirectory()) {
-        const real = await realpath6(absPath);
+        const real = await realpath7(absPath);
         const fromRoot = relative6(realRoot, real);
         if (fromRoot === ".." || fromRoot.startsWith(`..${"/"}`)) {
           throw new SkillContentInvalidError(`skill '${skillId}' \u76EE\u5F55\u5728\u904D\u5386\u671F\u95F4\u9003\u9038\uFF1A${relPath} \u2192 ${real}`);
@@ -21170,7 +21554,7 @@ async function buildCanonicalManifest(skillId, sourceDir, hooks = {}) {
         continue;
       }
       if (d.isFile()) {
-        const real = await realpath6(absPath);
+        const real = await realpath7(absPath);
         const fromRoot = relative6(realRoot, real);
         if (fromRoot === ".." || fromRoot.startsWith(`..${"/"}`)) {
           throw new SkillContentInvalidError(`skill '${skillId}' \u6587\u4EF6\u5728\u8BFB\u53D6\u524D\u9003\u9038\uFF1A${relPath} \u2192 ${real}`);
@@ -21344,7 +21728,7 @@ var DEFAULT_IDLE_TIMEOUT_MS = 20 * 60 * 1e3;
 var DEFAULT_COMPLETION_TIMEOUT_MS = 60 * 1e3;
 
 // packages/automation/dist/skills/content-locator.js
-import { lstat as lstat16, realpath as realpath7, stat as stat3 } from "node:fs/promises";
+import { lstat as lstat18, realpath as realpath8, stat as stat3 } from "node:fs/promises";
 import { join as join33 } from "node:path";
 var SkillContentNotFoundError = class extends Error {
   name = "SkillContentNotFoundError";
@@ -21374,7 +21758,7 @@ function createFsSkillContentLocator(roots) {
       for (const root of roots) {
         const candidate = join33(root, skillId);
         try {
-          await lstat16(candidate);
+          await lstat18(candidate);
         } catch (err) {
           if (errnoCode3(err) === "ENOENT")
             continue;
@@ -21390,7 +21774,7 @@ function createFsSkillContentLocator(roots) {
           throw new SkillContentAccessError(`skill '${skillId}' \u5019\u9009\u8DEF\u5F84 '${candidate}' \u5B58\u5728\u4F46\u4E0D\u662F\u76EE\u5F55\uFF0C\u62D2\u7EDD\u5F53\u4F5C\u672A\u5B89\u88C5\u9759\u9ED8\u8DF3\u8FC7`);
         }
         try {
-          candidates.push({ root, dir: await realpath7(candidate) });
+          candidates.push({ root, dir: await realpath8(candidate) });
         } catch (err) {
           throw new SkillContentAccessError(`skill '${skillId}' \u5019\u9009\u8DEF\u5F84 '${candidate}' \u76EE\u5F55\u5DF2\u786E\u8BA4\u5B58\u5728\u4F46 realpath \u89E3\u6790\u5931\u8D25\uFF08${errnoCode3(err)}\uFF09\uFF1A${errMessage(err)}`);
         }
@@ -21422,7 +21806,7 @@ function createFsSkillContentLocator(roots) {
 
 // packages/automation/dist/skills/production-content-locator.js
 import { readdirSync as readdirSync3, readFileSync as readFileSync13 } from "node:fs";
-import { isAbsolute as isAbsolute8, join as join34 } from "node:path";
+import { isAbsolute as isAbsolute9, join as join34 } from "node:path";
 var SkillRootRegistryError = class extends Error {
   name = "SkillRootRegistryError";
   _tag = "SkillRootRegistryError";
@@ -21512,7 +21896,7 @@ function claudeInstalledRoots(raw) {
         throw new SkillRootRegistryError(`Claude plugins.${key}[${index}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
       }
       const installPath = entry.installPath;
-      if (typeof installPath !== "string" || installPath.trim() === "" || !isAbsolute8(installPath)) {
+      if (typeof installPath !== "string" || installPath.trim() === "" || !isAbsolute9(installPath)) {
         throw new SkillRootRegistryError(`Claude plugins.${key}[${index}].installPath \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84`);
       }
       append(result, plugin, join34(installPath, "skills"));
@@ -21910,7 +22294,7 @@ async function evaluateLoopExecutionWiring(loop, loops, deps) {
 
 // packages/automation/dist/task-plan-run/journal.js
 import { constants as constants4 } from "node:fs";
-import { lstat as lstat17, mkdir as mkdir15, open as open6 } from "node:fs/promises";
+import { lstat as lstat19, mkdir as mkdir15, open as open6 } from "node:fs/promises";
 import { join as join35 } from "node:path";
 var JOURNAL_SCHEMA_VERSION = "task-run-event/v1";
 var MAX_JOURNAL_BYTES = 8 * 1024 * 1024;
@@ -22008,7 +22392,7 @@ function assertRegularJournalFile(stat4) {
 async function assertJournalPathIdentity(path7, expected) {
   let current;
   try {
-    current = await lstat17(path7);
+    current = await lstat19(path7);
   } catch {
     throw new TaskRunJournalCorruptError("Task run journal leaf changed during access");
   }
@@ -22061,7 +22445,7 @@ async function readEventsFromHandle(path7, handle) {
 async function ordinaryDirectory2(path7) {
   try {
     const openedDirectoryPath = process.platform === "linux" && /^\/(?:dev\/fd|proc\/self\/fd)\/\d+$/.test(path7) ? `${path7}/.` : path7;
-    const info = await lstat17(openedDirectoryPath);
+    const info = await lstat19(openedDirectoryPath);
     return info.isDirectory() && !info.isSymbolicLink();
   } catch {
     return false;
@@ -22083,7 +22467,7 @@ async function journalDirectory(changeDir, revisionId, create) {
       }
     } else {
       try {
-        await lstat17(current);
+        await lstat19(current);
       } catch (error2) {
         if (isRecord6(error2) && error2.code === "ENOENT")
           return null;
@@ -22242,7 +22626,7 @@ import {
   realpathSync as realpathSync4,
   unlinkSync
 } from "node:fs";
-import { isAbsolute as isAbsolute9, join as join36, relative as relative7, sep as sep10 } from "node:path";
+import { isAbsolute as isAbsolute10, join as join36, relative as relative7, sep as sep10 } from "node:path";
 
 // packages/server/src/workflowRootAnchor.ts
 import {
@@ -22354,7 +22738,7 @@ var WorkflowDeleteConflictError = class extends Error {
 // packages/server/src/workflowTrustedFs.ts
 function assertInsideRoot(realRoot, realPath, label) {
   const fromRoot = relative7(realRoot, realPath);
-  if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep10}`) || isAbsolute9(fromRoot)) {
+  if (fromRoot === "" || fromRoot === ".." || fromRoot.startsWith(`..${sep10}`) || isAbsolute10(fromRoot)) {
     throw new Error(`${label} \u5DF2\u9003\u9038 registered root: ${realPath}`);
   }
 }
@@ -23303,12 +23687,36 @@ async function snapshotWorkflowExecution(plan, state, root, changeDir, changeNam
   const fileExists = deps.fileExists ?? projectFileExists;
   const gitHeadSha2 = deps.gitHeadSha;
   const workspaceFingerprint = deps.workspaceFingerprint;
+  const assessBuildRevision = deps.assessBuildRevision ?? (async (request) => {
+    const identity = await probeBuildRevisionIdentity(root);
+    const observe = async () => {
+      const kind = request.isolation === "in-place" ? "workspace" : "git";
+      const revision = kind === "workspace" ? await workspaceFingerprint?.(root, changeName) ?? "" : await gitHeadSha2?.(root) ?? "";
+      if (!identity) throw new Error("build revision identity unavailable");
+      return { kind, revision, identity };
+    };
+    const provenance = async () => {
+      const validated = await readValidatedTransitionHead(changeDir);
+      if (!validated) return void 0;
+      const { current, record: record5 } = validated;
+      const stateBuildSha = current.state.fields.build_sha;
+      return {
+        currentStep: String(current.state.fields.phase ?? ""),
+        stateHash: safeRevisionHash(current.state.fields),
+        stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(",") : stateBuildSha,
+        recordTo: record5.to,
+        buildShaEffects: record5.effects.filter((effect) => effect.field === "build_sha").map((effect) => typeof effect.to === "string" ? effect.to : "")
+      };
+    };
+    return assessBuildRevisionTrust({ ...request, observe, provenance });
+  });
   return {
     readinessByTransition: await readinessByTransition(plan, state, {
       changeDirAbs: changeDir,
       fileExists: (path7) => fileExists(root, path7),
       gitHeadSha: gitHeadSha2 === void 0 ? void 0 : () => gitHeadSha2(root),
       workspaceFingerprint: workspaceFingerprint === void 0 ? void 0 : () => workspaceFingerprint(root, changeName),
+      assessBuildRevision,
       specMigrationStatus: () => evaluateSpecMigrationEvidence(root, changeDir, changeName)
     })
   };
@@ -23556,13 +23964,13 @@ function trustedContextBundleInputs(root, change, changeIdentity, limits) {
 }
 
 // packages/server/src/projectRoots.ts
-import { resolve as resolve13 } from "node:path";
+import { resolve as resolve14 } from "node:path";
 function dedupeRoots(roots) {
   const seen = /* @__PURE__ */ new Set();
   const out = [];
   for (const root of roots) {
     if (!root) continue;
-    const normalized2 = resolve13(root);
+    const normalized2 = resolve14(root);
     if (seen.has(normalized2)) continue;
     seen.add(normalized2);
     out.push(normalized2);
@@ -23579,7 +23987,7 @@ import {
   openSync as openSync8,
   realpathSync as realpathSync5
 } from "node:fs";
-import { dirname as dirname9, isAbsolute as isAbsolute10, join as join38, relative as relative8, sep as sep11 } from "node:path";
+import { dirname as dirname9, isAbsolute as isAbsolute11, join as join38, relative as relative8, sep as sep11 } from "node:path";
 
 // packages/server/src/stableFileMetadata.ts
 function captureStableFileVersion(stat4) {
@@ -23616,7 +24024,7 @@ function matchesDirectoryMutationVersion(expected) {
 }
 function isInside(base, candidate) {
   const fromBase = relative8(base, candidate);
-  return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep11}`) && !isAbsolute10(fromBase);
+  return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep11}`) && !isAbsolute11(fromBase);
 }
 function readBoundedTasksSource(fd, maxBytes) {
   const bytes = readBounded(fd, maxBytes);
@@ -23705,9 +24113,9 @@ async function mapWithConcurrency(items, limit, mapper) {
 }
 
 // packages/server/src/repositoryIdentity.ts
-import { execFile } from "node:child_process";
-import { createHash as createHash20 } from "node:crypto";
-import { basename as basename5, dirname as dirname10, isAbsolute as isAbsolute11, join as join39, normalize, resolve as resolve14 } from "node:path";
+import { execFile as execFile2 } from "node:child_process";
+import { createHash as createHash21 } from "node:crypto";
+import { basename as basename5, dirname as dirname10, isAbsolute as isAbsolute12, join as join39, normalize, resolve as resolve15 } from "node:path";
 var REPOSITORY_IDENTITY_TIMEOUT_MS = 1500;
 var REPOSITORY_IDENTITY_MAX_OUTPUT_BYTES = 4096;
 var REPOSITORY_IDENTITY_ARGS = [
@@ -23719,7 +24127,7 @@ var REPOSITORY_IDENTITY_ARGS = [
 ];
 function runGitRepositoryIdentity(root, args, timeoutMs) {
   return new Promise((resolveOutput, reject) => {
-    execFile("git", [...args], {
+    execFile2("git", [...args], {
       cwd: root,
       timeout: timeoutMs,
       killSignal: "SIGKILL",
@@ -23777,31 +24185,31 @@ async function probeRepositoryIdentity(root, deps = {}) {
   const lines = output.trim().split(/\r?\n/);
   if (lines.length !== 3) return void 0;
   const [commonDirectoryRaw, topLevelRaw, gitDirectoryRaw] = lines;
-  if (!commonDirectoryRaw || !topLevelRaw || !gitDirectoryRaw || !isAbsolute11(commonDirectoryRaw) || !isAbsolute11(topLevelRaw) || !isAbsolute11(gitDirectoryRaw)) return void 0;
-  const commonDirectory = normalize(resolve14(commonDirectoryRaw));
-  const topLevel = normalize(resolve14(topLevelRaw));
-  const gitDirectory = normalize(resolve14(gitDirectoryRaw));
+  if (!commonDirectoryRaw || !topLevelRaw || !gitDirectoryRaw || !isAbsolute12(commonDirectoryRaw) || !isAbsolute12(topLevelRaw) || !isAbsolute12(gitDirectoryRaw)) return void 0;
+  const commonDirectory = normalize(resolve15(commonDirectoryRaw));
+  const topLevel = normalize(resolve15(topLevelRaw));
+  const gitDirectory = normalize(resolve15(gitDirectoryRaw));
   const commonName = basename5(commonDirectory);
-  const conventionalDotGit = commonName === ".git" && (commonDirectory === normalize(resolve14(join39(topLevel, ".git"))) || gitDirectory !== commonDirectory);
+  const conventionalDotGit = commonName === ".git" && (commonDirectory === normalize(resolve15(join39(topLevel, ".git"))) || gitDirectory !== commonDirectory);
   const label = conventionalDotGit ? basename5(dirname10(commonDirectory)) : commonName.endsWith(".git") && commonName.length > ".git".length ? commonName.slice(0, -".git".length) : basename5(topLevel);
   if (!label) return void 0;
   return {
-    id: createHash20("sha256").update(commonDirectory).digest("hex"),
+    id: createHash21("sha256").update(commonDirectory).digest("hex"),
     label,
     workspace_kind: gitDirectory === commonDirectory ? "primary" : "worktree"
   };
 }
 
 // packages/server/src/snapshotFingerprint.ts
-import { lstat as lstat19, readdir as readdir4 } from "node:fs/promises";
+import { lstat as lstat21, readdir as readdir4 } from "node:fs/promises";
 import { join as join41 } from "node:path";
 
 // packages/server/src/repositoryFingerprint.ts
-import { lstat as lstat18 } from "node:fs/promises";
+import { lstat as lstat20 } from "node:fs/promises";
 import { join as join40, sep as sep12 } from "node:path";
 async function metadataPart(path7, mode = "volatile", lookupPath = path7) {
   try {
-    const metadata = await lstat18(lookupPath, { bigint: true });
+    const metadata = await lstat20(lookupPath, { bigint: true });
     const kind = metadata.isDirectory() ? "directory" : metadata.isFile() ? "file" : "other";
     const stableIdentity = mode === "stable" || mode === "stable-directory" && metadata.isDirectory();
     return {
@@ -23859,21 +24267,21 @@ async function computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminal
         const source = stateStorageSourcePathSync(changeDir);
         if (source === void 0) continue;
         try {
-          const stat4 = await lstat19(source, { bigint: true });
+          const stat4 = await lstat21(source, { bigint: true });
           parts.push(`${source}:${stat4.size}:${stat4.mtimeNs}`);
         } catch {
         }
         for (const name of ["tasks.md", ".pipeline-documents.json"]) {
           const target = join41(changeDir, name);
           try {
-            const stat4 = await lstat19(target, { bigint: true });
+            const stat4 = await lstat21(target, { bigint: true });
             parts.push(`${target}:${stat4.size}:${stat4.mtimeNs}`);
           } catch {
           }
         }
         const activity = join41(changeDir, TERMINAL_ACTIVITY_FILE);
         try {
-          const stat4 = await lstat19(activity, { bigint: true });
+          const stat4 = await lstat21(activity, { bigint: true });
           const live = await readTerminalActivity2(changeDir, entry.name, nowMs);
           parts.push(`${activity}:${stat4.size}:${stat4.mtimeNs}:${live === void 0 ? "stale" : "live"}`);
         } catch {
@@ -23995,6 +24403,7 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
   const workspaceFingerprint = deps.workspaceFingerprint;
   const capabilityDeps = {
     ...deps.fileExists === void 0 ? {} : { fileExists: deps.fileExists },
+    ...deps.assessBuildRevision === void 0 ? {} : { assessBuildRevision: deps.assessBuildRevision },
     ...gitHeadSha2 === void 0 ? {} : {
       gitHeadSha: () => {
         gitHeadPromise ??= gitHeadSha2(readRoot);
@@ -24339,7 +24748,7 @@ function hasTraceTimelineReader(store) {
 }
 
 // packages/server/src/operations.ts
-import { execFile as execFile2 } from "node:child_process";
+import { execFile as execFile3 } from "node:child_process";
 import { existsSync as existsSync5 } from "node:fs";
 import { dirname as dirname11, join as join43 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24349,13 +24758,13 @@ function pipelineCliBundlePath() {
 function pipelineCliAvailable() {
   return existsSync5(pipelineCliBundlePath());
 }
-var runPipelineCli = (repoRoot, args, options) => new Promise((resolve15, reject) => {
+var runPipelineCli = (repoRoot, args, options) => new Promise((resolve16, reject) => {
   const bundle = pipelineCliBundlePath();
   if (!existsSync5(bundle)) {
     reject(new Error(`Tenon CLI bundle \u4E0D\u5B58\u5728\uFF1A${bundle}\uFF1B\u8BF7\u5148\u6267\u884C npm run bundle`));
     return;
   }
-  execFile2(
+  execFile3(
     process.execPath,
     [bundle, ...args],
     {
@@ -24368,12 +24777,12 @@ var runPipelineCli = (repoRoot, args, options) => new Promise((resolve15, reject
     },
     (error2, stdout, stderr) => {
       if (error2 === null) {
-        resolve15({ exitCode: 0, stdout, stderr });
+        resolve16({ exitCode: 0, stdout, stderr });
         return;
       }
       const code = typeof error2.code === "number" ? error2.code : 1;
       if (typeof error2.code === "number") {
-        resolve15({ exitCode: code, stdout, stderr });
+        resolve16({ exitCode: code, stdout, stderr });
         return;
       }
       reject(error2);
@@ -24502,7 +24911,7 @@ function routerSuppressionReason(prompt) {
   return null;
 }
 function scoreRouterPatternWithGrep(pattern, prompt) {
-  return new Promise((resolve15, reject) => {
+  return new Promise((resolve16, reject) => {
     const child = spawn("grep", ["-ciE", "--", pattern], {
       env: { ...process.env, LC_ALL: "C" },
       stdio: ["pipe", "pipe", "pipe"]
@@ -24535,12 +24944,12 @@ function scoreRouterPatternWithGrep(pattern, prompt) {
         if (signal !== null) return reject(new Error(`router grep \u88AB\u4FE1\u53F7 ${signal} \u7EC8\u6B62`));
         if (code !== 0 && code !== 1) return reject(new Error(`router grep exit ${String(code)}\uFF1A${stderr.trim() || "unknown error"}`));
         if (stdinError !== null) return reject(new Error(`router grep stdin \u5931\u8D25\uFF1A${stdinError.message}`));
-        if (code === 1) return resolve15(0);
+        if (code === 1) return resolve16(0);
         const score = Number(stdout.trim());
         if (!Number.isSafeInteger(score) || score < 0) {
           return reject(new Error(`router grep \u8FD4\u56DE\u975E\u6CD5\u8BA1\u5206\uFF1A${JSON.stringify(stdout.trim())}`));
         }
-        return resolve15(score);
+        return resolve16(score);
       });
     });
     child.stdin.on("error", (error2) => {
@@ -24751,12 +25160,12 @@ import { accessSync, constants as fsConstants, statSync as statSync4 } from "nod
 import { join as join44 } from "node:path";
 
 // packages/server/src/dockerImages.ts
-import { execFile as execFile3 } from "node:child_process";
-var nodeExecDocker = (args) => new Promise((resolve15) => {
-  execFile3("docker", [...args], (err, stdout, stderr) => {
+import { execFile as execFile4 } from "node:child_process";
+var nodeExecDocker = (args) => new Promise((resolve16) => {
+  execFile4("docker", [...args], (err, stdout, stderr) => {
     const code = err?.code;
     const exitCode = err === null ? 0 : typeof code === "number" ? code : 1;
-    resolve15({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
+    resolve16({ stdout: String(stdout ?? ""), stderr: String(stderr ?? ""), exitCode });
   });
 });
 async function execDocker(args, opts) {
@@ -24764,8 +25173,8 @@ async function execDocker(args, opts) {
   const timeoutMs = opts?.timeoutMs ?? 5e3;
   let timer;
   try {
-    const timeout = new Promise((resolve15) => {
-      timer = setTimeout(() => resolve15(null), timeoutMs);
+    const timeout = new Promise((resolve16) => {
+      timer = setTimeout(() => resolve16(null), timeoutMs);
     });
     const result = await Promise.race([exec(args).catch(() => null), timeout]);
     return result;
@@ -24905,7 +25314,7 @@ function writeAutomationSettings(root, settings) {
 
 // packages/server/src/config.ts
 import { readFileSync as readFileSync17 } from "node:fs";
-import { readFile as readFile16, rename as rename7, rm as rm3, writeFile as writeFile10 } from "node:fs/promises";
+import { readFile as readFile17, rename as rename7, rm as rm3, writeFile as writeFile10 } from "node:fs/promises";
 import { dirname as dirname12 } from "node:path";
 var ConfigError = class extends Error {
   constructor(message) {
@@ -25038,7 +25447,7 @@ async function writeMandatorySkills(manifestPath2, phase, track, skills) {
   }
   const key = `${phase}.${track}`;
   await withLock(dirname12(manifestPath2), async () => {
-    const original = await readFile16(manifestPath2, "utf8");
+    const original = await readFile17(manifestPath2, "utf8");
     const lines = original.split("\n");
     let sectionStart = -1;
     for (let i = 0; i < lines.length; i++) {
@@ -25839,8 +26248,8 @@ function listAllSkillsDetailed(repoRoot, claudeDir) {
 import { join as join53, resolve as resolvePath4 } from "node:path";
 
 // packages/server/src/afk.ts
-import { execFile as execFile4 } from "node:child_process";
-import { readFile as readFile17, writeFile as writeFile11 } from "node:fs/promises";
+import { execFile as execFile5 } from "node:child_process";
+import { readFile as readFile18, writeFile as writeFile11 } from "node:fs/promises";
 import { join as join49 } from "node:path";
 var AFK_LANES = ["queued", "running", "merged", "failed", "conflict", "paused"];
 function isAutomationState(value) {
@@ -25970,8 +26379,8 @@ async function cancelAfkRun(store, changeDir) {
       error: `\u65E0\u6CD5\u5728 automation_worktree \u76EE\u5F55\u843D\u53D6\u6D88\u6807\u8BB0\uFF08${code}\uFF09\uFF1Aworktree \u76EE\u5F55\u53EF\u80FD\u5DF2\u88AB\u6E05\u7406\uFF0C\u6216\u5B57\u6BB5\u503C\u66FE\u88AB\u65E7\u7248\u622A\u65AD\u635F\u574F\u2014\u2014\u82E5\u4EFB\u52A1\u5B9E\u9645\u5DF2\u4E0D\u5728\u8DD1\uFF0C\u53EF\u76F4\u63A5\u91CD\u8BD5/\u653E\u5F03\u8BE5\u4EFB\u52A1`
     };
   }
-  await new Promise((resolve15) => {
-    execFile4("docker", ["kill", sandbox], () => resolve15());
+  await new Promise((resolve16) => {
+    execFile5("docker", ["kill", sandbox], () => resolve16());
   });
   return { ok: true };
 }
@@ -26018,7 +26427,7 @@ async function enqueueAfkRun(store, changeDir, clock, eligibility) {
 }
 async function readAfkRunLog(changeDir) {
   try {
-    return await readFile17(join49(changeDir, ".sandcastle-run.log"), "utf8");
+    return await readFile18(join49(changeDir, ".sandcastle-run.log"), "utf8");
   } catch {
     return null;
   }
@@ -26026,7 +26435,7 @@ async function readAfkRunLog(changeDir) {
 
 // packages/server/src/contextBundlePreviewSupport.ts
 import { lstatSync as lstatSync8, realpathSync as realpathSync6 } from "node:fs";
-import { isAbsolute as isAbsolute12, join as join50, relative as relative9, sep as sep13 } from "node:path";
+import { isAbsolute as isAbsolute13, join as join50, relative as relative9, sep as sep13 } from "node:path";
 var SCHEMA_VERSION = "context-bundle-preview/v1";
 var SIDE_EFFECTS = "none";
 var ContextBundlePathError = class extends Error {
@@ -26042,7 +26451,7 @@ function missingCode(error2) {
 }
 function inside2(base, candidate) {
   const fromBase = relative9(base, candidate);
-  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep13}`) && !isAbsolute12(fromBase);
+  return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep13}`) && !isAbsolute13(fromBase);
 }
 function captureDirectoryIdentity(path7) {
   const info = lstatSync8(path7, { bigint: true });
@@ -26553,11 +26962,11 @@ async function buildRunDetail(repoRoot, changeDir, changeName, deps) {
 }
 
 // packages/server/src/transition.ts
-import { readFile as readFile19 } from "node:fs/promises";
+import { readFile as readFile20 } from "node:fs/promises";
 import { join as join52 } from "node:path";
 
 // packages/server/src/transitionHistory.ts
-import { readFile as readFile18 } from "node:fs/promises";
+import { readFile as readFile19 } from "node:fs/promises";
 import { join as join51 } from "node:path";
 function decodeHistoryEntry(value) {
   if (typeof value !== "object" || value === null) return null;
@@ -26587,7 +26996,7 @@ function decodeHistoryEntry(value) {
 async function readJsonlHistory(changeDir) {
   let text3;
   try {
-    text3 = await readFile18(join51(changeDir, HISTORY_FILE), "utf8");
+    text3 = await readFile19(join51(changeDir, HISTORY_FILE), "utf8");
   } catch (error2) {
     if (error2.code === "ENOENT") return [];
     throw error2;
@@ -26689,6 +27098,19 @@ function mapTransitionResult(name, event, result) {
       return { code: 409, body: { ok: false, error: `illegal transition: ${result.from} -> ${result.to}` } };
     case "precondition-violated":
       return { code: 409, body: { ok: false, error: result.lines[0], detail: result.lines } };
+    case "revision-untrusted":
+      return {
+        code: 409,
+        body: {
+          ok: false,
+          error: "Verify build revision is not trustworthy",
+          code: result.blocker.code,
+          reason: result.blocker.reason,
+          remediation: result.blocker.remediation,
+          ...result.blocker.stateHash === void 0 ? {} : { stateHash: result.blocker.stateHash },
+          ...result.blocker.revisionHash === void 0 ? {} : { revisionHash: result.blocker.revisionHash }
+        }
+      };
     case "workflow-not-found":
       return {
         code: 409,
@@ -26751,10 +27173,42 @@ async function performTransition(deps, root, name, event) {
   const fileExists = deps.fileExists;
   const gitHeadSha2 = deps.gitHeadSha;
   const workspaceFingerprint = deps.workspaceFingerprint;
+  const captureBuildRevision = deps.captureBuildRevision;
+  const assessBuildRevision = deps.assessBuildRevision;
   const ctx = {
     fileExists: fileExists ? (p) => fileExists(root, p) : void 0,
     gitHeadSha: gitHeadSha2 ? () => gitHeadSha2(root) : void 0,
     workspaceFingerprint: workspaceFingerprint ? () => workspaceFingerprint(root, name) : void 0,
+    captureBuildRevision: captureBuildRevision ? (isolation) => captureBuildRevision(root, isolation) : async (isolation) => {
+      const identity = await probeBuildRevisionIdentity(root);
+      if (!identity) throw new Error("build revision identity unavailable");
+      const kind = isolation === "in-place" ? "workspace" : "git";
+      const revision = kind === "workspace" ? await workspaceFingerprint?.(root, name) ?? "" : await gitHeadSha2?.(root) ?? "";
+      return createBuildRevisionToken(kind, revision, identity).value;
+    },
+    assessBuildRevision: assessBuildRevision === void 0 ? async (request) => {
+      const identity = await probeBuildRevisionIdentity(root);
+      const observe = async () => {
+        const kind = request.isolation === "in-place" ? "workspace" : "git";
+        const revision = kind === "workspace" ? await workspaceFingerprint?.(root, name) ?? "" : await gitHeadSha2?.(root) ?? "";
+        if (!identity) throw new Error("build revision identity unavailable");
+        return { kind, revision, identity };
+      };
+      const provenance = async () => {
+        const validated = await readValidatedTransitionHead(dir);
+        if (!validated) return void 0;
+        const { current, record: record5 } = validated;
+        const stateBuildSha = current.state.fields.build_sha;
+        return {
+          currentStep: String(current.state.fields.phase ?? ""),
+          stateHash: safeRevisionHash(current.state.fields),
+          stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(",") : stateBuildSha,
+          recordTo: record5.to,
+          buildShaEffects: record5.effects.filter((effect) => effect.field === "build_sha").map((effect) => typeof effect.to === "string" ? effect.to : "")
+        };
+      };
+      return assessBuildRevisionTrust({ ...request, observe, provenance });
+    } : assessBuildRevision,
     specMigrationStatus: () => evaluateSpecMigrationEvidence(root, dir, name),
     tasksThroughPhase: (phase) => taskPlanTasksThroughPhaseForChange(dir, phase)
   };
@@ -26769,7 +27223,7 @@ async function performTransition(deps, root, name, event) {
       const slots = resolveRequiredSkillSlots(deps.skillResolver, capability, stepId);
       let historyRaw = "";
       try {
-        historyRaw = await readFile19(join52(targetDir, HISTORY_FILE), "utf8");
+        historyRaw = await readFile20(join52(targetDir, HISTORY_FILE), "utf8");
       } catch (error2) {
         if (error2.code !== "ENOENT") throw error2;
       }
@@ -27639,10 +28093,10 @@ function createHostTargetPlanRuntime(options = {}) {
     }
   };
   const schedule = (load) => {
-    const scheduled = new Promise((resolve15, reject) => {
+    const scheduled = new Promise((resolve16, reject) => {
       queue.push({
         load,
-        resolve: resolve15,
+        resolve: resolve16,
         reject,
         deadline: now() + timeoutMs
       });
@@ -27742,7 +28196,7 @@ import {
   openSync as openSync12,
   realpathSync as realpathSync7
 } from "node:fs";
-import { isAbsolute as isAbsolute13, join as join56, posix as posix4, relative as relative10, sep as sep14 } from "node:path";
+import { isAbsolute as isAbsolute14, join as join56, posix as posix4, relative as relative10, sep as sep14 } from "node:path";
 
 // packages/server/src/workflowDefinitionStatus.ts
 function projectWorkflowDefinitionStatus(workflow, frozenFingerprint, current) {
@@ -27779,7 +28233,7 @@ function missing3(error2) {
 }
 function isInside2(base, candidate) {
   const fromBase = relative10(base, candidate);
-  return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep14}`) && !isAbsolute13(fromBase);
+  return fromBase === "" || fromBase !== ".." && !fromBase.startsWith(`..${sep14}`) && !isAbsolute14(fromBase);
 }
 function readBoundedTasksSource2(fd, maxBytes) {
   const bytes = readBounded(fd, maxBytes);
@@ -27976,7 +28430,8 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
     const capabilityDeps = {
       ...deps.fileExists === void 0 ? {} : { fileExists: deps.fileExists },
       ...gitHeadSha2 === void 0 ? {} : { gitHeadSha: () => gitHeadSha2(rootPath) },
-      ...workspaceFingerprint === void 0 ? {} : { workspaceFingerprint: () => workspaceFingerprint(rootPath, changeName) }
+      ...workspaceFingerprint === void 0 ? {} : { workspaceFingerprint: () => workspaceFingerprint(rootPath, changeName) },
+      ...deps.assessBuildRevision === void 0 ? {} : { assessBuildRevision: deps.assessBuildRevision }
     };
     const [documents, terminalActivity, tasksProjection, workflowExecution, authority] = await Promise.all([
       documentEvidence(rootPath, changeDir, plan, phase),
@@ -29244,7 +29699,7 @@ import { resolve as resolvePath8 } from "node:path";
 
 // packages/server/src/changeLaunch.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { lstat as lstat20, readFile as readFile20, rename as rename8, unlink as unlink4, writeFile as writeFile12 } from "node:fs/promises";
+import { lstat as lstat22, readFile as readFile21, rename as rename8, unlink as unlink4, writeFile as writeFile12 } from "node:fs/promises";
 import { join as join58 } from "node:path";
 var CHANGE_TASK_FILE = "REAL_AGENT_TASK.md";
 var MAX_TASK_PROMPT_CHARS = 24e3;
@@ -29272,14 +29727,14 @@ function parseChangeSessionActivation(value, hasTaskPrompt) {
   return { ok: true, value };
 }
 async function writeChangeTaskPrompt(changeDir, prompt) {
-  const dirStat = await lstat20(changeDir);
+  const dirStat = await lstat22(changeDir);
   if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) {
     throw new Error("Change \u76EE\u5F55\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u76EE\u5F55\uFF0C\u62D2\u7EDD\u4FDD\u5B58\u4EFB\u52A1\u63D0\u793A\u8BCD");
   }
   const target = join58(changeDir, CHANGE_TASK_FILE);
   let targetExists = false;
   try {
-    await lstat20(target);
+    await lstat22(target);
     targetExists = true;
   } catch (error2) {
     if (errorCode7(error2) !== "ENOENT") throw error2;
@@ -29319,11 +29774,11 @@ async function activateChangeSession(input) {
   }
   const pointer = join58(input.repoRoot, ".pipeline-active");
   try {
-    const pointerStat = await lstat20(pointer);
+    const pointerStat = await lstat22(pointer);
     if (!pointerStat.isFile() || pointerStat.isSymbolicLink()) {
       return { requested: true, active: false, status: "degraded", exit_code: result.exitCode };
     }
-    const activeName = (await readFile20(pointer, "utf8")).trim();
+    const activeName = (await readFile21(pointer, "utf8")).trim();
     return activeName === input.changeName ? { requested: true, active: true, status: "active", exit_code: result.exitCode } : { requested: true, active: false, status: "degraded", exit_code: result.exitCode };
   } catch {
     return { requested: true, active: false, status: "degraded", exit_code: result.exitCode };
@@ -30113,7 +30568,7 @@ function registryReadError(error2) {
   const detail = error2 instanceof Error ? error2.message : String(error2);
   return new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${code}\uFF09\uFF1A${detail}`);
 }
-function readTrustedLoopRegistry(anchor, readFile21 = (fd) => readFileSync20(fd, "utf8")) {
+function readTrustedLoopRegistry(anchor, readFile22 = (fd) => readFileSync20(fd, "utf8")) {
   return readWithLoopScopeRootTrust(
     () => assertWorkflowRootAnchor(anchor),
     () => {
@@ -30161,7 +30616,7 @@ function readTrustedLoopRegistry(anchor, readFile21 = (fd) => readFileSync20(fd,
               assertDirectoryStillTrusted(pipeline, anchor);
               let text3;
               try {
-                text3 = readFile21(fd);
+                text3 = readFile22(fd);
               } catch (error2) {
                 throw registryReadError(error2);
               }
@@ -30942,12 +31397,12 @@ data: ${data}
     res.end(body);
   }
   function readJsonBody(req) {
-    return new Promise((resolve15) => {
+    return new Promise((resolve16) => {
       let done = false;
       const finish = (v) => {
         if (!done) {
           done = true;
-          resolve15(v);
+          resolve16(v);
         }
       };
       const len = Number.parseInt(String(req.headers["content-length"] ?? ""), 10);
@@ -31288,12 +31743,12 @@ function createRelatedSessionSearchExecutor(runner) {
     if (inFlight) return { ok: false, reason: "busy" };
     inFlight = true;
     try {
-      await new Promise((resolve15) => setImmediate(resolve15));
+      await new Promise((resolve16) => setImmediate(resolve16));
       return { ok: true, response: await runner(request) };
     } catch {
       return { ok: false, reason: "unavailable" };
     } finally {
-      await new Promise((resolve15) => setImmediate(resolve15));
+      await new Promise((resolve16) => setImmediate(resolve16));
       inFlight = false;
     }
   };
@@ -31597,7 +32052,7 @@ function createDashboardServer(options) {
     version,
     httpServer,
     listen(port = 0, host = "127.0.0.1") {
-      return new Promise((resolve15, reject) => {
+      return new Promise((resolve16, reject) => {
         const onError = (e) => reject(e);
         httpServer.once("error", onError);
         httpServer.listen(port, host, () => {
@@ -31609,12 +32064,12 @@ function createDashboardServer(options) {
           }
           boundPort = address.port;
           cadenceScheduler?.start();
-          resolve15({ port: boundPort, host });
+          resolve16({ port: boundPort, host });
         });
       });
     },
     close() {
-      return new Promise((resolve15) => {
+      return new Promise((resolve16) => {
         stopPoll();
         cadenceScheduler?.stop();
         for (const anchor of workflowRootAnchors.values()) closeWorkflowRootAnchor(anchor);
@@ -31626,7 +32081,7 @@ function createDashboardServer(options) {
           }
         }
         clients.clear();
-        httpServer.close(() => resolve15());
+        httpServer.close(() => resolve16());
         const closeAllConnections = Reflect.get(httpServer, "closeAllConnections");
         if (typeof closeAllConnections === "function") closeAllConnections.call(httpServer);
       });
@@ -31649,7 +32104,7 @@ function resolveServerPaths(opts = {}) {
 }
 
 // packages/server/src/preempt.ts
-import { execFile as execFile5 } from "node:child_process";
+import { execFile as execFile6 } from "node:child_process";
 import { get as httpGet } from "node:http";
 import { readFileSync as readFileSync24 } from "node:fs";
 import { createConnection } from "node:net";
@@ -31707,14 +32162,14 @@ function readPidfile(pidfilePath) {
   }
 }
 function probeHealth(port, host = "127.0.0.1", timeoutMs = 500) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve16) => {
     let done = false;
     let wallClockTimer;
     const finish = (v) => {
       if (done) return;
       done = true;
       if (wallClockTimer !== void 0) clearTimeout(wallClockTimer);
-      resolve15(v);
+      resolve16(v);
     };
     const req = httpGet({ host, port, path: "/api/health", timeout: timeoutMs }, (res) => {
       let body = "";
@@ -31771,28 +32226,28 @@ function parseListenerPids(stdout) {
   return [...new Set(stdout.split(/\r?\n/).map((line) => Number.parseInt(line.trim(), 10)).filter((pid) => Number.isSafeInteger(pid) && pid > 0))];
 }
 function listenerPids(port) {
-  return new Promise((resolve15) => {
-    execFile5("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }, (error2, stdout) => {
+  return new Promise((resolve16) => {
+    execFile6("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" }, (error2, stdout) => {
       if (error2 === null) {
-        resolve15(parseListenerPids(String(stdout ?? "")));
+        resolve16(parseListenerPids(String(stdout ?? "")));
         return;
       }
       const code = error2.code;
       if (code === 1) {
-        resolve15([]);
+        resolve16([]);
         return;
       }
-      resolve15(null);
+      resolve16(null);
     });
   });
 }
 function probePortOpen(port, host = "127.0.0.1", timeoutMs = 250) {
-  return new Promise((resolve15) => {
+  return new Promise((resolve16) => {
     let done = false;
     const finish = (open7) => {
       if (done) return;
       done = true;
-      resolve15(open7);
+      resolve16(open7);
     };
     const socket = createConnection({ host, port });
     socket.setTimeout(timeoutMs);
@@ -31874,8 +32329,8 @@ function manifestPath() {
   return join68(pluginRoot(), "templates", "manifest.yaml");
 }
 function gitHeadSha(cwd) {
-  return new Promise((resolve15) => {
-    execFile6("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => resolve15((stdout ?? "").trim()));
+  return new Promise((resolve16) => {
+    execFile7("git", ["rev-parse", "HEAD"], { cwd }, (_err, stdout) => resolve16((stdout ?? "").trim()));
   });
 }
 async function main() {

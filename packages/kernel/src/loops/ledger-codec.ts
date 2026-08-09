@@ -64,6 +64,7 @@ const RUN_REASONS = [
   'kill-switch', 'cancelled', 'infrastructure-error', 'recovered', 'reservation-expired',
   // H7 verifier Phase 2：settlement verification gate 的 fail-closed 诊断成因。
   'verification-missing', 'verification-untrusted', 'verification-inconclusive', 'verification-subject-mismatch',
+  'verify-build-revision-untrusted',
   // H7-S2（返工 r2 阻断4 custom fail-closed）：custom workflow 核验结果未真正落在 workflow-transition
   // binding 时的诊断成因。
   'verification-binding-unresolved',

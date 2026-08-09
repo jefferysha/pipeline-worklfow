@@ -62,6 +62,7 @@ export type FailureCause =
   // 停给人工，**非故障**。同样仅结构化可达：落盘原文「no-op run：零 commit …」regex 8 类无一命中，
   // 此前 fallback 落 unknown 还误建议跑 doctor（空跑不是环境故障，doctor 诊不出）。
   | 'no-op'
+  | 'verify-build-revision-untrusted'
   | 'unknown'
 
 export interface FailureDiagnosis {
@@ -132,6 +133,7 @@ const CAUSE_MAP: ReadonlyMap<string, FailureDiagnosis> = new Map<string, Failure
   ['verify-fail', { cause: 'verify-fail', fixCommand: null }],
   ['agent-exit', { cause: 'agent-nonzero', fixCommand: null }],
   ['no-op', { cause: 'no-op', fixCommand: null }],
+  ['verify-build-revision-untrusted', { cause: 'verify-build-revision-untrusted', fixCommand: null }],
 ])
 
 /**

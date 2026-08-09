@@ -127,6 +127,15 @@ function makeFixture(): Snapshot {
         track: 'backend',
         updated_at: '2026-07-12T10:00:00Z',
         fields: { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' },
+        // Readiness is an authoritative server projection; keep the gate fixture explicit.
+        workflowExecution: {
+          readinessByTransition: {
+            verify: {
+              'verify-pass': { ready: true, blockers: [] },
+              'verify-fail': { ready: true, blockers: [] },
+            },
+          },
+        },
       }),
       makeChange('triage-demo', 'spec', {
         track: 'chat',
@@ -637,6 +646,44 @@ describe('ProgressView 判定徽章（抽屉 dw-badge；rowSemantics 同源不�
 })
 
 describe('ProgressView 抽屉动作：放行/打回 = transition 管线', () => {
+  it('revision blocker disables exact Verify success while retaining ready rollback and remediation details', async () => {
+    const stateHash = `sha256:${'a'.repeat(64)}`
+    renderView({
+      snapshot: makeSnapshot([
+        makeProject(ROOT_A, [makeChange('revision-blocked', 'verify', {
+          fields: { verification_report: 'docs/v.md', branch_status: 'handled', agent_review_result: 'pass', codex_review_result: 'pass' },
+          workflowExecution: {
+            readinessByTransition: {
+              verify: {
+                'verify-pass': {
+                  ready: false,
+                  blockers: [{
+                    kind: 'verify-build-revision-untrusted',
+                    code: 'verify-build-revision-untrusted',
+                    reason: 'revision-stale',
+                    remediation: 'return-to-build-and-capture-current-revision',
+                    stateHash,
+                  }],
+                },
+                'verify-fail': { ready: true, blockers: [] },
+              },
+            },
+          },
+        })]),
+      ]),
+    })
+    await openDrawer('revision-blocked')
+    const pass = screen.getByTestId('prg9-dw-pass-revision-blocked')
+    expect(pass).toBeDisabled()
+    expect(screen.getByTestId('prg9-dw-reject-revision-blocked')).toBeEnabled()
+    const note = screen.getByTestId('prg9-note-revision-blocked')
+    expect(note).toHaveTextContent('verify-build-revision-untrusted')
+    expect(note).toHaveTextContent('reason=revision-stale')
+    expect(note).toHaveTextContent('remediation=return-to-build-and-capture-current-revision')
+    fireEvent.click(screen.getByTestId('prg9-dw-reject-revision-blocked'))
+    await waitFor(() => expect(fetchLog.some((l) => l.includes('"event":"verify-fail"'))).toBe(true))
+  })
+
   it('放行钮带目标相位（放行进入 交付）→ POST transition（verify-pass）+ 乐观推进 + toast + onRefresh', async () => {
     const { onToast, onRefresh } = renderView()
     await openDrawer('gate-demo')
@@ -1319,6 +1366,16 @@ describe('ProgressView Bug4：乐观 patch 按 change 落地清除，不被无�
         makeChange('gate-demo', phase, {
           track: 'backend',
           fields: { verify_result: 'pass', agent_review_result: 'pass', codex_review_result: 'pass' },
+          ...(phase === 'verify' ? {
+            workflowExecution: {
+              readinessByTransition: {
+                verify: {
+                  'verify-pass': { ready: true, blockers: [] },
+                  'verify-fail': { ready: true, blockers: [] },
+                },
+              },
+            },
+          } : {}),
         }),
         makeChange('changelog-cn', 'review', { track: 'chat', fields: { workflow: 'release-train' } }),
       ]),

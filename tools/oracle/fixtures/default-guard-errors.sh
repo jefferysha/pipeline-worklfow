@@ -53,9 +53,10 @@ DESIGN
 printf '# plan\n' > "$target/docs/plan.md"
 printf '# verification report\n' > "$target/docs/verify.md"
 
-# 独立 git 仓（无 commit）：base_branch 探测 → main（双侧确定性）；build-complete 的 git HEAD 取不到 →
-# build_sha 留 null（barrier 退化跳过，不干扰 verify-pass 各前置 guard 的失败探测）。同 backend-full。
+# 独立 git 仓并提交一个真实基线：Build revision capture 必须取得可验证 HEAD；该 fixture 不再依赖
+# 空/null build_sha 的旧 fail-open 路径。后续 Verify 失败只由计划中指定的 guard 分支触发。
 (cd "$target" && git init -q -b main 2>/dev/null || git init -q 2>/dev/null || true)
+(cd "$target" && git config user.email tenon-oracle@example.invalid && git config user.name tenon-oracle && git add .oracle-post-init docs && git commit -qm 'oracle fixture baseline')
 
 # 声明本 fixture 走 stderr 逐字口径（run.sh 据此在 transition 拒绝路径逐字比 stderr）。
 : > "$target/.oracle-stderr-check"

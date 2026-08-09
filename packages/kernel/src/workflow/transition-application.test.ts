@@ -15,14 +15,27 @@ import { createFlowEngine, loadManifest } from '../flow/index.js'
 import { compileAutomationPolicySnapshot } from '../loops/automation-policy.js'
 import type { LoopEntry } from '../loops/types.js'
 import { createTransitionApplication } from './transition-application.js'
-import type { TransitionApplicationDeps, TransitionApplicationWarning } from './transition-application.js'
+import type { TransitionApplicationDeps } from './transition-application.js'
 import { compileWorkflow } from './compile.js'
 import { compileEffectiveWorkflowPlan, documentGovernanceFingerprint } from './effective-plan.js'
 import type { WorkflowDef } from './types.js'
 import type { WorkflowIR } from './ir.js'
 import type { HistoryEntry } from '../types.js'
+import { createBuildRevisionToken, makeBuildRevisionBlocker, safeRevisionHash } from './build-revision.js'
 
 const FIXED_CLOCK = () => '2026-07-17T00:00:00Z'
+const REVISION_IDENTITY = { repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change' } as const
+const GIT_BUILD_TOKEN = createBuildRevisionToken('git', 'a'.repeat(40), REVISION_IDENTITY).value
+const WORKSPACE_BUILD_TOKEN = createBuildRevisionToken(
+  'workspace', `workspace:sha256:${'b'.repeat(64)}`, REVISION_IDENTITY,
+).value
+const WORKSPACE_BUILD_TOKEN_DRIFT = createBuildRevisionToken(
+  'workspace', `workspace:sha256:${'c'.repeat(64)}`, REVISION_IDENTITY,
+).value
+const TRUSTED_GIT_ASSESSMENT = async () => ({
+  trusted: true as const,
+  token: createBuildRevisionToken('git', 'a'.repeat(40), REVISION_IDENTITY),
+})
 /** 仓库根 templates/manifest.yaml（同 flow.test.ts 的定位手法，不依赖 cwd） */
 const TEMPLATE_MANIFEST = fileURLToPath(new URL('../../../../templates/manifest.yaml', import.meta.url))
 
@@ -296,7 +309,8 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
         branch_status: 'handled',
         agent_review_result: 'pass',
         codex_review_result: 'pass',
-        build_sha: 'MATCH',
+        isolation: 'branch',
+        build_sha: GIT_BUILD_TOKEN,
         review_gate_phase: 'verify',
         review_gate_status: 'approved',
         review_gate_event: 'verify-fail',
@@ -306,7 +320,10 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       const app = createTransitionApplication(deps)
       const blocked = await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'verify-pass',
-        context: { fileExists: () => true, gitHeadSha: async () => 'MATCH' }, loadWorkflow: NEVER_FOUND_WORKFLOW,
+        context: {
+          fileExists: () => true,
+          assessBuildRevision: TRUSTED_GIT_ASSESSMENT,
+        }, loadWorkflow: NEVER_FOUND_WORKFLOW,
       })
       expect(blocked).toEqual({ kind: 'review-approval-required', phase: 'verify', event: 'verify-pass' })
       expect((await store.read(dir)).fields.phase).toBe('verify')
@@ -423,7 +440,7 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect((await createStateStore().read(dir)).fields.phase).toBe('archive')
     })
 
-    test('build-complete 且 gitHeadSha 未注入 → applied 但 warnings 含 build-sha-missing', async () => {
+    test('build-complete 且 capture capability 未注入 → revision-untrusted 且零提交', async () => {
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const dir = await initChange(deps, root, 'demo')
@@ -435,16 +452,21 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
           pre_verify_review_result: 'pass',
         },
       )
+      const canonicalBefore = await createStateStore().read(dir)
+      const canonicalBeforeHash = safeRevisionHash(canonicalBefore.fields)
       const app = createTransitionApplication(deps)
       const result = await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'build-complete',
-        context: {}, // 无 gitHeadSha 注入 → 取不到 HEAD
+        context: {}, // 无 capture capability → fail-closed
         loadWorkflow: NEVER_FOUND_WORKFLOW,
       })
-      expect(result.kind).toBe('applied')
-      if (result.kind !== 'applied') throw new Error('expected applied')
-      const warning: TransitionApplicationWarning | undefined = result.warnings[0]
-      expect(warning).toEqual({ kind: 'build-sha-missing' })
+      expect(result).toMatchObject({ kind: 'revision-untrusted', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'capability-unavailable', stateHash: canonicalBeforeHash,
+      } })
+      const state = await createStateStore().read(dir)
+      expect(state.fields.phase).toBe('build')
+      expect(state.runMetadata?.transitionSequence).toBe(0)
+      expect(deps.historyEntries).toEqual([])
     })
 
     test('requirements-changed：即使上游文档已 stale 也可从 build 受控回退 spec，零伪造 receipt', async () => {
@@ -510,8 +532,7 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
   })
 
   describe('G2 P3：default 轨 typed guard/action 迁移的 IO 不变量（防双执行 + 拒绝零提交）', () => {
-    test('build-complete：gitHeadSha 恰调一次（freeze-build-sha action；前置 guard 不取 SHA）→ 冻结' +
-      'build_sha（若 legacy switch 与 typed action 双跑会调两次，此断言即抓红）', async () => {
+    test('build-complete：captureBuildRevision 恰调一次且冻结 canonical token（拒绝 legacy fallback）', async () => {
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const dir = await initChange(deps, root, 'demo')
@@ -519,67 +540,68 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
         phase: 'build', build_mode: 'direct', isolation: 'branch', direct_override: 'true',
         pre_verify_review_result: 'pass',
       })
-      let shaCalls = 0
+      let captureCalls = 0
       const app = createTransitionApplication(deps)
       const result = await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'build-complete',
-        context: { gitHeadSha: async () => { shaCalls++; return 'FROZENSHA\n' } },
+        context: { captureBuildRevision: async () => { captureCalls++; return GIT_BUILD_TOKEN } },
         loadWorkflow: NEVER_FOUND_WORKFLOW,
       })
       expect(result.kind).toBe('applied')
-      expect(shaCalls).toBe(1)
+      expect(captureCalls).toBe(1)
       const state = await createStateStore().read(dir)
-      expect(state.fields.build_sha).toBe('FROZENSHA')
+      expect(state.fields.build_sha).toBe(GIT_BUILD_TOKEN)
       expect(state.fields.phase).toBe('verify')
     })
 
-    test('verify-pass：gitHeadSha 恰调一次（barrier guard；mark-verification-passed action 不取 SHA）→' +
-      '通过并落 verify_result=pass（同上，双跑会调两次）', async () => {
+    test('verify-pass：assessor 恰调一次（mark action 不重复评估）→ 通过并落 verify_result=pass', async () => {
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const dir = await initChange(deps, root, 'demo')
       await createStateStore().setMany(dir, {
         phase: 'verify', verification_report: 'docs/v.md', branch_status: 'handled',
-        agent_review_result: 'pass', codex_review_result: 'pass', build_sha: 'MATCH',
+        agent_review_result: 'pass', codex_review_result: 'pass', isolation: 'branch', build_sha: GIT_BUILD_TOKEN,
         review_gate_phase: 'verify', review_gate_status: 'approved',
         review_gate_event: 'verify-pass',
         review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
       })
-      let shaCalls = 0
+      let assessCalls = 0
       const app = createTransitionApplication(deps)
       const result = await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'verify-pass',
-        context: { fileExists: () => true, gitHeadSha: async () => { shaCalls++; return 'MATCH' } },
+        context: {
+          fileExists: () => true,
+          assessBuildRevision: async (request) => { assessCalls++; return TRUSTED_GIT_ASSESSMENT(request) },
+        },
         loadWorkflow: NEVER_FOUND_WORKFLOW,
       })
       expect(result.kind).toBe('applied')
-      expect(shaCalls).toBe(1)
+      expect(assessCalls).toBe(1)
       const state = await createStateStore().read(dir)
       expect(state.fields.verify_result).toBe('pass')
       expect(state.fields.phase).toBe('ship')
     })
 
-    test('barrier 拒绝（build_sha≠HEAD）→ precondition-violated 双行文案 + 零提交（phase 不推进、' +
-      'seq=0、零 projection）', async () => {
+    test('barrier 拒绝（revision stale）→ typed blocker + 零提交（phase 不推进、seq=0、零 projection）', async () => {
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const dir = await initChange(deps, root, 'demo')
       await createStateStore().setMany(dir, {
         phase: 'verify', verification_report: 'docs/v.md', branch_status: 'handled',
-        agent_review_result: 'pass', codex_review_result: 'pass', build_sha: 'FROZEN',
+        agent_review_result: 'pass', codex_review_result: 'pass', isolation: 'branch', build_sha: GIT_BUILD_TOKEN,
       })
       const app = createTransitionApplication(deps)
       const result = await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'verify-pass',
-        context: { fileExists: () => true, gitHeadSha: async () => 'MOVED' },
+        context: {
+          fileExists: () => true,
+          assessBuildRevision: async () => ({ trusted: false as const, blocker: makeBuildRevisionBlocker('revision-stale') }),
+        },
         loadWorkflow: NEVER_FOUND_WORKFLOW,
       })
-      expect(result.kind).toBe('precondition-violated')
-      if (result.kind !== 'precondition-violated') throw new Error('expected precondition-violated')
-      expect(result.lines).toEqual([
-        'ERROR: verify-pass 要求 HEAD==build_sha（build 后产物被改未复验）build_sha=FROZEN HEAD=MOVED',
-        '  修复：要么把改动并入复验（重跑 build→verify），要么 verify-fail 回退后重新 build-complete 冻结新 SHA',
-      ])
+      expect(result).toMatchObject({ kind: 'revision-untrusted', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'revision-stale',
+      } })
       const state = await createStateStore().read(dir)
       expect(state.fields.phase).toBe('verify')
       expect(state.runMetadata?.transitionSequence).toBe(0)
@@ -917,7 +939,10 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
           {
             id: 'verify', label: '', gate: 'review', skills: [],
             inputs: [{ field: 'build_sha', type: 'string' }], outputs: [], guards: [],
-            transitions: [{ event: 'accept', to: 'ship' }, { event: 'reject', to: 'build' }],
+            transitions: [
+              { event: 'accept', to: 'ship' },
+              { event: 'reject', to: 'build', actions: [{ type: 'mark-verification-failed' }] },
+            ],
           },
           { id: 'ship', label: '', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
         ],
@@ -927,14 +952,24 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
         build_mode: 'direct', isolation: 'in-place', direct_override: 'true',
         pre_verify_review_result: 'pass',
       })
-      const baseline = 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+      const baseline = WORKSPACE_BUILD_TOKEN
       let current = baseline
+      let assessCalls = 0
+      let captureCalls = 0
       const app = createTransitionApplication(deps)
       const load = (name: string) => (name === 'governed' ? compileWorkflow(wf) : null)
       expect((await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'complete',
-        context: { workspaceFingerprint: async () => current, gitHeadSha: async () => 'UNCHANGED' }, loadWorkflow: load,
+        context: {
+          captureBuildRevision: async () => { captureCalls += 1; return baseline },
+          assessBuildRevision: async () => {
+            assessCalls += 1
+            return { trusted: true as const, token: createBuildRevisionToken('workspace', `workspace:sha256:${'b'.repeat(64)}`, REVISION_IDENTITY) }
+          },
+        }, loadWorkflow: load,
       })).kind).toBe('applied')
+      expect(captureCalls).toBe(1)
+      expect(assessCalls).toBe(0)
       expect((await createStateStore().read(dir)).fields.build_sha).toBe(baseline)
 
       await createStateStore().setMany(dir, {
@@ -943,25 +978,73 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
         review_gate_phase: 'verify', review_gate_status: 'approved', review_gate_event: 'accept',
         review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
       })
-      current = 'workspace:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+      current = WORKSPACE_BUILD_TOKEN_DRIFT
       const drifted = await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'accept',
-        context: { fileExists: () => true, workspaceFingerprint: async () => current }, loadWorkflow: load,
+        context: {
+          fileExists: () => true,
+          assessBuildRevision: async () => ({ trusted: false as const, blocker: makeBuildRevisionBlocker('revision-stale') }),
+        }, loadWorkflow: load,
       })
-      expect(drifted.kind).toBe('step-guard-failed')
-      if (drifted.kind !== 'step-guard-failed') throw new Error('expected workspace drift rejection')
-      expect(drifted.failures.join('\n')).toContain('当前工作区内容等于 build 冻结基线')
+      expect(drifted).toMatchObject({ kind: 'revision-untrusted', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'revision-stale',
+      } })
       expect((await createStateStore().read(dir)).fields.phase).toBe('verify')
 
       current = baseline
       const passed = await app.execute({
         root, changeDir: dir, changeName: 'demo', event: 'accept',
-        context: { fileExists: () => true, workspaceFingerprint: async () => current }, loadWorkflow: load,
+        context: {
+          fileExists: () => true,
+          assessBuildRevision: async () => ({ trusted: true as const, token: createBuildRevisionToken('workspace', `workspace:sha256:${'b'.repeat(64)}`, REVISION_IDENTITY) }),
+        }, loadWorkflow: load,
       })
       expect(passed.kind).toBe('applied')
       const state = await createStateStore().read(dir)
       expect(state.fields.phase).toBe('ship')
       expect(state.fields.verify_result).toBe('pass')
+    })
+
+    test('arbitrary Verify rollback injects no trust guard and clears the captured token', async () => {
+      const root = await freshRepoRoot()
+      const deps = makeDeps({
+        documentEvidence: async (_repoRoot, _changeDir, phase) => ({
+          phase, hasLedger: true, pass: true, blockers: [], items: [],
+        }),
+      })
+      const wf: WorkflowDef = {
+        name: 'rollback',
+        steps: [
+          {
+            id: 'implement', label: '', gate: null, skills: [], inputs: [],
+            outputs: [{ field: 'build_sha', type: 'string' }], guards: [],
+            transitions: [{ event: 'build', to: 'assure' }],
+          },
+          {
+            id: 'assure', label: '', gate: 'review', skills: [],
+            inputs: [{ field: 'build_sha', type: 'string' }], outputs: [], guards: [],
+            transitions: [{ event: 'rollback', to: 'implement', actions: [{ type: 'mark-verification-failed' }] }],
+          },
+        ],
+      }
+      const dir = await initCustom(deps, root, 'rollback', 'assure')
+      await createStateStore().setMany(dir, {
+        build_sha: WORKSPACE_BUILD_TOKEN,
+        isolation: 'in-place',
+        review_gate_phase: 'assure', review_gate_status: 'approved', review_gate_event: 'rollback',
+        review_requested_at: FIXED_CLOCK(), review_acknowledged_at: FIXED_CLOCK(),
+      })
+      let assessorCalled = false
+      const result = await createTransitionApplication(deps).execute({
+        root, changeDir: dir, changeName: 'demo', event: 'rollback',
+        context: {
+          assessBuildRevision: async () => { assessorCalled = true; return { trusted: false as const, blocker: makeBuildRevisionBlocker('revision-stale') } },
+        },
+        loadWorkflow: (name) => name === 'rollback' ? compileWorkflow(wf) : null,
+      })
+      expect(result.kind).toBe('applied')
+      expect(assessorCalled).toBe(false)
+      expect((await createStateStore().read(dir)).fields.build_sha).toBe('null')
     })
 
     test('edge guard field-equals 真拦截/放行：branch_status≠handled → step-guard-failed 零写盘；=handled → applied', async () => {
@@ -1020,7 +1103,7 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
       expect(passed.kind).toBe('applied')
     })
 
-    test('edge action handler 真异常（freeze-build-sha 的 gitHeadSha 抛错）→ 事务中止不 commit：state 未推进、零 projection', async () => {
+    test('edge action 缺 capture capability → typed blocker 且事务不 commit：state 未推进、零 projection', async () => {
       const root = await freshRepoRoot()
       const deps = makeDeps()
       const wf: WorkflowDef = {
@@ -1034,11 +1117,16 @@ describe('createTransitionApplication —— 唯一 TransitionApplication 用例
         ],
       }
       const dir = await initCustom(deps, root, 'bf', 'verify')
+      await createStateStore().set(dir, 'isolation', 'branch')
+      const canonicalBefore = await createStateStore().read(dir)
+      const canonicalBeforeHash = safeRevisionHash(canonicalBefore.fields)
       await expect(createTransitionApplication(deps).execute({
         root, changeDir: dir, changeName: 'demo', event: 'go',
-        context: { gitHeadSha: async () => { throw new Error('git boom') } },
+        context: {},
         loadWorkflow: (n) => (n === 'bf' ? compileWorkflow(wf) : null),
-      })).rejects.toThrow(/git boom/)
+      })).resolves.toMatchObject({ kind: 'revision-untrusted', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'capability-unavailable', stateHash: canonicalBeforeHash,
+      } })
       const state = await createStateStore().read(dir)
       expect(state.fields.phase).toBe('verify') // 未推进
       expect(state.runMetadata?.transitionSequence).toBe(0) // 未 commit

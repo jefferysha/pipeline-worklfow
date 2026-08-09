@@ -349,6 +349,7 @@ export async function readChangeSnapshot(
       ...(workspaceFingerprint === undefined
         ? {}
         : { workspaceFingerprint: () => workspaceFingerprint(rootPath, changeName) }),
+      ...(deps.assessBuildRevision === undefined ? {} : { assessBuildRevision: deps.assessBuildRevision }),
     }
     const [documents, terminalActivity, tasksProjection, workflowExecution, authority] = await Promise.all([
       documentEvidence(rootPath, changeDir, plan, phase),

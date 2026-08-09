@@ -25,6 +25,9 @@ import type {
   WorkflowInteractionPolicyV1, WorkflowReviewBudgetPolicyV1,
 } from './types.js'
 import type { TrackPredicate } from './predicates.js'
+import type {
+  BuildRevisionAssessment, BuildRevisionAssessmentRequest, BuildRevisionBlocker,
+} from './build-revision.js'
 
 /**
  * 运行/编译层严格 guard 闭集：定义层 9 变体去掉 nonempty-output（后者编译期已按 outputs 下沉）。
@@ -61,6 +64,12 @@ export type ActionConfig = WorkflowActionConfig
 /** guard handler 的注入面（同 TransitionContext / GuardContext 的可选能力做法）。 */
 export interface GuardInput {
   readonly fields: Readonly<Record<FieldName, string | string[]>>
+  /** Hash of the raw canonical state fields. Default guard views may normalize arrays for legacy
+   * scalar semantics, but revision trust must always bind to this unmodified state snapshot. */
+  readonly stateHash?: string
+  /** Raw canonical build revision candidate. Default guard views normalize scalar fields for
+   * legacy compatibility, but an array build_sha is ambiguous and must remain distinguishable. */
+  readonly rawBuildSha?: unknown
   readonly track: string
   /** 文件存在（项目根相对路径，已绑定）；缺省 = 文件面降级跳过（skipped）。 */
   readonly fileExists?: (repoRelativePath: string) => boolean
@@ -72,6 +81,12 @@ export interface GuardInput {
   readonly workspaceFingerprint?: () => Promise<string>
   /** 当前 Change 的主规格迁移机器证据；Ship 门禁缺少能力时必须失败关闭。 */
   readonly specMigrationStatus?: () => Promise<SpecMigrationGuardStatus>
+  /** Current Build revision trust evaluator. Missing capability is a hard blocker, never skipped. */
+  readonly assessBuildRevision?: (
+    request: Omit<BuildRevisionAssessmentRequest, 'observe' | 'provenance'>,
+  ) => Promise<BuildRevisionAssessment>
+  /** Current Verify-like step used by the provenance evaluator. */
+  readonly currentStep?: string
 }
 
 export type SpecMigrationGuardStatus =
@@ -98,10 +113,12 @@ export type GuardDecision =
       readonly field?: FieldName
       readonly actual?: string
       readonly expected?: readonly string[]
+      /** Stable trust blocker; raw candidates and exceptions never cross this boundary. */
+      readonly blocker?: BuildRevisionBlocker
     }
 
-/** action 的 IO 信号（结构化）：build-sha-missing = HEAD 取不到，build_sha 未冻结
- *  （HEAD 取不到、build_sha 未冻结——调用方据此 emit WARN）。 */
+/** Legacy action signal union retained for ABI compatibility. The current freeze action throws a
+ * typed revision blocker instead of emitting a warning when capture is unavailable. */
 export type ActionSignal = { readonly kind: 'build-sha-missing' }
 
 /** action handler 的注入面。fields 是只读视图——handler 绝不原地 mutate，改动走 patch。 */
@@ -111,6 +128,8 @@ export interface ActionInput {
   readonly gitHeadSha?: () => Promise<string>
   /** in-place build 的内容寻址工作区基线；此能力缺失时 freeze 必须拒绝，不能降级为假 SHA。 */
   readonly workspaceFingerprint?: () => Promise<string>
+  /** Trusted Build revision capture; receives the current isolation value. */
+  readonly captureBuildRevision?: (isolation: string) => Promise<string>
 }
 
 /** action 产出：字段增量（不原地 mutate）+ IO 信号。 */

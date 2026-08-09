@@ -1077,6 +1077,94 @@ describe('POST /api/change/<name>/transition —— B5 token 鉴权', () => {
   })
 })
 
+describe('POST /api/change/<name>/transition —— Verify revision rejection contract', () => {
+  it('malformed Build revision returns exact 409 blocker and performs zero canonical/history mutation', async () => {
+    const h = await start({ pollIntervalMs: 20 })
+    await writeFile(join(h.root, 'verification-report.md'), '# report\n', 'utf8')
+    const seeded = await h.store.read(h.changeDir)
+    const malformed = 'a'.repeat(41)
+    await h.store.write(h.changeDir, {
+      ...seeded,
+      fields: {
+        ...seeded.fields,
+        phase: 'verify',
+        verification_report: 'verification-report.md',
+        branch_status: 'handled',
+        agent_review_result: 'pass',
+        codex_review_result: 'pass',
+        build_sha: malformed,
+      },
+    })
+    const before = await h.store.read(h.changeDir)
+    const recordsPath = join(h.changeDir, '.pipeline-transitions')
+    const beforeRecords = await readdir(recordsPath).catch(() => [] as string[])
+    const historyPath = join(h.changeDir, '.pipeline-history.jsonl')
+    const beforeHistory = existsSync(historyPath) ? await readFile(historyPath, 'utf8') : undefined
+
+    const rejected = await reqPost(
+      h.port,
+      `/api/change/${h.name}/transition`,
+      { root: h.root, event: 'verify-pass' },
+      { headers: { Authorization: `Bearer ${h.token}` } },
+    )
+    expect(rejected.status).toBe(409)
+    const body = rejected.json<{
+      ok: boolean
+      error: string
+      code: string
+      reason: string
+      remediation: string
+      stateHash?: string
+      revisionHash?: string
+    }>()
+    expect(body).toEqual({
+      ok: false,
+      error: 'Verify build revision is not trustworthy',
+      code: 'verify-build-revision-untrusted',
+      reason: 'malformed',
+      remediation: 'return-to-build-and-capture-current-revision',
+      stateHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+    })
+    expect(JSON.stringify(body)).not.toContain(malformed)
+    expect(JSON.stringify(body)).not.toContain(h.root)
+
+    expect(await h.store.read(h.changeDir)).toEqual(before)
+    expect(await readdir(recordsPath).catch(() => [] as string[])).toEqual(beforeRecords)
+    const afterHistory = existsSync(historyPath) ? await readFile(historyPath, 'utf8') : undefined
+    expect(afterHistory).toBe(beforeHistory)
+
+    const snapshot = (await reqGet(h.port, '/api/snapshot')).json<any>()
+    const projectedReadiness = snapshot.projects[0].changes[0].workflowExecution
+    expect(projectedReadiness).toEqual({
+      readinessByTransition: {
+        verify: {
+          'verify-pass': {
+            ready: false,
+            blockers: [{
+              kind: 'verify-build-revision-untrusted',
+              code: 'verify-build-revision-untrusted',
+              reason: 'malformed',
+              remediation: 'return-to-build-and-capture-current-revision',
+              stateHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+            }],
+          },
+          'verify-fail': { ready: true, blockers: [] },
+        },
+      },
+    })
+    expect(JSON.stringify(projectedReadiness)).not.toContain(malformed)
+    expect(JSON.stringify(projectedReadiness)).not.toContain(h.root)
+
+    const sse = await openSSE(h.port, '/api/stream')
+    const first = await sse.waitFor((event) => event.event === 'snapshot')
+    const sseWorkflowExecution = JSON.parse(first.data).projects[0].changes[0].workflowExecution
+    expect(sseWorkflowExecution).toEqual(projectedReadiness)
+    expect(JSON.stringify(sseWorkflowExecution)).not.toContain(malformed)
+    expect(JSON.stringify(sseWorkflowExecution)).not.toContain(h.root)
+    sse.close()
+  })
+})
+
 describe('POST /api/change/<name>/transition —— G1 default 轨收尾（breadcrumb + 显式 review receipt）', () => {
   it('进入 review 相位（explore）→ 真写 changeDir/.breadcrumb，但不在进入时自锁 review marker', async () => {
     const h = await start()

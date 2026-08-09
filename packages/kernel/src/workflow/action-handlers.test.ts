@@ -9,39 +9,54 @@ import type { FieldName } from '../types.js'
 import type { ActionInput, ActionOutcome } from './ir.js'
 import { ACTION_HANDLERS, applyActions } from './action-handlers.js'
 import { allFields } from './test-support.js'
+import { createBuildRevisionToken } from './build-revision.js'
 
 const CLOCK = '2026-07-17T08:00:00Z'
+const IDENTITY = { repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change' } as const
+const GIT_TOKEN = createBuildRevisionToken('git', 'a'.repeat(40), IDENTITY).value
+const WORKSPACE_TOKEN = createBuildRevisionToken(
+  'workspace', `workspace:sha256:${'b'.repeat(64)}`, IDENTITY,
+).value
 
 function makeInput(
   over: Partial<Record<FieldName, string | string[]>> = {},
   gitHeadSha?: () => Promise<string>,
   workspaceFingerprint?: () => Promise<string>,
+  captureBuildRevision?: (isolation: string) => Promise<string>,
 ): ActionInput {
-  return { fields: allFields(over), clock: () => CLOCK, gitHeadSha, workspaceFingerprint }
+  return {
+    fields: allFields({ isolation: 'branch', ...over }),
+    clock: () => CLOCK,
+    gitHeadSha,
+    workspaceFingerprint,
+    captureBuildRevision,
+  }
 }
 
 describe('老仓 state-transition.sh cmd_transition 副作用体语义对照', () => {
-  it('L176-181：freeze-build-sha，HEAD 可取 → patch 只含 trim 后的 build_sha，零信号', async () => {
+  it('freeze-build-sha：capture capability 可取 canonical token → patch 只含 token，零信号', async () => {
     const out = await ACTION_HANDLERS['freeze-build-sha'](
       { type: 'freeze-build-sha' },
-      makeInput({}, async () => 'abc123\n'),
+      makeInput({}, undefined, undefined, async () => GIT_TOKEN),
     )
-    expect(out).toEqual({ patch: { build_sha: 'abc123' }, signals: [] })
+    expect(out).toEqual({ patch: { build_sha: GIT_TOKEN }, signals: [] })
   })
 
-  it('L177+L182-183：gitHeadSha 未注入 → 空 patch + build-sha-missing（`?? ""` 与空串同支）', async () => {
-    const out = await ACTION_HANDLERS['freeze-build-sha']({ type: 'freeze-build-sha' }, makeInput())
-    expect(out).toEqual({ patch: {}, signals: [{ kind: 'build-sha-missing' }] })
+  it('capture capability 未注入 → typed capability blocker（不再 skipped/warning）', async () => {
+    await expect(ACTION_HANDLERS['freeze-build-sha']({ type: 'freeze-build-sha' }, makeInput()))
+      .rejects.toMatchObject({ blocker: { code: 'verify-build-revision-untrusted', reason: 'capability-unavailable' } })
   })
 
-  it('L178：注入但返回空串（非 git 仓）→ 空 patch + build-sha-missing（`if (sha)` 空串 falsy 支）', async () => {
-    const out = await ACTION_HANDLERS['freeze-build-sha']({ type: 'freeze-build-sha' }, makeInput({}, async () => ''))
-    expect(out).toEqual({ patch: {}, signals: [{ kind: 'build-sha-missing' }] })
+  it('capture capability 返回空串 → malformed blocker，不写入 build_sha', async () => {
+    await expect(ACTION_HANDLERS['freeze-build-sha'](
+      { type: 'freeze-build-sha' }, makeInput({}, undefined, undefined, async () => ''),
+    )).rejects.toMatchObject({ blocker: { code: 'verify-build-revision-untrusted', reason: 'malformed' } })
   })
 
-  it('L177：返回纯空白（trim 后空）→ 同空串支（build_sha 留原值语义 = patch 不含它）', async () => {
-    const out = await ACTION_HANDLERS['freeze-build-sha']({ type: 'freeze-build-sha' }, makeInput({}, async () => '  \n'))
-    expect(out).toEqual({ patch: {}, signals: [{ kind: 'build-sha-missing' }] })
+  it('capture capability 返回带空白的 token → malformed blocker（canonical grammar 不 trim）', async () => {
+    await expect(ACTION_HANDLERS['freeze-build-sha'](
+      { type: 'freeze-build-sha' }, makeInput({}, undefined, undefined, async () => ` ${GIT_TOKEN}\n`),
+    )).rejects.toMatchObject({ blocker: { code: 'verify-build-revision-untrusted', reason: 'malformed' } })
   })
 
   it('in-place：即使 Git HEAD 可取也冻结内容基线，且不读取 Git（未提交工作区不是 HEAD）', async () => {
@@ -52,10 +67,11 @@ describe('老仓 state-transition.sh cmd_transition 副作用体语义对照', (
         { isolation: 'in-place' },
         async () => { gitCalls++; return 'UNUSED' },
         async () => 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        async () => WORKSPACE_TOKEN,
       ),
     )
     expect(out).toEqual({
-      patch: { build_sha: 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      patch: { build_sha: WORKSPACE_TOKEN },
       signals: [],
     })
     expect(gitCalls).toBe(0)
@@ -64,7 +80,7 @@ describe('老仓 state-transition.sh cmd_transition 副作用体语义对照', (
   it('in-place：没有内容基线能力时 fail-closed，不能留下不可复验的 build_sha', async () => {
     await expect(ACTION_HANDLERS['freeze-build-sha'](
       { type: 'freeze-build-sha' }, makeInput({ isolation: 'in-place' }, async () => 'HEAD'),
-    )).rejects.toThrow('workspaceFingerprint capability')
+    )).rejects.toMatchObject({ blocker: { code: 'verify-build-revision-untrusted', reason: 'capability-unavailable' } })
   })
 
   it("L185-188：mark-verification-passed → verify_result='pass' + verified_at=clock()", async () => {
@@ -106,7 +122,7 @@ describe('applyActions（声明顺序逐项合并）', () => {
   it("顺序合并的真实观测（同键后者胜）：[freeze-build-sha, mark-verification-failed] → build_sha 终值 'null'", async () => {
     const out = await applyActions(
       [{ type: 'freeze-build-sha' }, { type: 'mark-verification-failed' }],
-      makeInput({}, async () => 'abc123'),
+      makeInput({}, undefined, undefined, async () => GIT_TOKEN),
     )
     expect(out.patch).toEqual({ build_sha: 'null', verify_result: 'fail' })
   })
@@ -114,17 +130,17 @@ describe('applyActions（声明顺序逐项合并）', () => {
   it('反序则 freeze 覆盖 failed 的 build_sha → 终值是 HEAD（last-writer 合并序，顺序即语义）', async () => {
     const out = await applyActions(
       [{ type: 'mark-verification-failed' }, { type: 'freeze-build-sha' }],
-      makeInput({}, async () => 'abc123'),
+      makeInput({}, undefined, undefined, async () => GIT_TOKEN),
     )
-    expect(out.patch).toEqual({ build_sha: 'abc123', verify_result: 'fail' })
+    expect(out.patch).toEqual({ build_sha: GIT_TOKEN, verify_result: 'fail' })
   })
 
-  it('signals 按执行顺序串接（两次 HEAD 不可取 → 两条 build-sha-missing）', async () => {
+  it('同一 canonical capture 重复调用可幂等，且不产生 legacy missing signal', async () => {
     const out = await applyActions(
       [{ type: 'freeze-build-sha' }, { type: 'freeze-build-sha' }],
-      makeInput({}, async () => ''),
+      makeInput({}, undefined, undefined, async () => GIT_TOKEN),
     )
-    expect(out.signals).toEqual([{ kind: 'build-sha-missing' }, { kind: 'build-sha-missing' }])
+    expect(out).toEqual({ patch: { build_sha: GIT_TOKEN }, signals: [] })
   })
 
   it('applyActions 也不动 input.fields（合并只发生在视图与返回值上）', async () => {

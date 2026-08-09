@@ -7,6 +7,7 @@ import type { DocumentContractPhase, DocumentGovernancePolicy } from './document
 import type { TransitionRecord, WorkflowRunRepository } from './run-types.js'
 import type { EffectiveWorkflowPlan } from './effective-plan.js'
 import type { TrackDefinition } from '../tracks/types.js'
+import type { BuildRevisionBlocker } from './build-revision.js'
 
 export interface TransitionApplicationDeps {
   runRepository: WorkflowRunRepository
@@ -68,6 +69,7 @@ export type TransitionApplicationResult =
     }
   | { readonly kind: 'illegal-transition'; readonly from: Phase; readonly to: Phase }
   | { readonly kind: 'precondition-violated'; readonly lines: readonly string[] }
+  | { readonly kind: 'revision-untrusted'; readonly blocker: BuildRevisionBlocker }
   | { readonly kind: 'workflow-not-found'; readonly workflowName: string }
   | {
       readonly kind: 'document-governance-invalid'
@@ -87,6 +89,7 @@ export type TransitionApplicationResult =
       readonly workflowName: string
       readonly stepId: string
       readonly failures: readonly string[]
+      readonly blockers?: readonly BuildRevisionBlocker[]
     }
   | {
       readonly kind: 'step-skills-incomplete'

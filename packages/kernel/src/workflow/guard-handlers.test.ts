@@ -11,10 +11,24 @@ import type { CompiledGuardConfig, GuardInput } from './ir.js'
 import { evaluateGuards, GUARD_HANDLERS } from './guard-handlers.js'
 import { NON_PM } from './predicates.js'
 import { allFields } from './test-support.js'
+import { assessBuildRevisionTrust, createBuildRevisionToken } from './build-revision.js'
+
+const REVISION_IDENTITY = { repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change' } as const
+const REVISION = 'a'.repeat(40)
+const REVISION_TOKEN = createBuildRevisionToken('git', REVISION, REVISION_IDENTITY)
+
+const assessTrustedRevision: NonNullable<GuardInput['assessBuildRevision']> = async (request) => assessBuildRevisionTrust({
+  ...request,
+  observe: async () => ({ kind: 'git' as const, revision: REVISION, identity: REVISION_IDENTITY }),
+  provenance: async () => ({
+    currentStep: 'verify', stateHash: request.stateHash, stateBuildSha: REVISION_TOKEN.value,
+    recordTo: 'verify', buildShaEffects: [REVISION_TOKEN.value],
+  }),
+})
 
 function makeInput(
   over: Partial<Record<FieldName, string | string[]>> = {},
-  caps: Partial<Pick<GuardInput, 'track' | 'fileExists' | 'readText' | 'gitHeadSha' | 'workspaceFingerprint' | 'specMigrationStatus'>> = {},
+  caps: Partial<Pick<GuardInput, 'track' | 'fileExists' | 'readText' | 'gitHeadSha' | 'workspaceFingerprint' | 'specMigrationStatus' | 'assessBuildRevision'>> = {},
 ): GuardInput {
   return {
     fields: allFields(over),
@@ -24,6 +38,8 @@ function makeInput(
     gitHeadSha: caps.gitHeadSha,
     workspaceFingerprint: caps.workspaceFingerprint,
     specMigrationStatus: caps.specMigrationStatus,
+    assessBuildRevision: caps.assessBuildRevision,
+    currentStep: 'verify',
   }
 }
 
@@ -203,7 +219,8 @@ describe('老仓 state-transition.sh cmd_transition 前置校验语义对照', (
       branch_status: 'handled',
       agent_review_result: 'pass',
       codex_review_result: 'pass',
-      build_sha: 'abc123',
+      isolation: 'branch',
+      build_sha: REVISION_TOKEN.value,
     } as const
 
     it("L130-133：verification_report 空/'null' → field-nonempty failed", async () => {
@@ -260,7 +277,7 @@ describe('老仓 state-transition.sh cmd_transition 前置校验语义对照', (
         VERIFY_EXIT,
         makeInput(
           { ...VERIFY_OK, agent_review_result: '', codex_review_result: '' },
-          { track: 'pm', fileExists: () => true, gitHeadSha: async () => 'abc123\n' },
+          { track: 'pm', fileExists: () => true, assessBuildRevision: assessTrustedRevision },
         ),
       )
       // 6 条里 when:NON_PM 的两条被跳过：report 字段/文件 + branch_status + barrier = 4 条全 passed
@@ -270,19 +287,23 @@ describe('老仓 state-transition.sh cmd_transition 前置校验语义对照', (
       expect(out.map((e) => e.guard)).toEqual([VERIFY_REPORT_SET, VERIFY_REPORT_FILE, VERIFY_BRANCH, BARRIER])
     })
 
-    it("L149-151：build_sha 未设（''/'null'）→ barrier 首个合取不成立 → passed（放行）", async () => {
+    it("build_sha 缺失/null → stable verify-build-revision-untrusted blocker（不再放行）", async () => {
       for (const bsha of ['', 'null']) {
-        const out = await evaluateGuards([BARRIER], makeInput({ build_sha: bsha }, { gitHeadSha: async () => 'zzz' }))
-        expect(out.map((e) => e.decision)).toEqual([{ kind: 'passed' }])
+        const out = await evaluateGuards([BARRIER], makeInput({ build_sha: bsha }, { assessBuildRevision: assessTrustedRevision }))
+        expect(out[0]?.decision).toMatchObject({ kind: 'failed', blocker: {
+          code: 'verify-build-revision-untrusted', reason: bsha === '' ? 'missing' : 'null',
+        } })
       }
     })
 
-    it('L150：gitHeadSha 未注入 → skipped（`?? ""` 退化跳过，ADR 0005）', async () => {
-      const out = await evaluateGuards([BARRIER], makeInput({ build_sha: 'abc123' }))
-      expect(out.map((e) => e.decision)).toEqual([{ kind: 'skipped', capability: 'gitHeadSha' }])
+    it('L150：gitHeadSha 未注入 → capability blocker（revision trust 缺能力时 fail-closed）', async () => {
+      const out = await evaluateGuards([BARRIER], makeInput({ build_sha: REVISION_TOKEN.value }))
+      expect(out[0]?.decision).toMatchObject({ kind: 'failed', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'capability-unavailable',
+      } })
     })
 
-    it('in-place workspace baseline 相等 → passed，且不读取 Git HEAD', async () => {
+    it('in-place workspace baseline 未接 assessor → capability blocker（不降级读取旧 fingerprint）', async () => {
       let gitCalls = 0
       const baseline = 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
       const out = await evaluateGuards([BARRIER], makeInput(
@@ -292,59 +313,70 @@ describe('老仓 state-transition.sh cmd_transition 前置校验语义对照', (
           workspaceFingerprint: async () => baseline,
         },
       ))
-      expect(out.map((entry) => entry.decision)).toEqual([{ kind: 'passed' }])
+      expect(out[0]?.decision).toMatchObject({ kind: 'failed', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'capability-unavailable',
+      } })
       expect(gitCalls).toBe(0)
     })
 
-    it('in-place workspace baseline 漂移 → failed，expected/actual 都可审计', async () => {
+    it('in-place workspace baseline 未接 assessor → capability blocker，raw baseline 不作事实', async () => {
       const baseline = 'workspace:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
       const current = 'workspace:sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
       const out = await evaluateGuards([BARRIER], makeInput(
         { build_sha: baseline }, { workspaceFingerprint: async () => current },
       ))
-      expect(out.map((entry) => entry.decision)).toEqual([
-        { kind: 'failed', guardType: 'build-head-unchanged', field: 'build_sha', actual: current, expected: [baseline] },
-      ])
+      expect(out[0]?.decision).toMatchObject({ kind: 'failed', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'capability-unavailable',
+      } })
     })
 
-    it('L151：gitHeadSha 注入但 trim 后空串（HEAD 不可取）→ skipped（head!=="" 合取不成立，老代码放行）', async () => {
-      const out = await evaluateGuards([BARRIER], makeInput({ build_sha: 'abc123' }, { gitHeadSha: async () => '  \n' }))
-      expect(out.map((e) => e.decision)).toEqual([{ kind: 'skipped', capability: 'gitHeadSha' }])
+    it('legacy build_sha 即使 HEAD capability 有值也会被 malformed blocker 拒绝', async () => {
+      const out = await evaluateGuards([BARRIER], makeInput({ build_sha: 'abc123' }, { gitHeadSha: async () => '  \n', assessBuildRevision: assessTrustedRevision }))
+      expect(out[0]?.decision).toMatchObject({ kind: 'failed', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'malformed',
+      } })
     })
 
-    it('L150：HEAD 带换行 trim 后等于 build_sha → passed（`.trim()` 口径）', async () => {
-      const out = await evaluateGuards([BARRIER], makeInput({ build_sha: 'abc123' }, { gitHeadSha: async () => 'abc123\n' }))
-      expect(out.map((e) => e.decision)).toEqual([{ kind: 'passed' }])
+    it('legacy bare SHA 即使 HEAD 相等也不 backfill，保持 malformed blocker', async () => {
+      const out = await evaluateGuards([BARRIER], makeInput({ build_sha: 'abc123' }, { gitHeadSha: async () => 'abc123\n', assessBuildRevision: assessTrustedRevision }))
+      expect(out[0]?.decision).toMatchObject({ kind: 'failed', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'malformed',
+      } })
     })
 
-    it('L151-156：HEAD≠build_sha → failed，actual=HEAD、expected=[build_sha]（build 后偷改未复验）', async () => {
-      const out = await evaluateGuards([BARRIER], makeInput({ build_sha: 'abc123' }, { gitHeadSha: async () => 'def456\n' }))
-      expect(out.map((e) => e.decision)).toEqual([
-        { kind: 'failed', guardType: 'build-head-unchanged', field: 'build_sha', actual: 'def456', expected: ['abc123'] },
-      ])
+    it('legacy bare SHA 与 HEAD 漂移仍先拒 malformed，不折成普通 head mismatch', async () => {
+      const out = await evaluateGuards([BARRIER], makeInput({ build_sha: 'abc123' }, { gitHeadSha: async () => 'def456\n', assessBuildRevision: assessTrustedRevision }))
+      expect(out[0]?.decision).toMatchObject({ kind: 'failed', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'malformed',
+      } })
     })
 
-    it('L149-150 IO 序镜像：build_sha 未设 + gitHeadSha 抛错 → 异常传播（旧代码在判空之前先调 HEAD，不 catch）', async () => {
+    it('缺失 assessor 时不读取 gitHeadSha，直接返回 capability blocker（不泄漏异常）', async () => {
       const boom = vi.fn(async (): Promise<string> => { throw new Error('git rev-parse blew up') })
-      await expect(evaluateGuards([BARRIER], makeInput({ build_sha: '' }, { gitHeadSha: boom }))).rejects.toThrow(
-        'git rev-parse blew up',
-      )
-      expect(boom).toHaveBeenCalledTimes(1)
+      const out = await evaluateGuards([BARRIER], makeInput({ build_sha: '' }, { gitHeadSha: boom }))
+      expect(out[0]?.decision).toMatchObject({ kind: 'failed', blocker: {
+        code: 'verify-build-revision-untrusted', reason: 'capability-unavailable',
+      } })
+      expect(boom).not.toHaveBeenCalled()
     })
 
-    it("L149-150 IO 序镜像：注入即被调用——build_sha 未设（''/'null'）也各触发一次 HEAD 取值，判定仍 passed", async () => {
+    it("缺失/null 由 assessor 负责求值；guard 不直接读取 gitHeadSha", async () => {
       for (const bsha of ['', 'null']) {
         const spy = vi.fn(async () => 'zzz999')
-        const out = await evaluateGuards([BARRIER], makeInput({ build_sha: bsha }, { gitHeadSha: spy }))
-        expect(spy).toHaveBeenCalledTimes(1)
-        expect(out.map((e) => e.decision)).toEqual([{ kind: 'passed' }])
+        const out = await evaluateGuards([BARRIER], makeInput({ build_sha: bsha }, {
+          gitHeadSha: spy, assessBuildRevision: assessTrustedRevision,
+        }))
+        expect(spy).not.toHaveBeenCalled()
+        expect(out[0]?.decision).toMatchObject({ kind: 'failed', blocker: {
+          code: 'verify-build-revision-untrusted', reason: bsha === '' ? 'missing' : 'null',
+        } })
       }
     })
 
     it('全字段齐 + 文件在 + HEAD 对齐 → 6 条全 passed（L129-157 校验体通过）', async () => {
       const out = await evaluateGuards(
         VERIFY_EXIT,
-        makeInput(VERIFY_OK, { fileExists: () => true, gitHeadSha: async () => 'abc123' }),
+        makeInput(VERIFY_OK, { fileExists: () => true, assessBuildRevision: assessTrustedRevision }),
       )
       expect(out).toHaveLength(6)
       expect(out.every((e) => e.decision.kind === 'passed')).toBe(true)

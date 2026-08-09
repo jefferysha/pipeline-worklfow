@@ -1,4 +1,5 @@
 import {
+  assessBuildRevisionTrust,
   builtinWorkflow,
   compileWorkflow,
   evaluateWorkflowAction,
@@ -9,6 +10,9 @@ import {
   resolveEffectiveWorkflowPlan,
   WORKFLOW_ACTIONS,
   workflowPolicyPermissionLayer,
+  probeBuildRevisionIdentity,
+  readValidatedTransitionHead,
+  safeRevisionHash,
   type EffectiveWorkflowPlan,
   type PipelineState,
   type PipelineTodoStageDefinition,
@@ -31,6 +35,7 @@ export interface WorkflowSnapshotCapabilityDeps {
   readonly fileExists?: (root: string, repoRelativePath: string) => boolean
   readonly gitHeadSha?: (cwd: string) => Promise<string>
   readonly workspaceFingerprint?: (cwd: string, changeName: string) => Promise<string>
+  readonly assessBuildRevision?: import('@tenon/kernel').TransitionContext['assessBuildRevision']
 }
 
 export interface WorkflowSnapshotAuthorityInput {
@@ -245,6 +250,33 @@ export async function snapshotWorkflowExecution(
   const fileExists = deps.fileExists ?? projectFileExists
   const gitHeadSha = deps.gitHeadSha
   const workspaceFingerprint = deps.workspaceFingerprint
+  const assessBuildRevision = deps.assessBuildRevision ?? (async (request) => {
+    const identity = await probeBuildRevisionIdentity(root)
+    const observe = async () => {
+      const kind = request.isolation === 'in-place' ? 'workspace' as const : 'git' as const
+      const revision = kind === 'workspace'
+        ? await workspaceFingerprint?.(root, changeName) ?? ''
+        : await gitHeadSha?.(root) ?? ''
+      if (!identity) throw new Error('build revision identity unavailable')
+      return { kind, revision, identity }
+    }
+    const provenance = async () => {
+      const validated = await readValidatedTransitionHead(changeDir)
+      if (!validated) return undefined
+      const { current, record } = validated
+      const stateBuildSha = current.state.fields.build_sha
+      return {
+        currentStep: String(current.state.fields.phase ?? ''),
+        stateHash: safeRevisionHash(current.state.fields),
+        stateBuildSha: Array.isArray(stateBuildSha) ? stateBuildSha.join(',') : stateBuildSha,
+        recordTo: record.to,
+        buildShaEffects: record.effects
+          .filter((effect) => effect.field === 'build_sha')
+          .map((effect) => typeof effect.to === 'string' ? effect.to : ''),
+      }
+    }
+    return assessBuildRevisionTrust({ ...request, observe, provenance })
+  })
   return {
     readinessByTransition: await readinessByTransition(plan, state, {
       changeDirAbs: changeDir,
@@ -253,6 +285,7 @@ export async function snapshotWorkflowExecution(
       workspaceFingerprint: workspaceFingerprint === undefined
         ? undefined
         : () => workspaceFingerprint(root, changeName),
+      assessBuildRevision,
       specMigrationStatus: () => evaluateSpecMigrationEvidence(root, changeDir, changeName),
     }),
   }

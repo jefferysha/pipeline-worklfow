@@ -24,8 +24,8 @@
  *     结构化返回值没有这个风险）。
  *
  * 本模块的范围边界（2026-07-17 codex 架构评估划定，见 GOAL.md 清单 G）：只消灭 CLI/server 两处
- * 复制的转换编排，不改变 server 现有的外部可观测行为（build-sha-missing 这类 warning 目前只有
- * CLI adapter 转成 stderr 文案，server adapter 本轮忽略它，不扩大 HTTP 契约）；不统一 default 轨
+ * 复制的转换编排；revision capture/assessment 失败统一是 commit 前 typed blocker，旧
+ * `build-sha-missing` warning 仅作为 legacy ABI 类型保留，不再由当前 action 产生；不统一 default 轨
  * （FlowEngine/eventEdge）与 custom 轨（WorkflowIR/planStepTransition）内部本就不同的两套
  * 模型；change 名合法性/server root 信任校验/canonical-or-legacy state 是否存在这些
  * "transition 域拒绝"之外的前置校验留在 adapter 层，不下沉进本模块；不改变项目根
@@ -40,14 +40,14 @@ import { evaluateDocumentEvidence } from '../state/document-evidence.js'
 import type { DocumentEvidenceReport } from '../state/document-evidence.js'
 import { eventEdge } from '../flow/index.js'
 import type { EventName, TransitionContext } from '../flow/index.js'
-import { checkDefaultEventPreconditions, DEFAULT_EVENT_POLICY } from '../flow/default-event-policy.js'
+import { evaluateDefaultEventPreconditions, DEFAULT_EVENT_POLICY } from '../flow/default-event-policy.js'
 import { applyStepTransition, planStepTransition, resolveStep } from './engine.js'
 import { applyActions } from './action-handlers.js'
 import { evaluateConstraintPolicy, type ConstraintDecision } from '../loops/automation-policy.js'
-import type { WorkflowIR } from './ir.js'
+import type { ActionOutcome, WorkflowIR } from './ir.js'
 import {
   governedLifecyclePolicy,
-  mergeLifecycleActions,
+  mergeLifecycleActions, mergeLifecycleGuards, semanticRevisionLifecyclePolicy,
 } from './governed-lifecycle-policy.js'
 import {
   isDocumentContractPhase, isDocumentPolicyStep, shouldEnforceDocumentPolicyOnTransition,
@@ -62,6 +62,7 @@ import type {
   PreparedTransition, TransitionApplication, TransitionApplicationDeps, TransitionApplicationResult,
   TransitionApplicationWarning, TransitionCommand, TransitionRejection,
 } from './transition-application-types.js'
+import { BuildRevisionCaptureError, safeRevisionHash } from './build-revision.js'
 export type {
   TransitionApplication, TransitionApplicationDeps, TransitionApplicationResult,
   TransitionApplicationWarning, TransitionCommand,
@@ -98,8 +99,12 @@ async function planDefaultTransition(
 
   // ① 前置 guard：typed guard handler 判定（首错优先）+ renderer 逐字 ERROR 文案——default 轨
   // 政策从老 checkTransitionPreconditions switch 迁到 DefaultEventPolicy + guard-handlers（G2 P3）。
-  const violations = await checkDefaultEventPreconditions(event, state, command.context)
-  if (violations) return { kind: 'precondition-violated', lines: violations }
+  const preconditions = await evaluateDefaultEventPreconditions(event, state, command.context)
+  if (preconditions) {
+    const blocker = preconditions.blockers?.[0]
+    if (blocker !== undefined) return { kind: 'revision-untrusted', blocker }
+    return { kind: 'precondition-violated', lines: [...preconditions.lines] }
+  }
   if (policy.enforceTaskExit) {
     const tasks = await command.context.tasksThroughPhase?.(edge.from)
     if (tasks && !tasks.pass) {
@@ -121,17 +126,34 @@ async function planDefaultTransition(
   // applyTransitionEffects switch 迁到 DefaultEventPolicy.actions + applyActions（G2 P3），与
   // custom 轨（planCustomTransition）共用同一 applyActions 引擎、同一「推进后 action、commit 前
   // 合并」时序。单次 planner 路径只跑 typed action、绝不再调 legacy switch（防双执行：两条都跑
-  // 会让 clock()/gitHeadSha 各调两次 = 真实行为差异）。freeze-build-sha 取不到 HEAD → build-sha-missing
-  // 信号，逐字对齐老 buildShaMissing→WARN 映射。
+  // 会让 clock()/gitHeadSha 各调两次 = 真实行为差异）。freeze-build-sha 统一由 capture capability
+  // 生成 typed token；能力缺失或异常在 commit 前转为 revision-untrusted。
   const warnings: TransitionApplicationWarning[] = []
   let nextFields = result.state.fields
   if (policy.actions.length > 0) {
-    const outcome = await applyActions(policy.actions, {
-      fields: result.state.fields,
-      clock,
-      gitHeadSha: command.context.gitHeadSha,
-      workspaceFingerprint: command.context.workspaceFingerprint,
-    })
+    let outcome: ActionOutcome
+    try {
+      outcome = await applyActions(policy.actions, {
+        fields: result.state.fields,
+        clock,
+        gitHeadSha: command.context.gitHeadSha,
+        workspaceFingerprint: command.context.workspaceFingerprint,
+        captureBuildRevision: command.context.captureBuildRevision,
+      })
+    } catch (error) {
+      if (error instanceof BuildRevisionCaptureError) {
+        return {
+          kind: 'revision-untrusted',
+          blocker: {
+            ...error.blocker,
+            // Capture ran against the prospective target fields, but a rejected transition never
+            // commits that state. Always report the locked canonical pre-state digest.
+            stateHash: safeRevisionHash(state.fields),
+          },
+        }
+      }
+      throw error
+    }
     nextFields = { ...result.state.fields, ...outcome.patch }
     for (const signal of outcome.signals) warnings.push({ kind: signal.kind })
   }
@@ -183,15 +205,31 @@ async function planCustomTransition(
     : currentBeforePlan?.transitions.find((candidate) => candidate.event === command.event)
   const documentPolicy = effectivePlan.capabilities.documents.policy
   const governed = documentPolicy !== undefined
-  const lifecycle = currentBeforePlan && edgeBeforePlan
+  const fixedLifecycle = currentBeforePlan && edgeBeforePlan
     ? governedLifecyclePolicy(governed, currentBeforePlan.id, edgeBeforePlan.to)
     : undefined
+  const targetStep = edgeBeforePlan === undefined
+    ? undefined
+    : resolveStep(planningIr, edgeBeforePlan.to)
+  const semanticLifecycle = currentBeforePlan && edgeBeforePlan
+    ? semanticRevisionLifecyclePolicy(currentBeforePlan, edgeBeforePlan, targetStep ?? undefined)
+    : undefined
+  const lifecycle = fixedLifecycle === undefined
+    ? semanticLifecycle
+    : semanticLifecycle === undefined
+      ? fixedLifecycle
+      : {
+          guards: mergeLifecycleGuards(fixedLifecycle.guards, semanticLifecycle.guards),
+          actions: mergeLifecycleActions(fixedLifecycle.actions, semanticLifecycle.actions),
+        }
   const plan = await planStepTransition(planningIr, state, command.event, {
     changeDirAbs: command.changeDir,
     fileExists: command.context.fileExists,
     gitHeadSha: command.context.gitHeadSha,
     workspaceFingerprint: command.context.workspaceFingerprint,
     specMigrationStatus: command.context.specMigrationStatus,
+    assessBuildRevision: command.context.assessBuildRevision,
+    currentStep: fieldStr(state.fields.phase),
   }, lifecycle?.guards)
   if (!plan.ok) {
     if (plan.kind === 'step-not-in-graph') return { kind: 'step-not-in-graph', workflowName, stepId: plan.stepId }
@@ -200,7 +238,9 @@ async function planCustomTransition(
         kind: 'event-unsupported', workflowName, stepId: plan.stepId, event: command.event, available: plan.available,
       }
     }
-    return { kind: 'step-guard-failed', workflowName, stepId: plan.stepId, failures: plan.failures }
+    const blocker = plan.blockers?.[0]
+    if (blocker !== undefined) return { kind: 'revision-untrusted', blocker }
+    return { kind: 'step-guard-failed', workflowName, stepId: plan.stepId, failures: plan.failures, blockers: plan.blockers }
   }
   const currentStep = resolveStep(planningIr, plan.from)
   if (!currentStep) throw new Error(`workflow '${workflowName}' 在已规划 step '${plan.from}' 后无法重取当前 step`)
@@ -218,12 +258,29 @@ async function planCustomTransition(
     ? { ...nextState.fields, phase_status: 'done' as const }
     : nextState.fields
   if (actions.length > 0) {
-    const outcome = await applyActions(actions, {
-      fields: nextState.fields,
-      clock,
-      gitHeadSha: command.context.gitHeadSha,
-      workspaceFingerprint: command.context.workspaceFingerprint,
-    })
+    let outcome: ActionOutcome
+    try {
+      outcome = await applyActions(actions, {
+        fields: nextState.fields,
+        clock,
+        gitHeadSha: command.context.gitHeadSha,
+        workspaceFingerprint: command.context.workspaceFingerprint,
+        captureBuildRevision: command.context.captureBuildRevision,
+      })
+    } catch (error) {
+      if (error instanceof BuildRevisionCaptureError) {
+        return {
+          kind: 'revision-untrusted',
+          blocker: {
+            ...error.blocker,
+            // Capture ran against the prospective target fields, but a rejected transition never
+            // commits that state. Always report the locked canonical pre-state digest.
+            stateHash: safeRevisionHash(state.fields),
+          },
+        }
+      }
+      throw error
+    }
     nextFields = { ...nextFields, ...outcome.patch }
     for (const signal of outcome.signals) warnings.push({ kind: signal.kind })
   }

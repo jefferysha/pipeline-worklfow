@@ -151,6 +151,18 @@ export interface TransitionReadinessSnapshot {
 
 export type TransitionReadinessBlockerSnapshot =
   | {
+      kind: 'verify-build-revision-untrusted'
+      code: 'verify-build-revision-untrusted'
+      reason:
+        | 'missing' | 'null' | 'ambiguous' | 'malformed' | 'isolation-mismatch'
+        | 'capability-unavailable' | 'provenance-missing' | 'provenance-mismatch'
+        | 'state-stale' | 'revision-stale' | 'project-mismatch' | 'worktree-mismatch'
+        | 'evaluation-error'
+      remediation: 'return-to-build-and-capture-current-revision'
+      stateHash?: string
+      revisionHash?: string
+    }
+  | {
       kind: 'guard-failed'
       guardType: string
       field?: string

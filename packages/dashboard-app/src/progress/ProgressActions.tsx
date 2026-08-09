@@ -2,7 +2,11 @@ import { useRef } from 'react'
 import { ArrowRight, Copy, Square, Undo2 } from 'lucide-react'
 import type { PlannedTransition } from '../model/events'
 import { plannedTransition } from '../model/events'
-import { missingGateArtifacts } from '../model/progressModel'
+import {
+  formatReadinessBlocker,
+  missingGateArtifacts,
+  readinessForTransition,
+} from '../model/progressModel'
 import type { SessionLink } from '../api/client'
 import { shellQuote } from '../shared/shellQuote'
 import {
@@ -37,15 +41,40 @@ export function ProgressActions({
   tRef.current = t
   const name = row.row.change.name
   const testId = (action: string): string => `prg9-dw-${action}-${name}`
-  if (row.row.state === 'gate') {
+  if (row.row.state === 'gate' || row.row.state === 'agent') {
     const rules = row.rules
     if (!rules) return null
     const transitions = (rules.transitions[row.row.change.phase] ?? [])
-      .map((edge) => plannedTransition(rules, row.row.change.phase, edge.to))
+      .map((edge): PlannedTransition | null => {
+        const transition = plannedTransition(rules, row.row.change.phase, edge.to)
+        return transition?.event === edge.event
+          ? transition
+          : transition === null
+            ? null
+            : { ...transition, event: edge.event }
+      })
       .filter((transition): transition is PlannedTransition => transition !== null)
     const forward = transitions.filter((transition) => !transition.backward)
     const backward = transitions.filter((transition) => transition.backward)
     if (transitions.length === 0) return null
+    const readiness = (transition: PlannedTransition) => readinessForTransition(row.row.change, transition.event)
+    const forwardBlockers = forward.flatMap((transition) => {
+      const result = readiness(transition)
+      return result?.ready === true
+        ? []
+        : (result?.blockers ?? [{ kind: 'capability-unavailable' as const, guardType: 'readiness', capability: 'readiness' }])
+    })
+    const showActions = row.row.state === 'gate'
+      || forwardBlockers.length > 0
+      || backward.some((transition) => readiness(transition)?.ready === true)
+    if (!showActions) {
+      const missing = missingGateArtifacts(row.row.change, rules)
+      return missing.length === 0 ? null : (
+        <span className="text-xs text-text-3" data-testid={`prg9-note-${name}`}>
+          {t('progress.note_agent_missing', { fields: missing.join(' ') })}
+        </span>
+      )
+    }
     return (
       <>
         {forward.map((transition, index) => (
@@ -54,8 +83,11 @@ export function ProgressActions({
             type="button"
             className={BTN_GO_CLS}
             data-testid={index === 0 ? testId('pass') : testId(`fw-${transition.event}`)}
-            disabled={busy}
-            onClick={() => onTransition(row.row.root, name, transition)}
+            disabled={busy || readiness(transition)?.ready !== true}
+            title={readiness(transition)?.ready === true ? undefined : forwardBlockers.map(formatReadinessBlocker).join(' · ')}
+            onClick={() => {
+              if (readiness(transition)?.ready === true) onTransition(row.row.root, name, transition)
+            }}
           >
             <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
             {index === 0
@@ -69,13 +101,20 @@ export function ProgressActions({
             type="button"
             className={BTN_NEG_CLS}
             data-testid={index === 0 ? testId('reject') : testId(`bw-${transition.event}`)}
-            disabled={busy}
-            onClick={() => onTransition(row.row.root, name, transition)}
+            disabled={busy || readiness(transition)?.ready !== true}
+            onClick={() => {
+              if (readiness(transition)?.ready === true) onTransition(row.row.root, name, transition)
+            }}
           >
             <Undo2 className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
             {t('inbox.act_backward', { to: stepLabel(transition.to, rules, t) })}
           </button>
         ))}
+        {forwardBlockers.length > 0 && (
+          <span className="text-xs text-text-3" data-testid={`prg9-note-${name}`}>
+            {t('progress.note_agent_missing', { fields: forwardBlockers.map(formatReadinessBlocker).join(' · ') })}
+          </span>
+        )}
       </>
     )
   }
@@ -121,14 +160,6 @@ export function ProgressActions({
       >
         <Square className="h-3 w-3" aria-hidden="true" /> {t('progress.act_kill')}
       </button>
-    )
-  }
-  if (row.row.state === 'agent') {
-    const missing = missingGateArtifacts(row.row.change, row.rules)
-    return missing.length === 0 ? null : (
-      <span className="text-xs text-text-3" data-testid={`prg9-note-${name}`}>
-        {t('progress.note_agent_missing', { fields: missing.join(' ') })}
-      </span>
     )
   }
   return null

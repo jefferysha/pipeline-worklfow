@@ -439,6 +439,36 @@ describe('API bounded-context response decoders', () => {
     expect(decodeSnapshot(snapshot)).toBeNull()
   })
 
+  it('accepts strict revision-untrusted readiness and rejects extra keys, invalid hashes, or reasons', () => {
+    const valid = validSnapshot()
+    const readiness = valid.projects[0].changes[0].workflowExecution.readinessByTransition.open as
+      unknown as Record<string, { ready: boolean; blockers: unknown[] }>
+    readiness.finish = {
+      ready: false,
+      blockers: [{
+        kind: 'verify-build-revision-untrusted',
+        code: 'verify-build-revision-untrusted',
+        reason: 'revision-stale',
+        remediation: 'return-to-build-and-capture-current-revision',
+        stateHash: `sha256:${'a'.repeat(64)}`,
+        revisionHash: `sha256:${'b'.repeat(64)}`,
+      }],
+    }
+    expect(decodeSnapshot(valid)).not.toBeNull()
+
+    const extra = structuredClone(valid)
+    ;(extra.projects[0].changes[0].workflowExecution.readinessByTransition.open.finish.blockers[0] as Record<string, unknown>).leak = 'path'
+    expect(decodeSnapshot(extra)).toBeNull()
+
+    const malformedHash = structuredClone(valid)
+    ;(malformedHash.projects[0].changes[0].workflowExecution.readinessByTransition.open.finish.blockers[0] as Record<string, unknown>).stateHash = 'sha256:' + 'a'.repeat(63)
+    expect(decodeSnapshot(malformedHash)).toBeNull()
+
+    const unknownReason = structuredClone(valid)
+    ;(unknownReason.projects[0].changes[0].workflowExecution.readinessByTransition.open.finish.blockers[0] as Record<string, unknown>).reason = 'HEAD'
+    expect(decodeSnapshot(unknownReason)).toBeNull()
+  })
+
   it('accepts a strict canonical compatibility issue while preserving older omitted responses', () => {
     expect(decodeSnapshot(validSnapshot())?.projects[0]?.compatibilityIssues).toBeUndefined()
     const snapshot = validSnapshot()

@@ -29,6 +29,7 @@ export * from './lifecycle/lifecycle.js'
 // WeakSet provenance 检查保持包内，普通 RunChange 不能从 package 根给自己签发可信结果。
 export {
   DEFAULT_VERIFIER_ISSUER_KIND, createDefaultVerifierPort, evaluateVerificationGate,
+  VERIFY_BUILD_REVISION_REMEDIATION, VERIFY_BUILD_REVISION_UNTRUSTED,
 } from './verifier/verifier.js'
 export type {
   VerifierInput, VerifierPort, DefaultVerifierPortOptions, VerificationBlockReason,

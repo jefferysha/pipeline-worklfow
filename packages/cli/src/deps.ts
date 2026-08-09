@@ -247,6 +247,12 @@ export interface CliDeps {
    * 当前 change 的控制面；production 由 kernel fingerprintWorkspace 落地。
    */
   workspaceFingerprint?: (changeName: string) => Promise<string>
+  /** Trusted Build revision token capture; missing capability fails Build closed. */
+  captureBuildRevision?: (isolation: string) => Promise<string>
+  /** Physical repository/worktree identity used by the default trust assessor. */
+  buildRevisionIdentity?: () => Promise<import('@tenon/kernel').BuildRevisionIdentity | undefined>
+  /** Trusted Build revision assessment; missing capability fails Verify closed. */
+  assessBuildRevision?: import('@tenon/kernel').TransitionContext['assessBuildRevision']
   /** `tenon review request` 成功后写 versioned <cwd>/.pipeline-pending-review hook 投影。 */
   writeReviewMarker?: (content: string) => Promise<void>
   /** `tenon review acknowledge` 在 canonical approval receipt 成功后移除 hook 投影。 */

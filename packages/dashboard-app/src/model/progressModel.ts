@@ -22,6 +22,7 @@
  *     判不了门就归 agent（不误报「等你确认」）；automation 活跃态不依赖 rules，照常判定。
  */
 import type { ChangeSnapshot, Snapshot } from '../types'
+import type { TransitionReadinessBlockerSnapshot, TransitionReadinessSnapshot } from '../types'
 import { isProjectNavigable } from '../state/projectSelectionModel'
 import {
   rulesKey,
@@ -51,6 +52,34 @@ const AUTOMATION_PROVENANCE_STATES = new Set([
  */
 export type { StepOutputRules } from './workflowModel'
 export type ProgressRules = WorkflowRules & StepOutputRules
+
+export type ReadinessBlocker = TransitionReadinessBlockerSnapshot
+
+/** Readiness for one exact event; callers must not infer it from a sibling edge. */
+export function readinessForTransition(
+  c: ChangeSnapshot,
+  event: string,
+): TransitionReadinessSnapshot | undefined {
+  return c.workflowExecution.readinessByTransition[c.phase]?.[event]
+}
+
+export function isBackwardTransition(rules: WorkflowRules, from: string, to: string): boolean {
+  const fromIndex = rules.steps.indexOf(from)
+  const toIndex = rules.steps.indexOf(to)
+  return fromIndex >= 0 && toIndex >= 0 && toIndex < fromIndex
+}
+
+/** Stable, privacy-safe blocker rendering for the action/note surfaces. */
+export function formatReadinessBlocker(blocker: ReadinessBlocker): string {
+  if (blocker.kind === 'verify-build-revision-untrusted') {
+    return `${blocker.code} reason=${blocker.reason} remediation=${blocker.remediation}`
+  }
+  if (blocker.kind === 'capability-unavailable') return `capability:${blocker.capability}`
+  if (blocker.kind === 'evaluation-error') {
+    return blocker.capability === undefined ? `guard:${blocker.guardType}` : `capability:${blocker.capability}`
+  }
+  return blocker.field ?? `guard:${blocker.guardType}`
+}
 
 /** fields 值可能是 string[]；非字符串一律当未设（同 evidence.ts fieldStr 口径）。 */
 function fieldStr(c: ChangeSnapshot, key: string): string {
@@ -95,27 +124,25 @@ export function isDashboardGate(rules: WorkflowRules | undefined, phase: string)
  */
 export function missingGateArtifacts(c: ChangeSnapshot, rules: ProgressRules | undefined): string[] {
   if (!rules) return []
+  if (!isDashboardGate(rules, c.phase)) return []
   const transitions = rules.transitions[c.phase] ?? []
   if (transitions.length === 0) return []
-  const readiness = c.workflowExecution.readinessByTransition[c.phase] ?? {}
-  const byTransition = transitions.map(({ event }) => readiness[event])
+  // A ready rollback is not a ready success. Evaluate only forward exits for the gate's
+  // readiness state; keep rollback edges available to the action surface independently.
+  const forward = transitions.filter(({ to }) => !isBackwardTransition(rules, c.phase, to))
+  const candidates = forward.length > 0 ? forward : transitions
+  const byTransition = candidates.map(({ event }) => readinessForTransition(c, event))
   if (byTransition.some((result) => result?.ready === true)) return []
   const blockers = byTransition.map((result) => result?.blockers ?? [{
     kind: 'capability-unavailable' as const,
-    guardType: 'unknown',
+    guardType: 'readiness',
     capability: 'readiness',
   }])
   const selected = blockers.reduce((best, current) =>
     current.length < best.length ? current : best,
   )
   return selected.map((blocker) => {
-    if (blocker.kind === 'capability-unavailable') return `capability:${blocker.capability}`
-    if (blocker.kind === 'evaluation-error') {
-      return blocker.capability === undefined
-        ? `guard:${blocker.guardType}`
-        : `capability:${blocker.capability}`
-    }
-    return blocker.field ?? `guard:${blocker.guardType}`
+    return formatReadinessBlocker(blocker)
   })
 }
 

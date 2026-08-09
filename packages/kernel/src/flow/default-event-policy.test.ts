@@ -15,6 +15,14 @@ import {
   renderPreconditionViolation,
 } from './default-event-policy.js'
 import { evaluateGuards, type GuardEvaluation } from '../workflow/guard-handlers.js'
+import {
+  assessBuildRevisionTrust,
+  createBuildRevisionToken,
+  makeBuildRevisionBlocker,
+  safeRevisionHash,
+} from '../workflow/build-revision.js'
+import { compileEffectiveWorkflowPlan } from '../workflow/effective-plan.js'
+import { readinessByTransition } from '../workflow/transition-readiness.js'
 
 /** 最小 PipelineState 构造：只关心被测字段，其余留空串。 */
 function mkState(fields: Partial<Record<FieldName, string | string[]>>): PipelineState {
@@ -208,59 +216,155 @@ describe('checkDefaultEventPreconditions —— verify-pass（老仓 L163-199，
   })
 
   test('pm track 豁免双 review（when:NON_PM 不适用）', async () => {
+    const token = createBuildRevisionToken('git', 'a'.repeat(40), {
+      repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change',
+    })
     const r = await checkDefaultEventPreconditions(
       'verify-pass',
-      mkState({ track: 'pm', verification_report: 'docs/v.md', branch_status: 'handled', agent_review_result: 'skipped', codex_review_result: 'skipped' }),
-      filesExist(true),
+      mkState({ track: 'pm', verification_report: 'docs/v.md', branch_status: 'handled', agent_review_result: 'skipped', codex_review_result: 'skipped', isolation: 'branch', build_sha: token.value }),
+      { fileExists: () => true, assessBuildRevision: async () => ({ trusted: true, token }) },
     )
     expect(r).toBeNull()
   })
 
   test('free track 走中性验证分支，不继承工程 Track 的双 review', async () => {
+    const token = createBuildRevisionToken('git', 'a'.repeat(40), {
+      repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change',
+    })
     const r = await checkDefaultEventPreconditions(
       'verify-pass',
-      mkState({ track: 'free', verification_report: 'docs/v.md', branch_status: 'handled', agent_review_result: 'skipped', codex_review_result: 'skipped' }),
-      filesExist(true),
+      mkState({ track: 'free', verification_report: 'docs/v.md', branch_status: 'handled', agent_review_result: 'skipped', codex_review_result: 'skipped', isolation: 'branch', build_sha: token.value }),
+      { fileExists: () => true, assessBuildRevision: async () => ({ trusted: true, token }) },
     )
     expect(r).toBeNull()
   })
 
-  test('barrier：build_sha≠HEAD → 双行 ERROR 拒（逐字，含 build_sha= / HEAD= 值）', async () => {
-    const ctx: TransitionContext = { fileExists: () => true, gitHeadSha: async () => 'DEADBEEF\n' }
-    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', build_sha: 'CAFEBABE' }), ctx)
+  test('barrier：typed assessor revision stale → stable two-line blocker（无 raw HEAD 文案）', async () => {
+    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', isolation: 'branch', build_sha: 'CAFEBABE' }), {
+      fileExists: () => true,
+      assessBuildRevision: async (request) => ({ trusted: false, blocker: makeBuildRevisionBlocker('revision-stale', request.stateHash) }),
+    })
     expect(r).toEqual([
-      'ERROR: verify-pass 要求 HEAD==build_sha（build 后产物被改未复验）build_sha=CAFEBABE HEAD=DEADBEEF',
-      '  修复：要么把改动并入复验（重跑 build→verify），要么 verify-fail 回退后重新 build-complete 冻结新 SHA',
+      'ERROR: verify-pass revision trust blocked (code=verify-build-revision-untrusted reason=revision-stale)',
+      '  修复：return-to-build-and-capture-current-revision',
     ])
   })
 
-  test('barrier 退化：build_sha=null → 跳过', async () => {
-    const ctx: TransitionContext = { fileExists: () => true, gitHeadSha: async () => 'DEADBEEF' }
-    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', build_sha: 'null' }), ctx)
-    expect(r).toBeNull()
+  test('barrier：build_sha=null → typed null blocker，绝不跳过', async () => {
+    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', isolation: 'branch', build_sha: 'null' }), {
+      fileExists: () => true,
+      assessBuildRevision: async (request) => ({ trusted: false, blocker: makeBuildRevisionBlocker('null', request.stateHash) }),
+    })
+    expect(r).toEqual([
+      'ERROR: verify-pass revision trust blocked (code=verify-build-revision-untrusted reason=null)',
+      '  修复：return-to-build-and-capture-current-revision',
+    ])
   })
 
-  test('barrier 退化：HEAD 取不到（空串）→ 跳过', async () => {
-    const ctx: TransitionContext = { fileExists: () => true, gitHeadSha: async () => '' }
-    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', build_sha: 'CAFEBABE' }), ctx)
-    expect(r).toBeNull()
+  test('barrier：raw array build_sha 保持 ambiguous（不被 default 归一成 malformed）', async () => {
+    const token = createBuildRevisionToken('git', 'a'.repeat(40), {
+      repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change',
+    }).value
+    const buildSha = [token]
+    let seenBuildSha: unknown
+    const result = await checkDefaultEventPreconditions('verify-pass', mkState({
+      ...base, track: 'pm', isolation: 'branch', build_sha: buildSha,
+    }), {
+      fileExists: () => true,
+      assessBuildRevision: async (request) => {
+        seenBuildSha = request.buildSha
+        return assessBuildRevisionTrust({
+          ...request,
+          observe: async () => ({
+            kind: 'git' as const,
+            revision: 'a'.repeat(40),
+            identity: { repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change' },
+          }),
+          // The ambiguous candidate is rejected before provenance is consulted.
+          provenance: async () => undefined,
+        })
+      },
+    })
+    expect(result).toEqual([
+      'ERROR: verify-pass revision trust blocked (code=verify-build-revision-untrusted reason=ambiguous)',
+      '  修复：return-to-build-and-capture-current-revision',
+    ])
+    expect(seenBuildSha).toEqual(buildSha)
   })
 
-  test('barrier 退化：无 gitHeadSha 注入 → 跳过', async () => {
-    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', build_sha: 'CAFEBABE' }), filesExist(true))
-    expect(r).toBeNull()
+  test('readiness：raw array build_sha 保持 ambiguous 且不修改 canonical state', async () => {
+    const token = createBuildRevisionToken('git', 'a'.repeat(40), {
+      repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change',
+    }).value
+    const state = mkState({
+      ...base, phase: 'verify', track: 'pm', isolation: 'branch', build_sha: [token],
+    })
+    const before = structuredClone(state)
+    const plan = compileEffectiveWorkflowPlan('default')
+    const readiness = await readinessByTransition(plan, state, {
+      changeDirAbs: '/tmp/issue-42-default-readiness',
+      fileExists: () => true,
+      assessBuildRevision: async (request) => assessBuildRevisionTrust({
+        ...request,
+        observe: async () => ({
+          kind: 'git' as const,
+          revision: 'a'.repeat(40),
+          identity: { repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change' },
+        }),
+        provenance: async () => undefined,
+      }),
+    })
+    const verifyPass = readiness.verify?.['verify-pass']
+    expect(verifyPass).toEqual({
+      ready: false,
+      blockers: [{
+        kind: 'verify-build-revision-untrusted',
+        code: 'verify-build-revision-untrusted',
+        reason: 'ambiguous',
+        remediation: 'return-to-build-and-capture-current-revision',
+        stateHash: safeRevisionHash(state.fields),
+      }],
+    })
+    expect(state).toEqual(before)
+  })
+
+  test('barrier：只注入旧 gitHeadSha 能力仍 fail-closed（不再静默跳过）', async () => {
+    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', isolation: 'branch', build_sha: 'CAFEBABE' }), {
+      fileExists: () => true, gitHeadSha: async () => '',
+    })
+    expect(r).toEqual([
+      'ERROR: verify-pass revision trust blocked (code=verify-build-revision-untrusted reason=capability-unavailable)',
+      '  修复：return-to-build-and-capture-current-revision',
+    ])
+  })
+
+  test('barrier：无可信 assessor 能力 → stable capability-unavailable blocker', async () => {
+    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', isolation: 'branch', build_sha: 'CAFEBABE' }), filesExist(true))
+    expect(r).toEqual([
+      'ERROR: verify-pass revision trust blocked (code=verify-build-revision-untrusted reason=capability-unavailable)',
+      '  修复：return-to-build-and-capture-current-revision',
+    ])
   })
 
   test('barrier 通过：build_sha==HEAD', async () => {
-    const ctx: TransitionContext = { fileExists: () => true, gitHeadSha: async () => 'CAFEBABE' }
-    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', build_sha: 'CAFEBABE' }), ctx)
+    const token = createBuildRevisionToken('git', 'a'.repeat(40), {
+      repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change',
+    })
+    const r = await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', isolation: 'branch', build_sha: token.value }), {
+      fileExists: () => true, assessBuildRevision: async () => ({ trusted: true, token }),
+    })
     expect(r).toBeNull()
   })
 
-  test('barrier IO 序：verify-pass 前置全过时 gitHeadSha 恰调一次（barrier 在末位）', async () => {
+  test('barrier IO 序：verify-pass 前置全过时 assessor 恰调一次（barrier 在末位）', async () => {
     let calls = 0
-    const ctx: TransitionContext = { fileExists: () => true, gitHeadSha: async () => { calls++; return 'CAFEBABE' } }
-    await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', build_sha: 'CAFEBABE' }), ctx)
+    const token = createBuildRevisionToken('git', 'a'.repeat(40), {
+      repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change',
+    })
+    await checkDefaultEventPreconditions('verify-pass', mkState({ ...base, track: 'pm', isolation: 'branch', build_sha: token.value }), {
+      fileExists: () => true,
+      assessBuildRevision: async () => { calls++; return { trusted: true, token } },
+    })
     expect(calls).toBe(1)
   })
 
@@ -343,15 +447,42 @@ describe('checkDefaultEventPreconditions —— 数组边界输入（阻断 1：
   })
 
   test("verify-pass agent_review_result=['pass'] → 归一 'pass' → field-equals 放行（backend 轨全过）", async () => {
+    const token = createBuildRevisionToken('git', 'a'.repeat(40), {
+      repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change',
+    })
     const r = await checkDefaultEventPreconditions(
       'verify-pass',
       mkState({
         track: 'backend', verification_report: 'docs/v.md', branch_status: 'handled',
-        agent_review_result: ['pass'], codex_review_result: 'pass',
+        agent_review_result: ['pass'], codex_review_result: 'pass', isolation: 'branch', build_sha: token.value,
       }),
-      filesExist(true),
+      { fileExists: () => true, assessBuildRevision: async () => ({ trusted: true, token }) },
     )
     expect(r).toBeNull()
+  })
+
+  test('revision assessor hashes canonical raw fields, not the normalized default guard view', async () => {
+    const token = createBuildRevisionToken('git', 'a'.repeat(40), {
+      repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change',
+    }).value
+    const state = mkState({
+      track: 'backend', verification_report: 'docs/v.md', branch_status: 'handled',
+      codex_review_result: 'pass',
+      isolation: 'branch',
+      build_sha: token,
+      agent_review_result: ['pass'],
+    })
+    const expectedStateHash = safeRevisionHash(state.fields)
+    let seenStateHash: string | undefined
+    const result = await checkDefaultEventPreconditions('verify-pass', state, {
+      fileExists: () => true,
+      assessBuildRevision: async (request) => {
+        seenStateHash = request.stateHash
+        return { trusted: true, token }
+      },
+    })
+    expect(result).toBeNull()
+    expect(seenStateHash).toBe(expectedStateHash)
   })
 
   test('对照 custom 轨：evaluateGuards 直吃数组 build_mode → scalarValue fail-loud throw（default 同输入不 throw）', async () => {

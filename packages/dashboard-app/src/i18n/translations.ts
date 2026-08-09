@@ -2276,6 +2276,7 @@ export const zh: Dict = {
     // 在等，看到的是「差什么」）；state_agent_hint 是徽章/chip 的 title 提示，点明 agent 在终端工作。
     state_agent: '等产出',
     state_agent_missing: '等产出 · 缺 {fields}',
+    revision_untrusted: '构建修订不可信 · {reason} · 请回到 Build 重新捕获',
     state_agent_hint: '任务停在某阶段，等 agent 补产出或推进——agent 在终端工作',
     state_queued: '排队',
     act_kill: '终止',
@@ -2471,6 +2472,8 @@ export const zh: Dict = {
     //    无产出，非故障；**不建议 doctor**（空跑不是环境故障）。zh/en 尾部对称追加（completeness 守）。──
     'cause_no-op': '空跑——agent 运行成功但未产出提交，非故障；已暂停等人工处理，如需重跑请调整任务后重新入队',
     'short_no-op': '空跑',
+    'cause_verify-build-revision-untrusted': '构建修订不可信——请回到 Build 重新捕获当前修订后再验证',
+    'short_verify-build-revision-untrusted': '构建修订不可信',
     // ── v8-C 意见④：人话报错卡处置指引 hint_*（11 个 cause 全配；cause_* 讲结论，hint_* 讲下一步
     //    动作；cancelled/no-op 非故障不引导 doctor）。键尾=FailureCause 枚举值，含连字符整键引号；
     //    zh/en 对称追加（completeness 测试守）。──
@@ -2484,6 +2487,7 @@ export const zh: Dict = {
     'hint_verify-fail': '报告已落盘，直接重试大概率还挂——先进 worktree 看失败断言再改',
     hint_cancelled: '人为终止，非故障——不用跑体检；决定要不要重新跑就行',
     'hint_no-op': '空跑非故障——调整任务描述或拆小粒度后重新入队',
+    'hint_verify-build-revision-untrusted': '回到 Build 捕获当前修订，再重新运行 Verify；不要手动回填 build_sha',
     hint_unknown: '先跑一次就绪体检（拷下方修复命令），按结果处置',
   },
 }
@@ -4705,6 +4709,7 @@ export const en: Dict = {
     doctor_hint: 'Only counts tasks inside the automation sandbox — tasks marked "Awaiting you" or "Awaiting output" are not tracked by the scheduler; the parallel cap is configured per project in the Workbench',
     state_agent: 'Awaiting output',
     state_agent_missing: 'Awaiting output · missing {fields}',
+    revision_untrusted: 'Build revision is untrusted · {reason} · return to Build and recapture',
     state_agent_hint: 'Parked at a stage, waiting on the agent to produce output or move it forward — the agent works in the terminal',
     state_queued: 'Queued',
     act_kill: 'Stop',
@@ -4897,6 +4902,8 @@ export const en: Dict = {
     //    run) — the run succeeded but produced nothing; not a fault, so **no doctor suggestion**. ──
     'cause_no-op': 'No-op run — the agent finished without producing any commits; not a fault. Paused for human review; adjust the task and re-enqueue to run again',
     'short_no-op': 'no-op run',
+    'cause_verify-build-revision-untrusted': 'Build revision is untrusted — return to Build and capture the current revision before verifying again',
+    'short_verify-build-revision-untrusted': 'build revision untrusted',
     // ── v8-C note ④: humane failure-card next-step hints, hint_* for all 11 causes (cause_* states
     //    the conclusion, hint_* the next action; cancelled/no-op are not faults — no doctor push). ──
     'hint_missing-credential': 'Run the fix command to configure the credential, then come back and retry',
@@ -4909,6 +4916,7 @@ export const en: Dict = {
     'hint_verify-fail': 'The report is on disk; a blind retry will likely fail again — enter the worktree and read the failing assertions first',
     hint_cancelled: 'Stopped by a person, not a fault — no diagnostics needed; just decide whether to re-run',
     'hint_no-op': 'A no-op run is not a fault — adjust the task or split it smaller, then re-enqueue',
+    'hint_verify-build-revision-untrusted': 'Return to Build and capture the current revision, then run Verify again; do not backfill build_sha by hand',
     hint_unknown: 'Run the readiness diagnostics first (copy the fix command below) and act on the findings',
   },
 }

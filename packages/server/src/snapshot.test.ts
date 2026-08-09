@@ -1208,7 +1208,10 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
     const store = newStore()
     const root = await makeProject()
     const dir = await initChange(store, root, 'fingerprint-read-model')
-    await store.set(dir, 'build_sha', `workspace:sha256:${'a'.repeat(64)}`)
+    await store.setMany(dir, {
+      isolation: 'in-place',
+      build_sha: `workspace:sha256:${'a'.repeat(64)}`,
+    })
     let calls = 0
     const fingerprint = async () => {
       calls += 1
@@ -1233,16 +1236,20 @@ describe('buildSnapshot —— 真读多项目 .pipeline.yaml', () => {
       clock: () => 't',
       workspaceFingerprint: fingerprint,
     })
-    expect(calls).toBe(1)
+    // Legacy raw workspace SHA is rejected before capability evaluation. A
+    // trustworthy build token must be captured by the build action first.
+    expect(calls).toBe(0)
     expect(verify.projects[0]?.ok).toBe(true)
     expect(
       verify.projects[0]?.changes[0]?.workflowExecution.readinessByTransition.verify?.['verify-pass'],
     ).toMatchObject({
       ready: false,
       blockers: expect.arrayContaining([{
-        kind: 'evaluation-error',
-        guardType: 'build-head-unchanged',
-        capability: 'workspaceFingerprint',
+        kind: 'verify-build-revision-untrusted',
+        code: 'verify-build-revision-untrusted',
+        reason: 'malformed',
+        remediation: 'return-to-build-and-capture-current-revision',
+        stateHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       }]),
     })
   })
@@ -1547,9 +1554,11 @@ steps:
     ).toEqual({
       ready: false,
       blockers: [{
-        kind: 'capability-unavailable',
-        guardType: 'build-head-unchanged',
-        capability: 'gitHeadSha',
+        kind: 'verify-build-revision-untrusted',
+        code: 'verify-build-revision-untrusted',
+        reason: 'malformed',
+        remediation: 'return-to-build-and-capture-current-revision',
+        stateHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       }],
     })
 
@@ -1565,11 +1574,11 @@ steps:
     ).toEqual({
       ready: false,
       blockers: [{
-        kind: 'guard-failed',
-        guardType: 'build-head-unchanged',
-        field: 'build_sha',
-        actual: 'def456',
-        expected: ['abc123'],
+        kind: 'verify-build-revision-untrusted',
+        code: 'verify-build-revision-untrusted',
+        reason: 'malformed',
+        remediation: 'return-to-build-and-capture-current-revision',
+        stateHash: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
       }],
     })
   })

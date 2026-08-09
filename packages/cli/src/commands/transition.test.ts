@@ -6,6 +6,8 @@ import {
   IllegalTransitionError,
   TRANSITION_EVENTS,
   eventEdge as kernelEventEdge,
+  createBuildRevisionToken,
+  makeBuildRevisionBlocker,
   publishTaskPlanRevision,
 } from '@tenon/kernel'
 import type { Phase, PipelineState, TaskPlanRevisionV1, TransitionResult } from '@tenon/kernel'
@@ -13,6 +15,14 @@ import { cmdTransition } from './transition.js'
 import { EVENTS, eventEdge } from '../events.js'
 import { makeGuardCtx } from '../guardContext.js'
 import { FIXED_CLOCK, makeDeps, mockState, spy } from '../test-support.js'
+
+const TEST_REVISION_IDENTITY = { repository: '/repo.git', worktree: '/repo\\0/repo.git/worktrees/change' } as const
+const TEST_BUILD_TOKEN = createBuildRevisionToken('git', 'a'.repeat(40), TEST_REVISION_IDENTITY)
+
+function trustBuildRevision(deps: ReturnType<typeof makeDeps>): void {
+  deps.captureBuildRevision = async () => TEST_BUILD_TOKEN.value
+  deps.assessBuildRevision = async () => ({ trusted: true as const, token: TEST_BUILD_TOKEN })
+}
 
 function approvedReviewState(fields: Parameters<typeof mockState>[0]): PipelineState {
   const phase = String(fields.phase ?? 'explore')
@@ -68,11 +78,13 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
       isolation: 'worktree',
       pre_verify_review_result: 'pass',
     }) })
+    trustBuildRevision(deps)
     await cmdTransition(deps, 'demo', 'build-complete')
     expect(deps.store.withLock.calls).toHaveLength(1)
     expect(deps.store.write.calls).toHaveLength(1)
     const written = deps.store.write.calls[0]?.[1] as PipelineState
     expect(written.fields.phase).toBe('verify')
+    expect(written.fields.build_sha).toBe(TEST_BUILD_TOKEN.value)
   })
 
   test('生产 guardContext 会在 transition 锁内重验未完成 tasks 并阻止提交', async () => {
@@ -130,7 +142,7 @@ describe('transition —— [TRANSITION] 走 stderr / 非法 exit 1（oracle 实
 
     try {
       expect(await cmdTransition(deps, 'demo', 'verify-pass')).toBe(1)
-      expect(deps.errLines).toContain('verify 出口：tasks.md 缺失')
+      expect(deps.errLines.join('\n')).toContain('verify-build-revision-untrusted reason=null')
       expect(deps.store.write.calls).toHaveLength(0)
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -401,36 +413,38 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
         branch_status: 'handled',
         agent_review_result: 'skipped',
         codex_review_result: 'skipped',
+        isolation: 'branch',
+        build_sha: TEST_BUILD_TOKEN.value,
       }),
       guardCtx: ctxAllFiles(true),
     })
+    trustBuildRevision(deps)
     expect(await cmdTransition(deps, 'demo', 'verify-pass')).toBe(0)
     const written = deps.store.write.calls[0]?.[1] as PipelineState
     expect(written.fields.verify_result).toBe('pass')
     expect(written.fields.verified_at).toBe(FIXED_CLOCK)
   })
 
-  test('verify-pass barrier：build_sha≠HEAD 拒（双行 ERROR，老仓 L192-199）', async () => {
+  test('verify-pass barrier：revision stale 拒绝并输出 stable blocker', async () => {
     const deps = makeDeps({
       state: mockState({
         phase: 'verify',
         track: 'pm',
         verification_report: 'docs/v.md',
         branch_status: 'handled',
-        build_sha: 'CAFEBABE',
+        isolation: 'branch',
+        build_sha: TEST_BUILD_TOKEN.value,
       }),
       guardCtx: ctxAllFiles(true),
     })
-    deps.gitHeadSha = async () => 'DEADBEEF\n'
+    trustBuildRevision(deps)
+    deps.assessBuildRevision = async () => ({ trusted: false as const, blocker: makeBuildRevisionBlocker('revision-stale') })
     expect(await cmdTransition(deps, 'demo', 'verify-pass')).toBe(1)
-    expect(deps.errLines).toContain(
-      'ERROR: verify-pass 要求 HEAD==build_sha（build 后产物被改未复验）build_sha=CAFEBABE HEAD=DEADBEEF',
-    )
-    expect(deps.errLines).toContain('  修复：要么把改动并入复验（重跑 build→verify），要么 verify-fail 回退后重新 build-complete 冻结新 SHA')
+    expect(deps.errLines.join('\n')).toContain('verify-build-revision-untrusted reason=revision-stale remediation=return-to-build-and-capture-current-revision')
     expect(deps.store.write.calls).toHaveLength(0)
   })
 
-  test('verify-pass barrier 退化：build_sha=null 或 HEAD 取不到 → 跳过校验（老仓 L196 条件）', async () => {
+  test('verify-pass barrier 退化：build_sha=null 或 legacy SHA → stable blocker，不跳过校验', async () => {
     const nullSha = makeDeps({
       state: approvedReviewState({
         phase: 'verify', track: 'pm', verification_report: 'docs/v.md',
@@ -438,8 +452,10 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
       }),
       guardCtx: ctxAllFiles(true),
     })
+    nullSha.assessBuildRevision = async () => ({ trusted: false as const, blocker: makeBuildRevisionBlocker('null') })
     nullSha.gitHeadSha = async () => 'DEADBEEF'
-    expect(await cmdTransition(nullSha, 'demo', 'verify-pass')).toBe(0)
+    expect(await cmdTransition(nullSha, 'demo', 'verify-pass')).toBe(1)
+    expect(nullSha.errLines.join('\n')).toContain('verify-build-revision-untrusted reason=null')
     const noHead = makeDeps({
       state: approvedReviewState({
         phase: 'verify', track: 'pm', verification_report: 'docs/v.md',
@@ -447,8 +463,10 @@ describe('transition —— 事件前置校验（老仓 case 块，exit 1 + ERRO
       }),
       guardCtx: ctxAllFiles(true),
     })
+    noHead.assessBuildRevision = async () => ({ trusted: false as const, blocker: makeBuildRevisionBlocker('malformed') })
     noHead.gitHeadSha = async () => ''
-    expect(await cmdTransition(noHead, 'demo', 'verify-pass')).toBe(0)
+    expect(await cmdTransition(noHead, 'demo', 'verify-pass')).toBe(1)
+    expect(noHead.errLines.join('\n')).toContain('verify-build-revision-untrusted reason=malformed')
   })
 
   test('verify-fail：无前置校验，verify_result=fail + build_sha=null 落写（老仓 L206-211）', async () => {

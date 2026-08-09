@@ -7,7 +7,7 @@ import {
 import { errMsg, type CliDeps } from '../deps.js'
 import { changeDir, isValidChangeName } from '../paths.js'
 import { effectiveWorkflowForState } from './effective-workflow.js'
-import { frozenReviewCandidate } from './review-candidate.js'
+import { frozenReviewCandidate, normalizeReviewCandidate } from './review-candidate.js'
 
 interface ReviewBudgetContext {
   readonly change: string
@@ -145,14 +145,16 @@ export async function cmdReviewAttempt(
       if (opts.candidate === undefined || opts.candidate === '') {
         throw new Error('review-attempt begin 要求 --candidate <fingerprint>')
       }
-      if (opts.candidate !== ctx.candidateFingerprint) {
+      const candidate = normalizeReviewCandidate(opts.candidate)
+      if (candidate === undefined) throw new Error('review-attempt begin 的 --candidate 不是 canonical review candidate')
+      if (candidate !== ctx.candidateFingerprint) {
         throw new Error(
           `Review candidate 与当前 frozen input 不一致：expected=${ctx.candidateFingerprint} actual=${opts.candidate}`,
         )
       }
       const result = await store.begin({
         ...ctx,
-        candidateFingerprint: opts.candidate,
+        candidateFingerprint: candidate,
         maxAttempts: ctx.defaultMaxAttempts,
         requiredLanes: ctx.requiredLanes,
       })
