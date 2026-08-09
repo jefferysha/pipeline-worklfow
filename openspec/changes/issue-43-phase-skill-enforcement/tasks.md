@@ -25,11 +25,12 @@
 
 ## 验证
 
-- [ ] 运行风险匹配的定向测试与一次完整最终门，核对 Acceptance/Measurement。
-- [ ] 根代理完成最多两次 code-review 尝试并处置已确认 finding。
+- [x] 运行风险匹配的定向测试与一次完整最终门，核对 Acceptance/Measurement。
+- [x] 根代理完成最多两次 code-review 尝试并处置已确认 finding。
 
 ## 交付
 
+- [x] 在 Ship 阶段将已验证 `workflow-skill-enforcement` delta 幂等应用到 canonical OpenSpec，并创建 `applied-spec.md` 收据。
 - [ ] 提交、推送并创建含 `Closes #43`、Change、验证与风险说明的 PR。
 - [ ] 等待并核对 exact-head CI，不 merge、不发布版本。
 
