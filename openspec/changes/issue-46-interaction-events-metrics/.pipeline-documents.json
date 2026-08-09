@@ -120,7 +120,7 @@
         {
           "phase": "build",
           "sha256": "6d98263d810ab082cfb799545c7ace96ff2e6d63df17a68ae19352f144936694",
-          "readAt": "2026-08-09T16:36:32Z",
+          "readAt": "2026-08-09T18:15:14Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
         }
       ]
@@ -143,7 +143,7 @@
         {
           "phase": "build",
           "sha256": "81fe3d26946d9051c2de1784cb784ec6d87239e64f47af340dd4d5eab8ca52f0",
-          "readAt": "2026-08-09T16:36:32Z",
+          "readAt": "2026-08-09T18:15:14Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
         }
       ]
@@ -166,36 +166,7 @@
         {
           "phase": "build",
           "sha256": "81fe3d26946d9051c2de1784cb784ec6d87239e64f47af340dd4d5eab8ca52f0",
-          "readAt": "2026-08-09T16:36:32Z",
-          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
-        }
-      ]
-    },
-    {
-      "kind": "tasks",
-      "path": "openspec/changes/issue-46-interaction-events-metrics/tasks.md",
-      "sha256": "d4e7d261cd043fda9e0e59d53c6f4c31b6ab67cd5ced524e9f1a27fbb0cd9748",
-      "producer": "tenon-spec",
-      "recordedAt": "2026-08-09T16:35:47Z",
-      "producerInvocation": {
-        "confirmationInvocationId": "invocation-2dadb204bb6652d8fda222dcf0f312fe95dfdd65af531ef4a387c6d028130af3",
-        "evidenceScope": "spec",
-        "stepVisit": {
-          "runId": "0c180db0-1288-4ebb-9f02-b6e2dd352e3a",
-          "transitionSequence": 2
-        }
-      },
-      "reads": [
-        {
-          "phase": "spec",
-          "sha256": "d4e7d261cd043fda9e0e59d53c6f4c31b6ab67cd5ced524e9f1a27fbb0cd9748",
-          "readAt": "2026-08-09T16:35:50Z",
-          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",2]"
-        },
-        {
-          "phase": "build",
-          "sha256": "d4e7d261cd043fda9e0e59d53c6f4c31b6ab67cd5ced524e9f1a27fbb0cd9748",
-          "readAt": "2026-08-09T16:36:32Z",
+          "readAt": "2026-08-09T18:15:15Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
         }
       ]
@@ -225,6 +196,29 @@
           "phase": "build",
           "sha256": "bdcc4f159489ece1a920d2f34c4dde25d91672888adf9efdcb376e5a3c3c1cb4",
           "readAt": "2026-08-09T16:36:32Z",
+          "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
+        }
+      ]
+    },
+    {
+      "kind": "tasks",
+      "path": "openspec/changes/issue-46-interaction-events-metrics/tasks.md",
+      "sha256": "3c39bd8f696bc6f66c660c3e41b46f30037a51106e1870a106867428b542d72f",
+      "producer": "tenon-build",
+      "recordedAt": "2026-08-09T18:13:29Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-a3f2548f4188731aaf8279b76eabfe5cfa602779bbf00a3577e97ac88318e142",
+        "evidenceScope": "build",
+        "stepVisit": {
+          "runId": "0c180db0-1288-4ebb-9f02-b6e2dd352e3a",
+          "transitionSequence": 3
+        }
+      },
+      "reads": [
+        {
+          "phase": "build",
+          "sha256": "3c39bd8f696bc6f66c660c3e41b46f30037a51106e1870a106867428b542d72f",
+          "readAt": "2026-08-09T18:13:29Z",
           "visitId": "[\"0c180db0-1288-4ebb-9f02-b6e2dd352e3a\",3]"
         }
       ]

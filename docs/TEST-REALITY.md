@@ -89,10 +89,12 @@
 
 ## 2026-08-10 · Issue #46 interaction observability evidence
 
-- Focused kernel/CLI Vitest is real source execution: 7 files, 45 tests passed.
+- Post-integration focused kernel/CLI Vitest is real source execution: 10 files,
+  138 tests passed.
   Coverage includes closed/privacy codec and matrix round-trip, deterministic replay,
   projection sequence/hash/truncation/symlink failures, scorecard denominator guards,
-  unknown-code unclassified handling, and scorecard CLI path/error sanitisation.
+  unknown-code unclassified handling, scorecard CLI path/error sanitisation, exact review
+  journeys, session resume, and projection-failure compatibility.
 - Tracked fixture replay is deterministic through the built CLI bundle:
   tenon interaction scorecard tools/fixtures/interaction-events/v1 --json.
   It reports governedCompletionRate 0.6, humanInterruptionsPerVerifiedCompletion
@@ -100,10 +102,15 @@
   acceptedStaleDecisions 0, sameStateRepeatedPrompts 0, invalidResumes 1; projection-loss,
   malformed-order, and wrong-resume remain negative controls with sequence-gap,
   malformed-order, invalid-resume, and incomplete-success-journey diagnostics.
-- npm run build -- --pretty false and npm run check:architecture both passed after npm ci.
-  The CLI dist artifact was regenerated through the bundle target. Full repository tests,
-  browser acceptance, and final release gates were not run in this worker lane; the root
-  agent owns those final checks.
+- Post-integration root verification ran the full repository Vitest suite: 387 files,
+  6,729 tests passed, 27 environment/CI-gated tests skipped, and 0 failed. Docker-backed
+  cases were honestly skipped because the local daemon was unavailable; the real-Codex
+  acceptance remained CI-gated because `TENON_REQUIRE_REAL_CODEX!=1`. This change has no
+  Dashboard UI or server API surface, so browser acceptance was not applicable.
+- `npm run build`, `npm run check:architecture` (861 production files), OpenSpec/docs,
+  comments, repository hygiene, release-workflow/identity, default-workflow/document-template,
+  legacy/npx packaging, migration CAS, and the 32-case bundle smoke gate all passed. The
+  CLI and server dist artifacts were regenerated from the merged source graph.
 
 | 层 | 文件 | 真实性 | 驱动什么 |
 |---|---|---|---|

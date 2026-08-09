@@ -47,3 +47,8 @@
 {"ts":"2026-08-09T16:36:01Z","kind":"transition","from":"spec","to":"build","raw":"spec-complete","transitionRecordId":"9b82b00a-a8c6-4212-a0d1-22bca80706b4"}
 {"ts":"2026-08-09T16:36:32Z","kind":"set","field":"build_mode","to":"subagent-driven-development"}
 {"ts":"2026-08-09T16:36:32Z","kind":"set","field":"isolation","to":"worktree"}
+{"ts":"2026-08-09T18:13:29Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-09T18:13:29Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 0c180db0-1288-4ebb-9f02-b6e2dd352e3a 3"}
+{"ts":"2026-08-09T18:14:36Z","kind":"tool","raw":"CodexSkillRead: openspec-propose"}
+{"ts":"2026-08-09T18:14:36Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-propose 0c180db0-1288-4ebb-9f02-b6e2dd352e3a 3"}
+{"ts":"2026-08-09T18:28:54Z","kind":"set","field":"pre_verify_review_result","to":"pass"}

@@ -20,13 +20,13 @@
 
 ## 实现
 
-- [ ] 实现纯 kernel `InteractionEventV1` contract/codec、matrix、diagnostics 与 public exports。
-- [ ] 实现 change-lock 内 append-only event store、hash chain、有界 reader 和并发/损坏测试。
-- [ ] 打通 review request/acknowledgement/transition effect/session resume 的真实 CLI trace。
-- [ ] 实现 deterministic replay/scorecard、完整 fixture matrix 与七个可重放 fixtures。
-- [ ] 装配只读 `tenon interaction scorecard <fixture-dir> --json` 和真实 integration tests。
-- [ ] 同步 architecture checker、contract/test-reality/CLI docs，并由 bundle 生成受控 dist。
-- [ ] 根代理检查 worker diff 和定向测试，只针对确认缺口回派修复。
+- [x] 实现纯 kernel `InteractionEventV1` contract/codec、matrix、diagnostics 与 public exports。
+- [x] 实现 change-lock 内 append-only event store、hash chain、有界 reader 和并发/损坏测试。
+- [x] 打通 review request/acknowledgement/transition effect/session resume 的真实 CLI trace。
+- [x] 实现 deterministic replay/scorecard、完整 fixture matrix 与八个可重放 fixtures。
+- [x] 装配只读 `tenon interaction scorecard <fixture-dir> --json` 和真实 integration tests。
+- [x] 同步 architecture checker、contract/test-reality/CLI docs，并由 bundle 生成受控 dist。
+- [x] 根代理检查 worker diff 和定向测试，只针对确认缺口回派修复。
 
 ## 验证
 

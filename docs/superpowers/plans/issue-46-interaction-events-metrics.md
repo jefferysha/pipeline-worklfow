@@ -155,3 +155,4 @@ bash tools/test-bundle.sh
 - commit/push `codex/issue-46-interaction-metrics`。
 - 创建 PR，正文含 `Closes #46`、Change、验证证据、兼容/残余风险；不 merge、不 release。
 - Archive 后等待 exact-head CI，分别报告 CI、review 次数、mergeability 与阻塞项。
+

@@ -208,3 +208,4 @@ Kernel public barrel MUST 导出 interaction contract/replay/scorecard/store por
 
 - **WHEN** interaction contract/replay/scorecard 误导入 `node:*`、CLI、server 或 channel 内部实现
 - **THEN** `npm run check:architecture` 失败
+
