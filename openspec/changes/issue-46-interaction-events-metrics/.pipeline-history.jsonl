@@ -63,3 +63,4 @@
 {"ts":"2026-08-09T18:52:05Z","kind":"tool","raw":"review:request phase=verify event=verify-fail"}
 {"ts":"2026-08-09T18:52:08Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T16:19:48Z authority_host_session=019fe750-2345-7d01-a197-728b0017ba47"}
 {"ts":"2026-08-09T18:52:08Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"4dec48fd-768b-47e1-a25c-377cc5f066fb"}
+{"ts":"2026-08-09T19:49:38Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
