@@ -148,3 +148,45 @@ test('unresolved and ambiguous project-relative imports fail loudly', async () =
     /ambiguous project-relative import/u,
   )
 })
+
+test('resolution diagnostics are repo-relative and stable across fixture roots', async () => {
+  const unresolvedRoots = await Promise.all([
+    fixture({ 'a.ts': "import './missing';" }),
+    fixture({ 'a.ts': "import './missing';" }),
+  ])
+  const unresolvedErrors = await Promise.all(unresolvedRoots.map(async (root) => {
+    try {
+      await analyzeImportGraph({ rootDir: root })
+      throw new Error('expected unresolved import to fail')
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+  }))
+  assert.equal(unresolvedErrors[0], unresolvedErrors[1])
+  assert.match(unresolvedErrors[0], /packages\/kernel\/src\/a\.ts/u)
+  for (const root of unresolvedRoots) assert.equal(unresolvedErrors[0].includes(root), false)
+
+  const ambiguousRoots = await Promise.all([
+    fixture({
+      'a.ts': "import './b';",
+      'b.ts': 'export const b = 1;',
+      'b.tsx': 'export const b = 1;',
+    }),
+    fixture({
+      'a.ts': "import './b';",
+      'b.ts': 'export const b = 1;',
+      'b.tsx': 'export const b = 1;',
+    }),
+  ])
+  const ambiguousErrors = await Promise.all(ambiguousRoots.map(async (root) => {
+    try {
+      await analyzeImportGraph({ rootDir: root })
+      throw new Error('expected ambiguous import to fail')
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+  }))
+  assert.equal(ambiguousErrors[0], ambiguousErrors[1])
+  assert.match(ambiguousErrors[0], /packages\/kernel\/src\/a\.ts/u)
+  for (const root of ambiguousRoots) assert.equal(ambiguousErrors[0].includes(root), false)
+})

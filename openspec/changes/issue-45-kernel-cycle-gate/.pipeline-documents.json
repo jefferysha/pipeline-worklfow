@@ -35,6 +35,12 @@
           "sha256": "1101e86fb04d0d39ded484f4f9c662eb39f1566eebac6aded5e09dbb7f7816e7",
           "readAt": "2026-08-09T16:40:46Z",
           "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "1101e86fb04d0d39ded484f4f9c662eb39f1566eebac6aded5e09dbb7f7816e7",
+          "readAt": "2026-08-09T17:11:33Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",5]"
         }
       ]
     },
@@ -70,6 +76,12 @@
           "sha256": "d1c0e19ccbcf375e4a920347b530d1da8d148194951a280c9dfef12475b52a76",
           "readAt": "2026-08-09T16:40:46Z",
           "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "d1c0e19ccbcf375e4a920347b530d1da8d148194951a280c9dfef12475b52a76",
+          "readAt": "2026-08-09T17:11:33Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",5]"
         }
       ]
     },
@@ -99,6 +111,12 @@
           "sha256": "52c6eff9ba3560881bdb1474088e37cb9e926734c2187ec7764f6f97ea6683b4",
           "readAt": "2026-08-09T16:40:46Z",
           "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "52c6eff9ba3560881bdb1474088e37cb9e926734c2187ec7764f6f97ea6683b4",
+          "readAt": "2026-08-09T17:11:33Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",5]"
         }
       ]
     },
@@ -122,6 +140,12 @@
           "sha256": "4820ae9f0b020c40d0551ccf98b527d06e8b6a7d94e5befaa73023e75fc81460",
           "readAt": "2026-08-09T16:40:46Z",
           "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "4820ae9f0b020c40d0551ccf98b527d06e8b6a7d94e5befaa73023e75fc81460",
+          "readAt": "2026-08-09T17:11:33Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",5]"
         }
       ]
     },
@@ -145,6 +169,12 @@
           "sha256": "157155ff7b6a8bb78c0858a60052d9fb52d569b4e21153a65a5c1e062f9437d6",
           "readAt": "2026-08-09T16:40:46Z",
           "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "157155ff7b6a8bb78c0858a60052d9fb52d569b4e21153a65a5c1e062f9437d6",
+          "readAt": "2026-08-09T17:11:33Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",5]"
         }
       ]
     },
@@ -168,6 +198,12 @@
           "sha256": "157155ff7b6a8bb78c0858a60052d9fb52d569b4e21153a65a5c1e062f9437d6",
           "readAt": "2026-08-09T16:40:46Z",
           "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "157155ff7b6a8bb78c0858a60052d9fb52d569b4e21153a65a5c1e062f9437d6",
+          "readAt": "2026-08-09T17:11:33Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",5]"
         }
       ]
     },
@@ -197,21 +233,43 @@
           "sha256": "e9d415d7591e6a977750b900f28b84b25097f0355b6d54f979b1e68480b57368",
           "readAt": "2026-08-09T16:40:46Z",
           "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "e9d415d7591e6a977750b900f28b84b25097f0355b6d54f979b1e68480b57368",
+          "readAt": "2026-08-09T17:11:33Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",5]"
         }
       ]
+    },
+    {
+      "kind": "verification-report",
+      "path": "docs/superpowers/reports/2026-08-10-issue-45-kernel-cycle-gate-review-attempt-1.md",
+      "sha256": "341cf68413c67aa456f1ac5e7e08cf2391a621eaae440bf07e99f36324364bf6",
+      "producer": "verification-before-completion",
+      "recordedAt": "2026-08-09T17:10:17Z",
+      "producerInvocation": {
+        "confirmationInvocationId": "invocation-8c8031e25b5011a2720fb45ecfb02499b9ee3a47848c467cc4c90b7426d82bb0",
+        "evidenceScope": "verify",
+        "stepVisit": {
+          "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
+          "transitionSequence": 4
+        }
+      },
+      "reads": []
     },
     {
       "kind": "tasks",
       "path": "openspec/changes/issue-45-kernel-cycle-gate/tasks.md",
       "sha256": "bdd430d8b73f4dcc74b35e6655d115cb9cfa3f734ef7824079923cf947b0f917",
       "producer": "tenon-build",
-      "recordedAt": "2026-08-09T17:02:44Z",
+      "recordedAt": "2026-08-09T17:14:06Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-05c97eeb0e0186cb3d17aa57cf7b5ad72c43f7361fc7c49ec396cb07362acf0f",
+        "confirmationInvocationId": "invocation-521e2dd5b40da728b473f507e9a71e56cb5a539def85dcf8d2b4a5be3f2cf8e6",
         "evidenceScope": "build",
         "stepVisit": {
           "runId": "23ec581b-e28e-40a4-a2b2-fd7ff45ea557",
-          "transitionSequence": 3
+          "transitionSequence": 5
         }
       },
       "reads": [
@@ -220,6 +278,12 @@
           "sha256": "bdd430d8b73f4dcc74b35e6655d115cb9cfa3f734ef7824079923cf947b0f917",
           "readAt": "2026-08-09T17:02:45Z",
           "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",3]"
+        },
+        {
+          "phase": "build",
+          "sha256": "bdd430d8b73f4dcc74b35e6655d115cb9cfa3f734ef7824079923cf947b0f917",
+          "readAt": "2026-08-09T17:14:06Z",
+          "visitId": "[\"23ec581b-e28e-40a4-a2b2-fd7ff45ea557\",5]"
         }
       ]
     }

@@ -91,16 +91,17 @@ function candidatePaths(importerPath, specifier) {
   ]
 }
 
-export function resolveProjectImport(importerPath, specifier, sourceSet) {
+export function resolveProjectImport(importerPath, specifier, sourceSet, displayPath = posixPath) {
   if (!relativeSpecifier(specifier)) return undefined
   const candidates = candidatePaths(importerPath, specifier)
     .filter((candidate) => sourceSet.has(candidate))
+    .sort((a, b) => compareText(displayPath(a), displayPath(b)))
   if (candidates.length === 0) {
-    throw new Error(`cannot resolve project-relative import '${specifier}' from '${posixPath(importerPath)}'`)
+    throw new Error(`cannot resolve project-relative import '${specifier}' from '${displayPath(importerPath)}'`)
   }
   if (candidates.length > 1) {
     throw new Error(
-      `ambiguous project-relative import '${specifier}' from '${posixPath(importerPath)}': ${candidates.map(posixPath).join(', ')}`,
+      `ambiguous project-relative import '${specifier}' from '${displayPath(importerPath)}': ${candidates.map(displayPath).join(', ')}`,
     )
   }
   return candidates[0]
@@ -195,6 +196,7 @@ function graphFromFiles(rootDir, files) {
   const sourceSet = new Set(absoluteFiles)
   const nodes = absoluteFiles.map((path) => posixPath(relative(rootDir, path)))
   const pathByNode = new Map(absoluteFiles.map((path) => [path, posixPath(relative(rootDir, path))]))
+  const displayPath = (path) => posixPath(relative(rootDir, path))
   const runtime = new Map()
   const typeOnly = new Map()
   for (const importerPath of absoluteFiles) {
@@ -208,7 +210,7 @@ function graphFromFiles(rootDir, files) {
       sourceKind(importerPath),
     )
     for (const entry of collectImports(sourceFile, importer)) {
-      const resolvedPath = resolveProjectImport(importerPath, entry.specifier, sourceSet)
+      const resolvedPath = resolveProjectImport(importerPath, entry.specifier, sourceSet, displayPath)
       if (resolvedPath === undefined) continue
       const target = pathByNode.get(resolvedPath)
       if (target === undefined) throw new Error(`resolved import is outside production source set: ${entry.specifier}`)
