@@ -45,7 +45,7 @@
         {
           "phase": "ship",
           "sha256": "64e5b052ac598d4dd5990804607f20455a96cf74920205fe647c42fc8d1107a3",
-          "readAt": "2026-08-09T19:41:46Z",
+          "readAt": "2026-08-09T19:44:00Z",
           "visitId": "[\"00f78e3a-2e92-4d80-bd7a-90d226f5fa7a\",11]"
         }
       ]
@@ -116,7 +116,7 @@
         {
           "phase": "ship",
           "sha256": "06b1ad5029e3776c8de036c134f63e30c29d59c3a4fc75c735d92210f062f32f",
-          "readAt": "2026-08-09T19:41:46Z",
+          "readAt": "2026-08-09T19:44:00Z",
           "visitId": "[\"00f78e3a-2e92-4d80-bd7a-90d226f5fa7a\",11]"
         }
       ]
@@ -187,7 +187,7 @@
         {
           "phase": "ship",
           "sha256": "b7abd76ac7d8851cb7c8eac7d111941b6ab7f8cfdb19b97a743c2fafda605f5f",
-          "readAt": "2026-08-09T19:41:46Z",
+          "readAt": "2026-08-09T19:44:00Z",
           "visitId": "[\"00f78e3a-2e92-4d80-bd7a-90d226f5fa7a\",11]"
         }
       ]
@@ -228,7 +228,7 @@
         {
           "phase": "ship",
           "sha256": "30630f055a85f54f0264424295504c077e61a5b8acfad3719bc3baa6b995032e",
-          "readAt": "2026-08-09T19:41:46Z",
+          "readAt": "2026-08-09T19:44:00Z",
           "visitId": "[\"00f78e3a-2e92-4d80-bd7a-90d226f5fa7a\",11]"
         }
       ]
@@ -269,7 +269,7 @@
         {
           "phase": "ship",
           "sha256": "5a716713da0c699e56b41377cd994aee2439807952e4e39d141d7b48e6e8ddbf",
-          "readAt": "2026-08-09T19:41:46Z",
+          "readAt": "2026-08-09T19:44:00Z",
           "visitId": "[\"00f78e3a-2e92-4d80-bd7a-90d226f5fa7a\",11]"
         }
       ]
@@ -304,7 +304,7 @@
         {
           "phase": "ship",
           "sha256": "3159dd7c4850b61f8547615f4bf9bbaecd82584e7aa815dc4792e69c1519ac8d",
-          "readAt": "2026-08-09T19:41:46Z",
+          "readAt": "2026-08-09T19:44:00Z",
           "visitId": "[\"00f78e3a-2e92-4d80-bd7a-90d226f5fa7a\",11]"
         }
       ]
@@ -339,7 +339,7 @@
         {
           "phase": "ship",
           "sha256": "3159dd7c4850b61f8547615f4bf9bbaecd82584e7aa815dc4792e69c1519ac8d",
-          "readAt": "2026-08-09T19:41:46Z",
+          "readAt": "2026-08-09T19:44:00Z",
           "visitId": "[\"00f78e3a-2e92-4d80-bd7a-90d226f5fa7a\",11]"
         }
       ]
@@ -362,7 +362,7 @@
         {
           "phase": "ship",
           "sha256": "3f9485e8288863e0bdb431874eb42fe305ee4f8c19e1bceb1c65299f3c410851",
-          "readAt": "2026-08-09T19:41:46Z",
+          "readAt": "2026-08-09T19:44:00Z",
           "visitId": "[\"00f78e3a-2e92-4d80-bd7a-90d226f5fa7a\",11]"
         }
       ]
@@ -386,11 +386,11 @@
     {
       "kind": "tasks",
       "path": "openspec/changes/issue-43-phase-skill-enforcement/tasks.md",
-      "sha256": "f3c0ab16f258c17289b3f0b08b6fbcf7b22c88feedc60a5010550dc124adf31e",
+      "sha256": "4068dbf8e4fd61f56f4f1a1b58961b5df5d1af354ad74e0832a8063925e8ef2f",
       "producer": "tenon-ship",
-      "recordedAt": "2026-08-09T19:41:43Z",
+      "recordedAt": "2026-08-09T19:43:57Z",
       "producerInvocation": {
-        "confirmationInvocationId": "invocation-9d1bb042ec7f681cd9105e00084119bcfdc26c09746b7cf935d7e75e1fa4b0e5",
+        "confirmationInvocationId": "invocation-0e87448c8b522ad87df00fdbc40bb9065db0b5597d629916370a25bda0714df2",
         "evidenceScope": "ship",
         "stepVisit": {
           "runId": "00f78e3a-2e92-4d80-bd7a-90d226f5fa7a",
@@ -400,8 +400,8 @@
       "reads": [
         {
           "phase": "ship",
-          "sha256": "f3c0ab16f258c17289b3f0b08b6fbcf7b22c88feedc60a5010550dc124adf31e",
-          "readAt": "2026-08-09T19:41:46Z",
+          "sha256": "4068dbf8e4fd61f56f4f1a1b58961b5df5d1af354ad74e0832a8063925e8ef2f",
+          "readAt": "2026-08-09T19:44:00Z",
           "visitId": "[\"00f78e3a-2e92-4d80-bd7a-90d226f5fa7a\",11]"
         }
       ]

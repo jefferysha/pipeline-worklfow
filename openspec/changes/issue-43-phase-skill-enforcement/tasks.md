@@ -31,7 +31,7 @@
 ## 交付
 
 - [x] 在 Ship 阶段将已验证 `workflow-skill-enforcement` delta 幂等应用到 canonical OpenSpec，并创建 `applied-spec.md` 收据。
-- [ ] 提交、推送并创建含 `Closes #43`、Change、验证与风险说明的 PR。
+- [x] 提交、推送并创建含 `Closes #43`、Change、验证与风险说明的 PR。
 - [ ] 等待并核对 exact-head CI，不 merge、不发布版本。
 
 ## 归档
