@@ -760,7 +760,10 @@ test('published stable releases trigger an isolated public install, repeat, upda
   const writer = await text('.github/workflows/release-writer.yml')
   assert.match(workflow, /release:\s*\n\s+types: \[published\]/)
   assert.match(workflow, /workflow_dispatch:\s*\n\s+inputs:\s*\n\s+tag:/)
-  assert.match(workflow, /gh release view "\$RELEASE_TAG"/)
+  assert.match(
+    workflow,
+    /gh release view "\$RELEASE_TAG"[\s\\]+--repo "\$GITHUB_REPOSITORY"/,
+  )
   assert.match(workflow, /\[ "\$RELEASE_DRAFT" = false \]/)
   assert.match(workflow, /\[ "\$RELEASE_PRERELEASE" = false \]/)
   assert.match(workflow, /\[ "\$RELEASE_TARGET" = main \]/)
