@@ -112,6 +112,28 @@
   legacy/npx packaging, migration CAS, and the 32-case bundle smoke gate all passed. The
   CLI and server dist artifacts were regenerated from the merged source graph.
 
+## 2026-08-10 · Issue #66 bounded remediation worker evidence
+
+- TDD RED replay evidence: `npx vitest run packages/kernel/src/interaction/replay.test.ts
+  --minWorkers=4 --maxWorkers=4` initially reported 21 tests with 2 failures because terminal
+  successors and unknown extension core events were silently skipped. Sidecar RED evidence:
+  `npx vitest run packages/kernel/src/state/review-gate-binding.test.ts --minWorkers=4
+  --maxWorkers=4` initially reported 4 tests with 1 failure because the old reader accepted
+  reordered non-canonical JSON.
+- Focused green gate:
+  `npx vitest run packages/kernel/src/interaction/replay.test.ts packages/kernel/src/interaction/scorecard.test.ts
+  packages/kernel/src/state/review-gate-binding.test.ts packages/cli/src/commands/review.integration.test.ts
+  packages/cli/src/commands/transition.test.ts --minWorkers=4 --maxWorkers=4` — 5 files, 87 tests passed.
+  Coverage includes every terminal successor class, unknown-code fence, idempotent resume, canonical
+  sidecar bytes, missing/ambiguous/oversize/symlink/non-regular/UTF-8 cases, deterministic read-window
+  mutation/replacement/disappearance races, CLI refusal, fresh-request recovery, and projection independence.
+- `npx tsc -b packages/kernel packages/cli --pretty false` passed. `npm run bundle` and
+  `npm run build:server` regenerated the tracked CLI/server artifacts; `bash tools/test-bundle.sh`
+  passed 33/33 checks.
+- The worker did not run the root-owned full `npm test`, `npm run build`, architecture/comments/oracle/
+  OpenSpec gates, formal Review, PR/CI, or browser/Docker/real-Codex acceptance. Those remain separate
+  evidence owned by the root agent; this Change has no Dashboard/server route or browser surface.
+
 | 层 | 文件 | 真实性 | 驱动什么 |
 |---|---|---|---|
 | **真 fs 集成** | `packages/cli/src/integration.test.ts` | 🟢 真 | `buildProgram` + 真 `createStateStore/createFlowEngine/loadManifest/createHistoryWriter` + 真临时目录，断言真实落盘的 .pipeline.yaml/JSONL/marker 字节；真子进程跑 dist bundle --help |

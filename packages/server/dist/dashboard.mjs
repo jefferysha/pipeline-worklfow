@@ -12291,6 +12291,9 @@ function clearReviewGatePatch() {
   };
 }
 
+// packages/kernel/dist/state/review-gate-binding.js
+var MAX_REVIEW_GATE_BINDING_BYTES = 16 * 1024;
+
 // packages/kernel/dist/state/transitionTail.js
 async function applyBreadcrumbTail(port, args) {
   if (!port)

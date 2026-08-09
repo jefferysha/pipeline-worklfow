@@ -1,12 +1,17 @@
 import { createHash } from 'node:crypto'
-import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { REVIEW_GATE_FIELDS, type FieldName, type PipelineState } from '../types.js'
 import { atomicReplaceFile } from './atomic-publish.js'
+import {
+  readBoundedFileHandle,
+  readOptionalBoundedRegularTextFile,
+  type BoundedFileHandleReader,
+} from './document-path.js'
 import { serializePipeline } from './parse.js'
 
 /** Sidecar binding for the canonical review decision state (never an interaction projection). */
 export const REVIEW_GATE_BINDING_FILE = '.pipeline-review-gate-binding.json' as const
+export const MAX_REVIEW_GATE_BINDING_BYTES = 16 * 1024
 
 export interface ReviewGateBinding {
   readonly version: 1
@@ -15,6 +20,17 @@ export interface ReviewGateBinding {
   readonly requestedAt: string
   readonly decisionStateDigest: string
   readonly runId?: string
+}
+
+async function readReviewGateBindingSource(
+  handle: Parameters<BoundedFileHandleReader>[0],
+  maxBytes: number,
+): Promise<Buffer> {
+  const content = await readBoundedFileHandle(handle, maxBytes)
+  if (content.length >= 3 && content[0] === 0xef && content[1] === 0xbb && content[2] === 0xbf) {
+    throw new Error('review gate binding 必须使用 canonical JSON bytes')
+  }
+  return content
 }
 
 function scalar(state: PipelineState, field: FieldName): string {
@@ -80,29 +96,29 @@ function parseBinding(value: unknown): ReviewGateBinding {
   }
 }
 
-function errorCode(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) return undefined
-  const value = Reflect.get(error, 'code')
-  return typeof value === 'string' ? value : undefined
-}
-
-export async function readReviewGateBinding(changeDir: string): Promise<ReviewGateBinding | undefined> {
+export async function readReviewGateBinding(
+  changeDir: string,
+  readSource: BoundedFileHandleReader = readReviewGateBindingSource,
+): Promise<ReviewGateBinding | undefined> {
   const target = join(changeDir, REVIEW_GATE_BINDING_FILE)
+  const raw = await readOptionalBoundedRegularTextFile(
+    target,
+    MAX_REVIEW_GATE_BINDING_BYTES,
+    'review gate binding',
+    readSource,
+  )
+  if (raw === undefined) return undefined
+  let value: unknown
   try {
-    const info = await lstat(target)
-    if (!info.isFile() || info.isSymbolicLink()) throw new Error('review gate binding 必须是普通文件')
-    const raw = await readFile(target, 'utf8')
-    let value: unknown
-    try {
-      value = JSON.parse(raw)
-    } catch {
-      throw new Error('review gate binding JSON 非法')
-    }
-    return parseBinding(value)
-  } catch (error) {
-    if (errorCode(error) === 'ENOENT') return undefined
-    throw error
+    value = JSON.parse(raw)
+  } catch {
+    throw new Error('review gate binding JSON 非法')
   }
+  const binding = parseBinding(value)
+  if (`${JSON.stringify(binding)}\n` !== raw) {
+    throw new Error('review gate binding 必须使用 canonical JSON bytes')
+  }
+  return binding
 }
 
 /** Must be called while the Change lock is held; it intentionally overwrites only this sidecar. */

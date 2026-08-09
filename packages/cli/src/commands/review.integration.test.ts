@@ -1,4 +1,4 @@
-import { readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import {
@@ -184,6 +184,33 @@ describe('真实 e2e —— review exit receipt（default workflow）', () => {
     expect(rebuilt.decisionStateDigest).not.toBe('attacker-secret')
     expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
     expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(0)
+  })
+
+  test('oversize binding stays fail-closed for acknowledge and transition', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    const bindingPath = join(h.cwd, 'openspec/changes/demo', REVIEW_GATE_BINDING_FILE)
+    const canonical = await readFile(bindingPath, 'utf8')
+    await writeFile(bindingPath, `${canonical}${' '.repeat(16 * 1024)}`, 'utf8')
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(1)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(2)
+    expect(await h.read('demo')).toMatch(/^review_gate_status: pending$/m)
+  })
+
+  test('symlink binding stays fail-closed for acknowledge and transition', async () => {
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    const bindingPath = join(h.cwd, 'openspec/changes/demo', REVIEW_GATE_BINDING_FILE)
+    const outside = join(h.cwd, 'outside-review-binding.json')
+    const canonical = await readFile(bindingPath, 'utf8')
+    await writeFile(outside, canonical, 'utf8')
+    await rm(bindingPath)
+    await symlink(outside, bindingPath)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(1)
+
+    expect(await h.run(['review', 'request', 'demo', '--event', 'explore-complete'])).toBe(0)
+    expect(await h.run(['review', 'acknowledge', 'demo'])).toBe(0)
+    await rm(bindingPath)
+    await symlink(outside, bindingPath)
+    expect(await h.run(['transition', 'demo', 'explore-complete'])).toBe(1)
   })
 
   test('missing interaction projection does not change canonical acknowledgement', async () => {

@@ -150,6 +150,13 @@
   字段（以及派生 interaction projection）的 canonical decision digest、exact phase/event、requestedAt
   与 run identity。缺失、损坏或 digest/visit 漂移的 binding 一律 fail-closed，不参与也不读取 interaction
   projection 做授权判断；pending/approved receipt 可通过 fresh request 撤销旧决定并重新绑定后恢复。
+  Sidecar writer 的 canonical bytes 固定为单行 `JSON.stringify(binding) + "\n"`；authorization reader
+  只接受不超过 16 KiB 的严格 UTF-8 普通文件，并复用 `O_NOFOLLOW | O_NONBLOCK` 的 bounded fd reader，
+  在 proof/read 前后核对 parent realpath、target/fd 的 dev/ino/size/mtimeNs/ctimeNs。字段缺失/未知、
+  duplicate key、字段重排、额外空白/trailing bytes、symlink、目录、超限、替换、同 inode 改写、增长
+  或读取中消失均拒绝，错误不得回显 sidecar 内容。没有可信 binding 的 legacy pending/approved receipt
+  不自动 backfill；必须对相同 exact phase/event 发起 fresh `review request` 产生新的 requestedAt、pending
+  receipt 和 sidecar 后再 acknowledge，interaction projection 不能作为授权 fallback。
 - **不可变 TransitionRecord**（同上）：`openspec/changes/<name>/.pipeline-transitions/
   <sequence 零填充 6 位>-<recordId>.json`，每条记录一个文件，写入用「临时文件 + `link()` +
   `unlink()` 临时文件」而非 rename——`link()` 目标已存在时原子失败（`EEXIST`），存储层强制
@@ -337,6 +344,17 @@ credential, artifact body, URL, session id, and arbitrary metadata are not
 valid fields; the codec rejects unknown keys. Unknown namespaced codes
 round-trip into unclassified_codes and are never inferred as success. Extension
 codes are ASCII namespaced identifiers of at most 128 characters.
+
+Replay performs the terminal-order fence after the common anchor/time continuity
+checks and before unknown-code semantic skipping. A journey becomes terminal on
+rejected acknowledgement, failed effect/operation, or its first valid
+`resume.validated(success)`. After that point every core event must emit both
+global and journey-local `malformed-order` and cannot execute request,
+acknowledgement, effect, or resume success semantics. The only exception is an
+idempotent, fully-known `resume.validated(success)` with the same effect state and
+visit; it preserves the first `validResumeAt`, completion, and scorecard values.
+Unknown namespaced codes remain in `unclassified_codes`, but their core event
+still crosses this fence.
 
 The public writer port is `recordUnderLock`; callers invoke it only while
 holding the existing Change lock. The adapter appends through `appendUnderLock`

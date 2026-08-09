@@ -335,4 +335,144 @@ describe('interaction replay', () => {
     expect(scorecard.metrics.governedCompletionRate).toBe(1)
     expect(scorecard.metrics.medianTimeToValidResumeMs).toBe(3000)
   })
+
+  it('fences every core event after each terminal journey state', () => {
+    const positive = loadFixture('positive')
+    const request = positive[0]
+    const acknowledgement = positive[1]
+    const effect = positive[2]
+    const resume = positive[3]
+    expect(request).toBeDefined()
+    expect(acknowledgement).toBeDefined()
+    expect(effect).toBeDefined()
+    expect(resume).toBeDefined()
+    if (
+      request === undefined || acknowledgement === undefined || effect === undefined
+      || resume === undefined
+    ) return
+
+    const eventWith = (
+      source: InteractionEventV1,
+      overrides: Partial<InteractionEventV1> = {},
+    ): InteractionEventV1 => {
+      const { schema: _schema, eventId: _eventId, ...draft } = source
+      return createInteractionEvent({ ...draft, ...overrides })
+    }
+    const operationFailure = eventWith(effect, {
+      event: 'operation.failed',
+      result: 'failure',
+      reasonCode: 'effect.failed',
+      outcomeCode: 'operation.failed',
+      stateBeforeHash: effect.stateAfterHash,
+      stateAfterHash: effect.stateAfterHash,
+    })
+    const suppressed = eventWith(request, {
+      event: 'review.prompt-suppressed',
+      reasonCode: 'review.same-state-repeat',
+      result: 'suppressed',
+      outcomeCode: 'review.prompt-suppressed',
+      stateBeforeHash: request.stateAfterHash,
+      stateAfterHash: request.stateAfterHash,
+    })
+    const terminals: ReadonlyArray<readonly [string, readonly InteractionEventV1[]]> = [
+      ['rejected acknowledgement', [
+        request,
+        eventWith(acknowledgement, {
+          result: 'rejected',
+          reasonCode: 'decision.state-stale',
+          effectCode: 'review-gate.rejected',
+        }),
+      ]],
+      ['failed effect', [
+        request,
+        acknowledgement,
+        eventWith(effect, {
+          result: 'failure',
+          reasonCode: 'effect.failed',
+          stateAfterHash: effect.stateBeforeHash,
+        }),
+      ]],
+      ['failed operation', [request, acknowledgement, operationFailure]],
+      ['valid resume', positive],
+    ]
+    const successors: ReadonlyArray<readonly [string, InteractionEventV1]> = [
+      ['request', request],
+      ['prompt-suppressed', suppressed],
+      ['acknowledgement', acknowledgement],
+      ['effect', effect],
+      ['non-idempotent resume', eventWith(resume, {
+        stateBeforeHash: 'a'.repeat(64),
+        stateAfterHash: 'a'.repeat(64),
+      })],
+      ['operation failure', operationFailure],
+    ]
+
+    for (const [terminalName, terminalEvents] of terminals) {
+      for (const [successorName, successor] of successors) {
+        const terminal = terminalEvents[terminalEvents.length - 1]
+        expect(terminal, `${terminalName} should have a terminal event`).toBeDefined()
+        if (terminal === undefined) continue
+        const successorOccurredAt = new Date(Date.parse(terminal.occurredAt) + 1).toISOString()
+        const successorAfterTerminal = eventWith(successor, { occurredAt: successorOccurredAt })
+        const replay = replayInteractionEvents(rebuild([...terminalEvents, successorAfterTerminal]))
+        const journey = replay.journeys[0]
+        expect(journey, `${terminalName} -> ${successorName} should retain a journey`).toBeDefined()
+        if (journey === undefined) continue
+        const globalMalformed = replay.diagnostics.filter((diagnostic) => diagnostic.code === 'malformed-order')
+        const journeyMalformed = journey.diagnostics.filter((diagnostic) => diagnostic.code === 'malformed-order')
+        expect(globalMalformed, `${terminalName} -> ${successorName} should emit one global malformed-order`)
+          .toHaveLength(1)
+        expect(globalMalformed[0]?.journeyId).toBe(journey.journeyId)
+        expect(globalMalformed[0]?.sequence).toBe(terminalEvents.length + 1)
+        expect(journeyMalformed, `${terminalName} -> ${successorName} should emit one journey malformed-order`)
+          .toHaveLength(1)
+        expect(journeyMalformed[0]?.sequence).toBe(terminalEvents.length + 1)
+        expect(journey.validResume, `${terminalName} -> ${successorName} must not remain verified`).toBe(false)
+        expect(isVerifiedInteractionJourney(journey, replay), `${terminalName} -> ${successorName} must not verify`)
+          .toBe(false)
+        if (terminalName === 'valid resume') {
+          const scorecard = computeInteractionScorecard([{
+            id: `terminal-successor-${successorName}`,
+            mode: 'measurement',
+            events: replay.events,
+          }])
+          expect(scorecard.metrics.governedCompletionRate, `${successorName} must invalidate completion`).toBe(0)
+        }
+      }
+    }
+  })
+
+  it('does not let an unknown extension code bypass the terminal fence', () => {
+    const events = loadFixture('positive')
+    const request = events[0]
+    const acknowledgement = events[1]
+    const effect = events[2]
+    expect(request).toBeDefined()
+    expect(acknowledgement).toBeDefined()
+    expect(effect).toBeDefined()
+    if (request === undefined || acknowledgement === undefined || effect === undefined) return
+    const { schema: _schema, eventId: _eventId, ...effectDraft } = effect
+    const extension = createInteractionEvent({
+      ...effectDraft,
+      reasonCode: 'future.review-v2',
+    })
+    const rejected = rebuild([
+      request,
+      {
+        ...acknowledgement,
+        result: 'rejected',
+        reasonCode: 'decision.state-stale',
+        effectCode: 'review-gate.rejected',
+      },
+      extension,
+    ])
+    const replay = replayInteractionEvents(rejected)
+    const journey = replay.journeys[0]
+    expect(replay.unclassifiedCodes).toContain('future.review-v2')
+    expect(replay.diagnostics.filter((diagnostic) => diagnostic.code === 'malformed-order')).toHaveLength(1)
+    expect(journey?.diagnostics.filter((diagnostic) => diagnostic.code === 'malformed-order')).toHaveLength(1)
+    expect(replay.diagnostics.find((diagnostic) => diagnostic.code === 'malformed-order')?.sequence).toBe(3)
+    expect(journey?.validResume).toBe(false)
+    if (journey !== undefined) expect(isVerifiedInteractionJourney(journey, replay)).toBe(false)
+  })
 })

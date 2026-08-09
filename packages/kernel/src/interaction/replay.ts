@@ -170,15 +170,26 @@ export function replayInteractionEvents(
       }
       const origin = anchors?.originStepVisit ?? event.originStepVisit
       if (!visitsEqual(event.originStepVisit, origin)) journeyHasDiscontinuity = true
+      const terminalBeforeEvent = staleRejected || terminalRejected || failed || validResume
+      const duplicateValidResume = terminalBeforeEvent && validResume
+        && interactionEventCodesAreKnown(event)
+        && event.event === 'resume.validated'
+        && event.result === 'success'
+        && lastEffect !== undefined
+        && visitsEqual(event.stepVisit, lastEffect.stepVisit)
+        && interactionStateHashEquals(lastEffect.stateAfterHash, event.stateBeforeHash)
+        && interactionStateHashEquals(lastEffect.stateAfterHash, event.stateAfterHash)
+      if (terminalBeforeEvent && !duplicateValidResume) {
+        pushDiagnostic(diagnostics, 'malformed-order', event)
+        journeyDiagnostics.push({ code: 'malformed-order', journeyId, sequence: event.sequence })
+        journeyHasMalformedOrder = true
+        continue
+      }
       // Extension codes are safely retained above, but an unknown code cannot be assigned
       // stable request/ack/effect semantics.  Keep it out of completion, stale and safety
       // formulas until a future registry explicitly classifies it.  Generic anchor and time
       // continuity checks above still apply to every event.
       if (!interactionEventCodesAreKnown(event)) continue
-      const terminalBeforeEvent = staleRejected || terminalRejected || failed || validResume
-      const duplicateValidResume = terminalBeforeEvent && validResume
-        && event.event === 'resume.validated' && event.result === 'success'
-      if (terminalBeforeEvent && !duplicateValidResume) continue
       switch (event.event) {
         case 'review.requested':
           if (!visitsEqual(event.stepVisit, origin)) {
