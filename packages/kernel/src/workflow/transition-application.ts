@@ -45,17 +45,12 @@ import { applyStepTransition, planStepTransition, resolveStep } from './engine.j
 import { applyActions } from './action-handlers.js'
 import { evaluateConstraintPolicy, type ConstraintDecision } from '../loops/automation-policy.js'
 import type { ActionOutcome, WorkflowIR } from './ir.js'
-import {
-  effectiveLifecyclePolicy,
-} from './governed-lifecycle-policy.js'
+import { effectiveLifecyclePolicy } from './governed-lifecycle-policy.js'
 import {
   isDocumentContractPhase, isDocumentPolicyStep, shouldEnforceDocumentPolicyOnTransition,
 } from './document-contract.js'
 import type { DocumentGovernancePolicy } from './document-contract.js'
-import {
-  DocumentGovernanceBindingError,
-  resolveBoundEffectiveWorkflowPlan,
-} from './effective-plan.js'
+import { DocumentGovernanceBindingError, resolveBoundEffectiveWorkflowPlan } from './effective-plan.js'
 import type { EffectiveWorkflowPlan } from './effective-plan.js'
 import type {
   PreparedTransition, TransitionApplication, TransitionApplicationDeps, TransitionApplicationResult,
