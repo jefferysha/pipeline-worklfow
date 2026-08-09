@@ -1,7 +1,10 @@
-import { lstatSync, readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { lstatSync, readFileSync, realpathSync } from 'node:fs'
+import { isAbsolute, join, relative, sep } from 'node:path'
 import {
   createFsSkillContentLocator,
+  isPathSafeSkillId,
+  SkillContentAccessError,
+  SkillContentInvalidError,
   SkillContentNotFoundError,
   type SkillContentLocator,
 } from '@tenon/automation'
@@ -40,13 +43,65 @@ function candidateExists(path: string): boolean {
   }
 }
 
-function bundledRootHasEntries(root: string): boolean {
+function pathWithin(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate)
+  return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`))
+}
+
+function assertSafeSkillsRoot(root: string): string {
+  let rootEntry
   try {
-    return readdirSync(root).length > 0
+    rootEntry = lstatSync(root)
   } catch (error) {
-    if (errnoCode(error) === 'ENOENT') return false
-    throw new SkillProvenanceLocatorError('filesystem-safety-error', `读取 bundled Skill 根失败: ${root}（${String(error)}）`)
+    throw new SkillProvenanceLocatorError('filesystem-safety-error', `读取 bundled skillsRoot 失败: ${root}（${String(error)}）`)
   }
+  if (rootEntry.isSymbolicLink() || !rootEntry.isDirectory()) {
+    throw new SkillProvenanceLocatorError(
+      'filesystem-safety-error',
+      `bundled skillsRoot 必须是普通目录，拒绝 symlink/非目录: ${root}`,
+    )
+  }
+  try {
+    return realpathSync(root)
+  } catch (error) {
+    throw new SkillProvenanceLocatorError('filesystem-safety-error', `解析 bundled skillsRoot realpath 失败: ${root}（${String(error)}）`)
+  }
+}
+
+function assertSafeSkillRoot(root: string, skillId: string): string {
+  const path = join(root, skillId)
+  const rootReal = assertSafeSkillsRoot(root)
+  let entry
+  try {
+    entry = lstatSync(path)
+  } catch (error) {
+    if (errnoCode(error) === 'ENOENT') {
+      throw new SkillProvenanceLocatorError(
+        'missing-distributed-skill',
+        `registry 声明的 bundled Skill '${skillId}' 不存在`,
+      )
+    }
+    throw new SkillProvenanceLocatorError('filesystem-safety-error', `读取 bundled Skill 失败: ${path}（${String(error)}）`)
+  }
+  if (entry.isSymbolicLink() || !entry.isDirectory()) {
+    throw new SkillProvenanceLocatorError(
+      'filesystem-safety-error',
+      `bundled Skill '${skillId}' 必须是 skillsRoot 内的普通目录，拒绝 symlink/非目录`,
+    )
+  }
+  let candidateReal: string
+  try {
+    candidateReal = realpathSync(path)
+  } catch (error) {
+    throw new SkillProvenanceLocatorError('filesystem-safety-error', `解析 bundled Skill realpath 失败: ${path}（${String(error)}）`)
+  }
+  if (!pathWithin(rootReal, candidateReal)) {
+    throw new SkillProvenanceLocatorError(
+      'filesystem-safety-error',
+      `bundled Skill '${skillId}' realpath 逃逸 skillsRoot: ${candidateReal}`,
+    )
+  }
+  return candidateReal
 }
 
 /** Generic alias projection retained for explicitly legacy/runner compatibility paths. */
@@ -93,51 +148,41 @@ export function createProvenanceAwareBundledLocator(pluginRoot: string): SkillCo
   const bundledRoot = join(pluginRoot, 'skills')
   const base = createFsSkillContentLocator([bundledRoot])
   let registry: SkillProvenanceRegistry | undefined
-  let registryError: SkillProvenanceLocatorError | undefined
-  let loaded = false
   const load = (): SkillProvenanceRegistry | undefined => {
-    if (loaded) {
-      if (registryError) throw registryError
-      return registry
-    }
-    loaded = true
+    if (registry !== undefined) return registry
     try {
       const raw = readFileSync(join(pluginRoot, 'templates', 'skill-sources.yaml'), 'utf8')
       registry = parseSkillProvenanceRegistry(raw)
       return registry
     } catch (error) {
       const category = error instanceof SkillProvenanceRegistryError ? error.category : 'registry-read-error'
-      registryError = new SkillProvenanceLocatorError(
+      throw new SkillProvenanceLocatorError(
         category,
         error instanceof Error ? error.message : String(error),
       )
-      throw registryError
     }
   }
 
   return {
     async locate(skillId) {
-      const directPath = join(bundledRoot, skillId)
-      let exists = false
-      try {
-        exists = candidateExists(directPath)
-      } catch (error) {
-        throw error
+      if (!isPathSafeSkillId(skillId)) {
+        throw new SkillContentInvalidError(`skill id 含路径不安全字符，拒绝定位：${JSON.stringify(skillId)}`)
       }
-      // A plugin root with no bundled entries has no higher-tier candidate to prove; preserve
-      // external tier NotFound semantics even when an old/custom fixture omits the registry.
-      if (!exists && !bundledRootHasEntries(bundledRoot)) {
-        throw new SkillContentNotFoundError(`bundled Skill '${skillId}' 不存在`)
-      }
-      let current = load()
-      if (current === undefined) {
-        if (!exists) throw new SkillContentNotFoundError(`bundled Skill '${skillId}' 不存在`)
-        throw registryError ?? new SkillProvenanceLocatorError('registry-read-error', 'canonical registry 未加载')
-      }
+      assertSafeSkillsRoot(bundledRoot)
+      const current = load()
+      if (current === undefined) throw new SkillProvenanceLocatorError('registry-read-error', 'canonical registry 未加载')
       const byToken = new Map(current.skills.map((entry) => [entry.token, entry]))
       const byPhysical = new Map(current.skills.map((entry) => [physicalId(entry.sourceRef), entry]))
       const entry = byToken.get(skillId) ?? byPhysical.get(skillId)
       if (entry === undefined) {
+        const directPath = join(bundledRoot, skillId)
+        let exists = false
+        try {
+          exists = candidateExists(directPath)
+        } catch (error) {
+          throw error
+        }
+        if (exists) assertSafeSkillRoot(bundledRoot, skillId)
         if (!exists) throw new SkillContentNotFoundError(`bundled Skill '${skillId}' 未登记且不存在`)
         throw new SkillProvenanceLocatorError(
           'unregistered-distributed-skill',
@@ -145,20 +190,46 @@ export function createProvenanceAwareBundledLocator(pluginRoot: string): SkillCo
         )
       }
       const physical = physicalId(entry.sourceRef)
-      const physicalPath = join(bundledRoot, physical)
-      if (!candidateExists(physicalPath)) {
+      const physicalRealPath = assertSafeSkillRoot(bundledRoot, physical)
+      let located
+      try {
+        located = await base.locate(physical)
+      } catch (error) {
+        if (error instanceof SkillContentNotFoundError) {
+          throw new SkillProvenanceLocatorError('missing-distributed-skill', error.message)
+        }
+        if (error instanceof SkillContentInvalidError || error instanceof SkillContentAccessError) {
+          throw new SkillProvenanceLocatorError('filesystem-safety-error', error.message)
+        }
+        throw error
+      }
+      if (located.contentDir !== physicalRealPath) {
         throw new SkillProvenanceLocatorError(
-          'missing-distributed-skill',
-          `registry 声明的 bundled Skill '${physical}' 不存在`,
+          'filesystem-safety-error',
+          `bundled Skill '${physical}' 定位结果未绑定到受信 realpath`,
         )
       }
-      const located = await base.locate(physical)
-      const manifest = await buildCanonicalManifest(physical, located.contentDir)
+      let manifest
+      try {
+        manifest = await buildCanonicalManifest(physical, located.contentDir)
+      } catch (error) {
+        throw new SkillProvenanceLocatorError(
+          'filesystem-safety-error',
+          `bundled Skill '${physical}' 内容树无法安全读取: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
       const actual = `sha256:${manifest.treeSha256}`
       if (actual !== entry.contentHash) {
         throw new SkillProvenanceLocatorError(
           'content-hash-mismatch',
           `bundled Skill '${physical}' hash drift: expected ${entry.contentHash}, actual ${actual}`,
+        )
+      }
+      const expectedCoordinate = `tenon:${entry.sourceRef}@${entry.contentHash}`
+      if (entry.coordinate !== expectedCoordinate) {
+        throw new SkillProvenanceLocatorError(
+          'coordinate-mismatch',
+          `bundled Skill '${physical}' coordinate drift: expected ${expectedCoordinate}, actual ${entry.coordinate}`,
         )
       }
       return { skillId, contentDir: located.contentDir }

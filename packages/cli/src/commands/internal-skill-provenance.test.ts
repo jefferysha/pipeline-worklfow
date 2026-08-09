@@ -1,9 +1,9 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { makeDeps } from '../test-support.js'
-import { cmdInternalSkillProvenance } from './internal-skill-provenance.js'
+import { cmdInternalSkillProvenance, syncSkillProvenanceRegistry } from './internal-skill-provenance.js'
 
 const roots: string[] = []
 afterEach(async () => {
@@ -64,15 +64,110 @@ describe('cmdInternalSkillProvenance', () => {
     expect(deps.errLines.join('\n')).toMatch(/root|symlink|registry/i)
   })
 
+  it.each([
+    ['trailing token', '  demo: { tool: bundled, source: tenon, content_skill: demo, tier: mandatory, official: true } trailing'],
+    ['duplicate version', 'version: 2\nversion: 2\nskills:\n  demo: { tool: bundled, source: tenon, content_skill: demo, tier: mandatory, official: true }'],
+  ])('rejects strict sync input with %s', async (_label, source) => {
+    const root = await makeRoot()
+    const path = join(root, 'templates', 'skill-sources.yaml')
+    const before = await readFile(path, 'utf8')
+    await writeFile(path, source, 'utf8')
+    const deps = makeDeps()
+    expect(await cmdInternalSkillProvenance(deps, 'sync', { root, quiet: true })).toBe(1)
+    expect(await readFile(path, 'utf8')).toBe(source)
+    expect(deps.errLines.join('\n')).toMatch(/strict|trailing|duplicate|字段|registry/i)
+    expect(before).not.toBe(source)
+  })
+
+  it.each([
+    ['unsupported legacy version', 'version: 4\nskills:\n  demo: { tool: bundled, source: tenon, content_skill: demo, tier: mandatory, official: true }'],
+    ['non-numeric version', 'version: nope\nskills:\n  demo: { tool: bundled, source: tenon, content_skill: demo, tier: mandatory, official: true }'],
+    ['missing version', 'skills:\n  demo: { tool: bundled, source: tenon, content_skill: demo, tier: mandatory, official: true }'],
+    ['unknown flow field', 'version: 2\nskills:\n  demo: { tool: bundled, source: tenon, content_skil: demo, tier: mandatory, official: true }'],
+  ])('rejects strict legacy sync input with %s and preserves bytes/mode', async (_label, source) => {
+    const root = await makeRoot()
+    const path = join(root, 'templates', 'skill-sources.yaml')
+    await writeFile(path, source, 'utf8')
+    await chmod(path, 0o600)
+    const beforeMode = (await stat(path)).mode & 0o777
+    const deps = makeDeps()
+
+    expect(await cmdInternalSkillProvenance(deps, 'sync', { root, quiet: true })).toBe(1)
+    expect(await readFile(path, 'utf8')).toBe(source)
+    expect((await stat(path)).mode & 0o777).toBe(beforeMode)
+    expect(deps.errLines.join('\n')).toMatch(/version|strict|unknown|字段|registry/i)
+  })
+
   it('does not partially rewrite the registry when a later Skill cannot be hashed', async () => {
     const root = await makeRoot()
     const path = join(root, 'templates', 'skill-sources.yaml')
     const before = await readFile(path, 'utf8')
     const broken = `${before}  missing: { tool: bundled, source: tenon, tier: mandatory, official: true }\n`
     await writeFile(path, broken, 'utf8')
+    await chmod(path, 0o600)
+    const beforeMode = (await stat(path)).mode & 0o777
 
     const deps = makeDeps()
     expect(await cmdInternalSkillProvenance(deps, 'sync', { root, quiet: true })).toBe(1)
     expect(await readFile(path, 'utf8')).toBe(broken)
+    expect((await stat(path)).mode & 0o777).toBe(beforeMode)
+  })
+
+  it('rejects extra physical bundled roots before replacing the registry', async () => {
+    const root = await makeRoot()
+    const path = join(root, 'templates', 'skill-sources.yaml')
+    const before = await readFile(path, 'utf8')
+    await mkdir(join(root, 'skills', 'extra'), { recursive: true })
+    await writeFile(join(root, 'skills', 'extra', 'SKILL.md'), '# extra\n', 'utf8')
+
+    const deps = makeDeps()
+    expect(await cmdInternalSkillProvenance(deps, 'sync', { root, quiet: true })).toBe(1)
+    expect(await readFile(path, 'utf8')).toBe(before)
+    expect(deps.errLines.join('\n')).toMatch(/extra|unregistered/i)
+  })
+
+  it('rejects a deterministic canonical parent swap between hashing and temp creation', async () => {
+    const root = await makeRoot()
+    const path = join(root, 'templates', 'skill-sources.yaml')
+    const before = await readFile(path, 'utf8')
+    const beforeMode = (await stat(path)).mode & 0o777
+    let swapped = false
+    await expect(syncSkillProvenanceRegistry(root, {
+      beforeTempCreate: async () => {
+        if (swapped) return
+        swapped = true
+        const original = join(root, 'templates')
+        const replacement = join(root, 'templates-replacement')
+        await rename(original, replacement)
+        await mkdir(original)
+        await writeFile(join(original, 'skill-sources.yaml'), before, 'utf8')
+      },
+    })).rejects.toThrow(/TOCTOU|替换|canonical registry parent/i)
+    expect(await readFile(path, 'utf8')).toBe(before)
+    expect((await stat(path)).mode & 0o777).toBe(beforeMode)
+  })
+
+  it('rejects a deterministic canonical parent swap immediately before rename', async () => {
+    const root = await makeRoot()
+    const path = join(root, 'templates', 'skill-sources.yaml')
+    const before = await readFile(path, 'utf8')
+    await chmod(path, 0o600)
+    const beforeMode = (await stat(path)).mode & 0o777
+    let swapped = false
+
+    await expect(syncSkillProvenanceRegistry(root, {
+      beforeRename: async () => {
+        if (swapped) return
+        swapped = true
+        const original = join(root, 'templates')
+        const replacement = join(root, 'templates-replacement-before-rename')
+        await rename(original, replacement)
+        await mkdir(original)
+        await writeFile(join(original, 'skill-sources.yaml'), before, 'utf8')
+        await chmod(join(original, 'skill-sources.yaml'), beforeMode)
+      },
+    })).rejects.toThrow(/TOCTOU|替换|canonical registry parent/i)
+    expect(await readFile(path, 'utf8')).toBe(before)
+    expect((await stat(path)).mode & 0o777).toBe(beforeMode)
   })
 })

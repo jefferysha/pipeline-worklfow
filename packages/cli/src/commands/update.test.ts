@@ -664,7 +664,7 @@ describe('tenon update', () => {
       ['git', '-C /new/tenon ls-files --others --exclude-standard'],
       ['codex', 'plugin list --json'],
       ['git', '-C /new/tenon remote get-url origin'],
-      ['bash', '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon'],
+      ['bash', `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`],
       ['codex', 'plugin marketplace list --json'],
       ['git', '-C /new/tenon rev-parse HEAD'],
       ['git', '-C /new/tenon diff --quiet HEAD --'],
@@ -1026,7 +1026,7 @@ describe('tenon update', () => {
       'codex plugin add tenon@tenon --json',
     ])
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon')).toBe(true)
+      && args.join(' ') === `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`)).toBe(true)
     expect(runtime.calls.activations).toEqual([['/new/tenon', 'codex', '/home/update-test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'b'.repeat(64)}/payload`,
@@ -1143,7 +1143,7 @@ describe('tenon update', () => {
       'claude plugin install tenon@tenon',
     ])
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon')).toBe(true)
+      && args.join(' ') === `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`)).toBe(true)
   })
 
   test('update 发现冲突登记时只记录 cleanup-pending，当前会话不提前删除旧入口', async () => {
@@ -1629,7 +1629,7 @@ describe('tenon update', () => {
       'codex plugin add tenon@tenon --json',
     ])
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon')).toBe(true)
+      && args.join(' ') === `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`)).toBe(true)
     expect(runtime.calls.activations).toEqual([['/new/tenon', 'codex', '/home/update-test']])
     expect(deps.outLines.join('\n')).toContain('v1.2.3')
     expect(deps.outLines.join('\n')).toContain('tenon doctor')
@@ -1708,7 +1708,7 @@ describe('tenon update', () => {
       'codex plugin add tenon@tenon --json',
     ])
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon')).toBe(true)
+      && args.join(' ') === `/new/tenon/tools/verify-skills.sh --quiet --root /new/tenon --node ${process.execPath}`)).toBe(true)
     expect(runtime.calls.activations).toEqual([['/new/tenon', 'codex', '/home/update-test']])
   })
 })

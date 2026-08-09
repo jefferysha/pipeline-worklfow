@@ -9,7 +9,12 @@ export function verifyUpdatedRoot(
   root: string,
   targetVersion?: string,
 ): boolean {
-  const result = env.runCommand('bash', [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root])
+  const nodePath = env.resolveTrustedCommandBinding?.('node')?.executable
+    ?? env.resolveTrustedCommand?.('node')
+    ?? process.execPath
+  const result = env.runCommand('bash', [
+    join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root, '--node', nodePath,
+  ])
   if (result.code === 0) {
     const decoded = decodePluginManifestVersion({
       codex: env.readText(join(root, '.codex-plugin', 'plugin.json')),

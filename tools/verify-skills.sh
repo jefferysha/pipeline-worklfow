@@ -11,9 +11,10 @@
 #      SKILL.md；这防止默认 workflow 悄悄重新引入外部安装依赖。
 # 任何缺失 → exit 1，逐条列出「缺什么 / 在哪引用的 / 怎么修」。
 #
-# 用法：verify-skills.sh [--quiet] [--root <plugin根>]
+# 用法：verify-skills.sh [--quiet] [--root <plugin根>] [--node <冻结绝对路径>]
 #   --quiet  成功时零输出（SessionStart hook 用）；失败输出照常（stderr）
 #   --root   指定插件根（默认：本脚本所在 tools/ 的上级）；测试用它指向 sandbox
+#   --node   指定已冻结的绝对 Node 可执行文件；canonical verifier 不通过 PATH 解析 Node
 #
 # Bash 负责资产检查与输出；canonical Skill provenance 校验委托随包 Node CLI，保持与
 # install/doctor/bundle/release 共用同一 verifier（因此本脚本不再声称 zero-interpreter）。
@@ -21,6 +22,7 @@ set -uo pipefail
 
 QUIET=0
 ROOT=""
+NODE_BIN="${TENON_NODE_PATH:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --quiet) QUIET=1 ;;
@@ -29,14 +31,26 @@ while [ $# -gt 0 ]; do
       [ $# -gt 0 ] || { echo "verify-skills: --root 需要参数" >&2; exit 2; }
       ROOT="$1"
       ;;
+    --node)
+      shift
+      [ $# -gt 0 ] || { echo "verify-skills: --node 需要参数" >&2; exit 2; }
+      NODE_BIN="$1"
+      ;;
     -h|--help)
       sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
-    *) echo "verify-skills: 未知参数 ${1}（支持 --quiet / --root <dir>）" >&2; exit 2 ;;
+    *) echo "verify-skills: 未知参数 ${1}（支持 --quiet / --root <dir> / --node <绝对路径>）" >&2; exit 2 ;;
   esac
   shift
 done
+
+# Direct/contributor invocations historically omitted --node. Keep that entrypoint compatible by
+# resolving one absolute PATH candidate only when the caller supplied neither an explicit argument
+# nor TENON_NODE_PATH; production callers still pass their frozen physical executable explicitly.
+if [ -z "$NODE_BIN" ]; then
+  NODE_BIN="$(command -v node 2>/dev/null || true)"
+fi
 [ -z "$ROOT" ] && ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 [ -d "$ROOT" ] || { echo "verify-skills: 插件根不存在: $ROOT" >&2; exit 2; }
 
@@ -299,12 +313,18 @@ if [ ! -f "$PROVENANCE_CLI" ]; then
     "packages/cli/dist/tenon.mjs" \
     "运行 npm run bundle 后再执行 verify-skills.sh"
 else
-  provenance_output="$(node "$PROVENANCE_CLI" internal-skill-provenance verify --root "$ROOT" --quiet 2>&1)"
-  provenance_code=$?
-  if [ "$provenance_code" -ne 0 ]; then
-    add_fail "canonical Skill provenance verifier 失败: ${provenance_output}" \
-      "templates/skill-sources.yaml + skills/" \
-      "按上方 category 修复后运行 npm run sync:skill-provenance，再重跑 verify-skills.sh"
+  if [ -z "$NODE_BIN" ] || [ "${NODE_BIN#/}" = "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
+    add_fail "缺少已冻结的绝对 Node 可执行文件，拒绝通过 PATH 运行 provenance verifier" \
+      "verify-skills.sh --node <绝对路径>" \
+      "由 production caller 传入冻结 nodePath，或设置 TENON_NODE_PATH 后重试"
+  else
+    provenance_output="$("$NODE_BIN" "$PROVENANCE_CLI" internal-skill-provenance verify --root "$ROOT" --quiet 2>&1)"
+    provenance_code=$?
+    if [ "$provenance_code" -ne 0 ]; then
+      add_fail "canonical Skill provenance verifier 失败: ${provenance_output}" \
+        "templates/skill-sources.yaml + skills/" \
+        "按上方 category 修复后运行 npm run sync:skill-provenance，再重跑 verify-skills.sh"
+    fi
   fi
 fi
 

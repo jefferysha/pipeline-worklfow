@@ -529,7 +529,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(commands.find(([cmd, args]) => cmd === 'codex' && args === 'plugin list --json'))
       .toEqual(['codex', 'plugin list --json'])
     expect(commands).toContainEqual(['codex', 'plugin marketplace list --json'])
-    expect(commands).toContainEqual(['bash', '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon'])
+    expect(commands).toContainEqual(['bash', `/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon --node ${process.execPath}`])
     expect(commands.some(([cmd, args]) => cmd === 'codex'
       && (args.includes('plugin remove') || args.includes('plugin add')))).toBe(false)
     expect(deps.outLines.join('\n')).toContain('已启用 --codex 自动更新')
@@ -1487,7 +1487,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(calls.exec.some(([cmd, args]) => cmd === 'codex'
       && args.join(' ') === 'plugin remove pipeline-lite@pipeline-lite --json')).toBe(false)
     expect(calls.exec.some(([cmd, args]) => cmd === 'bash'
-      && args.join(' ') === '/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon')).toBe(true)
+      && args.join(' ') === `/installed/tenon/tools/verify-skills.sh --quiet --root /installed/tenon --node ${process.execPath}`)).toBe(true)
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     const receiptPath = join(
       resolveRuntimePaths({ homeDir: '/home/test', env: {} }).migrationsRoot,

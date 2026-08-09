@@ -42,25 +42,20 @@ export {
   createExecutionCoordinatePort,
   type ExecutionCoordinatePortDeps,
 } from './executionCoordinatePort.js'
-
 // ── productionSkillContentRoots ─────────────────────────────────────────────────
-
 export class SkillCacheAccessError extends Error {
   override readonly name = 'SkillCacheAccessError'
   readonly _tag = 'SkillCacheAccessError'
 }
-
 export class SkillCacheSchemaError extends Error {
   override readonly name = 'SkillCacheSchemaError'
   readonly _tag = 'SkillCacheSchemaError'
 }
-
 function nodeErrorCode(error: unknown): string {
   return typeof error === 'object' && error !== null && 'code' in error
     ? String((error as { code?: unknown }).code)
     : 'unknown'
 }
-
 function validateCodexRemotePluginMetadata(path: string): void {
   let raw: string
   try {
@@ -359,6 +354,31 @@ function withLogicalSkillAliases(locator: SkillContentLocator, aliases: Readonly
 }
 
 /**
+ * Legacy runner fixtures may provide only the generic alias registry and no bundled `skills/` root.
+ * Keep that compatibility surface for external tiers; any real bundled root, or a v3 registry whose
+ * root has been deleted, must still enter the strict provenance locator and fail closed.
+ */
+function hasCanonicalBundledSurface(pluginRoot: string): boolean {
+  try {
+    if (statSync(join(pluginRoot, 'skills')).isDirectory()) return true
+  } catch (error) {
+    if (nodeErrorCode(error) !== 'ENOENT') return true
+  }
+  try {
+    const raw = readFileSync(join(pluginRoot, 'templates', 'skill-sources.yaml'), 'utf8')
+    if (/^\s*version:\s*3\s*$/m.test(raw) || /^\s*hash_algorithm\s*:/m.test(raw)) return true
+    const versions = [...raw.matchAll(/^\s*version\s*:\s*(\S+)\s*$/gm)].map((match) => match[1])
+    // Only an unambiguous historical v1/v2 source registry with no bundled root may use the
+    // generic compatibility projection. Any other existing registry, including malformed/current
+    // data, must remain on the strict locator and fail closed instead of falling to lower tiers.
+    return !(versions.length === 1 && (versions[0] === '1' || versions[0] === '2'))
+  } catch (error) {
+    if (nodeErrorCode(error) !== 'ENOENT') return true
+    return false
+  }
+}
+
+/**
  * 生产 `SkillContentLocator`：裸与 namespaced token 都先查 Codex tier；只有 NotFound 才查
  * Claude/agents fallback。每个 tier 内部仍用 createFsSkillContentLocator 做访问错误分类、realpath、
  * 同内容折叠与异内容歧义拒绝。namespaced 返回值回填完整原始 token，而非内部 leaf。
@@ -378,7 +398,7 @@ export function createProductionSkillContentLocator(opts: ProductionSkillContent
       readInstalledPluginsJson: opts.readInstalledPluginsJson,
       readdirDirNames: opts.readdirDirNames,
     })
-    const bundledLocator = opts.pluginRoot === undefined
+    const bundledLocator = opts.pluginRoot === undefined || !hasCanonicalBundledSurface(opts.pluginRoot)
       ? undefined
       : createProvenanceAwareBundledLocator(opts.pluginRoot)
     const locator: SkillContentLocator = bundledLocator === undefined
@@ -396,7 +416,7 @@ export function createProductionSkillContentLocator(opts: ProductionSkillContent
     return withLogicalSkillAliases(locator, aliases)
   }
   const bundledRoot = opts.pluginRoot === undefined ? undefined : join(opts.pluginRoot, 'skills')
-  const bundledLocator = bundledRoot === undefined || opts.pluginRoot === undefined
+  const bundledLocator = bundledRoot === undefined || opts.pluginRoot === undefined || !hasCanonicalBundledSurface(opts.pluginRoot)
     ? undefined
     : createProvenanceAwareBundledLocator(opts.pluginRoot)
   let cachedCodexPluginRoots: Map<string, string[]> | undefined

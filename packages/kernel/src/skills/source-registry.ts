@@ -239,6 +239,9 @@ function strictEntryLine(line: string, lineNo: number): {
     const entry = parseEntry(line, lineNo)
     const brace = line.indexOf('{')
     const close = line.lastIndexOf('}')
+    if (line.slice(close + 1).trim() !== '') {
+      throw strictError('invalid-source-ref', `第 ${lineNo} 行 closing brace 后含尾随 token`)
+    }
     const fields = parseFlowBody(line.slice(brace + 1, close), entry.token)
     for (const key of fields.keys()) {
       if (!STRICT_ENTRY_FIELDS.has(key)) {
@@ -289,6 +292,9 @@ export function parseSkillProvenanceRegistry(text: string): SkillProvenanceRegis
   let version: number | undefined
   let hashAlgorithm: string | undefined
   let inSkills = false
+  let seenVersion = false
+  let seenHashAlgorithm = false
+  let seenSkills = false
   const skills: SkillProvenanceSourceDefinition[] = []
   const seenTokens = new Set<string>()
   const seenRefs = new Set<string>()
@@ -299,15 +305,21 @@ export function parseSkillProvenanceRegistry(text: string): SkillProvenanceRegis
     if (!inSkills) {
       const versionMatch = /^version:\s*(\d+)\s*$/.exec(line)
       if (versionMatch) {
+        if (seenVersion) throw strictError('unsupported-registry-version', `第 ${i + 1} 行重复声明 version`)
+        seenVersion = true
         version = Number(versionMatch[1])
         continue
       }
       const algorithmMatch = /^hash_algorithm:\s*(.+?)\s*$/.exec(line)
       if (algorithmMatch) {
+        if (seenHashAlgorithm) throw strictError('unsupported-registry-version', `第 ${i + 1} 行重复声明 hash_algorithm`)
+        seenHashAlgorithm = true
         hashAlgorithm = unquote(required(algorithmMatch[1]))
         continue
       }
       if (/^skills:\s*$/.test(line)) {
+        if (seenSkills) throw strictError('invalid-source-ref', `第 ${i + 1} 行重复声明 skills`)
+        seenSkills = true
         inSkills = true
         continue
       }
@@ -315,7 +327,9 @@ export function parseSkillProvenanceRegistry(text: string): SkillProvenanceRegis
     }
 
     if (!/^\s/.test(line)) {
-      if (/^skills:\s*$/.test(line)) continue
+      if (/^skills:\s*$/.test(line)) {
+        throw strictError('invalid-source-ref', `第 ${i + 1} 行重复声明 skills`)
+      }
       throw strictError('invalid-source-ref', `第 ${i + 1} 行位于 skills 块外`)
     }
     const { entry, fields } = strictEntryLine(line, i + 1)

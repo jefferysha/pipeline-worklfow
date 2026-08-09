@@ -1,5 +1,5 @@
-import { lstat, readFile, readdir } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { lstat, readFile, readdir, realpath } from 'node:fs/promises'
+import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import {
   parseSkillProvenanceRegistry,
   SKILL_PROVENANCE_ERROR_CATEGORIES,
@@ -82,6 +82,23 @@ async function directDistributedSkills(skillsRoot: string): Promise<string[]> {
     .sort((left, right) => left.localeCompare(right))
 }
 
+function pathWithin(root: string, candidate: string): boolean {
+  const rel = relative(root, candidate)
+  return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith(`..${sep}`))
+}
+
+async function assertPhysicalSkillRoot(skillsRoot: string, realSkillsRoot: string, skillId: string): Promise<void> {
+  const path = join(skillsRoot, skillId)
+  const entry = await lstat(path)
+  if (entry.isSymbolicLink() || !entry.isDirectory()) {
+    throw new Error(`skills/${skillId} 必须是 skillsRoot 内的普通目录，拒绝 symlink/非目录`)
+  }
+  const real = await realpath(path)
+  if (!pathWithin(realSkillsRoot, real)) {
+    throw new Error(`skills/${skillId} realpath 逃逸 skillsRoot: ${real}`)
+  }
+}
+
 function physicalId(sourceRef: string): string {
   return sourceRef.slice('skills/'.length)
 }
@@ -101,14 +118,12 @@ export async function verifySkillProvenance(
   const findings: SkillProvenanceFinding[] = []
 
   try {
-    const legacy = await lstat(join(root, 'skills-lock.json'))
-    if (legacy.isFile() || legacy.isSymbolicLink()) {
-      findings.push(finding(
-        'legacy-provenance-source',
-        '检测到禁止重新引入的 legacy skills-lock.json',
-        { actual: 'skills-lock.json' },
-      ))
-    }
+    await lstat(join(root, 'skills-lock.json'))
+    findings.push(finding(
+      'legacy-provenance-source',
+      '检测到禁止重新引入的 legacy skills-lock.json',
+      { actual: 'skills-lock.json' },
+    ))
   } catch (error) {
     if (typeof error !== 'object' || error === null || !('code' in error) || String((error as { code?: unknown }).code) !== 'ENOENT') {
       findings.push(finding('filesystem-safety-error', `读取 legacy provenance source 失败: ${String(error)}`))
@@ -135,7 +150,13 @@ export async function verifySkillProvenance(
   }
 
   let physical: string[]
+  let realSkillsRoot: string
   try {
+    const skillsRootStat = await lstat(skillsRoot)
+    if (skillsRootStat.isSymbolicLink() || !skillsRootStat.isDirectory()) {
+      throw new Error(`bundled Skill 根必须是普通目录，拒绝 symlink/非目录: ${skillsRoot}`)
+    }
+    realSkillsRoot = await realpath(skillsRoot)
     physical = await directDistributedSkills(skillsRoot)
   } catch (error) {
     findings.push(finding('filesystem-safety-error', `读取 bundled Skill 根失败: ${skillsRoot}（${String(error)}）`))
@@ -144,6 +165,19 @@ export async function verifySkillProvenance(
 
   const declared = new Map(registry.skills.map((entry) => [physicalId(entry.sourceRef), entry]))
   const physicalSet = new Set(physical)
+  const safePhysical = new Set<string>()
+  for (const id of physical) {
+    try {
+      await assertPhysicalSkillRoot(skillsRoot, realSkillsRoot, id)
+      safePhysical.add(id)
+    } catch (error) {
+      findings.push(finding(
+        'filesystem-safety-error',
+        `Skill '${id}' 顶层内容根无法安全读取: ${error instanceof Error ? error.message : String(error)}`,
+        { skill: id, actual: `skills/${id}` },
+      ))
+    }
+  }
   for (const entry of registry.skills) {
     const id = physicalId(entry.sourceRef)
     if (!physicalSet.has(id)) {
@@ -166,7 +200,7 @@ export async function verifySkillProvenance(
 
   for (const entry of registry.skills) {
     const id = physicalId(entry.sourceRef)
-    if (!physicalSet.has(id)) continue
+    if (!physicalSet.has(id) || !safePhysical.has(id)) continue
     try {
       const manifest = await buildCanonicalManifest(id, join(skillsRoot, id))
       const actual = `sha256:${manifest.treeSha256}`

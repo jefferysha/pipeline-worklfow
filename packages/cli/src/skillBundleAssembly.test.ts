@@ -412,6 +412,51 @@ describe('createProductionSkillContentLocator（H10 r1 复审阻断4：唯一生
     await expect(locator.locate('brainstorming')).rejects.toMatchObject({ category: 'content-hash-mismatch' })
   })
 
+  it('v3 declared bundled root missing rejects before lower-tier fallback', async () => {
+    const home = join(root, 'home')
+    const pluginRoot = join(root, 'plugin')
+    await makeSkillDir(join(pluginRoot, 'skills'), 'brainstorming', '# bundled')
+    await writeBundledRegistry(pluginRoot, 'brainstorming')
+    await rm(join(pluginRoot, 'skills'), { recursive: true, force: true })
+    await makeSkillDir(join(home, '.codex', 'skills'), 'brainstorming', '# lower tier')
+    let lowerTierReads = 0
+    const locator = createProductionSkillContentLocator({
+      home,
+      pluginRoot,
+      runner: 'codex',
+      readdirDirNames: () => {
+        lowerTierReads += 1
+        return []
+      },
+      readInstalledPluginsJson: () => null,
+    })
+
+    await expect(locator.locate('brainstorming')).rejects.toMatchObject({ name: 'SkillProvenanceLocatorError' })
+    expect(lowerTierReads).toBe(0)
+  })
+
+  it('malformed current registry rejects before lower-tier fallback even without bundled root', async () => {
+    const home = join(root, 'home')
+    const pluginRoot = join(root, 'plugin')
+    await mkdir(join(pluginRoot, 'templates'), { recursive: true })
+    await writeFile(join(pluginRoot, 'templates', 'skill-sources.yaml'), 'version: 4\nnot: a registry\n', 'utf8')
+    await makeSkillDir(join(home, '.codex', 'skills'), 'brainstorming', '# lower tier')
+    let lowerTierReads = 0
+    const locator = createProductionSkillContentLocator({
+      home,
+      pluginRoot,
+      runner: 'codex',
+      readdirDirNames: () => {
+        lowerTierReads += 1
+        return []
+      },
+      readInstalledPluginsJson: () => null,
+    })
+
+    await expect(locator.locate('brainstorming')).rejects.toMatchObject({ name: 'SkillProvenanceLocatorError' })
+    expect(lowerTierReads).toBe(0)
+  })
+
   it('selected bundle authority：bundle 命中时不枚举损坏的 lower-trust Codex cache', async () => {
     const home = join(root, 'home')
     const pluginRoot = join(root, 'plugin')

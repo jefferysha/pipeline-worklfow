@@ -53,4 +53,18 @@ describe('parseSkillProvenanceRegistry', () => {
     const raw = fixture() + `  other: { tool: bundled, source: tenon, content_skill: demo, tier: optional, official: true, source_kind: bundled, source_ref: skills/demo, content_hash: sha256:${DIGEST}, coordinate: tenon:skills/demo@sha256:${DIGEST} }\n`
     expect(() => parseSkillProvenanceRegistry(raw)).toThrow(/duplicate-distributed-source/)
   })
+
+  it.each([
+    ['trailing token', fixture().replace(' }\n', ' } trailing\n'), 'invalid-source-ref'],
+    ['duplicate version', fixture().replace('hash_algorithm:', 'version: 3\nhash_algorithm:'), 'unsupported-registry-version'],
+    ['duplicate hash algorithm', fixture().replace('skills:', 'hash_algorithm: tree-sha256-v1\nskills:'), 'unsupported-registry-version'],
+    ['duplicate skills block', fixture().replace('skills:\n', 'skills:\nskills:\n'), 'invalid-source-ref'],
+  ])('rejects strict registry %s', (_label, raw, category) => {
+    expect(() => parseSkillProvenanceRegistry(raw)).toThrow(SkillProvenanceRegistryError)
+    try {
+      parseSkillProvenanceRegistry(raw)
+    } catch (error) {
+      expect((error as SkillProvenanceRegistryError).category).toBe(category)
+    }
+  })
 })

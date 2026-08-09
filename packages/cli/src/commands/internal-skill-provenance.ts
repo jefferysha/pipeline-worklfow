@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
-import { chmod, lstat, mkdir, open, readFile, realpath, rename, rm } from 'node:fs/promises'
+import { chmod, lstat, mkdir, open, readFile, readdir, realpath, rename, rm } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
-import { parseSkillSources } from '@tenon/kernel'
+import { parseSkillProvenanceRegistry, parseSkillSources } from '@tenon/kernel'
 import { buildCanonicalManifest, verifySkillProvenance } from '@tenon/automation'
 import type { CliDeps } from '../deps.js'
 
@@ -11,6 +11,26 @@ export interface InternalSkillProvenanceOptions {
   readonly root?: string
   readonly json?: boolean
   readonly quiet?: boolean
+}
+
+export interface SkillProvenanceSyncHooks {
+  /** Test-only race injection, called after hashing and before temp creation. */
+  readonly beforeTempCreate?: () => Promise<void> | void
+  /** Test-only race injection, called after temp fsync and before final CAS rename. */
+  readonly beforeRename?: () => Promise<void> | void
+}
+
+interface PathIdentity {
+  readonly path: string
+  readonly realPath: string
+  readonly dev: number
+  readonly ino: number
+}
+
+interface RegistryPathSnapshot {
+  readonly root: PathIdentity
+  readonly parent: PathIdentity
+  readonly registry: PathIdentity | null
 }
 
 function rootPath(value: string | undefined): string {
@@ -62,18 +82,124 @@ function renderRegistry(entries: readonly { entry: ReturnType<typeof parseSkillS
   return lines.join('\n')
 }
 
-async function assertCanonicalRegistryPath(root: string, registryPath: string): Promise<void> {
-  const canonicalRoot = await realpath(root)
+const LEGACY_SYNC_ENTRY_FIELDS = new Set([
+  'tool', 'source', 'skill', 'content_skill', 'tier', 'official', 'engine', 'bin',
+  'unavailable', 'alt', 'note', 'source_kind', 'source_ref', 'content_hash', 'coordinate',
+])
+
+function splitLegacyFlowPairs(body: string): string[] {
+  const pairs: string[] = []
+  let current = ''
+  let quote = ''
+  for (const char of body) {
+    if (quote !== '') {
+      current += char
+      if (char === quote) quote = ''
+    } else if (char === '"' || char === "'") {
+      quote = char
+      current += char
+    } else if (char === ',') {
+      pairs.push(current)
+      current = ''
+    } else {
+      current += char
+    }
+  }
+  pairs.push(current)
+  return pairs
+}
+
+function validateLegacySyncEntry(line: string, lineNo: number): void {
+  const brace = line.indexOf('{')
+  const close = line.lastIndexOf('}')
+  if (brace < 0 || close < brace || line.slice(close + 1).trim() !== '') {
+    throw new Error(`strict sync input 第 ${lineNo} 行 closing brace 后含尾随 token`)
+  }
+  const tokenPart = line.slice(0, brace).trim()
+  const token = tokenPart.endsWith(':') ? tokenPart.slice(0, -1).trim() : tokenPart
+  const seen = new Set<string>()
+  for (const rawPair of splitLegacyFlowPairs(line.slice(brace + 1, close))) {
+    const pair = rawPair.trim()
+    if (pair === '') continue
+    const colon = pair.indexOf(':')
+    if (colon <= 0) throw new Error(`strict sync input 第 ${lineNo} 行 token '${token}' 字段缺 key: value`)
+    const key = pair.slice(0, colon).trim()
+    if (seen.has(key)) throw new Error(`strict sync input 第 ${lineNo} 行 token '${token}' 字段 '${key}' 重复`)
+    seen.add(key)
+    if (!LEGACY_SYNC_ENTRY_FIELDS.has(key)) {
+      throw new Error(`strict sync input 第 ${lineNo} 行 token '${token}' 含未知 registry 字段 '${key}'`)
+    }
+  }
+}
+
+/**
+ * Sync accepts the historical metadata-only source shape as an authoring input, but its
+ * narrow-YAML surface is still strict: no duplicate top-level keys and no tokens after an entry.
+ * Once a v3 marker is present, only the canonical parser is allowed to interpret the document.
+ */
+function parseSyncSources(text: string): ReturnType<typeof parseSkillSources> {
+  if (/^\s*version:\s*3\s*$/m.test(text) || /^\s*hash_algorithm\s*:/m.test(text)) {
+    return [...parseSkillProvenanceRegistry(text).skills]
+  }
+  let inSkills = false
+  let version: number | undefined
+  let seenVersion = false
+  let seenSkills = false
+  for (const [index, raw] of text.split('\n').entries()) {
+    const line = raw.replace(/\s+#.*$/, '').trimEnd()
+    const trimmed = line.trim()
+    if (trimmed === '' || trimmed.startsWith('#')) continue
+    if (!inSkills) {
+      if (/^version\s*:/.test(trimmed)) {
+        if (seenVersion) throw new Error(`strict sync input 第 ${index + 1} 行重复 version`)
+        const match = /^version\s*:\s*(\d+)\s*$/.exec(trimmed)
+        if (match === null) throw new Error(`strict sync input 第 ${index + 1} 行 version 必须是数字`)
+        seenVersion = true
+        version = Number(match[1])
+        continue
+      }
+      if (/^skills\s*:\s*$/.test(trimmed)) {
+        if (seenSkills) throw new Error(`strict sync input 第 ${index + 1} 行重复 skills`)
+        seenSkills = true
+        inSkills = true
+        continue
+      }
+      throw new Error(`strict sync input 第 ${index + 1} 行含未知顶层 token`)
+    }
+    if (!/^\s/.test(line)) {
+      if (/^skills\s*:\s*$/.test(trimmed)) throw new Error(`strict sync input 第 ${index + 1} 行重复 skills`)
+      throw new Error(`strict sync input 第 ${index + 1} 行位于 skills 块外`)
+    }
+    validateLegacySyncEntry(line, index + 1)
+  }
+  if (version === undefined) throw new Error('strict sync input 缺少明确的 version: 1/2')
+  if (version !== 1 && version !== 2) throw new Error(`strict sync input 不支持 legacy version: ${version}`)
+  if (!seenSkills) throw new Error('strict sync input 缺少 skills: 条目块')
+  return parseSkillSources(text)
+}
+
+async function capturePath(path: string, label: string): Promise<PathIdentity> {
+  const stat = await lstat(path)
+  if (stat.isSymbolicLink()) throw new Error(`${label} 不能是 symlink: ${path}`)
+  const resolved = await realpath(path)
+  return { path, realPath: resolved, dev: stat.dev, ino: stat.ino }
+}
+
+async function captureRegistryPathSnapshot(root: string, registryPath: string): Promise<RegistryPathSnapshot> {
+  const rootIdentity = await capturePath(root, '--root')
+  const canonicalRoot = rootIdentity.realPath
   const templatesPath = dirname(registryPath)
-  const templatesStat = await lstat(templatesPath)
-  if (!templatesStat.isDirectory() || templatesStat.isSymbolicLink()) {
+  const parentIdentity = await capturePath(templatesPath, 'canonical registry parent')
+  if (!within(canonicalRoot, parentIdentity.realPath)) {
     throw new Error(`canonical registry parent 不是 root 内的普通目录: ${templatesPath}`)
   }
-  const canonicalTemplates = await realpath(templatesPath)
-  if (!within(canonicalRoot, canonicalTemplates)) {
-    throw new Error(`canonical registry parent 越出 --root: ${templatesPath}`)
+  const parentStat = await lstat(templatesPath)
+  if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
+    throw new Error(`canonical registry parent 不是 root 内的普通目录: ${templatesPath}`)
   }
+  let registryIdentity: PathIdentity | null = null
   try {
+    registryIdentity = await capturePath(registryPath, 'canonical registry')
     const registryStat = await lstat(registryPath)
     if (!registryStat.isFile() || registryStat.isSymbolicLink()) {
       throw new Error(`canonical registry 不是 root 内的普通文件: ${registryPath}`)
@@ -83,18 +209,59 @@ async function assertCanonicalRegistryPath(root: string, registryPath: string): 
       throw new Error(`canonical registry 越出 --root: ${registryPath}`)
     }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') registryIdentity = null
     throw error
+  }
+  return { root: rootIdentity, parent: parentIdentity, registry: registryIdentity }
+}
+
+async function assertPathIdentity(expected: PathIdentity, label: string): Promise<void> {
+  const current = await capturePath(expected.path, label)
+  if (current.dev !== expected.dev || current.ino !== expected.ino || current.realPath !== expected.realPath) {
+    throw new Error(`${label} 在 sync 期间发生替换，拒绝 TOCTOU 写入: ${expected.path}`)
   }
 }
 
-async function syncRegistry(root: string): Promise<{ readonly registryPath: string; readonly count: number }> {
+async function assertRegistrySnapshot(snapshot: RegistryPathSnapshot, registryPath: string): Promise<void> {
+  await assertPathIdentity(snapshot.root, '--root')
+  await assertPathIdentity(snapshot.parent, 'canonical registry parent')
+  if (snapshot.registry === null) {
+    try {
+      await lstat(registryPath)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+      throw error
+    }
+    throw new Error(`canonical registry 在 sync 期间被创建或替换，拒绝 CAS rename: ${registryPath}`)
+  }
+  await assertPathIdentity(snapshot.registry, 'canonical registry')
+}
+
+async function syncRegistry(
+  root: string,
+  hooks: SkillProvenanceSyncHooks = {},
+): Promise<{ readonly registryPath: string; readonly count: number }> {
   const registryPath = join(root, 'templates', 'skill-sources.yaml')
   if (!within(root, registryPath)) throw new Error('registry path 越出 --root')
-  await assertCanonicalRegistryPath(root, registryPath)
+  const snapshot = await captureRegistryPathSnapshot(root, registryPath)
   const sourceText = await readFile(registryPath, 'utf8')
-  const entries = parseSkillSources(sourceText)
+  const entries = parseSyncSources(sourceText)
+  const skillsRoot = join(root, 'skills')
+  const physicalEntries = await readdir(skillsRoot, { withFileTypes: true })
+  const physicalIds = new Set<string>()
+  for (const entry of physicalEntries) {
+    // skills/EXTERNAL-SKILLS.md is a tracked dependency note, not a Skill root; only
+    // directory-shaped top-level entries participate in the canonical physical set.
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+    if (entry.isSymbolicLink()) throw new Error(`physical bundled Skill '${entry.name}' 必须是 skillsRoot 内的普通目录`)
+    if (entry.name === '' || entry.name === '.' || entry.name === '..'
+      || entry.name.includes('/') || entry.name.includes('\\') || entry.name.includes('\0')) {
+      throw new Error(`physical bundled Skill id 不安全: ${JSON.stringify(entry.name)}`)
+    }
+    physicalIds.add(entry.name)
+  }
   const computed: Array<{ entry: ReturnType<typeof parseSkillSources>[number]; digest: string }> = []
+  const declaredIds = new Set<string>()
   for (const entry of entries) {
     if (entry.tool !== 'bundled' || entry.source !== 'tenon') {
       throw new Error(`token '${entry.token}' 不是 bundled/tenon provenance，拒绝 sync`)
@@ -103,21 +270,44 @@ async function syncRegistry(root: string): Promise<{ readonly registryPath: stri
     if (physical.includes('/') || physical.includes('\\') || physical === '.' || physical === '..' || physical.includes('\0')) {
       throw new Error(`token '${entry.token}' content_skill 路径不安全`)
     }
-    const manifest = await buildCanonicalManifest(physical, join(root, 'skills', physical))
+    if (declaredIds.has(physical)) throw new Error(`physical bundled Skill '${physical}' 重复声明`)
+    declaredIds.add(physical)
+    if (!physicalIds.has(physical)) throw new Error(`registry 声明的 bundled Skill '${physical}' 不存在`)
+    const manifest = await buildCanonicalManifest(physical, join(skillsRoot, physical))
     computed.push({ entry, digest: manifest.treeSha256 })
+  }
+  for (const physical of physicalIds) {
+    if (!declaredIds.has(physical)) throw new Error(`physical bundled Skill '${physical}' 未在 canonical registry 声明`)
   }
   const output = renderRegistry(computed)
   const tmp = `${registryPath}.tmp-${process.pid}-${randomUUID()}`
   let handle
   try {
+    await hooks.beforeTempCreate?.()
+    await assertRegistrySnapshot(snapshot, registryPath)
     await mkdir(dirname(registryPath), { recursive: true })
     handle = await open(tmp, 'wx', 0o644)
     await handle.writeFile(output, 'utf8')
     await handle.sync()
     await handle.close()
     handle = undefined
+    const verification = await verifySkillProvenance(root, { registryPath: tmp })
+    if (!verification.ok) {
+      const detail = verification.findings
+        .map((item) => `[${item.category}] ${item.detail}`)
+        .join('; ')
+      throw new Error(`候选 provenance 未通过 production verifier: ${detail}`)
+    }
+    await hooks.beforeRename?.()
+    await assertRegistrySnapshot(snapshot, registryPath)
     await rename(tmp, registryPath)
     await chmod(registryPath, 0o644)
+    const parent = await open(dirname(registryPath), 'r')
+    try {
+      await parent.sync()
+    } finally {
+      await parent.close()
+    }
   } catch (error) {
     if (handle !== undefined) await handle.close().catch(() => undefined)
     await rm(tmp, { force: true }).catch(() => undefined)

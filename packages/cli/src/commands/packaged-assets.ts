@@ -9,7 +9,10 @@ export function verifyPackagedAssets(
   dryRun: boolean,
   silent = false,
 ): number {
-  const command = [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root]
+  const nodePath = env.resolveTrustedCommandBinding?.('node')?.executable
+    ?? env.resolveTrustedCommand?.('node')
+    ?? process.execPath
+  const command = [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root, '--node', nodePath]
   if (!silent) deps.io.out(`[setup] 插件资产校验: bash ${command.join(' ')}`)
   if (dryRun) return 0
   if (!env.pathExists(join(root, 'runtime', 'tenon-bootstrap.mjs'))) {

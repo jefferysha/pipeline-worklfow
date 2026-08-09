@@ -1,4 +1,5 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -68,6 +69,70 @@ describe('verifySkillProvenance', () => {
     expect(result.findings).toEqual(expect.arrayContaining([
       expect.objectContaining({ category: 'legacy-provenance-source' }),
     ]))
+  })
+
+  it('rejects any lstat-success legacy lock node, including a directory', async () => {
+    const { root } = await makeRoot()
+    await mkdir(join(root, 'skills-lock.json'), { recursive: true })
+    const result = await verifySkillProvenance(root)
+    expect(result.ok).toBe(false)
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: 'legacy-provenance-source' }),
+    ]))
+  })
+
+  it('rejects a top-level Skill symlink that escapes skillsRoot', async () => {
+    const { root } = await makeRoot()
+    const outside = await mkdtemp(join(tmpdir(), 'skill-provenance-outside-'))
+    roots.push(outside)
+    await writeFile(join(outside, 'SKILL.md'), '# demo\n', 'utf8')
+    await rm(join(root, 'skills', 'demo'), { recursive: true, force: true })
+    await symlink(outside, join(root, 'skills', 'demo'))
+
+    const result = await verifySkillProvenance(root)
+    expect(result.ok).toBe(false)
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: 'filesystem-safety-error', skill: 'demo' }),
+    ]))
+  })
+
+  it('does not hash a physical root after its safety check rejects an outside symlink tree', async () => {
+    const { root } = await makeRoot()
+    const outside = await mkdtemp(join(tmpdir(), 'skill-provenance-outside-hash-'))
+    roots.push(outside)
+    await writeFile(join(outside, 'SKILL.md'), '# outside drift\n', 'utf8')
+    await rm(join(root, 'skills', 'demo'), { recursive: true, force: true })
+    await symlink(outside, join(root, 'skills', 'demo'))
+
+    const result = await verifySkillProvenance(root)
+    expect(result.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ category: 'filesystem-safety-error', skill: 'demo' }),
+    ]))
+    expect(result.findings.some((item) => item.category === 'content-hash-mismatch')).toBe(false)
+    expect(result.findings.some((item) => item.category === 'coordinate-mismatch')).toBe(false)
+  })
+
+  it('measures the real repository provenance inventory exactly (62 physical roots = entries = verified hashes)', async () => {
+    const root = process.cwd()
+    const tracked = execFileSync('git', ['ls-files', '--cached', '-z'], {
+      cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024,
+    })
+      .split('\0').filter(Boolean)
+    const machineDataRoots = /^(?:templates(?:\/|$)|runtime(?:\/|$)|\.codex-plugin(?:\/|$)|\.claude-plugin(?:\/|$)|packages\/[^/]+\/dist(?:\/|$))/
+    const provenanceLike = /(?:skill[-_]?sources?|skill[-_]?registry|skills[-_]?lock|provenance)/iu
+    const provenanceSources = tracked.filter((path) =>
+      machineDataRoots.test(path) && /\.(?:yaml|yml|json)$/iu.test(path) && provenanceLike.test(path))
+    expect(provenanceSources).toEqual(['templates/skill-sources.yaml'])
+    expect(execFileSync('git', ['check-attr', 'eol', '--', 'skills/tenon/SKILL.md'], { cwd: root, encoding: 'utf8' })).toContain('eol: lf')
+    await expect(lstat(join(root, 'skills-lock.json'))).rejects.toMatchObject({ code: 'ENOENT' })
+    const physical = (await readdir(join(root, 'skills'), { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
+    expect(physical).toHaveLength(62)
+    const result = await verifySkillProvenance(root)
+    expect(result.ok).toBe(true)
+    expect(result.registry?.skills).toHaveLength(62)
+    expect(result.registry?.skills.every((entry) => entry.contentHash.startsWith('sha256:'))).toBe(true)
+    expect(result.findings).toHaveLength(0)
   })
 
   it('has a deterministic failing fixture for every declared drift category', async () => {

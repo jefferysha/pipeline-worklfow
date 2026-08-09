@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { buildCanonicalManifest } from '@tenon/automation'
+import { buildCanonicalManifest, SkillContentInvalidError } from '@tenon/automation'
 import {
   createProvenanceAwareBundledLocator,
   SkillProvenanceLocatorError,
@@ -55,5 +55,55 @@ describe('createProvenanceAwareBundledLocator', () => {
     await expect(createProvenanceAwareBundledLocator(root).locate('extra')).rejects.toMatchObject({
       category: 'unregistered-distributed-skill',
     } satisfies Partial<SkillProvenanceLocatorError>)
+  })
+
+  it('rejects a declared bundled root that is missing instead of allowing lower-tier fallback', async () => {
+    const { root } = await makeRoot()
+    await rm(join(root, 'skills', 'demo'), { recursive: true, force: true })
+    await expect(createProvenanceAwareBundledLocator(root).locate('logical')).rejects.toMatchObject({
+      category: 'missing-distributed-skill',
+    } satisfies Partial<SkillProvenanceLocatorError>)
+  })
+
+  it('rejects a top-level bundled symlink that escapes skillsRoot', async () => {
+    const { root } = await makeRoot()
+    const outside = await mkdtemp(join(tmpdir(), 'provenance-locator-outside-'))
+    roots.push(outside)
+    await writeFile(join(outside, 'SKILL.md'), '# demo\n', 'utf8')
+    await rm(join(root, 'skills', 'demo'), { recursive: true, force: true })
+    await symlink(outside, join(root, 'skills', 'demo'))
+    await expect(createProvenanceAwareBundledLocator(root).locate('logical')).rejects.toMatchObject({
+      category: 'filesystem-safety-error',
+    } satisfies Partial<SkillProvenanceLocatorError>)
+  })
+
+  it('rejects a skillsRoot symlink before resolving a declared child', async () => {
+    const { root } = await makeRoot()
+    const outside = await mkdtemp(join(tmpdir(), 'provenance-locator-root-outside-'))
+    roots.push(outside)
+    await mkdir(join(outside, 'demo'), { recursive: true })
+    await writeFile(join(outside, 'demo', 'SKILL.md'), '# demo\n', 'utf8')
+    await rm(join(root, 'skills'), { recursive: true, force: true })
+    await symlink(outside, join(root, 'skills'))
+
+    await expect(createProvenanceAwareBundledLocator(root).locate('logical')).rejects.toMatchObject({
+      category: 'filesystem-safety-error',
+    } satisfies Partial<SkillProvenanceLocatorError>)
+  })
+
+  it('validates unsafe skill ids before any bundled filesystem lookup', async () => {
+    const { root } = await makeRoot()
+    await expect(createProvenanceAwareBundledLocator(root).locate('../package.json')).rejects.toBeInstanceOf(SkillContentInvalidError)
+  })
+
+  it('does not cache a failed registry load; the same locator recovers after repair', async () => {
+    const { root } = await makeRoot()
+    const registryPath = join(root, 'templates', 'skill-sources.yaml')
+    const clean = await readFile(registryPath, 'utf8')
+    await writeFile(registryPath, 'version: 3\n', 'utf8')
+    const locator = createProvenanceAwareBundledLocator(root)
+    await expect(locator.locate('logical')).rejects.toMatchObject({ category: 'unsupported-registry-version' })
+    await writeFile(registryPath, clean, 'utf8')
+    await expect(locator.locate('logical')).resolves.toMatchObject({ skillId: 'logical' })
   })
 })

@@ -294,11 +294,14 @@ function makeDoctorProbes(runtimeScope: () => RuntimeScopeSnapshot): DoctorProbe
     codexAuthStatus: () => probeCodexAuth(),
     runVerifySkills: () => {
       const bash = trustedCommand('bash')
-      if (bash === undefined) return Promise.resolve({ code: 1, output: '可信 Bash 不可执行' })
+      const node = trustedCommand('node')
+      if (bash === undefined || node === undefined) {
+        return Promise.resolve({ code: 1, output: '可信 Bash/Node 不可执行' })
+      }
       return new Promise((resolve) => {
         execFile(
           bash,
-          [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root],
+          [join(root, 'tools', 'verify-skills.sh'), '--quiet', '--root', root, '--node', node],
           { timeout: 30_000 },
           (err, stdout, stderr) => {
             const errCode = (err as { code?: unknown } | null)?.code
