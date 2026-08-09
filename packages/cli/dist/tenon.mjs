@@ -56506,557 +56506,9 @@ async function cmdList4(deps, opts) {
   return 0;
 }
 
-// packages/cli/src/commands/review-binding.ts
-async function refreshReviewGateBinding(changeDir2, state, phase, event, requestedAt, options = {}) {
-  let existing;
-  try {
-    existing = await readReviewGateBinding(changeDir2);
-  } catch {
-    if (options.tolerateUnreadable !== true) throw new Error("review gate binding unreadable");
-    existing = void 0;
-  }
-  if (!reviewGateBindingMatches(existing, state, phase, event)) {
-    await writeReviewGateBindingUnderLock(
-      changeDir2,
-      reviewGateBindingForState(state, phase, event, requestedAt)
-    );
-  }
-}
-async function readReviewGateBindingForRequest(changeDir2) {
-  try {
-    return await readReviewGateBinding(changeDir2);
-  } catch {
-    return void 0;
-  }
-}
-function freshReviewRequestedAt(previous, now) {
-  const candidate = now();
-  if (previous === "") return candidate;
-  const previousMs = Date.parse(previous);
-  const candidateMs = Date.parse(candidate);
-  if (!Number.isFinite(previousMs) || !Number.isFinite(candidateMs) || candidateMs > previousMs) return candidate;
-  return new Date(previousMs + 1).toISOString();
-}
-async function assertReviewGateBinding(changeDir2, state, phase, event) {
-  const binding = await readReviewGateBinding(changeDir2);
-  if (!reviewGateBindingMatches(binding, state, phase, event)) {
-    throw new Error(`phase '${phase}' \u7684 review receipt \u672A\u7ED1\u5B9A\u5F53\u524D canonical decision state\uFF1B\u8BF7\u91CD\u65B0 request ${event}`);
-  }
-}
-async function clearReviewMarker(deps) {
-  if (!deps.clearReviewMarker) return true;
-  try {
-    await deps.clearReviewMarker();
-    return true;
-  } catch (error2) {
-    deps.io.err(`WARN: review marker \u6E05\u7406\u5931\u8D25\uFF08approval receipt \u5DF2\u63D0\u4EA4\uFF0C\u53EF\u91CD\u8BD5 acknowledge\uFF09: ${errMsg(error2)}`);
-    return false;
-  }
-}
-async function writeReviewMarker(deps, phase, event, name2, requestedAt) {
-  if (!deps.writeReviewMarker) return true;
-  try {
-    await deps.writeReviewMarker(formatReviewMarker({ phase, event, changeName: name2, requestedAt }));
-    return true;
-  } catch (error2) {
-    deps.io.err(`WARN: review marker \u5199\u5165\u5931\u8D25\uFF08canonical pending receipt \u5DF2\u63D0\u4EA4\uFF0C\u53EF\u91CD\u8BD5 request\uFF09: ${errMsg(error2)}`);
-    return false;
-  }
-}
-async function recordRejectedAcknowledgement(deps, interaction, changeDir2, changeName, state, revision, event) {
-  if (interaction === void 0 || revision === void 0) {
-    if (interaction !== void 0) {
-      deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u672A\u5199\u5165\uFF08\u7F3A canonical run/workflow/state anchor\uFF1Bcanonical review acknowledgement \u5DF2\u62D2\u7EDD\uFF09`);
-    }
-    return;
-  }
-  try {
-    await interaction.recordReviewAcknowledged({
-      changeDir: changeDir2,
-      changeName,
-      state,
-      revision,
-      beforeRevision: revision,
-      event,
-      requestedAt: scalar13(state, "review_requested_at"),
-      rejected: true,
-      clock: freshReviewRequestedAt(scalar13(state, "review_requested_at"), deps.clock)
-    });
-  } catch (error2) {
-    deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u5199\u5165\u5931\u8D25\uFF08canonical review acknowledgement \u5DF2\u62D2\u7EDD\uFF09: ${errMsg(error2)}`);
-  }
-}
-function scalar13(state, field3) {
-  const value = state.fields[field3];
-  return Array.isArray(value) ? value.join(",") : value ?? "";
-}
-
-// packages/cli/src/commands/review.ts
-function scalar14(state, field3) {
-  const value = state.fields[field3];
-  return Array.isArray(value) ? value.join(",") : value ?? "";
-}
-function resolveReviewStep(deps, state) {
-  const phase = scalar14(state, "phase");
-  const plan = effectiveWorkflowForState(deps, state);
-  if (!plan) throw new Error(`workflow '${String(state.fields.workflow ?? "")}' \u672A\u627E\u5230\u6216\u4E0D\u53EF\u7F16\u8BD1`);
-  const step = resolveStep(plan.workflow, phase);
-  if (!step) throw new Error(`step '${phase}' \u4E0D\u5728 workflow '${plan.id}' \u91CC`);
-  if (step.gate !== "review") throw new Error(`workflow '${plan.id}' \u7684 step '${phase}' \u672A\u58F0\u660E gate=review`);
-  return {
-    phase,
-    workflow: plan.id,
-    executionModel: plan.capabilities.execution.model,
-    events: step.transitions.map((transition) => transition.event)
-  };
-}
-function resolveReviewEvent(step, requestedEvent) {
-  if (requestedEvent !== void 0) {
-    if (!step.events.includes(requestedEvent)) {
-      throw new Error(
-        `phase '${step.phase}' \u4E0D\u652F\u6301 review event '${requestedEvent}'\uFF1B\u53EF\u9009\uFF1A${step.events.join(", ") || "(\u65E0)"}`
-      );
-    }
-    return requestedEvent;
-  }
-  if (step.events.length !== 1) {
-    throw new Error(
-      `phase '${step.phase}' \u6709\u591A\u4E2A review \u51FA\u53E3\uFF1B\u5FC5\u987B\u6307\u5B9A --event ${step.events.join("|")}`
-    );
-  }
-  const event = step.events[0];
-  if (event === void 0) throw new Error(`phase '${step.phase}' \u6CA1\u6709 review \u51FA\u53E3`);
-  return event;
-}
-async function checkVerifyFailReadiness(deps, name2, dir, state) {
-  const blockers = [];
-  const report = scalar14(state, "verification_report");
-  const fileExists2 = deps.guardCtx?.(name2)?.fileExists;
-  if (report === "" || report === "null") {
-    blockers.push(`verify-fail \u51B3\u7B56\u8981\u6C42 verification_report \u975E\u7A7A\uFF08\u5F53\u524D='${report || "null"}'\uFF09`);
-  } else if (fileExists2?.(report) === false) {
-    blockers.push(`verify-fail \u51B3\u7B56\u8981\u6C42 verification_report \u6587\u4EF6\u5B58\u5728\uFF08\u5F53\u524D='${report}'\uFF09`);
-  }
-  const plan = effectiveWorkflowForState(deps, state);
-  const documentPolicy = plan?.capabilities.documents.policy;
-  if (documentPolicy) {
-    const phase = scalar14(state, "phase");
-    if (!isDocumentPolicyStep(documentPolicy, phase) || !isDocumentContractPhase(phase)) {
-      blockers.push(`\u53D7 OpenSpec \u6587\u6863\u5951\u7EA6\u6CBB\u7406\u7684 workflow \u5F53\u524D phase \u975E\u6CD5\uFF08\u5F53\u524D='${phase || "\u7A7A"}'\uFF09`);
-    } else {
-      const evidence = deps.documentEvidence ? await deps.documentEvidence(deps.cwd, dir, phase) : await evaluateDocumentEvidence(deps.cwd, dir, phase, {
-        recordKinds: ["verification-report"],
-        readKinds: []
-      });
-      blockers.push(...evidence.blockers.map((blocker) => `document: ${blocker}`));
-    }
-  }
-  deps.io.out(`[CHECK] ${name2} (phase=verify, event=verify-fail)`);
-  if (blockers.length === 0) {
-    deps.io.out("  [PASS] verify-fail \u56DE\u9000\u8BC1\u636E\u5DF2\u5C31\u7EEA");
-    return 0;
-  }
-  for (const blocker of blockers) deps.io.out(`  [FAIL] ${blocker}`);
-  deps.io.out(`  [FAIL] \u5171 ${blockers.length} \u9879\u672A\u901A\u8FC7`);
-  return 2;
-}
-async function checkReviewRequestReadiness(deps, name2, dir, state, step, event) {
-  if (step.executionModel === "phase-manifest" && step.phase === "verify" && event === "verify-fail") {
-    return checkVerifyFailReadiness(deps, name2, dir, state);
-  }
-  return cmdCheck(deps, name2);
-}
-async function cmdReview(deps, sub, name2, opts = {}) {
-  if (sub !== "request" && sub !== "acknowledge") {
-    deps.io.err("ERROR: \u7528\u6CD5\uFF1Atenon review request <change> [--event <event>] | acknowledge <change> [--delegated]");
-    return 1;
-  }
-  if (!name2 || !isValidChangeName(name2)) {
-    deps.io.err(`ERROR: change-name \u975E\u6CD5: '${name2 ?? ""}' (\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _)`);
-    return 1;
-  }
-  const dir = changeDir(deps.cwd, name2);
-  const interaction = deps.interaction === void 0 ? void 0 : createInteractionCapture(deps.interaction, deps.clock);
-  try {
-    if (sub === "request") {
-      if (opts.delegated === true) {
-        deps.io.err("ERROR: --delegated \u53EA\u53EF\u7528\u4E8E review acknowledge\uFF1Brequest \u4ECD\u5FC5\u987B\u5148\u5B8C\u6210\u771F\u5B9E review \u8BC1\u636E");
-        return 1;
-      }
-      const preflight = await deps.store.read(dir);
-      const preflightStep = resolveReviewStep(deps, preflight);
-      const event = resolveReviewEvent(preflightStep, opts.event);
-      const check = await checkReviewRequestReadiness(deps, name2, dir, preflight, preflightStep, event);
-      if (check !== 0) return check;
-      let requested;
-      await deps.store.withLock(dir, async () => {
-        const state = await deps.store.read(dir);
-        const beforeRevision = interaction === void 0 ? void 0 : await readCurrentRunRevision(dir);
-        const step = resolveReviewStep(deps, state);
-        const lockedEvent = resolveReviewEvent(step, opts.event);
-        if (step.phase !== preflightStep.phase || lockedEvent !== event) {
-          throw new Error("review request \u671F\u95F4\u5F53\u524D phase \u6216\u53EF\u9009 event \u5DF2\u53D8\u5316\uFF1B\u8BF7\u91CD\u65B0\u8FD0\u884C\u8BE5\u547D\u4EE4");
-        }
-        const existingStatus = reviewGateStatus(state);
-        if (existingStatus !== null && !reviewGateMatches(state, step.phase)) {
-          throw new Error(`\u68C0\u6D4B\u5230\u5C5E\u4E8E phase '${scalar14(state, "review_gate_phase")}' \u7684\u6B8B\u7559 review receipt\uFF1B\u8BF7\u5148\u8BCA\u65AD state \u540E\u91CD\u8BD5`);
-        }
-        const existingBinding = await readReviewGateBindingForRequest(dir);
-        const bindingMatches = reviewGateBindingMatches(existingBinding, state, step.phase, event);
-        if (reviewGateApprovedFor(state, step.phase, event) && bindingMatches) {
-          throw new Error(`phase '${step.phase}' \u7684 event '${event}' \u5DF2\u83B7\u786E\u8BA4\uFF1B\u8BF7\u76F4\u63A5\u6267\u884C\u8BE5 transition\uFF0C\u4E0D\u80FD\u91CD\u590D request`);
-        }
-        const existingAt = scalar14(state, "review_requested_at");
-        if (reviewGatePendingFor(state, step.phase, event) && bindingMatches) {
-          await refreshReviewGateBinding(dir, state, step.phase, event, existingAt || deps.clock());
-          requested = {
-            phase: step.phase,
-            event,
-            requestedAt: existingAt || deps.clock(),
-            alreadyPending: true,
-            replacedReceipt: false
-          };
-          if (interaction !== void 0 && beforeRevision !== void 0) {
-            try {
-              await interaction.recordReviewRequested({
-                changeDir: dir,
-                changeName: name2,
-                state,
-                revision: beforeRevision,
-                beforeRevision,
-                event,
-                requestedAt: existingAt || deps.clock(),
-                suppressed: true,
-                clock: deps.clock()
-              });
-            } catch (error2) {
-              deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u5199\u5165\u5931\u8D25\uFF08canonical review pending \u5DF2\u5B58\u5728\uFF09: ${errMsg(error2)}`);
-            }
-          } else if (interaction !== void 0) {
-            deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u672A\u5199\u5165\uFF08\u7F3A canonical run/workflow/state anchor\uFF1Bcanonical review pending \u672A\u6539\u53D8\uFF09`);
-          }
-          return;
-        }
-        const requestedAt = freshReviewRequestedAt(existingAt, deps.clock);
-        const requestedState = {
-          ...state,
-          fields: { ...state.fields, ...reviewGateRequestPatch(step.phase, event, requestedAt) }
-        };
-        await deps.store.writeUnderLock(dir, requestedState, { kind: "set-many" });
-        await refreshReviewGateBinding(dir, requestedState, step.phase, event, requestedAt, { tolerateUnreadable: true });
-        const afterRevision = interaction === void 0 ? void 0 : await readCurrentRunRevision(dir);
-        if (interaction !== void 0 && beforeRevision !== void 0 && afterRevision !== void 0) {
-          try {
-            await interaction.recordReviewRequested({
-              changeDir: dir,
-              changeName: name2,
-              state: requestedState,
-              revision: afterRevision,
-              beforeRevision,
-              event,
-              requestedAt,
-              clock: requestedAt
-            });
-          } catch (error2) {
-            deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u5199\u5165\u5931\u8D25\uFF08canonical review request \u5DF2\u63D0\u4EA4\uFF09: ${errMsg(error2)}`);
-          }
-        } else if (interaction !== void 0) {
-          deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u672A\u5199\u5165\uFF08\u7F3A canonical run/workflow/state anchor\uFF1Bcanonical review request \u5DF2\u63D0\u4EA4\uFF09`);
-        }
-        requested = {
-          phase: step.phase,
-          event,
-          requestedAt,
-          alreadyPending: false,
-          // Replacing a different/legacy receipt can only revoke a prior decision; it always
-          // creates a fresh pending request and therefore never grants the new event permission.
-          replacedReceipt: existingStatus !== null
-        };
-      });
-      if (!requested) throw new Error("review request \u672A\u4EA7\u751F receipt");
-      const markerOk2 = await writeReviewMarker(deps, requested.phase, requested.event, name2, requested.requestedAt);
-      if (!requested.alreadyPending) {
-        await recordHistory(deps, dir, {
-          ts: requested.requestedAt,
-          kind: "tool",
-          raw: `review:request phase=${requested.phase} event=${requested.event}${requested.replacedReceipt ? " replaced=true" : ""}`
-        });
-      }
-      deps.io.out(
-        `[REVIEW] ${name2} phase=${requested.phase} event=${requested.event} ${requested.alreadyPending ? "\u4ECD\u5F85\u786E\u8BA4" : "\u5DF2\u8BF7\u6C42\u4EBA\u5DE5\u786E\u8BA4"}`
-      );
-      return markerOk2 ? 0 : 2;
-    }
-    let acknowledged;
-    await deps.store.withLock(dir, async () => {
-      const state = await deps.store.read(dir);
-      const beforeRevision = interaction === void 0 ? void 0 : await readCurrentRunRevision(dir);
-      const step = resolveReviewStep(deps, state);
-      const event = reviewGateEvent(state);
-      if (event === "") {
-        throw new Error(`phase '${step.phase}' \u7684\u65E7 review receipt \u672A\u7ED1\u5B9A event\uFF1B\u8BF7\u91CD\u65B0\u8FD0\u884C tenon review request ${name2} --event <event>`);
-      }
-      if (!step.events.includes(event)) {
-        throw new Error(`phase '${step.phase}' \u7684 receipt event '${event}' \u5DF2\u4E0D\u5728\u5F53\u524D workflow \u51FA\u53E3\u4E2D\uFF1B\u8BF7\u91CD\u65B0 request`);
-      }
-      if (opts.event !== void 0 && opts.event !== event) {
-        throw new Error(`acknowledge \u7684 event '${opts.event}' \u4E0E\u5F85\u786E\u8BA4 receipt '${event}' \u4E0D\u4E00\u81F4`);
-      }
-      try {
-        await assertReviewGateBinding(dir, state, step.phase, event);
-      } catch (error2) {
-        await recordRejectedAcknowledgement(deps, interaction, dir, name2, state, beforeRevision, event);
-        throw error2;
-      }
-      const delegatedAuthority = opts.delegated === true ? await readDelegatedReviewAuthority(
-        deps.cwd,
-        name2,
-        deps.env?.("TENON_HOST_SESSION_ID") ?? deps.env?.("CODEX_THREAD_ID")
-      ) : null;
-      if (opts.delegated === true && delegatedAuthority === null) {
-        throw new Error(`\u5F53\u524D Change '${name2}' \u6CA1\u6709\u6709\u6548\u7684\u7528\u6237\u59D4\u6258 review \u6388\u6743\uFF1B\u8BF7\u7B49\u5F85\u6B63\u5E38\u786E\u8BA4\uFF0C\u6216\u5148\u7531\u7528\u6237\u660E\u786E\u6388\u6743\u540E\u7EED\u81EA\u4E3B\u6267\u884C`);
-      }
-      if (reviewGateApprovedFor(state, step.phase, event)) {
-        acknowledged = {
-          phase: step.phase,
-          event,
-          acknowledgedAt: scalar14(state, "review_acknowledged_at") || deps.clock(),
-          changed: false,
-          delegatedAuthority
-        };
-        return;
-      }
-      if (!reviewGatePendingFor(state, step.phase, event)) {
-        throw new Error(`phase '${step.phase}' \u5C1A\u672A\u4E3A event '${event}' request review\uFF1B\u5148\u5B8C\u6210\u4EA7\u7269\u5E76\u8FD0\u884C tenon review request ${name2} --event ${event}`);
-      }
-      const acknowledgedAt = freshReviewRequestedAt(scalar14(state, "review_requested_at"), deps.clock);
-      await deps.store.writeUnderLock(dir, {
-        ...state,
-        fields: { ...state.fields, ...reviewGateApprovalPatch(acknowledgedAt) }
-      }, { kind: "set-many" });
-      const afterRevision = interaction === void 0 ? void 0 : await readCurrentRunRevision(dir);
-      if (interaction !== void 0 && beforeRevision !== void 0 && afterRevision !== void 0) {
-        try {
-          await interaction.recordReviewAcknowledged({
-            changeDir: dir,
-            changeName: name2,
-            state: { ...state, fields: { ...state.fields, ...reviewGateApprovalPatch(acknowledgedAt) } },
-            revision: afterRevision,
-            beforeRevision,
-            event,
-            requestedAt: scalar14(state, "review_requested_at"),
-            clock: acknowledgedAt
-          });
-        } catch (error2) {
-          deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u5199\u5165\u5931\u8D25\uFF08canonical review acknowledgement \u5DF2\u63D0\u4EA4\uFF09: ${errMsg(error2)}`);
-        }
-      } else if (interaction !== void 0) {
-        deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u672A\u5199\u5165\uFF08\u7F3A canonical run/workflow/state anchor\uFF1Bcanonical review acknowledgement \u5DF2\u63D0\u4EA4\uFF09`);
-      }
-      acknowledged = { phase: step.phase, event, acknowledgedAt, changed: true, delegatedAuthority };
-    });
-    if (!acknowledged) throw new Error("review acknowledgement \u672A\u4EA7\u751F receipt");
-    const markerOk = await clearReviewMarker(deps);
-    if (acknowledged.changed) {
-      await recordHistory(deps, dir, {
-        ts: acknowledged.acknowledgedAt,
-        kind: "tool",
-        raw: acknowledged.delegatedAuthority === null ? `review:acknowledge phase=${acknowledged.phase} event=${acknowledged.event}` : `review:delegated-ack phase=${acknowledged.phase} event=${acknowledged.event} authority_issued_at=${acknowledged.delegatedAuthority.issuedAt} authority_host_session=${acknowledged.delegatedAuthority.hostSessionId}`
-      });
-    }
-    deps.io.out(
-      `[REVIEW] ${name2} phase=${acknowledged.phase} event=${acknowledged.event} ${acknowledged.delegatedAuthority === null ? "\u5DF2\u786E\u8BA4" : "\u5DF2\u6309\u7528\u6237\u59D4\u6258\u7684\u6301\u7EED\u6388\u6743\u786E\u8BA4"}\uFF0C\u53EF\u91CD\u53D1 transition`
-    );
-    return markerOk ? 0 : 2;
-  } catch (error2) {
-    deps.io.err(`ERROR: ${errMsg(error2)}`);
-    return 1;
-  }
-}
-
-// packages/cli/src/commands/interaction.ts
-import { lstat as lstat41 } from "node:fs/promises";
-import { isAbsolute as isAbsolute30, join as join90, relative as relative23, resolve as resolve37 } from "node:path";
-var MAX_FIXTURE_BYTES = 1024 * 1024;
-var MAX_EVENT_FILE_BYTES = 1024 * 1024;
-var MAX_FIXTURES = 256;
-var SAFE_RELATIVE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/;
-var SAFE_FIXTURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
-function object4(value, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`${label} invalid`);
-  return value;
-}
-function stringValue3(value, label) {
-  if (typeof value !== "string" || value.length === 0) throw new Error(`${label} invalid`);
-  return value;
-}
-function arrayValue(value, label) {
-  if (!Array.isArray(value)) throw new Error(`${label} invalid`);
-  return value;
-}
-function exactKeys5(value, expected, label) {
-  const keys = Object.keys(value).sort();
-  const allowed = [...expected].sort();
-  if (keys.length !== allowed.length || keys.some((key, index) => key !== allowed[index])) {
-    throw new Error(`${label} fields invalid`);
-  }
-}
-function exactDimension(value, expected, label) {
-  const values = arrayValue(value, label);
-  if (!values.every((item2) => typeof item2 === "string") || values.length !== expected.length || values.some((item2, index) => item2 !== expected[index]) || new Set(values).size !== values.length) {
-    throw new Error(`${label} matrix invalid`);
-  }
-  return values;
-}
-async function readRegularJson(path9, maxBytes, label) {
-  let entry;
-  try {
-    entry = await lstat41(path9);
-  } catch {
-    throw new Error(`${label} unavailable`);
-  }
-  if (entry.isSymbolicLink() || !entry.isFile() || entry.size > maxBytes) throw new Error(`${label} unavailable`);
-  let content;
-  try {
-    content = await readBoundedRegularFile(path9, maxBytes, label);
-  } catch {
-    throw new Error(`${label} invalid`);
-  }
-  try {
-    return JSON.parse(decodeUtf8Text(content, label));
-  } catch {
-    throw new Error(`${label} invalid`);
-  }
-}
-function assertFixturePath(root, file) {
-  if (isAbsolute30(file) || file.includes("\\") || !SAFE_RELATIVE.test(file)) {
-    throw new Error("fixture file path invalid");
-  }
-  const target = resolve37(root, file);
-  const rootRelative = relative23(resolve37(root), target);
-  if (rootRelative.startsWith("..") || isAbsolute30(rootRelative)) throw new Error("fixture file path invalid");
-  return target;
-}
-function parseManifest2(value) {
-  const raw = object4(value, "manifest");
-  exactKeys5(raw, ["schema", "dimensions", "fixtures"], "manifest");
-  if (raw.schema !== INTERACTION_EVENT_SCHEMA) throw new Error("manifest schema invalid");
-  const dimensions = object4(raw.dimensions, "manifest dimensions");
-  const dimensionsKeys = ["executionMode", "workflowMode", "trackKind", "pipelineStage", "controlStage", "surface"];
-  exactKeys5(dimensions, dimensionsKeys, "manifest dimensions");
-  const executionMode = exactDimension(dimensions.executionMode, INTERACTION_EXECUTION_MODES, "manifest dimensions.executionMode");
-  const workflowMode2 = exactDimension(dimensions.workflowMode, INTERACTION_WORKFLOW_MODES, "manifest dimensions.workflowMode");
-  const trackKind3 = exactDimension(dimensions.trackKind, INTERACTION_TRACK_KINDS, "manifest dimensions.trackKind");
-  const pipelineStage3 = exactDimension(dimensions.pipelineStage, INTERACTION_PIPELINE_STAGES, "manifest dimensions.pipelineStage");
-  const controlStage = exactDimension(dimensions.controlStage, INTERACTION_CONTROL_STAGES, "manifest dimensions.controlStage");
-  const surface = exactDimension(dimensions.surface, INTERACTION_SURFACES, "manifest dimensions.surface");
-  const fixtures = arrayValue(raw.fixtures, "manifest fixtures");
-  if (fixtures.length > MAX_FIXTURES) throw new Error("manifest fixtures limit exceeded");
-  const ids2 = /* @__PURE__ */ new Set();
-  const files = /* @__PURE__ */ new Set();
-  return {
-    schema: INTERACTION_EVENT_SCHEMA,
-    dimensions: {
-      executionMode,
-      workflowMode: workflowMode2,
-      trackKind: trackKind3,
-      pipelineStage: pipelineStage3,
-      controlStage,
-      surface
-    },
-    fixtures: fixtures.map((entry) => {
-      const item2 = object4(entry, "manifest fixture");
-      exactKeys5(item2, ["id", "mode", "file", "expected"], "manifest fixture");
-      const expected = object4(item2.expected, "manifest expected");
-      exactKeys5(expected, ["valid", "diagnostics"], "manifest expected");
-      const diagnostics = arrayValue(expected.diagnostics, "manifest expected diagnostics").map((code) => stringValue3(code, "diagnostic"));
-      if (diagnostics.some((code) => !INTERACTION_DIAGNOSTICS.includes(code))) {
-        throw new Error("manifest diagnostic invalid");
-      }
-      if (typeof expected.valid !== "boolean") throw new Error("manifest expected.valid invalid");
-      const mode = item2.mode;
-      if (mode !== "measurement" && mode !== "negative-control") throw new Error("manifest fixture mode invalid");
-      const id2 = stringValue3(item2.id, "fixture id");
-      if (!SAFE_FIXTURE_ID.test(id2)) throw new Error("manifest fixture id invalid");
-      const file = stringValue3(item2.file, "fixture file");
-      if (ids2.has(id2) || files.has(file)) throw new Error("manifest fixture duplicate");
-      ids2.add(id2);
-      files.add(file);
-      return {
-        id: id2,
-        mode,
-        file,
-        expected: { valid: expected.valid, diagnostics }
-      };
-    })
-  };
-}
-async function readFixture(root, entry) {
-  const value = await readRegularJson(assertFixturePath(root, entry.file), MAX_EVENT_FILE_BYTES, "fixture");
-  const raw = object4(value, "fixture");
-  exactKeys5(raw, ["schema", "fixture_id", "events"], "fixture");
-  if (raw.schema !== INTERACTION_EVENT_SCHEMA || raw.fixture_id !== entry.id) throw new Error("fixture schema invalid");
-  const events = arrayValue(raw.events, "fixture events").map((event) => {
-    try {
-      return decodeInteractionEvent(event);
-    } catch (error2) {
-      if (error2 instanceof InteractionEventSchemaError) throw new Error("event-schema-invalid");
-      throw new Error("fixture event invalid");
-    }
-  });
-  return { id: entry.id, mode: entry.mode, events, expected: entry.expected };
-}
-async function cmdInteraction(deps, sub, args, opts = {}) {
-  if (sub !== "scorecard" || args.length !== 1 || opts.json !== true) {
-    deps.io.err("ERROR: \u7528\u6CD5\uFF1Atenon interaction scorecard <fixture-dir> --json");
-    return 1;
-  }
-  try {
-    const fixtureDir = args[0];
-    if (fixtureDir === void 0) throw new Error("fixture directory unavailable");
-    let directory;
-    try {
-      directory = await lstat41(fixtureDir);
-    } catch {
-      throw new Error("fixture directory unavailable");
-    }
-    if (directory.isSymbolicLink() || !directory.isDirectory()) throw new Error("fixture directory unavailable");
-    const manifest = parseManifest2(await readRegularJson(join90(fixtureDir, "manifest.json"), MAX_FIXTURE_BYTES, "manifest"));
-    const orderedEntries = [...manifest.fixtures].sort((left, right) => left.id.localeCompare(right.id));
-    const physicalFiles = /* @__PURE__ */ new Set();
-    for (const entry of orderedEntries) {
-      const target = assertFixturePath(fixtureDir, entry.file);
-      let info;
-      try {
-        info = await lstat41(target);
-      } catch {
-        throw new Error("fixture unavailable");
-      }
-      if (!info.isFile() || info.isSymbolicLink()) throw new Error("fixture unavailable");
-      const identity2 = `${info.dev}:${info.ino}`;
-      if (physicalFiles.has(identity2)) throw new Error("manifest fixture duplicate");
-      physicalFiles.add(identity2);
-    }
-    const inputs2 = await Promise.all(orderedEntries.map((entry) => readFixture(fixtureDir, entry)));
-    const scorecard = computeInteractionScorecard(inputs2);
-    for (const [index, entry] of orderedEntries.entries()) {
-      const observed = scorecard.fixtures[index];
-      const expected = entry.expected;
-      if (observed === void 0 || observed.valid !== expected.valid || observed.diagnostics.join(",") !== [...expected.diagnostics].sort().join(",")) {
-        throw new Error("fixture expected diagnostics mismatch");
-      }
-    }
-    deps.io.out(JSON.stringify(scorecard));
-    return 0;
-  } catch (error2) {
-    deps.io.err(`ERROR: interaction scorecard unavailable (${errMsg(error2)})`);
-    return 1;
-  }
-}
-
 // packages/cli/src/commands/review-candidate.ts
 var REVIEW_CANDIDATE2 = /^(?:sha256:|workspace:sha256:)[0-9a-f]{64}$|^git:[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
-function scalar15(value) {
+function scalar13(value) {
   if (typeof value === "string") return value;
   if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) return value.join(",");
   return null;
@@ -57065,7 +56517,7 @@ async function frozenReviewCandidate(deps, change, state, plan, scope) {
   const step = plan.workflow.steps.find((entry) => entry.id === scope);
   if (step === void 0) throw new Error(`\u5F53\u524D Review step '${scope}' \u4E0D\u5728 frozen workflow \u4E2D`);
   const declared = [...new Set(step.inputs.flatMap((input) => {
-    const value = scalar15(Reflect.get(state.fields, input.field));
+    const value = scalar13(Reflect.get(state.fields, input.field));
     return value !== null && REVIEW_CANDIDATE2.test(value) ? [value] : [];
   }))];
   if (declared.length > 1) throw new Error(`Review step '${scope}' \u5B58\u5728\u591A\u4E2A candidate-shaped frozen input`);
@@ -57113,7 +56565,7 @@ function canonicalTenonSkillId(skillId) {
 function isTenonOrchestratorSkill(skillId) {
   return canonicalTenonSkillId(skillId) === "tenon";
 }
-function scalar16(state, field3) {
+function scalar14(state, field3) {
   const value = state.fields[field3];
   return Array.isArray(value) ? value.join(",") : value ?? "";
 }
@@ -57125,7 +56577,7 @@ function explicitReviewLane(deps, plan, stepId, skillId) {
   return step?.declared.find((skill) => skill.id === skillId && skill.kind === "review")?.reviewLane;
 }
 async function requireActiveReviewAttempt(deps, change, dir, state, plan, skillId) {
-  const stepId = scalar16(state, "phase");
+  const stepId = scalar14(state, "phase");
   const lane = explicitReviewLane(deps, plan, stepId, skillId);
   if (lane === void 0) return true;
   const requiredLanes = plan.capabilities.review.laneScopes.find((scope) => scope.stepId === stepId)?.lanes;
@@ -57364,14 +56816,14 @@ async function cmdInternalCodexJsonl(deps, mode, jsonlPath) {
 
 // packages/cli/src/commands/internal-skill-provenance.ts
 import { randomUUID as randomUUID15 } from "node:crypto";
-import { chmod as chmod5, lstat as lstat42, mkdir as mkdir31, open as open12, readFile as readFile42, readdir as readdir15, realpath as realpath16, rename as rename12, rm as rm15 } from "node:fs/promises";
-import { dirname as dirname22, join as join91, relative as relative24, resolve as resolve38 } from "node:path";
+import { chmod as chmod5, lstat as lstat41, mkdir as mkdir31, open as open12, readFile as readFile42, readdir as readdir15, realpath as realpath16, rename as rename12, rm as rm15 } from "node:fs/promises";
+import { dirname as dirname22, join as join90, relative as relative23, resolve as resolve37 } from "node:path";
 function rootPath(value) {
   if (value === void 0 || value.trim() === "") throw new Error("--root <path> \u662F\u5FC5\u9700\u53C2\u6570");
-  return resolve38(value);
+  return resolve37(value);
 }
 function within(root, path9) {
-  const rel = relative24(root, path9);
+  const rel = relative23(root, path9);
   return rel === "" || !rel.startsWith("../") && rel !== ".." && !rel.includes("/../");
 }
 function quoteValue(value) {
@@ -57511,7 +56963,7 @@ function parseSyncSources(text4) {
   return parseSkillSources(text4);
 }
 async function capturePath(path9, label) {
-  const stat12 = await lstat42(path9);
+  const stat12 = await lstat41(path9);
   if (stat12.isSymbolicLink()) throw new Error(`${label} \u4E0D\u80FD\u662F symlink: ${path9}`);
   const resolved = await realpath16(path9);
   return { path: path9, realPath: resolved, dev: stat12.dev, ino: stat12.ino };
@@ -57524,14 +56976,14 @@ async function captureRegistryPathSnapshot(root, registryPath) {
   if (!within(canonicalRoot, parentIdentity.realPath)) {
     throw new Error(`canonical registry parent \u4E0D\u662F root \u5185\u7684\u666E\u901A\u76EE\u5F55: ${templatesPath}`);
   }
-  const parentStat = await lstat42(templatesPath);
+  const parentStat = await lstat41(templatesPath);
   if (!parentStat.isDirectory() || parentStat.isSymbolicLink()) {
     throw new Error(`canonical registry parent \u4E0D\u662F root \u5185\u7684\u666E\u901A\u76EE\u5F55: ${templatesPath}`);
   }
   let registryIdentity = null;
   try {
     registryIdentity = await capturePath(registryPath, "canonical registry");
-    const registryStat = await lstat42(registryPath);
+    const registryStat = await lstat41(registryPath);
     if (!registryStat.isFile() || registryStat.isSymbolicLink()) {
       throw new Error(`canonical registry \u4E0D\u662F root \u5185\u7684\u666E\u901A\u6587\u4EF6: ${registryPath}`);
     }
@@ -57556,7 +57008,7 @@ async function assertRegistrySnapshot(snapshot2, registryPath) {
   await assertPathIdentity(snapshot2.parent, "canonical registry parent");
   if (snapshot2.registry === null) {
     try {
-      await lstat42(registryPath);
+      await lstat41(registryPath);
     } catch (error2) {
       if (error2.code === "ENOENT") return;
       throw error2;
@@ -57566,12 +57018,12 @@ async function assertRegistrySnapshot(snapshot2, registryPath) {
   await assertPathIdentity(snapshot2.registry, "canonical registry");
 }
 async function syncRegistry(root, hooks = {}) {
-  const registryPath = join91(root, "templates", "skill-sources.yaml");
+  const registryPath = join90(root, "templates", "skill-sources.yaml");
   if (!within(root, registryPath)) throw new Error("registry path \u8D8A\u51FA --root");
   const snapshot2 = await captureRegistryPathSnapshot(root, registryPath);
   const sourceText = await readFile42(registryPath, "utf8");
   const entries = parseSyncSources(sourceText);
-  const skillsRoot = join91(root, "skills");
+  const skillsRoot = join90(root, "skills");
   const physicalEntries = await readdir15(skillsRoot, { withFileTypes: true });
   const physicalIds = /* @__PURE__ */ new Set();
   for (const entry of physicalEntries) {
@@ -57595,7 +57047,7 @@ async function syncRegistry(root, hooks = {}) {
     if (declaredIds.has(physical)) throw new Error(`physical bundled Skill '${physical}' \u91CD\u590D\u58F0\u660E`);
     declaredIds.add(physical);
     if (!physicalIds.has(physical)) throw new Error(`registry \u58F0\u660E\u7684 bundled Skill '${physical}' \u4E0D\u5B58\u5728`);
-    const manifest = await buildCanonicalManifest(physical, join91(skillsRoot, physical));
+    const manifest = await buildCanonicalManifest(physical, join90(skillsRoot, physical));
     computed.push({ entry, digest: manifest.treeSha256 });
   }
   for (const physical of physicalIds) {
@@ -57710,13 +57162,13 @@ async function cmdMigrateWorkflow(deps, name2) {
 }
 
 // packages/cli/src/commands/state-projection.ts
-import { lstat as lstat43, readFile as readFile43 } from "node:fs/promises";
-import { isAbsolute as isAbsolute32, join as join92, resolve as resolve39 } from "node:path";
+import { lstat as lstat42, readFile as readFile43 } from "node:fs/promises";
+import { isAbsolute as isAbsolute31, join as join91, resolve as resolve38 } from "node:path";
 function message(error2) {
   return error2 instanceof Error ? error2.message : String(error2);
 }
 async function cmdStateProjection(deps, sub, name2, opts = {}) {
-  const changeDir2 = join92(deps.cwd, "openspec", "changes", name2);
+  const changeDir2 = join91(deps.cwd, "openspec", "changes", name2);
   try {
     switch (sub) {
       case "status": {
@@ -57751,8 +57203,8 @@ async function cmdStateProjection(deps, sub, name2, opts = {}) {
           deps.io.out(opts.json ? JSON.stringify({ status: "already-pinned" }) : `${name2}: workflow snapshot already pinned`);
           return 0;
         }
-        const sourcePath = isAbsolute32(opts.workflowFile) ? opts.workflowFile : resolve39(deps.cwd, opts.workflowFile);
-        const info = await lstat43(sourcePath);
+        const sourcePath = isAbsolute31(opts.workflowFile) ? opts.workflowFile : resolve38(deps.cwd, opts.workflowFile);
+        const info = await lstat42(sourcePath);
         if (!info.isFile() || info.isSymbolicLink()) {
           throw new Error(`workflow file \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${sourcePath}`);
         }
@@ -57782,7 +57234,7 @@ async function cmdStateProjection(deps, sub, name2, opts = {}) {
 
 // packages/cli/src/commands/triage.ts
 import { homedir as homedir16 } from "node:os";
-import { join as join93 } from "node:path";
+import { join as join92 } from "node:path";
 var TRIAGE_SOURCE_KINDS = ["git-commits", "loop-run-terminals"];
 var isTriageSourceKind = (value) => TRIAGE_SOURCE_KINDS.includes(value);
 var TriageCommandInterruptedError = class extends Error {
@@ -57833,7 +57285,7 @@ function createCodexFirstTriageProvider(options) {
   const execute = options.exec ?? nodeCodexTriageExec;
   const hostEnv = options.env ?? process.env;
   const configuredHome = hostEnv.CODEX_HOME?.trim();
-  const codexHome = configuredHome === void 0 || configuredHome === "" ? join93((options.homeDir ?? homedir16)(), ".codex") : configuredHome;
+  const codexHome = configuredHome === void 0 || configuredHome === "" ? join92((options.homeDir ?? homedir16)(), ".codex") : configuredHome;
   return createCodexTriageProvider({
     model: options.model,
     exec: (file, args, execOptions) => execute(file, args, {
@@ -58369,7 +57821,7 @@ function createReleasedDashboardStarter(runtime) {
 var REAL_RELEASED_DASHBOARD_STARTER = createReleasedDashboardStarter(REAL_DASHBOARD_RUNTIME);
 
 // packages/cli/src/commands/setupEnvironment.ts
-import { dirname as dirname23, join as join94, resolve as resolve40, win32 as win326 } from "node:path";
+import { dirname as dirname23, join as join93, resolve as resolve39, win32 as win326 } from "node:path";
 import { randomUUID as randomUUID16 } from "node:crypto";
 import { execFileSync as execFileSync2 } from "node:child_process";
 import {
@@ -58395,7 +57847,7 @@ var REAL_SETUP_ENV = {
     return r !== void 0 && r.trim() !== "" ? r : null;
   },
   selfPath: () => {
-    const candidate = resolve40(process.argv[1] ?? "");
+    const candidate = resolve39(process.argv[1] ?? "");
     try {
       return realpathSync7(candidate);
     } catch {
@@ -58513,7 +57965,7 @@ var REAL_SETUP_ENV = {
   withHostMutationLock: (host, operation) => {
     const homeDir = homedir18();
     const paths = resolveRuntimePaths({ homeDir, env: { ...process.env } });
-    return withLock(join94(paths.stateRoot, "host-mutation", host), operation);
+    return withLock(join93(paths.stateRoot, "host-mutation", host), operation);
   },
   confirm: (question) => {
     process.stdout.write(question);
@@ -58530,7 +57982,7 @@ var REAL_SETUP_ENV = {
 function resolvePipelineRoot(env) {
   const root = env.pluginRoot();
   if (root !== null) return root;
-  return resolve40(dirname23(env.selfPath()), "..", "..", "..");
+  return resolve39(dirname23(env.selfPath()), "..", "..", "..");
 }
 function printPlanSkeleton(deps, opts, host) {
   deps.io.out(`[setup] ${hostFlag(host)} \u5168\u529F\u80FD\u5C31\u7EEA\u5F15\u5BFC \u2014\u2014 \u8BA1\u5212\u9AA8\u67B6`);
@@ -58546,7 +57998,7 @@ function printPlanSkeleton(deps, opts, host) {
   if (opts.dryRun) deps.io.out("  \uFF08--dry-run:\u4EC5\u6253\u5370\u8BA1\u5212,\u4E0D\u53D1\u5E03 runtime\u3001\u4E0D\u5199\u4EFB\u4F55\u6587\u4EF6\uFF09");
 }
 function autoUpdateConfigPath(env) {
-  return join94(resolveRuntimePaths({
+  return join93(resolveRuntimePaths({
     homeDir: env.homeDir(),
     env: env.runtimeEnv()
   }).configRoot, "auto-update.conf");
@@ -58622,7 +58074,7 @@ function scrubLegacyCodexAdapterHooks(content) {
 `, removed };
 }
 function migrateLegacyCodexHooks(deps, env) {
-  const configPath = join94(env.homeDir(), ".codex", "hooks.json");
+  const configPath = join93(env.homeDir(), ".codex", "hooks.json");
   if (!env.pathExists(configPath)) return 0;
   const current = env.readText(configPath);
   if (current === void 0) {
@@ -58642,10 +58094,10 @@ function migrateLegacyCodexHooks(deps, env) {
 }
 
 // packages/cli/src/commands/setupHost.ts
-import { join as join101 } from "node:path";
+import { join as join100 } from "node:path";
 
 // packages/cli/src/commands/release-dashboard-coordinator.ts
-import { join as join95 } from "node:path";
+import { join as join94 } from "node:path";
 async function coordinateReleaseDashboard(deps, transaction, initialJournal, activation, openBrowser2, dashboardPort, starter, trustedNodePath, verifyTrustedNode) {
   let journal = initialJournal;
   if (journal.dashboardPort !== void 0 && journal.dashboardPort !== dashboardPort) {
@@ -58880,7 +58332,7 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
       startedNewDashboard = true;
       dashboardOutcome = await starter.start(
         deps,
-        join95(activation.releaseRoot, "payload"),
+        join94(activation.releaseRoot, "payload"),
         {
           openBrowser: openBrowser2,
           port: dashboardPort,
@@ -58938,11 +58390,11 @@ async function coordinateReleaseDashboard(deps, transaction, initialJournal, act
 }
 
 // packages/cli/src/commands/dashboard-restore.ts
-import { dirname as dirname24, join as join96 } from "node:path";
+import { dirname as dirname24, join as join95 } from "node:path";
 async function restorePreviousReleasedDashboard(deps, activation, starter, dashboardPort, restoreTransactionId, trustedNodePath, verifyTrustedNode) {
   const previousRelease = activation.selection.previousRelease;
   if (previousRelease === null) return { state: "not-required" };
-  const payloadRoot = join96(dirname24(activation.releaseRoot), previousRelease, "payload");
+  const payloadRoot = join95(dirname24(activation.releaseRoot), previousRelease, "payload");
   const outcome = await starter.start(deps, payloadRoot, {
     openBrowser: false,
     port: dashboardPort,
@@ -59998,7 +59450,7 @@ async function publishSetupManagedRuntime(deps, env, installer, prepareCandidate
 // packages/cli/src/migration/legacy-project-registry.ts
 import { statSync as statSync8 } from "node:fs";
 import { mkdir as mkdir32, readFile as readFile44 } from "node:fs/promises";
-import { isAbsolute as isAbsolute33, join as join97, posix as posix7, resolve as resolve41, win32 as win327 } from "node:path";
+import { isAbsolute as isAbsolute32, join as join96, posix as posix7, resolve as resolve40, win32 as win327 } from "node:path";
 var MAX_LEGACY_REGISTRY_BYTES = 1048576;
 var MIGRATION_ID = "host-project-registry-v1";
 function resolveHostProjectRegistryCandidates(input) {
@@ -60062,13 +59514,13 @@ async function readPendingMigration(path9) {
     throw new Error(`host project registry migration pending snapshot \u975E\u6CD5\uFF1A${path9}`);
   }
   const record8 = value;
-  if (record8.version !== 1 || record8.migration !== MIGRATION_ID || !Array.isArray(record8.roots) || !record8.roots.every((root) => typeof root === "string" && isAbsolute33(root)) || new Set(record8.roots).size !== record8.roots.length || !nonNegativeInteger(record8.rejected)) {
+  if (record8.version !== 1 || record8.migration !== MIGRATION_ID || !Array.isArray(record8.roots) || !record8.roots.every((root) => typeof root === "string" && isAbsolute32(root)) || new Set(record8.roots).size !== record8.roots.length || !nonNegativeInteger(record8.rejected)) {
     throw new Error(`host project registry migration pending snapshot \u975E\u6CD5\uFF1A${path9}`);
   }
   return {
     version: 1,
     migration: MIGRATION_ID,
-    roots: record8.roots.map((root) => resolve41(root)),
+    roots: record8.roots.map((root) => resolve40(root)),
     rejected: record8.rejected
   };
 }
@@ -60078,9 +59530,9 @@ async function migrateLegacyProjectRegistry(input) {
     ...input.platform === void 0 ? {} : { platform: input.platform },
     env: input.env
   });
-  const migrationRoot = join97(productPaths.migrationsRoot, MIGRATION_ID);
-  const receiptPath = join97(migrationRoot, "receipt.json");
-  const pendingPath = join97(migrationRoot, "pending.json");
+  const migrationRoot = join96(productPaths.migrationsRoot, MIGRATION_ID);
+  const receiptPath = join96(migrationRoot, "receipt.json");
+  const pendingPath = join96(migrationRoot, "pending.json");
   await mkdir32(migrationRoot, { recursive: true });
   return withLock(migrationRoot, async () => {
     if (await readMigrationReceipt(receiptPath) !== null) {
@@ -60130,11 +59582,11 @@ async function migrateLegacyProjectRegistry(input) {
               return false;
             }
           })());
-          if (typeof item2 !== "string" || !isAbsolute33(item2) || !input.pathExists(item2) || !isDirectory) {
+          if (typeof item2 !== "string" || !isAbsolute32(item2) || !input.pathExists(item2) || !isDirectory) {
             rejected += 1;
             continue;
           }
-          discovered.add(resolve41(item2));
+          discovered.add(resolve40(item2));
         }
       }
       pending = {
@@ -60172,7 +59624,7 @@ async function migrateLegacyProjectRegistry(input) {
 }
 
 // packages/cli/src/commands/host-plugin-convergence.ts
-import { join as join99 } from "node:path";
+import { join as join98 } from "node:path";
 
 // packages/cli/src/commands/native-runtime-installer-scope.ts
 function nativeRuntimeInstallerScope(env) {
@@ -60209,12 +59661,12 @@ function nativeCandidateValidationOptions(env) {
 }
 
 // packages/cli/src/commands/host-plugin-convergence-receipt.ts
-import { dirname as dirname25, isAbsolute as isAbsolute34, join as join98, normalize as normalize4 } from "node:path";
+import { dirname as dirname25, isAbsolute as isAbsolute33, join as join97, normalize as normalize4 } from "node:path";
 function hostPluginConvergencePaths(env, host) {
   const paths = resolveRuntimePaths({ homeDir: env.homeDir(), env: env.runtimeEnv() });
   return {
-    receiptPath: join98(paths.migrationsRoot, "host-plugin-convergence", `${host}.json`),
-    sessionProofPath: join98(paths.stateRoot, "migration", "tenon-session-loaded")
+    receiptPath: join97(paths.migrationsRoot, "host-plugin-convergence", `${host}.json`),
+    sessionProofPath: join97(paths.stateRoot, "migration", "tenon-session-loaded")
   };
 }
 function isReleaseId(value) {
@@ -60237,7 +59689,7 @@ function parseReceipt3(raw, host) {
   const receiptVersion = Reflect.get(value, "version");
   if (receiptVersion !== 2 && receiptVersion !== 3 && receiptVersion !== 4 || receipt.state !== "cleanup-pending" && receipt.state !== "completed" || receipt.host !== host || receipt.conflictPluginId !== LEGACY_PLUGIN_IDENTITY || !Array.isArray(receipt.conflictScopes) || receipt.state === "cleanup-pending" && receipt.conflictScopes.length === 0 || receipt.conflictScopes.some(
     (scope) => scope !== "user" && scope !== "project" && scope !== "local" && scope !== "managed"
-  ) || new Set(receipt.conflictScopes).size !== receipt.conflictScopes.length || !isReleaseId(receipt.releaseId) || typeof receipt.releaseRoot !== "string" || !isAbsolute34(receipt.releaseRoot) || normalize4(receipt.releaseRoot) !== receipt.releaseRoot || typeof receipt.candidateRoot !== "string" || !isAbsolute34(receipt.candidateRoot) || normalize4(receipt.candidateRoot) !== receipt.candidateRoot || typeof receipt.createdAtEpoch !== "number" || !Number.isSafeInteger(receipt.createdAtEpoch) || receipt.createdAtEpoch < 0 || typeof receipt.updatedAt !== "string" || receipt.updatedAt === "") return null;
+  ) || new Set(receipt.conflictScopes).size !== receipt.conflictScopes.length || !isReleaseId(receipt.releaseId) || typeof receipt.releaseRoot !== "string" || !isAbsolute33(receipt.releaseRoot) || normalize4(receipt.releaseRoot) !== receipt.releaseRoot || typeof receipt.candidateRoot !== "string" || !isAbsolute33(receipt.candidateRoot) || normalize4(receipt.candidateRoot) !== receipt.candidateRoot || typeof receipt.createdAtEpoch !== "number" || !Number.isSafeInteger(receipt.createdAtEpoch) || receipt.createdAtEpoch < 0 || typeof receipt.updatedAt !== "string" || receipt.updatedAt === "") return null;
   const transactionId = Reflect.get(value, "transactionId");
   const stableTarget = parseStableTarget(Reflect.get(value, "stableTarget"));
   if ((receiptVersion === 3 || receiptVersion === 4) && (typeof transactionId !== "string" || !/^[a-zA-Z0-9_-]+$/.test(transactionId))) return null;
@@ -60304,7 +59756,7 @@ function recordPendingHostPluginConflict(deps, env, host, inventory, activation,
   if (!inventory.enabledIds.has(LEGACY_PLUGIN_IDENTITY)) {
     if (existing.state === "none") return true;
     const previous = existing.receipt;
-    const sameRelease = previous.releaseId === activation.release.releaseId && previous.releaseRoot === join99(activation.releaseRoot, "payload") && previous.candidateRoot === candidateRoot;
+    const sameRelease = previous.releaseId === activation.release.releaseId && previous.releaseRoot === join98(activation.releaseRoot, "payload") && previous.candidateRoot === candidateRoot;
     const newerRelease = previous.stableTarget === void 0 || compareStableVersions(stableTarget.version, previous.stableTarget.version) > 0;
     if (!sameRelease && !newerRelease) {
       deps.io.err("ERROR: \u5DF2\u7F3A\u5E2D\u7684 legacy plugin \u5BF9\u5E94\u53E6\u4E00\u4E2A\u672A\u88AB\u5F53\u524D\u7A33\u5B9A\u7248\u672C\u8D85\u8D8A\u7684 receipt\uFF1B\u62D2\u7EDD\u8986\u76D6\u3002");
@@ -60324,7 +59776,7 @@ function recordPendingHostPluginConflict(deps, env, host, inventory, activation,
       conflictPluginId: LEGACY_PLUGIN_IDENTITY,
       conflictScopes: [],
       releaseId: activation.release.releaseId,
-      releaseRoot: join99(activation.releaseRoot, "payload"),
+      releaseRoot: join98(activation.releaseRoot, "payload"),
       candidateRoot,
       stableTarget,
       createdAtEpoch: createdAtEpoch2,
@@ -60336,7 +59788,7 @@ function recordPendingHostPluginConflict(deps, env, host, inventory, activation,
   }
   if (existing.state === "receipt") {
     const receipt2 = existing.receipt;
-    const sameRelease = receipt2.releaseId === activation.release.releaseId && receipt2.releaseRoot === join99(activation.releaseRoot, "payload") && receipt2.candidateRoot === candidateRoot && (receipt2.stableTarget === void 0 || receipt2.stableTarget.version === stableTarget.version && receipt2.stableTarget.tag === stableTarget.tag && receipt2.stableTarget.commit === stableTarget.commit);
+    const sameRelease = receipt2.releaseId === activation.release.releaseId && receipt2.releaseRoot === join98(activation.releaseRoot, "payload") && receipt2.candidateRoot === candidateRoot && (receipt2.stableTarget === void 0 || receipt2.stableTarget.version === stableTarget.version && receipt2.stableTarget.tag === stableTarget.tag && receipt2.stableTarget.commit === stableTarget.commit);
     if (receipt2.transactionId === transactionId && !sameRelease) {
       deps.io.err("ERROR: \u540C\u4E00 transaction id \u7684\u6536\u655B receipt \u4E0E\u5F53\u524D activation \u4E0D\u4E00\u81F4\u3002");
       return false;
@@ -60376,7 +59828,7 @@ function recordPendingHostPluginConflict(deps, env, host, inventory, activation,
     conflictPluginId: LEGACY_PLUGIN_IDENTITY,
     conflictScopes,
     releaseId: activation.release.releaseId,
-    releaseRoot: join99(activation.releaseRoot, "payload"),
+    releaseRoot: join98(activation.releaseRoot, "payload"),
     candidateRoot,
     stableTarget,
     createdAtEpoch,
@@ -60480,14 +59932,14 @@ async function finalizePendingHostPluginConflictWithinTransaction(deps, env, ins
 }
 
 // packages/cli/src/commands/packaged-assets.ts
-import { join as join100 } from "node:path";
+import { join as join99 } from "node:path";
 function verifyPackagedAssets(deps, env, root, dryRun, silent = false) {
   const provenance = provenanceVerifierBinding(env);
   const nodePath = provenance.nodePath || "<unavailable>";
-  const command2 = [join100(root, "tools", "verify-skills.sh"), "--quiet", "--root", root, "--node", nodePath];
+  const command2 = [join99(root, "tools", "verify-skills.sh"), "--quiet", "--root", root, "--node", nodePath];
   if (!silent) deps.io.out(`[setup] \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C: bash ${command2.join(" ")}`);
   if (dryRun) return 0;
-  if (!env.pathExists(join100(root, "runtime", "tenon-bootstrap.mjs"))) {
+  if (!env.pathExists(join99(root, "runtime", "tenon-bootstrap.mjs"))) {
     if (!silent) deps.io.err("ERROR: \u63D2\u4EF6\u8D44\u4EA7\u6821\u9A8C\u5931\u8D25\uFF1A\u7F3A\u5C11 runtime/tenon-bootstrap.mjs\uFF08\u8BE5 marketplace release \u4E0D\u662F\u5B8C\u6574\u53EF\u5B89\u88C5\u5305\uFF09");
     return 1;
   }
@@ -61083,7 +60535,7 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
       openDashboard
     ).then((runtimeCode) => {
       if (runtimeCode !== 0) return runtimeCode;
-      const adapter2 = join101(root, "adapters", "install.sh");
+      const adapter2 = join100(root, "adapters", "install.sh");
       const args = [adapter2, hostFlag(host), "--target", opts.target ?? deps.cwd, "--yes"];
       deps.io.out(`[setup] $ bash ${args.join(" ")}`);
       const result = env.runCommand("bash", args);
@@ -61098,10 +60550,10 @@ function cmdSetupHost(deps, host, opts, env = REAL_SETUP_ENV, installer = REAL_R
 }
 
 // packages/cli/src/commands/setupSkills.ts
-import { join as join103, resolve as resolve44 } from "node:path";
+import { join as join102, resolve as resolve43 } from "node:path";
 
 // packages/cli/src/commands/setupSkillsPlan.ts
-import { join as join102 } from "node:path";
+import { join as join101 } from "node:path";
 var REGISTERED_MARKETPLACES = /* @__PURE__ */ new Set(["claude-plugins-official"]);
 var TIER_RANK = { mandatory: 3, recommended: 2, conditional: 1, optional: 0 };
 var higherTier = (a, b) => TIER_RANK[a] >= TIER_RANK[b] ? a : b;
@@ -61110,26 +60562,26 @@ function marketplaceRepo(source) {
 }
 function skillInstalled(env, name2) {
   const home = env.homeDir();
-  if (env.pathExists(join102(home, ".codex", "skills", name2))) return true;
-  if (env.pathExists(join102(home, ".claude", "skills", name2))) return true;
-  if (env.pathExists(join102(home, ".agents", "skills", name2))) return true;
-  const cache2 = join102(home, ".claude", "plugins", "cache");
+  if (env.pathExists(join101(home, ".codex", "skills", name2))) return true;
+  if (env.pathExists(join101(home, ".claude", "skills", name2))) return true;
+  if (env.pathExists(join101(home, ".agents", "skills", name2))) return true;
+  const cache2 = join101(home, ".claude", "plugins", "cache");
   for (const marketplace of env.listDir(cache2)) {
-    if (env.pathExists(join102(cache2, marketplace, name2))) return true;
+    if (env.pathExists(join101(cache2, marketplace, name2))) return true;
   }
   return false;
 }
 function pluginInstalled(env, runner, source, id2) {
   const base = runner === "codex" ? ".codex" : ".claude";
-  return env.pathExists(join102(env.homeDir(), base, "plugins", "cache", source, id2));
+  return env.pathExists(join101(env.homeDir(), base, "plugins", "cache", source, id2));
 }
 function marketplaceInstalled(env, runner, source) {
   if (REGISTERED_MARKETPLACES.has(source)) return true;
   const home = env.homeDir();
   if (runner === "codex") {
-    return env.pathExists(join102(home, ".codex", ".tmp", "marketplaces", source)) || env.pathExists(join102(home, ".codex", "plugins", "cache", source));
+    return env.pathExists(join101(home, ".codex", ".tmp", "marketplaces", source)) || env.pathExists(join101(home, ".codex", "plugins", "cache", source));
   }
-  return env.pathExists(join102(home, ".claude", "plugins", "marketplaces", source)) || env.pathExists(join102(home, ".claude", "plugins", "cache", source));
+  return env.pathExists(join101(home, ".claude", "plugins", "marketplaces", source)) || env.pathExists(join101(home, ".claude", "plugins", "cache", source));
 }
 function cmdStr(c) {
   return [c.cmd, ...c.args].join(" ");
@@ -61434,7 +60886,7 @@ function verifyRealPluginRootBeforePlanning(deps, env) {
   const provenance = provenanceVerifierBinding(env);
   const nodePath = provenance.nodePath || "<unavailable>";
   const result = provenance.run([
-    join103(root, "tools", "verify-skills.sh"),
+    join102(root, "tools", "verify-skills.sh"),
     "--quiet",
     "--root",
     root,
@@ -61454,7 +60906,7 @@ ${output}`)
   return 0;
 }
 function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources, loadSources = loadCanonicalSkillSources) {
-  const selfPath = resolve44(env.selfPath());
+  const selfPath = resolve43(env.selfPath());
   const isBundledCli = /(?:^|[\\/])packages[\\/]cli[\\/]dist[\\/]tenon\.mjs$/u.test(selfPath);
   const isProductionEnv = env === REAL_SETUP_ENV || env.runTrustedLifecycleCommand !== void 0;
   const productionCanonicalSetup = sources === void 0 && loadSources === loadCanonicalSkillSources && isProductionEnv && isBundledCli;
@@ -61466,7 +60918,7 @@ function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources, loadSources =
   if (sources !== void 0) {
     list = sources;
   } else {
-    const loaded = productionCanonicalSetup ? loadCanonicalSkillSources(join103(env.pluginRoot() ?? resolvePipelineRoot(env), "templates", "skill-sources.yaml")) : loadSources();
+    const loaded = productionCanonicalSetup ? loadCanonicalSkillSources(join102(env.pluginRoot() ?? resolvePipelineRoot(env), "templates", "skill-sources.yaml")) : loadSources();
     if (!loaded.ok) {
       deps.io.err(
         `ERROR: \u6280\u80FD registry \u672A\u5C31\u7EEA\uFF08${loaded.error}\uFF09\u2014\u2014\u65E0\u6CD5\u751F\u6210\u5B89\u88C5\u8BA1\u5212\uFF0C\u8BF7\u4FEE\u590D templates/skill-sources.yaml \u540E\u91CD\u8BD5 tenon setup skills\u3002`
@@ -61496,12 +60948,12 @@ function cmdSetupSkills(deps, opts, env = REAL_SETUP_ENV, sources, loadSources =
 }
 
 // packages/cli/src/commands/setupRuntime.ts
-import { join as join105 } from "node:path";
+import { join as join104 } from "node:path";
 
 // packages/cli/src/afkReadiness.ts
 import { execFile as execFile4 } from "node:child_process";
 import { accessSync as accessSync5, constants as fsConstants5, statSync as statSync9 } from "node:fs";
-import { join as join104 } from "node:path";
+import { join as join103 } from "node:path";
 var nodeExecDocker = (args) => new Promise((resolve46) => {
   execFile4("docker", [...args], (err, stdout, stderr) => {
     const code = err?.code;
@@ -61559,7 +61011,7 @@ async function probeAfkReadiness(opts) {
         CODEX_HOME: codexHomeCredentialLight(
           hostEnv.CODEX_HOME,
           opts.defaultCodexHome,
-          (home) => (opts.canReadFile ?? canReadFile)(join104(home, "auth.json"))
+          (home) => (opts.canReadFile ?? canReadFile)(join103(home, "auth.json"))
         )
       }
     }
@@ -61571,7 +61023,7 @@ import { homedir as homedir19 } from "node:os";
 var REAL_RUNTIME_ENV = {
   exec: nodeExecDocker,
   hostEnv: process.env,
-  defaultCodexHome: join105(homedir19(), ".codex"),
+  defaultCodexHome: join104(homedir19(), ".codex"),
   resolveImage: (cwd) => readAutomationJson(cwd).image ?? "sandcastle:local"
 };
 var READY_TAG = "[\u5C31\u7EEA]";
@@ -61721,7 +61173,7 @@ function cmdSetup(deps, sub, opts, env = REAL_SETUP_ENV, rt = REAL_RUNTIME_ENV, 
 }
 
 // packages/cli/src/commands/update-native.ts
-import { join as join108 } from "node:path";
+import { join as join107 } from "node:path";
 
 // packages/cli/src/commands/update-boundary-report.ts
 function boundaryDetail(hostState, managedState, detail) {
@@ -61740,12 +61192,12 @@ function reportHostBoundary(deps, host, state) {
 }
 
 // packages/cli/src/commands/update-candidate-verification.ts
-import { join as join106 } from "node:path";
+import { join as join105 } from "node:path";
 function verifyUpdatedRoot(deps, env, root, targetVersion) {
   const provenance = provenanceVerifierBinding(env);
   const nodePath = provenance.nodePath || "<unavailable>";
   const result = provenance.run([
-    join106(root, "tools", "verify-skills.sh"),
+    join105(root, "tools", "verify-skills.sh"),
     "--quiet",
     "--root",
     root,
@@ -61754,8 +61206,8 @@ function verifyUpdatedRoot(deps, env, root, targetVersion) {
   ]);
   if (result.code === 0) {
     const decoded = decodePluginManifestVersion({
-      codex: env.readText(join106(root, ".codex-plugin", "plugin.json")),
-      claude: env.readText(join106(root, ".claude-plugin", "plugin.json"))
+      codex: env.readText(join105(root, ".codex-plugin", "plugin.json")),
+      claude: env.readText(join105(root, ".claude-plugin", "plugin.json"))
     });
     if (decoded.ok && (targetVersion === void 0 || decoded.version === targetVersion)) return true;
     const actual = decoded.ok ? decoded.version : decoded.detail;
@@ -61775,7 +61227,7 @@ async function rejectUpdate(deps, installer, env, detail) {
 }
 
 // packages/cli/src/commands/update-project-report.ts
-import { isAbsolute as isAbsolute35, join as join107 } from "node:path";
+import { isAbsolute as isAbsolute34, join as join106 } from "node:path";
 function shellQuote3(value) {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
@@ -61800,11 +61252,11 @@ function reportRegisteredProjects(deps, env, pluginVersion) {
   }
   if (!Array.isArray(roots)) return;
   const registeredRoots = [...new Set(
-    roots.filter((root) => typeof root === "string" && isAbsolute35(root))
+    roots.filter((root) => typeof root === "string" && isAbsolute34(root))
   )];
   const outdated = registeredRoots.filter((root) => {
     try {
-      return env.readText(join107(root, ".pipeline-version"))?.trim() !== pluginVersion;
+      return env.readText(join106(root, ".pipeline-version"))?.trim() !== pluginVersion;
     } catch {
       return true;
     }
@@ -62019,7 +61471,7 @@ async function runNativeUpdate(input) {
               const currentActivation = {
                 selection: runtime.selection,
                 release: active,
-                releaseRoot: join108(runtimePaths.releasesRoot, active.releaseId),
+                releaseRoot: join107(runtimePaths.releasesRoot, active.releaseId),
                 launcherCommitted: expectedStableLaunchers(
                   runtimePaths,
                   env.homeDir(),
@@ -62599,7 +62051,7 @@ async function cmdHandoff(deps, name2, opts, fs = void 0, localeResolver = resol
 }
 
 // packages/cli/src/commands/workflow-plan.ts
-function scalar17(value) {
+function scalar15(value) {
   return Array.isArray(value) ? value.join(",") : value ?? "";
 }
 function renderHuman(deps, name2, state, plan) {
@@ -62607,7 +62059,7 @@ function renderHuman(deps, name2, state, plan) {
   deps.io.out(`change   ${name2}`);
   deps.io.out(`workflow ${plan.id}`);
   deps.io.out(`source   ${source}`);
-  deps.io.out(`current  ${scalar17(state.fields.phase)}`);
+  deps.io.out(`current  ${scalar15(state.fields.phase)}`);
   for (const [index, step] of plan.workflow.steps.entries()) {
     const skills = step.skills.map((skill) => skill.id).join(", ") || "-";
     deps.io.out(`${String(index + 1).padStart(2, "0")} ${step.id} | ${step.label} | skills: ${skills}`);
@@ -62633,7 +62085,7 @@ async function cmdWorkflowPlan(deps, name2, opts) {
     return 1;
   }
   if (plan === null) {
-    deps.io.err(`ERROR: workflow '${scalar17(state.fields.workflow)}' \u672A\u627E\u5230`);
+    deps.io.err(`ERROR: workflow '${scalar15(state.fields.workflow)}' \u672A\u627E\u5230`);
     return 1;
   }
   const source = state.runMetadata?.workflowPlanSnapshot === void 0 ? "current-definition" : "frozen-snapshot";
@@ -62641,7 +62093,7 @@ async function cmdWorkflowPlan(deps, name2, opts) {
     deps.io.out(JSON.stringify({
       change: name2,
       source,
-      current_step: scalar17(state.fields.phase),
+      current_step: scalar15(state.fields.phase),
       plan
     }));
   } else {
@@ -62842,8 +62294,188 @@ function registerSkillInvocationInternalCommands(program2, deps) {
   program2.command("internal-host-interaction <changeName> <payloadPath>").description("[\u5185\u90E8] \u5C06 native host \u7684\u7ED3\u6784\u5316\u95EE\u7B54\u7ED1\u5B9A\u5230\u540C session \u7684 canonical active invocation").action(async (changeName, payloadPath) => bail(await cmdInternalHostInteraction(deps, changeName, payloadPath)));
 }
 
+// packages/cli/src/commands/interaction.ts
+import { lstat as lstat43 } from "node:fs/promises";
+import { isAbsolute as isAbsolute35, join as join108, relative as relative24, resolve as resolve45 } from "node:path";
+var MAX_FIXTURE_BYTES = 1024 * 1024;
+var MAX_EVENT_FILE_BYTES = 1024 * 1024;
+var MAX_FIXTURES = 256;
+var SAFE_RELATIVE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/;
+var SAFE_FIXTURE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+function object4(value, label) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`${label} invalid`);
+  return value;
+}
+function stringValue3(value, label) {
+  if (typeof value !== "string" || value.length === 0) throw new Error(`${label} invalid`);
+  return value;
+}
+function arrayValue(value, label) {
+  if (!Array.isArray(value)) throw new Error(`${label} invalid`);
+  return value;
+}
+function exactKeys5(value, expected, label) {
+  const keys = Object.keys(value).sort();
+  const allowed = [...expected].sort();
+  if (keys.length !== allowed.length || keys.some((key, index) => key !== allowed[index])) {
+    throw new Error(`${label} fields invalid`);
+  }
+}
+function exactDimension(value, expected, label) {
+  const values = arrayValue(value, label);
+  if (!values.every((item2) => typeof item2 === "string") || values.length !== expected.length || values.some((item2, index) => item2 !== expected[index]) || new Set(values).size !== values.length) {
+    throw new Error(`${label} matrix invalid`);
+  }
+  return values;
+}
+async function readRegularJson(path9, maxBytes, label) {
+  let entry;
+  try {
+    entry = await lstat43(path9);
+  } catch {
+    throw new Error(`${label} unavailable`);
+  }
+  if (entry.isSymbolicLink() || !entry.isFile() || entry.size > maxBytes) throw new Error(`${label} unavailable`);
+  let content;
+  try {
+    content = await readBoundedRegularFile(path9, maxBytes, label);
+  } catch {
+    throw new Error(`${label} invalid`);
+  }
+  try {
+    return JSON.parse(decodeUtf8Text(content, label));
+  } catch {
+    throw new Error(`${label} invalid`);
+  }
+}
+function assertFixturePath(root, file) {
+  if (isAbsolute35(file) || file.includes("\\") || !SAFE_RELATIVE.test(file)) {
+    throw new Error("fixture file path invalid");
+  }
+  const target = resolve45(root, file);
+  const rootRelative = relative24(resolve45(root), target);
+  if (rootRelative.startsWith("..") || isAbsolute35(rootRelative)) throw new Error("fixture file path invalid");
+  return target;
+}
+function parseManifest2(value) {
+  const raw = object4(value, "manifest");
+  exactKeys5(raw, ["schema", "dimensions", "fixtures"], "manifest");
+  if (raw.schema !== INTERACTION_EVENT_SCHEMA) throw new Error("manifest schema invalid");
+  const dimensions = object4(raw.dimensions, "manifest dimensions");
+  const dimensionsKeys = ["executionMode", "workflowMode", "trackKind", "pipelineStage", "controlStage", "surface"];
+  exactKeys5(dimensions, dimensionsKeys, "manifest dimensions");
+  const executionMode = exactDimension(dimensions.executionMode, INTERACTION_EXECUTION_MODES, "manifest dimensions.executionMode");
+  const workflowMode2 = exactDimension(dimensions.workflowMode, INTERACTION_WORKFLOW_MODES, "manifest dimensions.workflowMode");
+  const trackKind3 = exactDimension(dimensions.trackKind, INTERACTION_TRACK_KINDS, "manifest dimensions.trackKind");
+  const pipelineStage3 = exactDimension(dimensions.pipelineStage, INTERACTION_PIPELINE_STAGES, "manifest dimensions.pipelineStage");
+  const controlStage = exactDimension(dimensions.controlStage, INTERACTION_CONTROL_STAGES, "manifest dimensions.controlStage");
+  const surface = exactDimension(dimensions.surface, INTERACTION_SURFACES, "manifest dimensions.surface");
+  const fixtures = arrayValue(raw.fixtures, "manifest fixtures");
+  if (fixtures.length > MAX_FIXTURES) throw new Error("manifest fixtures limit exceeded");
+  const ids2 = /* @__PURE__ */ new Set();
+  const files = /* @__PURE__ */ new Set();
+  return {
+    schema: INTERACTION_EVENT_SCHEMA,
+    dimensions: {
+      executionMode,
+      workflowMode: workflowMode2,
+      trackKind: trackKind3,
+      pipelineStage: pipelineStage3,
+      controlStage,
+      surface
+    },
+    fixtures: fixtures.map((entry) => {
+      const item2 = object4(entry, "manifest fixture");
+      exactKeys5(item2, ["id", "mode", "file", "expected"], "manifest fixture");
+      const expected = object4(item2.expected, "manifest expected");
+      exactKeys5(expected, ["valid", "diagnostics"], "manifest expected");
+      const diagnostics = arrayValue(expected.diagnostics, "manifest expected diagnostics").map((code) => stringValue3(code, "diagnostic"));
+      if (diagnostics.some((code) => !INTERACTION_DIAGNOSTICS.includes(code))) {
+        throw new Error("manifest diagnostic invalid");
+      }
+      if (typeof expected.valid !== "boolean") throw new Error("manifest expected.valid invalid");
+      const mode = item2.mode;
+      if (mode !== "measurement" && mode !== "negative-control") throw new Error("manifest fixture mode invalid");
+      const id2 = stringValue3(item2.id, "fixture id");
+      if (!SAFE_FIXTURE_ID.test(id2)) throw new Error("manifest fixture id invalid");
+      const file = stringValue3(item2.file, "fixture file");
+      if (ids2.has(id2) || files.has(file)) throw new Error("manifest fixture duplicate");
+      ids2.add(id2);
+      files.add(file);
+      return {
+        id: id2,
+        mode,
+        file,
+        expected: { valid: expected.valid, diagnostics }
+      };
+    })
+  };
+}
+async function readFixture(root, entry) {
+  const value = await readRegularJson(assertFixturePath(root, entry.file), MAX_EVENT_FILE_BYTES, "fixture");
+  const raw = object4(value, "fixture");
+  exactKeys5(raw, ["schema", "fixture_id", "events"], "fixture");
+  if (raw.schema !== INTERACTION_EVENT_SCHEMA || raw.fixture_id !== entry.id) throw new Error("fixture schema invalid");
+  const events = arrayValue(raw.events, "fixture events").map((event) => {
+    try {
+      return decodeInteractionEvent(event);
+    } catch (error2) {
+      if (error2 instanceof InteractionEventSchemaError) throw new Error("event-schema-invalid");
+      throw new Error("fixture event invalid");
+    }
+  });
+  return { id: entry.id, mode: entry.mode, events, expected: entry.expected };
+}
+async function cmdInteraction(deps, sub, args, opts = {}) {
+  if (sub !== "scorecard" || args.length !== 1 || opts.json !== true) {
+    deps.io.err("ERROR: \u7528\u6CD5\uFF1Atenon interaction scorecard <fixture-dir> --json");
+    return 1;
+  }
+  try {
+    const fixtureDir = args[0];
+    if (fixtureDir === void 0) throw new Error("fixture directory unavailable");
+    let directory;
+    try {
+      directory = await lstat43(fixtureDir);
+    } catch {
+      throw new Error("fixture directory unavailable");
+    }
+    if (directory.isSymbolicLink() || !directory.isDirectory()) throw new Error("fixture directory unavailable");
+    const manifest = parseManifest2(await readRegularJson(join108(fixtureDir, "manifest.json"), MAX_FIXTURE_BYTES, "manifest"));
+    const orderedEntries = [...manifest.fixtures].sort((left, right) => left.id.localeCompare(right.id));
+    const physicalFiles = /* @__PURE__ */ new Set();
+    for (const entry of orderedEntries) {
+      const target = assertFixturePath(fixtureDir, entry.file);
+      let info;
+      try {
+        info = await lstat43(target);
+      } catch {
+        throw new Error("fixture unavailable");
+      }
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error("fixture unavailable");
+      const identity2 = `${info.dev}:${info.ino}`;
+      if (physicalFiles.has(identity2)) throw new Error("manifest fixture duplicate");
+      physicalFiles.add(identity2);
+    }
+    const inputs2 = await Promise.all(orderedEntries.map((entry) => readFixture(fixtureDir, entry)));
+    const scorecard = computeInteractionScorecard(inputs2);
+    for (const [index, entry] of orderedEntries.entries()) {
+      const observed = scorecard.fixtures[index];
+      const expected = entry.expected;
+      if (observed === void 0 || observed.valid !== expected.valid || observed.diagnostics.join(",") !== [...expected.diagnostics].sort().join(",")) {
+        throw new Error("fixture expected diagnostics mismatch");
+      }
+    }
+    deps.io.out(JSON.stringify(scorecard));
+    return 0;
+  } catch (error2) {
+    deps.io.err(`ERROR: interaction scorecard unavailable (${errMsg(error2)})`);
+    return 1;
+  }
+}
+
 // packages/cli/src/commands/review-attempt.ts
-function scalar18(state, field3) {
+function scalar16(state, field3) {
   const value = state.fields[field3];
   return Array.isArray(value) ? value.join(",") : value ?? "";
 }
@@ -62854,12 +62486,12 @@ async function context(deps, name2) {
   const dir = changeDir(deps.cwd, name2);
   const state = await deps.store.read(dir);
   const plan = effectiveWorkflowForState(deps, state);
-  if (plan === null) throw new Error(`workflow '${scalar18(state, "workflow")}' \u672A\u627E\u5230\u6216\u4E0D\u53EF\u7F16\u8BD1`);
+  if (plan === null) throw new Error(`workflow '${scalar16(state, "workflow")}' \u672A\u627E\u5230\u6216\u4E0D\u53EF\u7F16\u8BD1`);
   const runId = state.runMetadata?.runId;
   if (runId === void 0 || runId === "") {
     throw new Error("\u5F53\u524D Pipeline \u7F3A\u5C11 durable run identity\uFF1B\u8BF7\u5148\u8FD0\u884C\u53D7\u652F\u6301\u7684\u72B6\u6001\u8FC1\u79FB\u5B8C\u6210\u5347\u7EA7");
   }
-  const scope = scalar18(state, "phase");
+  const scope = scalar16(state, "phase");
   if (scope === "") throw new Error("\u5F53\u524D Pipeline step \u4E3A\u7A7A\uFF0C\u65E0\u6CD5\u7ED1\u5B9A Review scope");
   const requiredLanes = plan.capabilities.review.laneScopes.find((entry) => entry.stepId === scope)?.lanes ?? [];
   const candidateFingerprint = await frozenReviewCandidate(deps, name2, state, plan, scope);
@@ -63020,7 +62652,380 @@ async function cmdReviewBudget(deps, sub, name2, opts) {
   }
 }
 
+// packages/cli/src/commands/review-binding.ts
+async function refreshReviewGateBinding(changeDir2, state, phase, event, requestedAt, options = {}) {
+  let existing;
+  try {
+    existing = await readReviewGateBinding(changeDir2);
+  } catch {
+    if (options.tolerateUnreadable !== true) throw new Error("review gate binding unreadable");
+    existing = void 0;
+  }
+  if (!reviewGateBindingMatches(existing, state, phase, event)) {
+    await writeReviewGateBindingUnderLock(
+      changeDir2,
+      reviewGateBindingForState(state, phase, event, requestedAt)
+    );
+  }
+}
+async function readReviewGateBindingForRequest(changeDir2) {
+  try {
+    return await readReviewGateBinding(changeDir2);
+  } catch {
+    return void 0;
+  }
+}
+function freshReviewRequestedAt(previous, now) {
+  const candidate = now();
+  if (previous === "") return candidate;
+  const previousMs = Date.parse(previous);
+  const candidateMs = Date.parse(candidate);
+  if (!Number.isFinite(previousMs) || !Number.isFinite(candidateMs) || candidateMs > previousMs) return candidate;
+  return new Date(previousMs + 1).toISOString();
+}
+async function assertReviewGateBinding(changeDir2, state, phase, event) {
+  const binding = await readReviewGateBinding(changeDir2);
+  if (!reviewGateBindingMatches(binding, state, phase, event)) {
+    throw new Error(`phase '${phase}' \u7684 review receipt \u672A\u7ED1\u5B9A\u5F53\u524D canonical decision state\uFF1B\u8BF7\u91CD\u65B0 request ${event}`);
+  }
+}
+async function clearReviewMarker(deps) {
+  if (!deps.clearReviewMarker) return true;
+  try {
+    await deps.clearReviewMarker();
+    return true;
+  } catch (error2) {
+    deps.io.err(`WARN: review marker \u6E05\u7406\u5931\u8D25\uFF08approval receipt \u5DF2\u63D0\u4EA4\uFF0C\u53EF\u91CD\u8BD5 acknowledge\uFF09: ${errMsg(error2)}`);
+    return false;
+  }
+}
+async function writeReviewMarker(deps, phase, event, name2, requestedAt) {
+  if (!deps.writeReviewMarker) return true;
+  try {
+    await deps.writeReviewMarker(formatReviewMarker({ phase, event, changeName: name2, requestedAt }));
+    return true;
+  } catch (error2) {
+    deps.io.err(`WARN: review marker \u5199\u5165\u5931\u8D25\uFF08canonical pending receipt \u5DF2\u63D0\u4EA4\uFF0C\u53EF\u91CD\u8BD5 request\uFF09: ${errMsg(error2)}`);
+    return false;
+  }
+}
+async function recordRejectedAcknowledgement(deps, interaction, changeDir2, changeName, state, revision, event) {
+  if (interaction === void 0 || revision === void 0) {
+    if (interaction !== void 0) {
+      deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u672A\u5199\u5165\uFF08\u7F3A canonical run/workflow/state anchor\uFF1Bcanonical review acknowledgement \u5DF2\u62D2\u7EDD\uFF09`);
+    }
+    return;
+  }
+  try {
+    await interaction.recordReviewAcknowledged({
+      changeDir: changeDir2,
+      changeName,
+      state,
+      revision,
+      beforeRevision: revision,
+      event,
+      requestedAt: scalar17(state, "review_requested_at"),
+      rejected: true,
+      clock: freshReviewRequestedAt(scalar17(state, "review_requested_at"), deps.clock)
+    });
+  } catch (error2) {
+    deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u5199\u5165\u5931\u8D25\uFF08canonical review acknowledgement \u5DF2\u62D2\u7EDD\uFF09: ${errMsg(error2)}`);
+  }
+}
+function scalar17(state, field3) {
+  const value = state.fields[field3];
+  return Array.isArray(value) ? value.join(",") : value ?? "";
+}
+
+// packages/cli/src/commands/review.ts
+function scalar18(state, field3) {
+  const value = state.fields[field3];
+  return Array.isArray(value) ? value.join(",") : value ?? "";
+}
+function resolveReviewStep(deps, state) {
+  const phase = scalar18(state, "phase");
+  const plan = effectiveWorkflowForState(deps, state);
+  if (!plan) throw new Error(`workflow '${String(state.fields.workflow ?? "")}' \u672A\u627E\u5230\u6216\u4E0D\u53EF\u7F16\u8BD1`);
+  const step = resolveStep(plan.workflow, phase);
+  if (!step) throw new Error(`step '${phase}' \u4E0D\u5728 workflow '${plan.id}' \u91CC`);
+  if (step.gate !== "review") throw new Error(`workflow '${plan.id}' \u7684 step '${phase}' \u672A\u58F0\u660E gate=review`);
+  return {
+    phase,
+    workflow: plan.id,
+    executionModel: plan.capabilities.execution.model,
+    events: step.transitions.map((transition) => transition.event)
+  };
+}
+function resolveReviewEvent(step, requestedEvent) {
+  if (requestedEvent !== void 0) {
+    if (!step.events.includes(requestedEvent)) {
+      throw new Error(
+        `phase '${step.phase}' \u4E0D\u652F\u6301 review event '${requestedEvent}'\uFF1B\u53EF\u9009\uFF1A${step.events.join(", ") || "(\u65E0)"}`
+      );
+    }
+    return requestedEvent;
+  }
+  if (step.events.length !== 1) {
+    throw new Error(
+      `phase '${step.phase}' \u6709\u591A\u4E2A review \u51FA\u53E3\uFF1B\u5FC5\u987B\u6307\u5B9A --event ${step.events.join("|")}`
+    );
+  }
+  const event = step.events[0];
+  if (event === void 0) throw new Error(`phase '${step.phase}' \u6CA1\u6709 review \u51FA\u53E3`);
+  return event;
+}
+async function checkVerifyFailReadiness(deps, name2, dir, state) {
+  const blockers = [];
+  const report = scalar18(state, "verification_report");
+  const fileExists2 = deps.guardCtx?.(name2)?.fileExists;
+  if (report === "" || report === "null") {
+    blockers.push(`verify-fail \u51B3\u7B56\u8981\u6C42 verification_report \u975E\u7A7A\uFF08\u5F53\u524D='${report || "null"}'\uFF09`);
+  } else if (fileExists2?.(report) === false) {
+    blockers.push(`verify-fail \u51B3\u7B56\u8981\u6C42 verification_report \u6587\u4EF6\u5B58\u5728\uFF08\u5F53\u524D='${report}'\uFF09`);
+  }
+  const plan = effectiveWorkflowForState(deps, state);
+  const documentPolicy = plan?.capabilities.documents.policy;
+  if (documentPolicy) {
+    const phase = scalar18(state, "phase");
+    if (!isDocumentPolicyStep(documentPolicy, phase) || !isDocumentContractPhase(phase)) {
+      blockers.push(`\u53D7 OpenSpec \u6587\u6863\u5951\u7EA6\u6CBB\u7406\u7684 workflow \u5F53\u524D phase \u975E\u6CD5\uFF08\u5F53\u524D='${phase || "\u7A7A"}'\uFF09`);
+    } else {
+      const evidence = deps.documentEvidence ? await deps.documentEvidence(deps.cwd, dir, phase) : await evaluateDocumentEvidence(deps.cwd, dir, phase, {
+        recordKinds: ["verification-report"],
+        readKinds: []
+      });
+      blockers.push(...evidence.blockers.map((blocker) => `document: ${blocker}`));
+    }
+  }
+  deps.io.out(`[CHECK] ${name2} (phase=verify, event=verify-fail)`);
+  if (blockers.length === 0) {
+    deps.io.out("  [PASS] verify-fail \u56DE\u9000\u8BC1\u636E\u5DF2\u5C31\u7EEA");
+    return 0;
+  }
+  for (const blocker of blockers) deps.io.out(`  [FAIL] ${blocker}`);
+  deps.io.out(`  [FAIL] \u5171 ${blockers.length} \u9879\u672A\u901A\u8FC7`);
+  return 2;
+}
+async function checkReviewRequestReadiness(deps, name2, dir, state, step, event) {
+  if (step.executionModel === "phase-manifest" && step.phase === "verify" && event === "verify-fail") {
+    return checkVerifyFailReadiness(deps, name2, dir, state);
+  }
+  return cmdCheck(deps, name2);
+}
+async function cmdReview(deps, sub, name2, opts = {}) {
+  if (sub !== "request" && sub !== "acknowledge") {
+    deps.io.err("ERROR: \u7528\u6CD5\uFF1Atenon review request <change> [--event <event>] | acknowledge <change> [--delegated]");
+    return 1;
+  }
+  if (!name2 || !isValidChangeName(name2)) {
+    deps.io.err(`ERROR: change-name \u975E\u6CD5: '${name2 ?? ""}' (\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _)`);
+    return 1;
+  }
+  const dir = changeDir(deps.cwd, name2);
+  const interaction = deps.interaction === void 0 ? void 0 : createInteractionCapture(deps.interaction, deps.clock);
+  try {
+    if (sub === "request") {
+      if (opts.delegated === true) {
+        deps.io.err("ERROR: --delegated \u53EA\u53EF\u7528\u4E8E review acknowledge\uFF1Brequest \u4ECD\u5FC5\u987B\u5148\u5B8C\u6210\u771F\u5B9E review \u8BC1\u636E");
+        return 1;
+      }
+      const preflight = await deps.store.read(dir);
+      const preflightStep = resolveReviewStep(deps, preflight);
+      const event = resolveReviewEvent(preflightStep, opts.event);
+      const check = await checkReviewRequestReadiness(deps, name2, dir, preflight, preflightStep, event);
+      if (check !== 0) return check;
+      let requested;
+      await deps.store.withLock(dir, async () => {
+        const state = await deps.store.read(dir);
+        const beforeRevision = interaction === void 0 ? void 0 : await readCurrentRunRevision(dir);
+        const step = resolveReviewStep(deps, state);
+        const lockedEvent = resolveReviewEvent(step, opts.event);
+        if (step.phase !== preflightStep.phase || lockedEvent !== event) {
+          throw new Error("review request \u671F\u95F4\u5F53\u524D phase \u6216\u53EF\u9009 event \u5DF2\u53D8\u5316\uFF1B\u8BF7\u91CD\u65B0\u8FD0\u884C\u8BE5\u547D\u4EE4");
+        }
+        const existingStatus = reviewGateStatus(state);
+        if (existingStatus !== null && !reviewGateMatches(state, step.phase)) {
+          throw new Error(`\u68C0\u6D4B\u5230\u5C5E\u4E8E phase '${scalar18(state, "review_gate_phase")}' \u7684\u6B8B\u7559 review receipt\uFF1B\u8BF7\u5148\u8BCA\u65AD state \u540E\u91CD\u8BD5`);
+        }
+        const existingBinding = await readReviewGateBindingForRequest(dir);
+        const bindingMatches = reviewGateBindingMatches(existingBinding, state, step.phase, event);
+        if (reviewGateApprovedFor(state, step.phase, event) && bindingMatches) {
+          throw new Error(`phase '${step.phase}' \u7684 event '${event}' \u5DF2\u83B7\u786E\u8BA4\uFF1B\u8BF7\u76F4\u63A5\u6267\u884C\u8BE5 transition\uFF0C\u4E0D\u80FD\u91CD\u590D request`);
+        }
+        const existingAt = scalar18(state, "review_requested_at");
+        if (reviewGatePendingFor(state, step.phase, event) && bindingMatches) {
+          await refreshReviewGateBinding(dir, state, step.phase, event, existingAt || deps.clock());
+          requested = {
+            phase: step.phase,
+            event,
+            requestedAt: existingAt || deps.clock(),
+            alreadyPending: true,
+            replacedReceipt: false
+          };
+          if (interaction !== void 0 && beforeRevision !== void 0) {
+            try {
+              await interaction.recordReviewRequested({
+                changeDir: dir,
+                changeName: name2,
+                state,
+                revision: beforeRevision,
+                beforeRevision,
+                event,
+                requestedAt: existingAt || deps.clock(),
+                suppressed: true,
+                clock: deps.clock()
+              });
+            } catch (error2) {
+              deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u5199\u5165\u5931\u8D25\uFF08canonical review pending \u5DF2\u5B58\u5728\uFF09: ${errMsg(error2)}`);
+            }
+          } else if (interaction !== void 0) {
+            deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u672A\u5199\u5165\uFF08\u7F3A canonical run/workflow/state anchor\uFF1Bcanonical review pending \u672A\u6539\u53D8\uFF09`);
+          }
+          return;
+        }
+        const requestedAt = freshReviewRequestedAt(existingAt, deps.clock);
+        const requestedState = {
+          ...state,
+          fields: { ...state.fields, ...reviewGateRequestPatch(step.phase, event, requestedAt) }
+        };
+        await deps.store.writeUnderLock(dir, requestedState, { kind: "set-many" });
+        await refreshReviewGateBinding(dir, requestedState, step.phase, event, requestedAt, { tolerateUnreadable: true });
+        const afterRevision = interaction === void 0 ? void 0 : await readCurrentRunRevision(dir);
+        if (interaction !== void 0 && beforeRevision !== void 0 && afterRevision !== void 0) {
+          try {
+            await interaction.recordReviewRequested({
+              changeDir: dir,
+              changeName: name2,
+              state: requestedState,
+              revision: afterRevision,
+              beforeRevision,
+              event,
+              requestedAt,
+              clock: requestedAt
+            });
+          } catch (error2) {
+            deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u5199\u5165\u5931\u8D25\uFF08canonical review request \u5DF2\u63D0\u4EA4\uFF09: ${errMsg(error2)}`);
+          }
+        } else if (interaction !== void 0) {
+          deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u672A\u5199\u5165\uFF08\u7F3A canonical run/workflow/state anchor\uFF1Bcanonical review request \u5DF2\u63D0\u4EA4\uFF09`);
+        }
+        requested = {
+          phase: step.phase,
+          event,
+          requestedAt,
+          alreadyPending: false,
+          // Replacing a different/legacy receipt can only revoke a prior decision; it always
+          // creates a fresh pending request and therefore never grants the new event permission.
+          replacedReceipt: existingStatus !== null
+        };
+      });
+      if (!requested) throw new Error("review request \u672A\u4EA7\u751F receipt");
+      const markerOk2 = await writeReviewMarker(deps, requested.phase, requested.event, name2, requested.requestedAt);
+      if (!requested.alreadyPending) {
+        await recordHistory(deps, dir, {
+          ts: requested.requestedAt,
+          kind: "tool",
+          raw: `review:request phase=${requested.phase} event=${requested.event}${requested.replacedReceipt ? " replaced=true" : ""}`
+        });
+      }
+      deps.io.out(
+        `[REVIEW] ${name2} phase=${requested.phase} event=${requested.event} ${requested.alreadyPending ? "\u4ECD\u5F85\u786E\u8BA4" : "\u5DF2\u8BF7\u6C42\u4EBA\u5DE5\u786E\u8BA4"}`
+      );
+      return markerOk2 ? 0 : 2;
+    }
+    let acknowledged;
+    await deps.store.withLock(dir, async () => {
+      const state = await deps.store.read(dir);
+      const beforeRevision = interaction === void 0 ? void 0 : await readCurrentRunRevision(dir);
+      const step = resolveReviewStep(deps, state);
+      const event = reviewGateEvent(state);
+      if (event === "") {
+        throw new Error(`phase '${step.phase}' \u7684\u65E7 review receipt \u672A\u7ED1\u5B9A event\uFF1B\u8BF7\u91CD\u65B0\u8FD0\u884C tenon review request ${name2} --event <event>`);
+      }
+      if (!step.events.includes(event)) {
+        throw new Error(`phase '${step.phase}' \u7684 receipt event '${event}' \u5DF2\u4E0D\u5728\u5F53\u524D workflow \u51FA\u53E3\u4E2D\uFF1B\u8BF7\u91CD\u65B0 request`);
+      }
+      if (opts.event !== void 0 && opts.event !== event) {
+        throw new Error(`acknowledge \u7684 event '${opts.event}' \u4E0E\u5F85\u786E\u8BA4 receipt '${event}' \u4E0D\u4E00\u81F4`);
+      }
+      try {
+        await assertReviewGateBinding(dir, state, step.phase, event);
+      } catch (error2) {
+        await recordRejectedAcknowledgement(deps, interaction, dir, name2, state, beforeRevision, event);
+        throw error2;
+      }
+      const delegatedAuthority = opts.delegated === true ? await readDelegatedReviewAuthority(
+        deps.cwd,
+        name2,
+        deps.env?.("TENON_HOST_SESSION_ID") ?? deps.env?.("CODEX_THREAD_ID")
+      ) : null;
+      if (opts.delegated === true && delegatedAuthority === null) {
+        throw new Error(`\u5F53\u524D Change '${name2}' \u6CA1\u6709\u6709\u6548\u7684\u7528\u6237\u59D4\u6258 review \u6388\u6743\uFF1B\u8BF7\u7B49\u5F85\u6B63\u5E38\u786E\u8BA4\uFF0C\u6216\u5148\u7531\u7528\u6237\u660E\u786E\u6388\u6743\u540E\u7EED\u81EA\u4E3B\u6267\u884C`);
+      }
+      if (reviewGateApprovedFor(state, step.phase, event)) {
+        acknowledged = {
+          phase: step.phase,
+          event,
+          acknowledgedAt: scalar18(state, "review_acknowledged_at") || deps.clock(),
+          changed: false,
+          delegatedAuthority
+        };
+        return;
+      }
+      if (!reviewGatePendingFor(state, step.phase, event)) {
+        throw new Error(`phase '${step.phase}' \u5C1A\u672A\u4E3A event '${event}' request review\uFF1B\u5148\u5B8C\u6210\u4EA7\u7269\u5E76\u8FD0\u884C tenon review request ${name2} --event ${event}`);
+      }
+      const acknowledgedAt = freshReviewRequestedAt(scalar18(state, "review_requested_at"), deps.clock);
+      await deps.store.writeUnderLock(dir, {
+        ...state,
+        fields: { ...state.fields, ...reviewGateApprovalPatch(acknowledgedAt) }
+      }, { kind: "set-many" });
+      const afterRevision = interaction === void 0 ? void 0 : await readCurrentRunRevision(dir);
+      if (interaction !== void 0 && beforeRevision !== void 0 && afterRevision !== void 0) {
+        try {
+          await interaction.recordReviewAcknowledged({
+            changeDir: dir,
+            changeName: name2,
+            state: { ...state, fields: { ...state.fields, ...reviewGateApprovalPatch(acknowledgedAt) } },
+            revision: afterRevision,
+            beforeRevision,
+            event,
+            requestedAt: scalar18(state, "review_requested_at"),
+            clock: acknowledgedAt
+          });
+        } catch (error2) {
+          deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u5199\u5165\u5931\u8D25\uFF08canonical review acknowledgement \u5DF2\u63D0\u4EA4\uFF09: ${errMsg(error2)}`);
+        }
+      } else if (interaction !== void 0) {
+        deps.io.err(`WARN: ${INTERACTION_PROJECTION_WRITE_FAILED} interaction projection \u672A\u5199\u5165\uFF08\u7F3A canonical run/workflow/state anchor\uFF1Bcanonical review acknowledgement \u5DF2\u63D0\u4EA4\uFF09`);
+      }
+      acknowledged = { phase: step.phase, event, acknowledgedAt, changed: true, delegatedAuthority };
+    });
+    if (!acknowledged) throw new Error("review acknowledgement \u672A\u4EA7\u751F receipt");
+    const markerOk = await clearReviewMarker(deps);
+    if (acknowledged.changed) {
+      await recordHistory(deps, dir, {
+        ts: acknowledged.acknowledgedAt,
+        kind: "tool",
+        raw: acknowledged.delegatedAuthority === null ? `review:acknowledge phase=${acknowledged.phase} event=${acknowledged.event}` : `review:delegated-ack phase=${acknowledged.phase} event=${acknowledged.event} authority_issued_at=${acknowledged.delegatedAuthority.issuedAt} authority_host_session=${acknowledged.delegatedAuthority.hostSessionId}`
+      });
+    }
+    deps.io.out(
+      `[REVIEW] ${name2} phase=${acknowledged.phase} event=${acknowledged.event} ${acknowledged.delegatedAuthority === null ? "\u5DF2\u786E\u8BA4" : "\u5DF2\u6309\u7528\u6237\u59D4\u6258\u7684\u6301\u7EED\u6388\u6743\u786E\u8BA4"}\uFF0C\u53EF\u91CD\u53D1 transition`
+    );
+    return markerOk ? 0 : 2;
+  } catch (error2) {
+    deps.io.err(`ERROR: ${errMsg(error2)}`);
+    return 1;
+  }
+}
+
 // packages/cli/src/program-review.ts
+function registerReviewCommands(program2, deps) {
+  program2.command("review <sub> [name]").description("review \u51FA\u53E3\u786E\u8BA4\uFF1Arequest <change> --event <event>\uFF08\u8BF7\u6C42 review\uFF09/ acknowledge <change> [--delegated]\uFF08\u5199\u7CBE\u786E receipt\uFF09").option("--event <event>", "request \u65F6\u7ED1\u5B9A\u7684\u786E\u5207 transition event\uFF1B\u591A\u51FA\u53E3 review step \u5FC5\u586B").option("--delegated", "\u4EC5\u7528\u6237\u5DF2\u660E\u786E\u59D4\u6258\u5F53\u524D Change \u8FDE\u7EED\u6267\u884C\u65F6\uFF0C\u6309\u8BE5\u59D4\u6258\u5199\u5BA1\u8BA1\u5316 review receipt").action(async (sub, name2, opts) => bail(await cmdReview(deps, sub, name2, opts)));
+  program2.command("interaction <sub> [args...]").description("interaction scorecard\uFF1A\u8BFB\u53D6\u6709\u754C\u3001\u975E symlink \u7684 benchmark fixtures \u5E76\u8F93\u51FA\u786E\u5B9A\u6027 JSON").option("--json", "JSON \u8F93\u51FA\uFF08scorecard \u5FC5\u987B\u663E\u5F0F\u6307\u5B9A\uFF09").action(async (sub, args, opts) => bail(await cmdInteraction(deps, sub, args, opts)));
+  registerAutomatedReviewCommands(program2, deps);
+}
 function registerAutomatedReviewCommands(program2, deps) {
   program2.command("review-attempt <sub> <name>").description("\u81EA\u52A8 Review \u6B21\u6570\u4E8B\u52A1\uFF1Abegin \u5360\u7528\u4E00\u6B21\uFF1Blane \u805A\u5408\u8BC1\u636E\uFF1Bcomplete \u63D0\u4EA4\u6574\u8F6E").option("--candidate <fingerprint>", "begin \u7684\u51BB\u7ED3\u5019\u9009 fingerprint").option("--attempt-id <id>", "complete \u7684 attempt UUID").option("--lane <lane>", "lane \u5B50\u547D\u4EE4\u7684 frozen Review lane id").option("--result <result>", "complete \u7ED3\u679C\uFF1Apass|fail").option("--report <path>", "complete \u7684\u9879\u76EE\u5185 Review \u62A5\u544A\u8DEF\u5F84").option("--json", "JSON \u8F93\u51FA").action(async (sub, name2, opts) => bail(await cmdReviewAttempt(deps, sub, name2, opts)));
   program2.command("review-budget <sub> <name>").description("\u67E5\u770B\u6216\u5BA1\u8BA1\u5316\u8986\u76D6\u5F53\u524D Pipeline step \u7684\u6709\u9650 Review \u6B21\u6570").option("--max-attempts <n>", "set \u7684\u6709\u6548\u8303\u56F4 1..20").option("--json", "JSON \u8F93\u51FA").action(async (sub, name2, opts) => bail(await cmdReviewBudget(deps, sub, name2, opts)));
@@ -63083,9 +63088,7 @@ function buildProgram(deps, runtimes = {}) {
   document.command("read <change> <kind>").description("\u767B\u8BB0\u5F53\u524D phase \u5DF2\u8BFB\u53D6\u6587\u6863\uFF08kind \u53EF\u4E3A 'all'\uFF09").action(async (change, kind) => bail(await cmdDocumentRead(deps, change, kind)));
   document.command("status <change>").description("\u663E\u793A\u6587\u6863\u4EA7\u7269\u3001\u5185\u5BB9\u6458\u8981\u548C\u5F53\u524D phase \u7684\u8BFB\u53D6\u6536\u636E\uFF08\u4E0D\u5B8C\u6574 exit 2\uFF09").option("--json", "JSON \u8F93\u51FA").action(async (change, opts) => bail(await cmdDocumentStatus(deps, change, opts.json === true)));
   program2.command("transition <name> <event>").description("\u72B6\u6001\u673A\u8F6C\u6362\uFF08stdout \u65E0\u8F93\u51FA\uFF0C[TRANSITION] \u8D70 stderr\uFF1B\u975E\u6CD5/\u672A\u77E5\u4E8B\u4EF6 exit 1\uFF09").action(async (name2, event) => bail(await cmdTransition(deps, name2, event)));
-  program2.command("review <sub> [name]").description("review \u51FA\u53E3\u786E\u8BA4\uFF1Arequest <change> --event <event>\uFF08\u8BF7\u6C42 review\uFF09/ acknowledge <change> [--delegated]\uFF08\u5199\u7CBE\u786E receipt\uFF09").option("--event <event>", "request \u65F6\u7ED1\u5B9A\u7684\u786E\u5207 transition event\uFF1B\u591A\u51FA\u53E3 review step \u5FC5\u586B").option("--delegated", "\u4EC5\u7528\u6237\u5DF2\u660E\u786E\u59D4\u6258\u5F53\u524D Change \u8FDE\u7EED\u6267\u884C\u65F6\uFF0C\u6309\u8BE5\u59D4\u6258\u5199\u5BA1\u8BA1\u5316 review receipt").action(async (sub, name2, opts) => bail(await cmdReview(deps, sub, name2, opts)));
-  program2.command("interaction <sub> [args...]").description("interaction scorecard\uFF1A\u8BFB\u53D6\u6709\u754C\u3001\u975E symlink \u7684 benchmark fixtures \u5E76\u8F93\u51FA\u786E\u5B9A\u6027 JSON").option("--json", "JSON \u8F93\u51FA\uFF08scorecard \u5FC5\u987B\u663E\u5F0F\u6307\u5B9A\uFF09").action(async (sub, args, opts) => bail(await cmdInteraction(deps, sub, args, opts)));
-  registerAutomatedReviewCommands(program2, deps);
+  registerReviewCommands(program2, deps);
   program2.command("check <name>").description("guard \u524D\u7F6E\u6821\u9A8C\uFF08\u4EBA\u8BFB\u62A5\u544A\uFF1B\u4E0D\u8FC7 exit 2\uFF09").action(async (name2) => bail(await cmdCheck(deps, name2)));
   program2.command("advance <name>").description("auto-transition \u4E2D\u95F4\u6863\uFF1Aguard \u5168\u7EFF\u81EA\u52A8\u63A8\u8FDB\uFF0C\u649E\u4E09\u95E8/\u7EC8\u6001/guard \u4E0D\u8FC7\u5373\u505C\uFF08HITL\uFF0CD12>Tenon runtime\uFF09").option("--max-steps <n>", "\u9632\u5931\u63A7\u4FDD\u9669\u4E1D\uFF08\u9ED8\u8BA4 12\uFF09", (v) => parseInt(v, 10)).option("--dry-run", "\u53EA\u62A5\u8BA1\u5212\u4E0D\u63A8\u8FDB").option("--through-gates", "\u653E\u884C\u590D\u6838\u76F8\u4F4D\uFF08confirm/interaction \u786C\u95E8\u4ECD\u4E0D\u8DE8\u8D8A\uFF09").action(async (name2, opts) => bail(await cmdAdvance(deps, name2, opts)));
   registerHandoffCommand(program2, deps);

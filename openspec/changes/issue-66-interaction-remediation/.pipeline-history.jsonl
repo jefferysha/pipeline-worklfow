@@ -81,3 +81,5 @@
 {"ts":"2026-08-09T21:32:27Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe020-7883-7010-993f-4bb0506273bc"}
 {"ts":"2026-08-09T21:32:28Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T21:32:27Z authority_host_session=019fe020-7883-7010-993f-4bb0506273bc"}
 {"ts":"2026-08-09T21:32:28Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"95a6afba-6c48-4f86-b74f-4a878fcc5779"}
+{"ts":"2026-08-09T21:33:33Z","kind":"tool","raw":"CodexSkillRead: tenon-build"}
+{"ts":"2026-08-09T21:33:33Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-build 8a27f53e-17d9-4479-814e-a6006a88a00a 7"}
