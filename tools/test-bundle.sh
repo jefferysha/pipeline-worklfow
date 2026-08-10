@@ -147,6 +147,14 @@ if [ -f "$BUNDLE" ]; then
     && ok "bundle: open 阶段 Todo 已完成" \
     || bad "bundle: open 阶段 Todo 已完成" "未找到可勾选的 open 任务"
 
+  # default workflow 的 open 阶段还要求 workflow owner tenon-open；通过同一个真实 PostToolUse
+  # skill tracker 记录它，保持 open-complete 的 workflow-skill enforcement fail-closed。
+  printf '{"cwd":"%s","tool_name":"Skill","skill":"tenon-open","session_id":"bundle-smoke-session","tool_use_id":"bundle-smoke-tenon-open"}' "$TMP" \
+    | CLAUDE_PLUGIN_ROOT="$ROOT" bash "$ROOT/hooks/skill-tracker.sh" >/dev/null 2>&1
+  [ "$?" -eq 0 ] \
+    && ok "bundle: hook 记录 tenon-open 调用证据" \
+    || bad "bundle: hook 记录 tenon-open 调用证据" "skill-tracker 失败"
+
   # default workflow 的 OpenSpec 文档契约要求 open 阶段先登记 proposal/design/tasks。它们是 init
   # 创建的最小骨架；这里通过真实 CLI 绑定产物 hash 和 openspec-propose skill 证据，证明入库 bundle
   # 同时包含新文档链路，而不是把冒烟测试回退成历史上的无证据直转。先调用同包的 PostToolUse
