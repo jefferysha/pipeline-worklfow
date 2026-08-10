@@ -1861,6 +1861,9 @@ steps:
         const { reviewLanes: _reviewLanes, ...legacyStep } = step
         return {
           ...legacyStep,
+          // This fixture represents a pre-issue#43 default snapshot: phase Skills were not
+          // persisted yet, so historical fingerprint validation must use empty declarations.
+          skills: [],
           guards: step.id === 'build'
             ? step.guards.filter((guard) =>
                 !(guard.type === 'field-equals' && guard.field === 'pre_verify_review_result'))

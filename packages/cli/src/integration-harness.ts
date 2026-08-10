@@ -49,6 +49,8 @@ import {
   recordNativeDocumentSkillConfirmation,
 } from './test-support.js'
 import { createManifestSkillActionAuthorityResolver } from './skill-action-authority-provider.js'
+import { recordWorkflowPhaseSkill } from './integration-phase-skill-test-support.js'
+export { recordWorkflowPhaseSkill } from './integration-phase-skill-test-support.js'
 
 /** Track Registry 校验上下文（与 main.ts trackValidationContext 同款，harness 镜像生产装配）。 */
 function trackValidationContext(repoRoot: string, manifest: ExtendedManifestData): TrackValidationContext {
@@ -419,8 +421,16 @@ export function makeHarness(cwd: string): Harness {
         const phase = String(state.fields.phase)
         const track = String(state.fields.track)
         const historyPath = join(changeDir, '.pipeline-history.jsonl')
-        const history = await readFile(historyPath, 'utf8').catch(() => '')
+        let history = await readFile(historyPath, 'utf8').catch(() => '')
         const completed = completedWorkflowSkillsSinceStepEntry(history, phase)
+        // A phase receipt is per canonical visit.  Reuse it for read/set commands in the same
+        // visit and invoke the real hook only when this visit has not yet loaded its Workflow
+        // phase Skill; this keeps transition fixtures faithful without spawning a shell for every
+        // preparatory command.
+        if (!completed.has(`tenon-${phase}`)) {
+          await recordWorkflowPhaseSkill(cwd, changeDir)
+          history = await readFile(historyPath, 'utf8').catch(() => '')
+        }
         const lines = deps.resolver.resolveDefaultMandatory(phase, track)
           .filter((slot) => !slot.alternatives.some((skill) => completed.has(skill)))
           .map((slot) => slot.alternatives[0])

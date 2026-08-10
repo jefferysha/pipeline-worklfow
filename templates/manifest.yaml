@@ -73,10 +73,14 @@ review_skills:
 # Track 路由默认值的单一真相源是 kernel tracks/builtins；项目覆盖写入
 # `.pipeline/tracks.yaml` 的 `policy_profile.routing`，manifest 不再镜像路由规则。
 
-# —— phase × track 强制 skill 表（老 evidence 派生；缺则 full preset [HARD] 阻断）——
+# —— Track matrix overlay 的 phase × track 强制 skill 表（老 evidence 派生；缺则 full preset [HARD] 阻断）——
 # 键 = 'phase.track'；`_all` = 不分 track、对每 track 兜底（老 evidence 三级回退：per-track → _all → 空）。
-# 所有默认 token 均是本插件内置 skill；新用户不依赖另一宿主、npm 或第三方 marketplace。
-# 消费方：guard 强制 skill 校验面 / SessionStart 注入。
+# 这些表只描述 Track overlay：只有 `policy_profile.skills.matrix=true` 时才自动叠加到
+# Workflow phase requirement。default Workflow 的 `tenon-<phase>` hard Skill 属于冻结的
+# Workflow capability，不在这里重复声明；free/matrix=false 仍可由 artifact/AFK 的显式
+# profile resolver 选择 phase + named allowlist，但不会因此重新开启自动 overlay。
+# 所有默认 overlay token 均是本插件内置 skill；新用户不依赖另一宿主、npm 或第三方 marketplace。
+# 消费方：resolver required/available/explicit 三投影、doctor 与 router 注入。
 mandatory_skills:
   open._all: [openspec-propose]
   explore.pm: [brainstorming, grill-with-docs]

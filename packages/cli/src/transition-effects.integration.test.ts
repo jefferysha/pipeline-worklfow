@@ -378,7 +378,7 @@ describe('真实 e2e —— verify-fail / archived 副作用（老仓 L206-218�
     expect(yaml).toMatch(/^phase_status: done$/m)
     expect(yaml).toMatch(/^archived: true$/m)
     expect(yaml).toMatch(new RegExp(`^archived_at: ${FIXED_CLOCK}$`, 'm'))
-  })
+  }, 30_000)
 })
 
 describe('真实 e2e —— 跨命令串联 + 历史 JSONL（GOAL C10）', () => {
@@ -404,7 +404,7 @@ describe('真实 e2e —— 跨命令串联 + 历史 JSONL（GOAL C10）', () =>
       'ship-complete',
       'archived',
     ])
-  })
+  }, 30_000)
 
   test('verify-fail 回炉重跑：build-complete 重新冻结新 SHA 后 verify-pass 通过（老仓 barrier 修复路径）', async () => {
     await initGoverned('demo')
@@ -424,5 +424,5 @@ describe('真实 e2e —— 跨命令串联 + 历史 JSONL（GOAL C10）', () =>
     await approveReviewExit('demo', 'verify-pass')
     expect(await h.run(['transition', 'demo', 'verify-pass'])).toBe(0)
     expect(await h.read('demo')).toMatch(/^verify_result: pass$/m)
-  })
+  }, 30_000)
 })

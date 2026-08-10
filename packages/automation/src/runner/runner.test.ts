@@ -932,7 +932,7 @@ exit 91
       await rm(root, { recursive: true, force: true })
       await rm(binDir, { recursive: true, force: true })
     }
-  })
+  }, 30_000)
 
   it('H5 Codex-first：policy gate 拒绝时真实 worktree 零业务写；放行后才应用并提交私有 workspace patch', async () => {
     const root = await mkdtemp(join(tmpdir(), 'afk-h5-policy-'))

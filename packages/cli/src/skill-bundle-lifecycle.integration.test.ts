@@ -66,6 +66,9 @@ const AFK_WORKFLOW = compileEffectiveWorkflowPlan('skill-bundle-afk', {
   interaction: { version: 'v1', mode: 'afk' },
   steps: [{
     id: 'build', label: 'Build', gate: null,
+    skills: [{ id: SKILL_ID }], inputs: [], outputs: [], guards: [], transitions: [{ event: 'build-complete', to: 'verify' }],
+  }, {
+    id: 'verify', label: 'Verify', gate: null,
     skills: [{ id: SKILL_ID }], inputs: [], outputs: [], guards: [], transitions: [],
   }],
 })
@@ -83,11 +86,23 @@ steps:
     inputs: []
     outputs: []
     guards: []
+    transitions:
+      - event: build-complete
+        to: verify
+  - id: verify
+    label: Verify
+    gate: null
+    skills:
+      - id: ${SKILL_ID}
+    inputs: []
+    outputs: []
+    guards: []
     transitions: []
 `
 
-/** 最小真实 manifest 定稿：'build' 相位在 'backend' track 的 mandatory skill 恰是 SKILL_ID
- *  （resolveDefault('build','backend') 的三级回退第一档直接命中，不依赖 `_all` 兜底）。 */
+/** 最小真实 manifest 定稿：custom workflow 的 'build' step 在 'backend' track 的
+ * explicit profile allowlist 恰是 SKILL_ID；custom bundle 仍只消费冻结 StepIR 声明，不注入 default。
+ */
 const MANIFEST_YAML = `phases:
   - build
 transitions:
@@ -111,6 +126,7 @@ async function seedLoopYaml(
     cadence: '1h',
     risk: 'low',
     runner: 'claude-code',
+    workflow_id: AFK_WORKFLOW.id,
     change_prefix: spec.changePrefix,
     phases: ['build', 'verify'],
     human_gates: ['verify'],

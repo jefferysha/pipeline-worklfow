@@ -1,11 +1,14 @@
 /**
  * EffectiveSkillResolver（G2 P5）——artifact register 校验「谁产出了这条 artifact」的领域接缝。
  *
- * 两种解析能力，一一对应 artifact 的两种 producer policy（见 types.ts::ArtifactProducerPolicy）：
- *   · resolveDefault(stepId, track) —— default 轨（producerPolicy: effective-phase-skills）：产出者
- *     值域 = 当前 phase×track 的 manifest 有效 skill 集 = mandatory（前）＋ recommended（后），
- *     经 skillsFor 三级回退（per-track → `_all` → 空）取值，按 token 稳定去重、逐 token 以 `|`
- *     拆成具体 alternatives。default step id 即 phase（default.yaml 的 step id = open/explore/...）。
+ * 三种解析投影一一对应运行时消费者的不同授权面：
+ *   · resolveRequired(capability, stepId) —— phase-first 硬要求 + matrix-enabled mandatory overlay；
+ *   · resolveAvailable(capability, stepId) —— phase-first 自动可用集 + matrix-enabled mandatory/recommended overlay；
+ *   · resolveExplicitProfile(capability, stepId, profile) —— phase-first + named profile 的
+ *     mandatory/recommended allowlist，供 artifact/AFK 等显式选择；显式 profile 不会反向成为 Hook/transition
+ *     的自动要求。所有投影按 token 稳定去重并拆成具体 alternatives。
+ *   · resolveDefault(stepId, track) / resolveDefaultProfile(stepId, profile) —— 保留给旧 producer
+ *     装配面的 manifest-only compatibility seam；新 runtime consumers 不应借此丢弃 frozen phase slots。
  *   · resolveCustom(step, track) —— custom 轨（producerPolicy: effective-step-skills）：产出者值域
  *     = 本 step 声明的 skill 集（step.skills[].id），稳定去重、**每个 id 是具体 skill、不把 `|`
  *     隐式当 alternative**（custom SkillRef.id 语义是实际 id，`a|b` 备选只存在于 manifest 契约；
@@ -15,10 +18,9 @@
  * `--producer` 是否精确命中「某个有效 skill 槽的某个具体 alternative」，而不能把整个 `a|b` token
  * 当合法 producer（那是从未被实际调用的伪 id）。
  *
- * T-R6 生产装配使用 createEffectiveSkillResolver({ registry, manifest })：default artifact 分支先从
- * track.policyProfile.skills.profile 得 profile，再走 profile → `_all` → []。registry 可传快照或 fresh-load
- * 函数，CLI 采用后者，保证同进程 CRUD 后不复用旧 registry。H10 的 skill_bundle_id 本身就是 profile，
- * 走 resolveDefaultProfile，避免把 `_all` 等 profile 错当 track id。
+ * T-R6 生产装配使用 createEffectiveSkillResolver({ registry, manifest })：default artifact/AFK 分支先从
+ * track.policyProfile.skills.profile 得 profile，再把 frozen phase capability 与 profile allowlist 一起解析。
+ * registry 可传快照或 fresh-load 函数，CLI 采用后者，保证同进程 CRUD 后不复用旧 registry。
  */
 import { skillsFor, skillTokenAlternatives, type SkillTable } from '../flow/manifest.js'
 import type { TrackRegistry } from '../tracks/types.js'
@@ -54,6 +56,13 @@ export interface EffectiveSkillResolver {
     capability: EffectiveWorkflowPlan['capabilities']['skills'],
     stepId: string,
   ): readonly EffectiveSkillSlot[]
+  /** Resolve a named explicit profile for artifact producers and AFK bundles.
+   * Workflow-owned phase slots are always first; custom workflows remain step-declared. */
+  resolveExplicitProfile?(
+    capability: EffectiveWorkflowPlan['capabilities']['skills'],
+    stepId: string,
+    profile: string,
+  ): readonly EffectiveSkillSlot[]
   /** default 轨当前 step 的硬阻断 skill 槽；不含 recommended。 */
   resolveDefaultMandatory(stepId: string, track: string): readonly EffectiveSkillSlot[]
   /** default 轨 step/track 的有效 skill 槽（manifest mandatory＋recommended，稳定去重＋a|b 拆分）。 */
@@ -88,12 +97,17 @@ export function resolveRequiredSkillSlots(
   stepId: string,
 ): readonly EffectiveSkillSlot[] {
   if (resolver?.resolveRequired !== undefined) return resolver.resolveRequired(capability, stepId)
+  const phase = capability.steps.find((candidate) => candidate.stepId === stepId)?.requiredSkillIds ?? []
   if (capability.source === 'manifest-overlay') {
-    if (!capability.trackOverlay.matrix || resolver === undefined) return []
-    return resolver.resolveDefaultMandatory(stepId, capability.trackOverlay.profile)
+    const overlay = capability.trackOverlay.matrix && resolver !== undefined
+      ? resolver.resolveDefaultMandatory(stepId, capability.trackOverlay.profile)
+      : []
+    return dedupeStableSlots([
+      ...phase.map((id) => ({ token: id, alternatives: [id] })),
+      ...overlay,
+    ])
   }
-  const step = capability.steps.find((candidate) => candidate.stepId === stepId)
-  return (step?.requiredSkillIds ?? []).map((id) => ({ token: id, alternatives: [id] }))
+  return dedupeStableSlots(phase.map((id) => ({ token: id, alternatives: [id] })))
 }
 
 export function resolveAvailableSkillSlots(
@@ -102,13 +116,38 @@ export function resolveAvailableSkillSlots(
   stepId: string,
 ): readonly EffectiveSkillSlot[] {
   if (resolver.resolveAvailable !== undefined) return resolver.resolveAvailable(capability, stepId)
+  const phase = capability.steps.find((candidate) => candidate.stepId === stepId)?.requiredSkillIds ?? []
   if (capability.source === 'manifest-overlay') {
-    if (!capability.trackOverlay.matrix) return []
-    return resolver.resolveDefaultProfile?.(stepId, capability.trackOverlay.profile)
-      ?? resolver.resolveDefault(stepId, capability.trackOverlay.profile)
+    const overlay = capability.trackOverlay.matrix
+      ? resolver.resolveDefaultProfile?.(stepId, capability.trackOverlay.profile)
+        ?? resolver.resolveDefault(stepId, capability.trackOverlay.profile)
+      : []
+    return dedupeStableSlots([
+      ...phase.map((id) => ({ token: id, alternatives: [id] })),
+      ...overlay,
+    ])
   }
-  const step = capability.steps.find((candidate) => candidate.stepId === stepId)
-  return (step?.requiredSkillIds ?? []).map((id) => ({ token: id, alternatives: [id] }))
+  return dedupeStableSlots(phase.map((id) => ({ token: id, alternatives: [id] })))
+}
+
+/** Resolve an explicitly named profile without dropping the frozen Workflow phase capability. */
+export function resolveExplicitProfileSkillSlots(
+  resolver: EffectiveSkillResolver | undefined,
+  capability: EffectiveWorkflowPlan['capabilities']['skills'],
+  stepId: string,
+  profile: string,
+): readonly EffectiveSkillSlot[] {
+  if (resolver?.resolveExplicitProfile !== undefined) {
+    return resolver.resolveExplicitProfile(capability, stepId, profile)
+  }
+  const phase = capability.steps.find((candidate) => candidate.stepId === stepId)?.requiredSkillIds ?? []
+  const profileSlots = capability.source === 'manifest-overlay' && resolver !== undefined
+    ? resolver.resolveDefaultProfile?.(stepId, profile) ?? resolver.resolveDefault(stepId, profile)
+    : []
+  return dedupeStableSlots([
+    ...phase.map((id) => ({ token: id, alternatives: [id] })),
+    ...profileSlots,
+  ])
 }
 
 /** 稳定去重（保留首次出现顺序）。 */
@@ -119,6 +158,17 @@ function dedupeStable(tokens: readonly string[]): string[] {
     if (seen.has(t)) continue
     seen.add(t)
     out.push(t)
+  }
+  return out
+}
+
+function dedupeStableSlots(slots: readonly EffectiveSkillSlot[]): EffectiveSkillSlot[] {
+  const seen = new Set<string>()
+  const out: EffectiveSkillSlot[] = []
+  for (const slot of slots) {
+    if (seen.has(slot.token)) continue
+    seen.add(slot.token)
+    out.push(slot)
   }
   return out
 }
@@ -139,6 +189,21 @@ export function createEffectiveSkillResolver(
       alternatives: skillTokenAlternatives(token),
     }))
   }
+  const resolveMandatory = (stepId: string, profile: string): readonly EffectiveSkillSlot[] =>
+    dedupeStable(skillsFor(manifest.mandatorySkills, stepId as Phase, profile)).map((token) => ({
+      token,
+      alternatives: skillTokenAlternatives(token),
+    }))
+  const phaseSlots = (
+    capability: EffectiveWorkflowPlan['capabilities']['skills'],
+    stepId: string,
+  ): readonly EffectiveSkillSlot[] => {
+    const step = capability.steps.find((candidate) => candidate.stepId === stepId)
+    return dedupeStableSlots((step?.requiredSkillIds ?? []).map((id) => ({
+      token: id,
+      alternatives: [id],
+    })))
+  }
   return {
     reviewLaneFor(capability, stepId, skillId) {
       if (capability.source === 'manifest-overlay') return manifest.reviewSkillLanes?.[skillId]
@@ -147,23 +212,25 @@ export function createEffectiveSkillResolver(
     },
     resolveRequired(capability, stepId) {
       if (capability.source === 'manifest-overlay') {
-        if (!capability.trackOverlay.matrix) return []
-        const profile = capability.trackOverlay.profile
-        return dedupeStable(skillsFor(manifest.mandatorySkills, stepId as Phase, profile)).map((token) => ({
-          token,
-          alternatives: skillTokenAlternatives(token),
-        }))
+        const overlay = capability.trackOverlay.matrix
+          ? resolveMandatory(stepId, capability.trackOverlay.profile)
+          : []
+        return dedupeStableSlots([...phaseSlots(capability, stepId), ...overlay])
       }
-      const step = capability.steps.find((candidate) => candidate.stepId === stepId)
-      return dedupeStable(step?.requiredSkillIds ?? []).map((id) => ({ token: id, alternatives: [id] }))
+      return phaseSlots(capability, stepId)
     },
     resolveAvailable(capability, stepId) {
       if (capability.source === 'manifest-overlay') {
-        if (!capability.trackOverlay.matrix) return []
-        return resolveProfile(stepId, capability.trackOverlay.profile)
+        const overlay = capability.trackOverlay.matrix
+          ? resolveProfile(stepId, capability.trackOverlay.profile)
+          : []
+        return dedupeStableSlots([...phaseSlots(capability, stepId), ...overlay])
       }
-      const step = capability.steps.find((candidate) => candidate.stepId === stepId)
-      return dedupeStable(step?.requiredSkillIds ?? []).map((id) => ({ token: id, alternatives: [id] }))
+      return phaseSlots(capability, stepId)
+    },
+    resolveExplicitProfile(capability, stepId, profile) {
+      if (capability.source !== 'manifest-overlay') return phaseSlots(capability, stepId)
+      return dedupeStableSlots([...phaseSlots(capability, stepId), ...resolveProfile(stepId, profile)])
     },
     resolveDefaultMandatory(stepId, track) {
       const currentRegistry = typeof registry === 'function' ? registry() : registry
@@ -180,6 +247,9 @@ export function createEffectiveSkillResolver(
       if (profile === undefined) throw new Error(`unknown track '${track}' in effective skill resolver`)
       return resolveProfile(stepId, profile)
     },
+    // Legacy profile-only seam retained for callers that explicitly need the manifest
+    // allowlist. New artifact/AFK consumers use resolveExplicitProfile so phase slots
+    // cannot be dropped when matrix=false.
     resolveDefaultProfile: resolveProfile,
     // track 目前不参与 custom 解析（step.skills 固定）——保留在签名里供 T-R6 track-条件 custom skill 接线。
     resolveCustom(step, _track) {

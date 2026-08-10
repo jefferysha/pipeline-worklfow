@@ -227,6 +227,8 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
   /** 走完一个相位在 backend track 下 manifest 真派生的全部 mandatory skill（skillsFor 三级回退，
    *  非硬编码——manifest.yaml 改了这里自动跟着变，回归锚同 manifest-derive.test.ts 的单一真相源原则）。 */
   async function runMandatorySkillsForPhase(phase: Phase): Promise<void> {
+    // The Workflow-owned phase entry is required even when Track overlays are empty/disabled.
+    await invokeSkillThroughGate(phase, `tenon-${phase}`)
     for (const token of skillsFor(manifest.mandatorySkills, phase, TRACK)) {
       await invokeSkillThroughGate(phase, token)
     }
@@ -339,6 +341,7 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
 
     // ── ship-complete → archive；archived 事件收尾 ──
     expect(await h.run(['transition', CHANGE, 'ship-complete'])).toBe(0)
+    await runMandatorySkillsForPhase('archive')
     expect(await h.run(['transition', CHANGE, 'archived'])).toBe(0)
     expect(await h.read(CHANGE)).toMatch(/^phase: archive$/m)
     expect(await h.read(CHANGE)).toMatch(/^archived: true$/m)
@@ -375,7 +378,7 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     expect(pipelineShip).toContain('/commit-commands:commit-push-pr` 仅是可选命令加速器，不进入 skill bundle。')
 
     // 与当前真实 manifest.yaml 的锚点（backend track 全 7 相位 mandatory skill 求和）。
-    expect(toolCount).toBe(12)
+    expect(toolCount).toBe(19)
     expect(unlockCount).toBe(2)
 
     // 行序因果核验（非仅计数）：每个相位区间内的 tool/prompt 条数必须落在该相位真实转移事件之间
@@ -388,16 +391,16 @@ describe('真实 e2e —— 完整多相位 workflow × skill 编排一体化闭
     const idxShip = idx('ship')
     const idxArchive = idx('archive')
     const skillCount = (entries: HistLine[]) => entries.filter((p) => p.kind === 'tool' && p.raw?.startsWith('Skill:')).length
-    expect(skillCount(parsed.slice(0, idxExplore))).toBe(1) // open 阶段 1 个 mandatory skill
-    expect(skillCount(seg(idxExplore, idxSpec))).toBe(4)
+    expect(skillCount(parsed.slice(0, idxExplore))).toBe(2) // open 阶段 phase + overlay skill
+    expect(skillCount(seg(idxExplore, idxSpec))).toBe(5)
     expect(seg(idxExplore, idxSpec).filter((p) => p.kind === 'prompt')).toHaveLength(2)
-    expect(skillCount(seg(idxSpec, idxBuild))).toBe(2)
+    expect(skillCount(seg(idxSpec, idxBuild))).toBe(3)
     expect(seg(idxSpec, idxBuild).filter((p) => p.kind === 'prompt')).toHaveLength(0)
-    expect(skillCount(seg(idxBuild, idxVerify))).toBe(2)
+    expect(skillCount(seg(idxBuild, idxVerify))).toBe(3)
     expect(seg(idxBuild, idxVerify).filter((p) => p.kind === 'prompt')).toHaveLength(0) // build 非 review 相位，全程不该有解锁
-    expect(skillCount(seg(idxVerify, idxShip))).toBe(1)
+    expect(skillCount(seg(idxVerify, idxShip))).toBe(2)
     expect(seg(idxVerify, idxShip).filter((p) => p.kind === 'prompt')).toHaveLength(0)
-    expect(skillCount(seg(idxShip, idxArchive))).toBe(2)
+    expect(skillCount(seg(idxShip, idxArchive))).toBe(3)
     expect(seg(idxShip, idxArchive).filter((p) => p.kind === 'prompt')).toHaveLength(0) // ship 非 review 相位，全程不该有解锁
   }, 30_000)
 
@@ -420,9 +423,11 @@ tracks:
       skills:
         matrix: false
         profile: backend
-`)
+    `)
     expect(await h.run(['init', CHANGE, '--track', 'designer-mobile', '--preset', 'full'])).toBe(0)
     await h.seedGovernedDocumentEvidence(CHANGE)
+    expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
+    await invokeSkillThroughGate('open', 'tenon-open')
     expect(await h.run(['transition', CHANGE, 'open-complete'])).toBe(0)
 
     const routed = runRouter('继续处理 mobile-route-token')
@@ -436,6 +441,8 @@ tracks:
   test('review request 真产出的 v2 marker 陈旧超 TTL 后，gate.sh 真自愈放行（无需 AskUserQuestion）', async () => {
     expect(await h.run(['init', CHANGE, '--track', TRACK, '--preset', 'full'])).toBe(0)
     await h.seedGovernedDocumentEvidence(CHANGE)
+    expect(await h.run(['session', 'activate', CHANGE])).toBe(0)
+    await invokeSkillThroughGate('open', 'tenon-open')
     expect(await h.run(['transition', CHANGE, 'open-complete'])).toBe(0)
     await h.seedArtifact(CHANGE, 'design_doc', `openspec/changes/${CHANGE}/design.md`)
     expect(await h.run(['review', 'request', CHANGE, '--event', 'explore-complete'])).toBe(0)

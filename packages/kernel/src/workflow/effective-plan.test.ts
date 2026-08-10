@@ -24,6 +24,9 @@ function preVerifyConvergenceWorkflow() {
       const { reviewLanes: _reviewLanes, ...legacyStep } = step
       return {
         ...legacyStep,
+        // This fixture intentionally models the pre-issue#43 frozen snapshot, whose
+        // default Workflow steps had no Workflow-owned phase Skills.
+        skills: [],
         guards: step.id === 'build'
           ? step.guards.filter((guard) =>
               !(guard.type === 'field-equals' && guard.field === 'pre_verify_review_result'))

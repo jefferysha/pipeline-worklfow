@@ -116,7 +116,8 @@ describe('workflow policy snapshot v3', () => {
     } = current.workflow
     const legacyWorkflow = {
       ...currentWithoutPolicies,
-      steps: currentWithoutPolicies.steps.map(({ reviewLanes: _reviewLanes, ...step }) => step),
+      // Historical V2 bytes predate issue #43; default phase Skills were not persisted.
+      steps: currentWithoutPolicies.steps.map(({ reviewLanes: _reviewLanes, ...step }) => ({ ...step, skills: [] })),
     }
     const restored = effectiveWorkflowPlanFromSnapshot({
       version: 2,

@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { appendFile } from 'node:fs/promises'
 import { describe, expect, test } from 'vitest'
 import { cmdTransition } from './commands/transition.js'
-import { freshHarness, realDeps, rm } from './integration-harness.js'
+import { freshHarness, realDeps, recordWorkflowPhaseSkill, rm } from './integration-harness.js'
 
 describe('真实 e2e —— 并发 transition 尾部写入严格串行（不逆序覆盖）', () => {
   test('第一次 transition 的 breadcrumb 写入被阻塞期间，第二次 transition 无法抢先完成；' +
@@ -29,6 +29,9 @@ describe('真实 e2e —— 并发 transition 尾部写入严格串行（不逆�
       // Reuse the hash-bound OpenSpec design seeded above. Rewriting it would correctly make
       // explore->spec fail before this test reaches its serialization assertion.
       await h.seedArtifact('demo', 'design_doc', 'openspec/changes/demo/design.md')
+      // The first transition exits the initial open visit; satisfy its frozen Workflow-owned
+      // phase Skill through the production tracker hook before exercising breadcrumb locking.
+      await recordWorkflowPhaseSkill(h.cwd, join(h.cwd, 'openspec', 'changes', 'demo'))
       const historyPath = join(h.cwd, 'openspec', 'changes', 'demo', '.pipeline-history.jsonl')
       const recordSkills = async (...skills: string[]): Promise<void> => {
         await appendFile(
@@ -67,6 +70,11 @@ describe('真实 e2e —— 并发 transition 尾部写入严格串行（不逆�
       // 等待真实观察点，不用固定 sleep 猜 canonical revision/hash 写入在当前机器上要多久。
       await firstEntered
       expect(order).toEqual(['first-breadcrumb-blocked']) // 确认真的卡住了，不是提前跑完
+
+      // p1 has committed the explore visit while its breadcrumb tail is blocked.  Record the
+      // phase Skill for that exact visit before p2 acquires the lock, so p2 reaches its intended
+      // review-receipt assertion rather than failing earlier on the phase gate.
+      await recordWorkflowPhaseSkill(h.cwd, join(h.cwd, 'openspec', 'changes', 'demo'))
 
       const p2 = cmdTransition(deps, 'demo', 'explore-complete')
       // 给 p2 一点时间——它应该被锁挡住，不该跑到它自己的 breadcrumb 写入

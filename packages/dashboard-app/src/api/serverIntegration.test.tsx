@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDashboardServer, resolveServerPaths } from '@tenon/server'
+import { recordWorkflowPhaseSkill } from '../../../server/src/test-support.js'
 import {
   createFlowEngine,
   createStateStore,
@@ -144,6 +145,7 @@ async function startRealServer(): Promise<Started> {
     repoRoot: root, name: 'demo', track: 'backend', reviewSeed: 'pending', preset: 'full', clock,
   })
   await seedGovernedDocumentEvidence(root, changeDir, 'demo')
+  await recordWorkflowPhaseSkill(root, changeDir)
   const srv = createDashboardServer({
     paths: resolveServerPaths({ home: root, env: {} }),
     version: 'itest',

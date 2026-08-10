@@ -12,6 +12,7 @@ import {
   createReviewAttemptBudgetStore,
   isSkillUnlocked,
   resolveAvailableSkillSlots,
+  resolveRequiredSkillSlots,
   type EffectiveWorkflowPlan,
   type PipelineState,
 } from '@tenon/kernel'
@@ -216,24 +217,48 @@ export async function cmdInternalSkillGate(deps: CliDeps, name: string, skillId:
       }
       if (skillCapability.source === 'manifest-overlay') {
         const slots = resolveAvailableSkillSlots(deps.resolver, skillCapability, currentStepId)
+        const requiredSlots = resolveRequiredSkillSlots(deps.resolver, skillCapability, currentStepId)
         const canonicalSlots = slots.map((slot) => ({
           token: slot.token,
           alternatives: slot.alternatives.map(canonicalTenonSkillId),
         }))
+        const canonicalRequiredSlots = requiredSlots.map((slot) => ({
+          token: slot.token,
+          alternatives: slot.alternatives.map(canonicalTenonSkillId),
+        }))
         const slotIndex = canonicalSlots.findIndex((slot) => slot.alternatives.includes(canonicalSkillId))
-        // Default profiles enumerate mandatory/recommended orchestration Skills, not every useful
-        // optional tool. Optional undeclared Skills remain available; declared slots keep order.
-        if (slotIndex < 0) return 0
         await reconcileCodexSkillEvidence({
           repoRoot: deps.cwd,
           changeDir: dir,
-          candidateSkillIds: canonicalSlots.flatMap((slot) => slot.alternatives),
+          candidateSkillIds: [
+            ...canonicalSlots.flatMap((slot) => slot.alternatives),
+            ...canonicalRequiredSlots.flatMap((slot) => slot.alternatives),
+          ],
           recordedAt: deps.clock(),
           history: deps.history,
           evidenceScope: currentStepId,
         })
         const lines = parseHistoryLines((await deps.readHistoryRaw?.(dir)) ?? '')
         const completed = completedSkillsSinceStepEntry(lines, currentStepId)
+        // Optional/undeclared skills cannot be used to bypass a missing Workflow-owned phase
+        // requirement. The optional path intentionally checks only the frozen Workflow phase
+        // slots: Track mandatory overlays are available/orderable when declared, but they must
+        // not turn an otherwise-unrelated optional Skill into a new mandatory dependency.
+        if (slotIndex < 0) {
+          const phaseRequiredSlots = capabilityStep.requiredSkillIds.map((id) => ({
+            token: id,
+            alternatives: [canonicalTenonSkillId(id)],
+          }))
+          const missingRequired = phaseRequiredSlots
+            .filter((slot) => !slot.alternatives.some((candidate) => completed.has(candidate)))
+            .map((slot) => slot.token)
+          if (missingRequired.length === 0) return 0
+          deps.io.err(
+            `【Tenon 门】skill '${skillId}' 在 default step '${currentStepId}' 未解锁：` +
+            `还需先完成 ${missingRequired.join(', ')}（本次进入该 step 之后）`,
+          )
+          return 2
+        }
         const missing = canonicalSlots
           .slice(0, slotIndex)
           .filter((slot) => !slot.alternatives.some((candidate) => completed.has(candidate)))

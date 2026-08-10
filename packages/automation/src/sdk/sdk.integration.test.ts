@@ -27,6 +27,8 @@ import {
   type LoopAdmissionDeps,
 } from '../admission/loop-admission.js'
 import { type LifecyclePorts, runChangeInSandbox } from '../lifecycle/lifecycle.js'
+import { createFsSkillContentLocator } from '../skills/content-locator.js'
+import { materializeSkillSnapshot } from '../skills/snapshot-store.js'
 import type { VerifierInput } from '../verifier/verifier.js'
 import { createAutomation, storeWriter } from './sdk.js'
 
@@ -43,6 +45,7 @@ const AFK_WORKFLOW_PLAN = compileEffectiveWorkflowPlan('sdk-afk', {
   }],
 })
 const AFK_WORKFLOW_SNAPSHOT = workflowPlanSnapshot(AFK_WORKFLOW_PLAN)
+const DEFAULT_COORDINATE_CAPABILITY = compileEffectiveWorkflowPlan('default').capabilities.skills
 const AFK_GRANT = { status: 'valid', grants: ['enter-afk'] } as const
 const AUTH_TRACK_REGISTRY: TrackRegistry = {
   ordered: BUILTIN_TRACK_DEFINITIONS,
@@ -243,7 +246,7 @@ loops:
     clock,
     coordinates: {
       capture: async (context) => ({
-        resolution: { kind: 'default' as const, stepId: 'build' },
+        resolution: { kind: 'default' as const, stepId: 'build', capability: DEFAULT_COORDINATE_CAPABILITY },
         workflow: AFK_WORKFLOW_PLAN.id,
         track: 'backend',
         inputsDigest: 'f'.repeat(64),
@@ -258,14 +261,9 @@ loops:
       resolveCustom: () => [],
     },
     locator: {
-      locate: async () => { throw new Error('empty bundle must not locate skills') },
+      locate: createFsSkillContentLocator([join(process.cwd(), 'skills')]).locate,
     },
-    materialize: async () => ({
-      digest: 'e'.repeat(64),
-      casDir: join(root, '.pipeline', 'loops', 'skill-snapshots', 'sha256', 'e'.repeat(64)),
-      manifests: [],
-      reused: false,
-    }),
+    materialize: materializeSkillSnapshot,
   })
 
   it('enqueue 按调用者解析的 effective policy 判定，动态 track id 本身不参与能力判断', async () => {
@@ -405,7 +403,6 @@ loops:
     await afk.enqueue('sdk-authorized', eligiblePolicy)
 
     const report = await afk.runRound(runChange)
-
     expect(report).toMatchObject({ candidates: 1, admitted: 1, ok: true })
     expect(runChange).toHaveBeenCalledOnce()
     expect(await store.get(dir, 'automation')).toBe('paused')

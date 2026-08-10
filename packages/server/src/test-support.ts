@@ -2,10 +2,11 @@
  * server 测试基座 —— 真 fs / 真 HTTP 客户端工具（GOAL C9：绝不 mock，真起真请求）。
  * 非 *.test.ts（会被 tsc 编入 dist），但仅测试引用；生产 index.ts 不导出。
  */
+import { spawnSync } from 'node:child_process'
 import { request as httpRequest, get as httpGet, type IncomingHttpHeaders } from 'node:http'
 import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   builtinTrack,
@@ -46,6 +47,45 @@ export function testFlow(): FlowEngine {
 
 export function newStore(): StateStore {
   return createStateStore()
+}
+
+/** Record the current Workflow-owned phase Skill through the production tracker hook. */
+export async function recordWorkflowPhaseSkill(root: string, changeDir: string): Promise<void> {
+  const state = await createStateStore().read(changeDir)
+  const phase = String(state.fields.phase)
+  const skill = `tenon-${phase}`
+  const pointer = join(root, '.pipeline-active')
+  let previous: string | undefined
+  try {
+    previous = await readFile(pointer, 'utf8')
+  } catch {
+    // Fresh server fixtures do not normally have a selected Change.
+  }
+  await writeFile(pointer, `${basename(changeDir)}\n`, 'utf8')
+  try {
+    const hooksRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'hooks')
+    const result = spawnSync('bash', [join(hooksRoot, 'skill-tracker.sh')], {
+      cwd: root,
+      env: { ...process.env, TENON_PROJECT_ROOT: root },
+      input: JSON.stringify({
+        cwd: root,
+        tool_name: 'Skill',
+        tool_input: { skill },
+        session_id: `server-test-${basename(changeDir)}-${phase}`,
+        tool_use_id: `phase-${phase}-${Date.now()}`,
+      }),
+      encoding: 'utf8',
+    })
+    if (result.error) throw result.error
+    if (result.status !== 0) throw new Error(`skill-tracker.sh failed for ${skill}: ${result.stderr ?? ''}`)
+    const history = await readFile(join(changeDir, '.pipeline-history.jsonl'), 'utf8')
+    if (!history.split('\n').some((line) => line.includes(`\"raw\":\"Skill: ${skill}\"`))) {
+      throw new Error(`skill-tracker.sh did not record ${skill} for ${basename(changeDir)}`)
+    }
+  } finally {
+    if (previous === undefined) await rm(pointer, { force: true })
+    else await writeFile(pointer, previous, 'utf8')
+  }
 }
 
 export async function makeTempHome(): Promise<string> {

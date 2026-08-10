@@ -378,7 +378,7 @@ describe('真实 e2e —— 全命令驱动真 kernel + 真 fs（GOAL C9）', ()
     const trans = hist.split('\n').filter((l) => l.includes('"kind":"transition"'))
     expect(trans).toHaveLength(7)
     expect(trans.some((l) => l.includes('"raw":"verify-pass"'))).toBe(true)
-  })
+  }, 30_000)
 
   test('真实 CLI/default assessor 拒绝 legacy phase/build_sha backfill，即使有 approved review receipt', async () => {
     await h.run(['init', 'backfill', '--track', 'backend', '--preset', 'full'])

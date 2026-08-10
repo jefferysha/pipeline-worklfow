@@ -138,7 +138,10 @@ export function createExecutionPreparation(deps: ExecutionPreparationDeps): Exec
       return { ok: false, reason: 'skill-bundle-resolve-failed', detail: errText(e) }
     }
     const resolutionInput: SkillBundleResolutionInput = coordinate.resolution.kind === 'default'
-      ? { kind: 'default', stepId: coordinate.resolution.stepId, profileId: skillBundleId }
+      ? {
+          kind: 'default', stepId: coordinate.resolution.stepId, profileId: skillBundleId,
+          capability: coordinate.resolution.capability,
+        }
       : { kind: 'custom', step: coordinate.resolution.step, profileId: skillBundleId }
     // H10 r1 阻断6（任务B1）：resolver 调用（resolveDefault/resolveCustom，可能触及 manifest/
     // step.skills 解析失败）同样此前在结构化捕获之外。此刻 coordinate 已知，workflowKind 精确传

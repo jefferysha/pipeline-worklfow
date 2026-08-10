@@ -89,6 +89,8 @@ const TRACK_REGISTRY: TrackRegistry = {
   source: 'builtin-only',
 }
 
+const DEFAULT_COORDINATE_CAPABILITY = compileEffectiveWorkflowPlan('default').capabilities.skills
+
 let dir: string
 let idc = 0
 const admission = (over: Partial<LoopAdmissionDeps> & { loops?: LoopEntry[] } = {}) => {
@@ -1732,6 +1734,7 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
 
   const fakeResolver = (over: Partial<EffectiveSkillResolver> = {}): EffectiveSkillResolver => ({
     resolveDefault: over.resolveDefault ?? (() => [{ token: 'demo-skill', alternatives: ['demo-skill'] }]),
+    resolveExplicitProfile: over.resolveExplicitProfile ?? (() => [{ token: 'demo-skill', alternatives: ['demo-skill'] }]),
     resolveCustom: over.resolveCustom ?? (() => [{ token: 'demo-skill', alternatives: ['demo-skill'] }]),
   })
 
@@ -1741,7 +1744,11 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
       inputsDigest: string; currentInputsDigest: string; workflowRunId: string
     }> = {},
   ): ExecutionCoordinatePort => {
-    const resolution = over.resolution ?? { kind: 'default' as const, stepId: 'open' }
+    const resolution = over.resolution ?? {
+      kind: 'default' as const,
+      stepId: 'open',
+      capability: DEFAULT_COORDINATE_CAPABILITY,
+    }
     const workflow = over.workflow ?? 'default'
     const track = over.track ?? 'pm'
     // coordinate_digest 现在真落 skill-bundle-snapshot 记录（codec 用 checkSha256 窄校验），默认值须是
@@ -1884,7 +1891,7 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
 
   it('alternative 顺序：第一候选缺失、第二候选存在 → 选中第二个（不依赖隐含顺序静默换成第一个）', async () => {
     await makeSkillDir('skill-b', '# b only')
-    const resolver = fakeResolver({ resolveDefault: () => [{ token: 'skill-a|skill-b', alternatives: ['skill-a', 'skill-b'] }] })
+    const resolver = fakeResolver({ resolveExplicitProfile: () => [{ token: 'skill-a|skill-b', alternatives: ['skill-a', 'skill-b'] }] })
     const preparation = createExecutionPreparation(prepDeps({ resolver }))
     const result = await preparation.prepare(ctxFor())
     expect(result.ok).toBe(true)
@@ -1903,7 +1910,7 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
     await writeFile(join(outside, 'secret.txt'), 'nope', 'utf8')
     await symlink(join(outside, 'secret.txt'), join(dirA, 'escape.txt'))
     await makeSkillDir('skill-b', '# valid')
-    const resolver = fakeResolver({ resolveDefault: () => [{ token: 'skill-a|skill-b', alternatives: ['skill-a', 'skill-b'] }] })
+    const resolver = fakeResolver({ resolveExplicitProfile: () => [{ token: 'skill-a|skill-b', alternatives: ['skill-a', 'skill-b'] }] })
     const preparation = createExecutionPreparation(prepDeps({ resolver }))
     const result = await preparation.prepare(ctxFor())
     expect(result.ok).toBe(false)
@@ -1911,7 +1918,7 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
   })
 
   it('全部候选都缺失 → skill-bundle-skill-not-found', async () => {
-    const resolver = fakeResolver({ resolveDefault: () => [{ token: 'ghost-a|ghost-b', alternatives: ['ghost-a', 'ghost-b'] }] })
+    const resolver = fakeResolver({ resolveExplicitProfile: () => [{ token: 'ghost-a|ghost-b', alternatives: ['ghost-a', 'ghost-b'] }] })
     const preparation = createExecutionPreparation(prepDeps({ resolver }))
     const result = await preparation.prepare(ctxFor())
     expect(result.ok).toBe(false)
@@ -1924,7 +1931,7 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
       await makeSkillDir('conflicted', '# version A\n')
       await mkdir(join(rootB, 'conflicted'), { recursive: true })
       await writeFile(join(rootB, 'conflicted', 'SKILL.md'), '# version B\n', 'utf8')
-      const resolver = fakeResolver({ resolveDefault: () => [{ token: 'conflicted', alternatives: ['conflicted'] }] })
+      const resolver = fakeResolver({ resolveExplicitProfile: () => [{ token: 'conflicted', alternatives: ['conflicted'] }] })
       const preparation = createExecutionPreparation(prepDeps({ resolver, locator: createFsSkillContentLocator([skillsRoot, rootB]) }))
       const result = await preparation.prepare(ctxFor())
       expect(result.ok).toBe(false)
@@ -1935,7 +1942,7 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
   })
 
   it('合法空 slots（resolver 返回 []）→ 成功产出确定性空快照，不视为未接线', async () => {
-    const resolver = fakeResolver({ resolveDefault: () => [] })
+    const resolver = fakeResolver({ resolveExplicitProfile: () => [] })
     const preparation = createExecutionPreparation(prepDeps({ resolver }))
     const result = await preparation.prepare(ctxFor())
     expect(result.ok).toBe(true)
@@ -1979,7 +1986,7 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
   it('复制期间源内容持续变化（每次尝试都变，两遍皆不稳定）→ skill-bundle-source-unstable', async () => {
     const dirC = await makeSkillDir('flaky-skill', '# v1')
     let counter = 0
-    const resolver = fakeResolver({ resolveDefault: () => [{ token: 'flaky-skill', alternatives: ['flaky-skill'] }] })
+    const resolver = fakeResolver({ resolveExplicitProfile: () => [{ token: 'flaky-skill', alternatives: ['flaky-skill'] }] })
     const preparation = createExecutionPreparation(prepDeps({
       resolver,
       materialize: (inputs, options) => materializeSkillSnapshot(inputs, {
@@ -2000,7 +2007,7 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
   // fs 竞态时序）。
   it('materialize() 物化后的 treeSha256 与 provenance 预读值不一致（模拟预读后/物化前窗口的源内容漂移）→ skill-bundle-source-unstable，不用失真 provenance 发布', async () => {
     await makeSkillDir('demo-skill', '# demo')
-    const resolver = fakeResolver({ resolveDefault: () => [{ token: 'demo-skill', alternatives: ['demo-skill'] }] })
+    const resolver = fakeResolver({ resolveExplicitProfile: () => [{ token: 'demo-skill', alternatives: ['demo-skill'] }] })
     let materializeCalled = false
     const preparation = createExecutionPreparation(prepDeps({
       resolver,
@@ -2073,9 +2080,9 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
     expect(locatorCalled).toBe(false)
   })
 
-  it('resolver（resolveDefault）抛错 → 结构化归 skill-bundle-resolve-failed，workflowKind=default（coordinate 已知，精确传递）', async () => {
+  it('resolver（resolveExplicitProfile）抛错 → 结构化归 skill-bundle-resolve-failed，workflowKind=default（coordinate 已知，精确传递）', async () => {
     let locatorCalled = false
-    const resolver = fakeResolver({ resolveDefault: () => { throw new Error('manifest 解析失败') } })
+    const resolver = fakeResolver({ resolveExplicitProfile: () => { throw new Error('manifest 解析失败') } })
     const preparation = createExecutionPreparation(prepDeps({
       resolver,
       locator: { locate: async () => { locatorCalled = true; throw new Error('不应被调用') } },
@@ -2109,14 +2116,14 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
 
   it('locator 抛出未识别错误类型 → fail-loud 原样重新抛出（不伪装成任何 PreparationFailureReason）', async () => {
     const boom = Object.assign(new Error('unexpected disk gremlin'), { _tag: 'TotallyUnknownError' })
-    const resolver = fakeResolver({ resolveDefault: () => [{ token: 'x', alternatives: ['x'] }] })
+    const resolver = fakeResolver({ resolveExplicitProfile: () => [{ token: 'x', alternatives: ['x'] }] })
     const locator = { locate: async (): Promise<never> => { throw boom } }
     const preparation = createExecutionPreparation(prepDeps({ resolver, locator }))
     await expect(preparation.prepare(ctxFor())).rejects.toBe(boom)
   })
 
   it('locate() 抛出 SkillContentInvalidError（非路径不安全，模拟内容层面判定）也正确映射（防止只测 symlink 这一种触发路径）', async () => {
-    const resolver = fakeResolver({ resolveDefault: () => [{ token: 'x', alternatives: ['x'] }] })
+    const resolver = fakeResolver({ resolveExplicitProfile: () => [{ token: 'x', alternatives: ['x'] }] })
     const locator = { locate: async (): Promise<never> => { throw new SkillContentInvalidError('内容非法（构造样例）') } }
     const preparation = createExecutionPreparation(prepDeps({ resolver, locator }))
     const result = await preparation.prepare(ctxFor())
@@ -2152,7 +2159,10 @@ describe('H10 §3/§8任务5：createExecutionPreparation（真 fs 定位/物化
       coordinates: {
         capture: async () => {
           coordinatesCalled = true
-          return { resolution: { kind: 'default', stepId: 'open' }, workflow: 'default', track: 'pm', inputsDigest: 'd' }
+          return {
+            resolution: { kind: 'default', stepId: 'open', capability: DEFAULT_COORDINATE_CAPABILITY },
+            workflow: 'default', track: 'pm', inputsDigest: 'd',
+          }
         },
         readCurrentInputsDigest: async () => 'd',
       },

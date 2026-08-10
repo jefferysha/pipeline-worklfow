@@ -201,3 +201,44 @@ describe('resolveCustom —— step.skills[].id', () => {
     expect(r.resolveCustom(step([]), 'frontend')).toEqual([])
   })
 })
+
+describe('issue #43 —— Workflow phase slots stay ahead of Track overlays', () => {
+  it('free/default still resolves the frozen current phase slot when matrix=false', () => {
+    const resolver = createEffectiveSkillResolver({
+      mandatorySkills: table({ build: { free: ['writing-plans'] } }),
+      recommendedSkills: table({ build: { free: ['hallmark'] } }),
+    })
+    const plan = compileEffectiveWorkflowPlan('default', undefined, {
+      id: 'free', label: 'free', builtin: true,
+      workflow: { default: 'default', allowed: '*' },
+      policyProfile: {
+        reviewSeed: 'pending', automationEligible: false, coverageProfile: 'none',
+        routing: { enabled: false }, skills: { matrix: false, profile: 'free' },
+      },
+    })
+
+    expect(resolver.resolveRequired?.(plan.capabilities.skills, 'build').map((slot) => slot.token))
+      .toEqual(['tenon-build'])
+    expect(resolver.resolveAvailable?.(plan.capabilities.skills, 'build').map((slot) => slot.token))
+      .toEqual(['tenon-build'])
+  })
+
+  it('matrix-enabled default prepends phase slots and keeps mandatory/recommended order', () => {
+    const resolver = createEffectiveSkillResolver({
+      mandatorySkills: table({ explore: { backend: ['openspec-explore', 'shared'] } }),
+      recommendedSkills: table({ explore: { backend: ['shared', 'search-first'] } }),
+    })
+    const plan = compileEffectiveWorkflowPlan('default', undefined, {
+      id: 'backend', label: 'backend', builtin: true,
+      workflow: { default: 'default', allowed: '*' },
+      policyProfile: {
+        reviewSeed: 'pending', automationEligible: true, coverageProfile: 'backend',
+        routing: { enabled: true }, skills: { matrix: true, profile: 'backend' },
+      },
+    })
+    expect(resolver.resolveRequired?.(plan.capabilities.skills, 'explore').map((slot) => slot.token))
+      .toEqual(['tenon-explore', 'openspec-explore', 'shared'])
+    expect(resolver.resolveAvailable?.(plan.capabilities.skills, 'explore').map((slot) => slot.token))
+      .toEqual(['tenon-explore', 'openspec-explore', 'shared', 'search-first'])
+  })
+})

@@ -21,6 +21,7 @@ import {
   makeProject,
   newStore,
   readGovernedDocumentsForCurrentVisit,
+  recordWorkflowPhaseSkill,
   seedGovernedDocumentEvidence,
   testFlow,
 } from './test-support.js'
@@ -34,6 +35,7 @@ describe('真实 e2e —— server 并发 transition 尾部写入严格串行（
     const initializedChangeDir = await initChange(store, root, name)
     const changeDir = join(root, 'openspec', 'changes', name)
     await seedGovernedDocumentEvidence(root, initializedChangeDir, name)
+    await recordWorkflowPhaseSkill(root, changeDir)
     // explore-complete 的前置（design_doc）从一开始就满足，两次 transition 之间不需要再插入
     // 任何 set 步骤。
     // Reuse the seeded OpenSpec design: changing it here would intentionally invalidate its
@@ -74,6 +76,7 @@ describe('真实 e2e —— server 并发 transition 尾部写入严格串行（
     // The first transition has committed its canonical explore visit before its breadcrumb tail.
     // Simulate the agent reading governed inputs in that exact visit before the next exit attempt.
     await readGovernedDocumentsForCurrentVisit(root, changeDir)
+    await recordWorkflowPhaseSkill(root, changeDir)
 
     const p2 = performTransition(deps, root, name, 'explore-complete')
     await new Promise((r) => setTimeout(r, 30))
@@ -110,6 +113,7 @@ describe('真实 e2e —— server 并发 transition 尾部写入严格串行（
       review_requested_at: '2026-07-16T00:00:00Z',
       review_acknowledged_at: '2026-07-16T00:00:00Z',
     })
+    await recordWorkflowPhaseSkill(root, changeDir)
     const deps: TransitionDeps = {
       store,
       runRepo: createWorkflowRunRepository({
@@ -139,6 +143,7 @@ describe('真实 e2e —— server 并发 transition 尾部写入严格串行（
       isolation: 'worktree',
       pre_verify_review_result: 'pass',
     })
+    await recordWorkflowPhaseSkill(root, changeDir)
     const deps: TransitionDeps = {
       store,
       runRepo: createWorkflowRunRepository({

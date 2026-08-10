@@ -6,8 +6,10 @@
  * fail-closed，保持与 runtime preparation 的错误边界一致。
  */
 import {
+  compileEffectiveWorkflowPlan,
   resolveSkillBundle,
   type EffectiveSkillResolver,
+  type EffectiveWorkflowPlan,
   type LoopEntry,
   type StepIR,
 } from '@tenon/kernel'
@@ -29,7 +31,11 @@ export interface SkillBundleWiringDeps {
 
 /** host 已解析的 workflow 坐标；profileId 仍由 loop 的 durable skill_bundle_id 唯一提供。 */
 export type SkillBundleWiringResolutionInput =
-  | { readonly kind: 'default'; readonly stepId: string }
+  | {
+      readonly kind: 'default'
+      readonly stepId: string
+      readonly capability: EffectiveWorkflowPlan['capabilities']['skills']
+    }
   | { readonly kind: 'custom'; readonly step: StepIR }
 
 type SlotLocateOutcome = { readonly ok: true } | { readonly ok: false; readonly detail: string }
@@ -95,10 +101,10 @@ export async function evaluateSkillBundleWiring(
       reason: `custom workflow "${workflowId}" 缺少 host 已编译 StepIR 解析计划，拒绝偷用同名 default phase`,
     }
   }
-  const effectiveInputs = resolutionInputs ?? loop.phases.map((stepId) => ({
-    kind: 'default' as const,
-    stepId,
-  }))
+  const effectiveInputs = resolutionInputs ?? (() => {
+    const capability = compileEffectiveWorkflowPlan('default').capabilities.skills
+    return loop.phases.map((stepId) => ({ kind: 'default' as const, stepId, capability }))
+  })()
   const expectedKind = workflowId === 'default' ? 'default' : 'custom'
   const mismatchedKind = effectiveInputs.find((input) => input.kind !== expectedKind)
   if (mismatchedKind !== undefined) {
@@ -133,7 +139,10 @@ export async function evaluateSkillBundleWiring(
       slots = resolveSkillBundle(
         deps.resolver,
         resolutionInput.kind === 'default'
-          ? { kind: 'default', stepId: resolutionInput.stepId, profileId: bundleId }
+          ? {
+              kind: 'default', stepId: resolutionInput.stepId, profileId: bundleId,
+              capability: resolutionInput.capability,
+            }
           : { kind: 'custom', step: resolutionInput.step, profileId: bundleId },
       ).slots
     } catch (error) {

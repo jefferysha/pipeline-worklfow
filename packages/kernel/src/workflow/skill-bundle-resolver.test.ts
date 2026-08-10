@@ -15,6 +15,7 @@ import { resolveSkillBundle } from './skill-bundle-resolver.js'
 import type { SkillTable } from '../flow/manifest.js'
 import type { StepIR } from './ir.js'
 import type { TrackRegistry } from '../tracks/types.js'
+import { compileEffectiveWorkflowPlan } from './effective-plan.js'
 
 /** 最小 SkillTable 夹具（对齐 effective-skill-resolver.test.ts 同款写法）。 */
 function table(rows: Record<string, Record<string, readonly string[]>>): SkillTable {
@@ -26,16 +27,22 @@ function step(skills: readonly { id: string }[]): StepIR {
   return { id: 's', label: '', gate: null, skills, inputs: [], outputs: [], guards: [], artifacts: [], transitions: [] }
 }
 
-describe('resolveSkillBundle —— default 分支委托 resolveDefault', () => {
-  it('原样转发 stepId/profileId 给 resolveDefault，source 标 default，slots 等于 resolver 产出、不触碰 resolveCustom', () => {
+describe('resolveSkillBundle —— default 分支委托 frozen explicit profile', () => {
+  const capability = compileEffectiveWorkflowPlan('default').capabilities.skills
+
+  it('原样转发 capability/stepId/profileId 给 resolveExplicitProfile，source 标 default，不触碰 legacy profile API/custom', () => {
     const slots: EffectiveSkillSlot[] = [{ token: 'm1', alternatives: ['m1'] }]
     const resolveDefault = vi.fn().mockReturnValue(slots)
+    const resolveExplicitProfile = vi.fn().mockReturnValue(slots)
     const resolveCustom = vi.fn()
-    const resolver: EffectiveSkillResolver = { resolveDefault, resolveCustom }
+    const resolver: EffectiveSkillResolver = { resolveDefault, resolveExplicitProfile, resolveCustom }
 
-    const result = resolveSkillBundle(resolver, { kind: 'default', stepId: 'explore', profileId: 'frontend' })
+    const result = resolveSkillBundle(resolver, {
+      kind: 'default', stepId: 'explore', profileId: 'frontend', capability,
+    })
 
-    expect(resolveDefault).toHaveBeenCalledWith('explore', 'frontend')
+    expect(resolveExplicitProfile).toHaveBeenCalledWith(capability, 'explore', 'frontend')
+    expect(resolveDefault).not.toHaveBeenCalled()
     expect(resolveCustom).not.toHaveBeenCalled()
     expect(result).toEqual({ source: 'default', slots })
   })
@@ -46,11 +53,14 @@ describe('resolveSkillBundle —— default 分支委托 resolveDefault', () => 
       recommendedSkills: table({}),
     })
 
-    const result = resolveSkillBundle(resolver, { kind: 'default', stepId: 'explore', profileId: 'frontend' })
+    const result = resolveSkillBundle(resolver, {
+      kind: 'default', stepId: 'explore', profileId: 'frontend', capability,
+    })
 
     expect(result).toEqual({
       source: 'default',
       slots: [
+        { token: 'tenon-explore', alternatives: ['tenon-explore'] },
         { token: 'opsx:explore|openspec-explore', alternatives: ['opsx:explore', 'openspec-explore'] },
         { token: 'grill-with-docs', alternatives: ['grill-with-docs'] },
       ],
@@ -63,11 +73,18 @@ describe('resolveSkillBundle —— default 分支委托 resolveDefault', () => 
       recommendedSkills: table({}),
     })
 
-    expect(resolveSkillBundle(resolver, { kind: 'default', stepId: 'open', profileId: 'backend' })).toEqual({
+    expect(resolveSkillBundle(resolver, {
+      kind: 'default', stepId: 'open', profileId: 'backend', capability,
+    })).toEqual({
       source: 'default',
-      slots: [{ token: 'propose', alternatives: ['propose'] }],
+      slots: [
+        { token: 'tenon-open', alternatives: ['tenon-open'] },
+        { token: 'propose', alternatives: ['propose'] },
+      ],
     })
-    expect(resolveSkillBundle(resolver, { kind: 'default', stepId: 'not-a-phase', profileId: 'frontend' })).toEqual({
+    expect(resolveSkillBundle(resolver, {
+      kind: 'default', stepId: 'not-a-phase', profileId: 'frontend', capability,
+    })).toEqual({
       source: 'default',
       slots: [],
     })
@@ -88,10 +105,37 @@ describe('resolveSkillBundle —— default 分支委托 resolveDefault', () => 
       },
     })
 
-    expect(resolveSkillBundle(resolver, { kind: 'default', stepId: 'open', profileId: '_all' })).toEqual({
+    expect(resolveSkillBundle(resolver, {
+      kind: 'default', stepId: 'open', profileId: '_all', capability,
+    })).toEqual({
       source: 'default',
-      slots: [{ token: 'propose', alternatives: ['propose'] }],
+      slots: [
+        { token: 'tenon-open', alternatives: ['tenon-open'] },
+        { token: 'propose', alternatives: ['propose'] },
+      ],
     })
+  })
+
+  it('issue #43：携带冻结 capability 时显式 profile 以 phase slot 开头', () => {
+    const resolver = createEffectiveSkillResolver({
+      mandatorySkills: table({ build: { free: ['writing-plans'] } }),
+      recommendedSkills: table({ build: { free: ['hallmark'] } }),
+    })
+    const plan = compileEffectiveWorkflowPlan('default')
+    const result = resolveSkillBundle(resolver, {
+      kind: 'default', stepId: 'build', profileId: 'free', capability: plan.capabilities.skills,
+    })
+    expect(result.slots.map((slot) => slot.token)).toEqual(['tenon-build', 'writing-plans', 'hallmark'])
+  })
+
+  it('issue #43：default bundle 缺 frozen capability 时 fail-closed，不回退到 profile-only resolver', () => {
+    const resolver = createEffectiveSkillResolver({
+      mandatorySkills: table({ build: { free: ['writing-plans'] } }),
+      recommendedSkills: table({}),
+    })
+    expect(() => resolveSkillBundle(resolver, {
+      kind: 'default', stepId: 'build', profileId: 'free', capability: undefined as never,
+    })).toThrow('default skill bundle requires frozen workflow capability')
   })
 })
 

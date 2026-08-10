@@ -1,12 +1,14 @@
 /** H11 starter 的纯读 binding/workflow/skill wiring 报告器；准入消费者与 CLI 展示共用。 */
 import {
   compileAutomationPolicyTemplate,
+  compileEffectiveWorkflowPlan,
   compileWorkflow,
   getAutomationPolicyTemplate,
   loadWorkflow,
   LOOP_RUNNERS,
   PHASES,
   resolveStep,
+  resolveEffectiveWorkflowPlan,
   validateAutomationPolicyTemplate,
   type AutomationPolicyTemplate,
   type LoopEntry,
@@ -197,7 +199,8 @@ export async function buildLoopStarterWiringReport(
           { status: 'unwired', reason: 'default workflow phase 无法映射到 runtime 坐标' },
         )
       }
-      skillResolutionInputs = target.phases.map((stepId) => ({ kind: 'default', stepId }))
+      const capability = compileEffectiveWorkflowPlan('default').capabilities.skills
+      skillResolutionInputs = target.phases.map((stepId) => ({ kind: 'default' as const, stepId, capability }))
     } else {
       let definition: WorkflowDef | null
       try {
@@ -337,10 +340,54 @@ export async function evaluateLoopExecutionWiring(
     }
     return { status: 'ready', loopId: loop.id, starter }
   }
+  const workflowId = loop.workflow_id ?? 'default'
+  let skillResolutionInputs: readonly SkillBundleWiringResolutionInput[]
+  let compiledCustom: WorkflowIR | undefined
+  let plan: ReturnType<typeof resolveEffectiveWorkflowPlan>
+  try {
+    plan = resolveEffectiveWorkflowPlan(workflowId, (name) => {
+      const definition = (deps.loadWorkflow ?? loadWorkflow)(deps.repoRoot, name)
+      if (definition === null) return null
+      compiledCustom = (deps.compileWorkflow ?? compileWorkflow)(definition)
+      return compiledCustom
+    })
+  } catch (error) {
+    return {
+      status: 'invalid', loopId: loop.id, dimension: 'workflow',
+      reason: `custom workflow "${workflowId}" 加载/校验/编译失败：${errorMessage(error)}`,
+      starter: null,
+    }
+  }
+  if (plan === null) {
+    return {
+      status: 'invalid', loopId: loop.id, dimension: 'workflow',
+      reason: `custom workflow "${workflowId}" 文件不存在或缺失，无法建立执行 wiring`,
+      starter: null,
+    }
+  }
+  if (plan.executionModel === 'phase-manifest') {
+    const capability = plan.capabilities.skills
+    skillResolutionInputs = loop.phases.map((stepId) => ({ kind: 'default' as const, stepId, capability }))
+  } else {
+    const compiled = compiledCustom ?? plan.workflow
+    const customInputs: SkillBundleWiringResolutionInput[] = []
+    for (const phase of loop.phases) {
+      const step = (deps.resolveStep ?? resolveStep)(compiled, phase)
+      if (step === null) {
+        return {
+          status: 'invalid', loopId: loop.id, dimension: 'workflow',
+          reason: `loop phase/step "${phase}" 未在 custom workflow "${workflowId}" 中声明`,
+          starter: null,
+        }
+      }
+      customInputs.push({ kind: 'custom', step })
+    }
+    skillResolutionInputs = customInputs
+  }
   const skill = await (deps.evaluateSkillBundleWiring ?? evaluateSkillBundleWiringDefault)(
     loop,
     deps.skillBundleWiringForLoop?.(loop) ?? deps.skillBundleWiring,
-    loop.phases.map((stepId) => ({ kind: 'default', stepId })),
+    skillResolutionInputs,
   )
   if (skill.status !== 'ready') {
     return {

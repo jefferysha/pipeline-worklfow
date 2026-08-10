@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { PRODUCT_IDENTITY, type SkillTable } from '@tenon/kernel'
+import { compileEffectiveWorkflowPlan, PRODUCT_IDENTITY, type SkillTable } from '@tenon/kernel'
 import type { DoctorProbes, HostPluginInventorySource } from '../deps.js'
 import {
   LEGACY_PLUGIN_IDENTITY,
@@ -126,6 +126,30 @@ export function checkSkills(p: DoctorProbes): [DoctorCheck, DoctorCheck] {
   }
 
   return evaluateSkillChecks(tables, registry, p.installedSkillNames())
+}
+
+/** Verify the Workflow-owned phase Skill layer independently from Track matrix tables. */
+export function checkWorkflowPhaseSkills(p: DoctorProbes): DoctorCheck {
+  try {
+    const plan = compileEffectiveWorkflowPlan('default')
+    const required = plan.capabilities.skills.steps.flatMap((step) => step.requiredSkillIds)
+    const missing = [...new Set(required)].filter((id) => !p.fileExists(join(p.pluginRoot, 'skills', id, 'SKILL.md')))
+    const contract = 'phase requirements=Workflow-owned; automatic overlays=matrix-enabled mandatory/recommended; explicit profiles=phase+named allowlist'
+    if (missing.length === 0) {
+      return green('skills:workflow-phase', `default ${contract}；${required.length} 个 phase Skill 可发现`)
+    }
+    return red(
+      'skills:workflow-phase',
+      `default Workflow 缺 ${missing.length} 个 phase Skill：${missing.join('、')}`,
+      `补齐 ${missing.map((id) => join(p.pluginRoot, 'skills', id, 'SKILL.md')).join('、')} 后重跑 tenon doctor`,
+    )
+  } catch (error) {
+    return red(
+      'skills:workflow-phase',
+      `default Workflow phase capability 无法解析：${error instanceof Error ? error.message : String(error)}`,
+      '修复 default workflow source/generated runtime 后重跑 tenon doctor',
+    )
+  }
 }
 
 const CODEX_PROJECT_CONTRACT_SKILLS = [

@@ -336,13 +336,20 @@ done
 `tenon-<phase>` 子 skill；custom workflow 则先读取冻结 DAG，只调用其中已解锁的 phase entry
 skill（若图未声明 `tenon-<phase>`，不得擅自补调用）。**禁止跳过此步骤**。
 
+default 的七个 `tenon-<phase>` 是 Workflow-owned hard requirements，随 Workflow snapshot
+冻结；`free`/`matrix=false` 也不能跳过当前 phase。manifest 的 Track
+`mandatory_skills`/`recommended_skills` 仅在 matrix-enabled 时自动叠加。artifact producer 与
+AFK 的显式 named profile 可以使用既有 allowlist，但 explicit resolver 仍以冻结 phase Skill
+为首位，不能反向把 profile 变成 Hook/transition 自动要求。
+
 内建 `simple` 也是非 default workflow，但不读取项目 `.pipeline/workflows/simple.yaml`；其定义随插件
 版本由 kernel 只读提供，项目同名文件不能覆盖。`change` 只允许 `simple-task`，`verify` 只允许
 `verification-before-completion`，`done` / `escalated` 是终态。
 
 `free` 不是另一张 workflow 图：它只是中性的执行 Track。若绑定 default，仍使用上表七阶段子 skill，
-但有效 profile 是 `free`，只提供文档产物所需的最小 phase Skill；若绑定 custom，则完全按 custom
-图解析，既不补 default skill，也不跳过该图自己的 gate/Hook/OpenSpec contract。
+同时有效 profile 是 `free` 的 named allowlist 仅用于显式 artifact/AFK 投影；它不会削减冻结的
+phase Skill，也不会自动开启 Track overlay。若绑定 custom，则完全按 custom 图解析，既不补 default
+skill，也不跳过该图自己的 gate/Hook/OpenSpec contract。
 
 子 skill 的上下文优先级：`<pipeline-dispatch>` 注入 → 已激活 Change / `tenon status` →
 `TENON_TRACK` 与 `TENON_CHANGE_NAME` 环境变量。环境变量只是兼容快捷方式，不能是唯一真相源：

@@ -1,5 +1,12 @@
 import { describe, expect, test, vi } from 'vitest'
-import type { EffectiveSkillResolver, LoopEntry, WorkflowDef, WorkflowIR } from '@tenon/kernel'
+import {
+  compileEffectiveWorkflowPlan,
+  createEffectiveSkillResolver,
+  type EffectiveSkillResolver,
+  type LoopEntry,
+  type WorkflowDef,
+  type WorkflowIR,
+} from '@tenon/kernel'
 import {
   buildLoopStarterWiringReport,
   type LoopStarterWiringDeps,
@@ -39,6 +46,7 @@ const EMPTY_RESOLVER: EffectiveSkillResolver = {
   resolveDefault: () => [],
   resolveCustom: () => [],
 }
+const DEFAULT_CAPABILITY = compileEffectiveWorkflowPlan('default').capabilities.skills
 
 function workflowIr(name: string, stepIds: readonly string[]): WorkflowIR {
   return {
@@ -83,7 +91,7 @@ describe('buildLoopStarterWiringReport', () => {
     expect(evaluate).toHaveBeenCalledWith(
       entry,
       expect.objectContaining({ resolver: EMPTY_RESOLVER }),
-      [{ kind: 'default', stepId: 'build' }],
+      [{ kind: 'default', stepId: 'build', capability: DEFAULT_CAPABILITY }],
     )
   })
 
@@ -125,9 +133,9 @@ describe('buildLoopStarterWiringReport', () => {
       entry,
       expect.objectContaining({ resolver: EMPTY_RESOLVER }),
       [
-        { kind: 'default', stepId: 'open' },
-        { kind: 'default', stepId: 'build' },
-        { kind: 'default', stepId: 'verify' },
+        { kind: 'default', stepId: 'open', capability: DEFAULT_CAPABILITY },
+        { kind: 'default', stepId: 'build', capability: DEFAULT_CAPABILITY },
+        { kind: 'default', stepId: 'verify', capability: DEFAULT_CAPABILITY },
       ],
     )
     expect(report.runnable).toBe(true)
@@ -149,6 +157,26 @@ describe('buildLoopStarterWiringReport', () => {
     expect(report.runnable).toBe(false)
     expect(load).not.toHaveBeenCalled()
     expect(evaluate).not.toHaveBeenCalled()
+  })
+
+  test('default static admission 缺 phase Skill 内容 → skill bundle invalid，不降级成 profile-only 空/部分快照', async () => {
+    const entry = loop({ status: 'active', phases: ['build'] })
+    const report = await buildLoopStarterWiringReport('ci-sweeper', [entry], {
+      repoRoot: '/repo',
+      skillBundleWiring: {
+        resolver: createEffectiveSkillResolver({ mandatorySkills: {}, recommendedSkills: {} }),
+        isSkillProfileKnown: () => true,
+        locator: {
+          locate: async () => {
+            throw new SkillContentNotFoundError('tenon-build missing')
+          },
+        },
+      },
+    })
+
+    expect(report.wiring.skillBundle).toMatchObject({ status: 'invalid' })
+    expect(report.wiring.reason).toMatch(/phase "build".*tenon-build|tenon-build/i)
+    expect(report.runnable).toBe(false)
   })
 
   test('runner 不在 kernel LOOP_RUNNERS 闭集 → binding invalid，绝不降级到 Claude', async () => {
