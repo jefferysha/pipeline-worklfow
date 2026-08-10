@@ -91,3 +91,27 @@
 {"ts":"2026-08-09T23:22:37Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-fail authority_issued_at=2026-08-09T23:22:00Z authority_host_session=019fe020-7883-7010-993f-4bb0506273bc"}
 {"ts":"2026-08-09T23:22:45Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
 {"ts":"2026-08-09T23:22:45Z","kind":"transition","from":"verify","to":"build","raw":"verify-fail","transitionRecordId":"f396293f-2502-462b-ac47-a57ddcab0d50"}
+{"ts":"2026-08-09T23:57:03Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-09T23:57:19Z","kind":"set","field":"pre_verify_review_result","to":"pass"}
+{"ts":"2026-08-09T23:57:38Z","kind":"tool","raw":"CodexSkillRead: writing-plans"}
+{"ts":"2026-08-09T23:57:38Z","kind":"tool","raw":"CodexSkillRead: test-driven-development"}
+{"ts":"2026-08-09T23:57:38Z","kind":"transition","from":"build","to":"verify","raw":"build-complete","transitionRecordId":"12e80851-433b-4339-8b01-af9be5cfd53f"}
+{"ts":"2026-08-10T00:09:30Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-10T00:09:30Z","kind":"tool","raw":"CodexSkillRead: verification-before-completion"}
+{"ts":"2026-08-10T00:09:30Z","kind":"tool","raw":"CodexSkillReadBinding: verification-before-completion cf585986-3742-4155-b4e1-543f05594fff 10"}
+{"ts":"2026-08-10T00:09:31Z","kind":"tool","raw":"CodexSkillRead: tenon-verify"}
+{"ts":"2026-08-10T00:09:31Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-verify cf585986-3742-4155-b4e1-543f05594fff 10"}
+{"ts":"2026-08-10T00:09:44Z","kind":"set","field":"verification_report","to":"docs/superpowers/reports/2026-08-10-issue-67-afk-empty-queue-remediation-verify.md"}
+{"ts":"2026-08-10T00:09:44Z","kind":"set","field":"agent_review_result","to":"pass"}
+{"ts":"2026-08-10T00:09:44Z","kind":"set","field":"codex_review_result","to":"pass"}
+{"ts":"2026-08-10T00:09:44Z","kind":"set","field":"branch_status","to":"handled"}
+{"ts":"2026-08-10T00:09:50Z","kind":"tool","raw":"review:request phase=verify event=verify-pass"}
+{"ts":"2026-08-10T00:09:50Z","kind":"tool","raw":"review:delegated-ack phase=verify event=verify-pass authority_issued_at=2026-08-10T00:09:30Z authority_host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-10T00:09:50Z","kind":"transition","from":"verify","to":"ship","raw":"verify-pass","transitionRecordId":"d34a5e0e-6405-4adf-b7c7-217273744b81"}
+{"ts":"2026-08-10T00:11:05Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-10T00:11:05Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change cf585986-3742-4155-b4e1-543f05594fff 11"}
+{"ts":"2026-08-10T00:11:15Z","kind":"prompt","raw":"interaction-authority:enabled scope=interactive-skills review=delegated host_session=019fe020-7883-7010-993f-4bb0506273bc"}
+{"ts":"2026-08-10T00:11:35Z","kind":"tool","raw":"CodexSkillRead: openspec-apply-change"}
+{"ts":"2026-08-10T00:11:35Z","kind":"tool","raw":"CodexSkillReadBinding: openspec-apply-change cf585986-3742-4155-b4e1-543f05594fff 11"}
+{"ts":"2026-08-10T00:12:06Z","kind":"tool","raw":"CodexSkillRead: tenon-ship"}
+{"ts":"2026-08-10T00:12:06Z","kind":"tool","raw":"CodexSkillReadBinding: tenon-ship cf585986-3742-4155-b4e1-543f05594fff 11"}

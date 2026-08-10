@@ -22,7 +22,7 @@
 
 ## 验证
 
-- [ ] 对冻结候选完成最多两次 formal Review、聚焦 E2E 与一次稳定候选完整门。 (verify)
+- [x] 对冻结候选完成最多两次 formal Review、聚焦 E2E 与一次稳定候选完整门。 (verify)
 
 ## 交付
 
