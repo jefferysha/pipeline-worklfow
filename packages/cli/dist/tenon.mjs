@@ -31460,7 +31460,7 @@ var REAL_STABLE_RELEASE_HTTP = {
         "user-agent": "tenon-release-resolver",
         "x-github-api-version": "2022-11-28"
       },
-      signal: AbortSignal.timeout(1e4)
+      signal: AbortSignal.timeout(STABLE_RELEASE_NETWORK_TIMEOUT_MS)
     });
     if (!response.ok) throw new Error(`stable Release request failed: HTTP ${response.status}`);
     const raw = record7(await response.json());
@@ -31495,7 +31495,7 @@ var TENON_HOSTS = [
 var TENON_MARKETPLACE_SOURCE = "jefferysha/tenon";
 var TENON_MARKETPLACE_NAME = "tenon";
 var TENON_PLUGIN_NAME = "tenon";
-var TENON_RELEASE_VERSION = "1.0.3";
+var TENON_RELEASE_VERSION = "1.0.4";
 function parseHostPluginInventory(host, stdout) {
   let parsed;
   try {
