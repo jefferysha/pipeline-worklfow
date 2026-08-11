@@ -12,6 +12,18 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 面向用户的解释、影响与操作步骤默认使用中文。
 
+## v1.0.4 · 2026-08-11
+
+### 公开安装与更新网络预算
+
+- shell installer 的 GitHub Release metadata/tag proof、`tenon update` 的 Release metadata 请求，以及 npm bootstrap 的 installer 下载，统一采用有界 30 秒网络预算。
+- exact stable Release、tag/object、digest、host trust、官方 HTTPS host、大小限制与原子性校验保持不变。
+- 仍然不重试、不使用 source/branch/cache fallback；失败继续在 mutation 前 fail-closed。
+
+### 升级动作
+
+当前公开入口使用不可变 `v1.0.4`；日常升级仍运行 `tenon update --codex`（或 `--claude`）。
+
 ## v1.0.3 · 2026-08-11
 
 ### Stable Release 证明诊断

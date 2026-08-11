@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 const repository = '__TENON_REPOSITORY__'
 const releaseRef = '__TENON_RELEASE_REF__'
 const installerSha256 = '__TENON_INSTALLER_SHA256__'
+const INSTALLER_NETWORK_TIMEOUT_MS = 30_000
 const allowedHosts = new Set(['--codex', '--claude'])
 
 function usage() {
@@ -48,6 +49,7 @@ async function downloadInstaller(url) {
   const response = await fetch(url, {
     redirect: 'follow',
     headers: { 'user-agent': 'tenon-npx-bootstrap' },
+    signal: AbortSignal.timeout(INSTALLER_NETWORK_TIMEOUT_MS),
   })
   if (!response.ok) throw new Error(`installer download failed: HTTP ${response.status}`)
   if (new URL(response.url).hostname !== 'raw.githubusercontent.com') {

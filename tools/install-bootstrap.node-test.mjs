@@ -321,6 +321,21 @@ test('Codex auth commands stay consistent across Chinese, English, troubleshooti
   }
 })
 
+test('public Release API requests use one bounded 30 second network budget', async () => {
+  const installer = await readFile(join(root, 'install.sh'), 'utf8')
+  const start = installer.indexOf('github_api_get()')
+  assert.notEqual(start, -1)
+  const end = installer.indexOf('\n}', start)
+  assert.notEqual(end, -1)
+  const helper = installer.slice(start, end)
+  assert.match(installer, /GITHUB_API_TIMEOUT_SECONDS=30\b/u)
+  assert.match(helper, /--connect-timeout\s+"\$GITHUB_API_TIMEOUT_SECONDS"/u)
+  assert.match(helper, /--max-time\s+"\$GITHUB_API_TIMEOUT_SECONDS"/u)
+  assert.match(helper, /--speed-time\s+"\$GITHUB_API_TIMEOUT_SECONDS"/u)
+  assert.match(helper, /--speed-limit\s+"\$GITHUB_API_SPEED_LIMIT_BYTES"/u)
+  assert.doesNotMatch(helper, /--(?:connect-timeout|max-time|speed-time)\s+(?:5|10)\b/u)
+})
+
 test('one-line dry-run prints the complete host and packaged setup plan without invoking the host or writing HOME', async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-dry-run-'))
   try {

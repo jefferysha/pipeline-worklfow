@@ -7,7 +7,9 @@ set -euo pipefail
 
 MARKETPLACE_SOURCE="jefferysha/tenon"
 MARKETPLACE_NAME="tenon"
-TENON_RELEASE_VERSION="1.0.3"
+TENON_RELEASE_VERSION="1.0.4"
+GITHUB_API_TIMEOUT_SECONDS=30
+GITHUB_API_SPEED_LIMIT_BYTES=1024
 HOST=""
 AUTO_UPDATE=0
 DRY_RUN=0
@@ -389,7 +391,10 @@ read_marketplace_state() {
 
 github_api_get() {
   run_curl --proto '=https' --tlsv1.2 --silent --show-error --fail \
-    --connect-timeout 5 --max-time 10 --speed-time 5 --speed-limit 1024 \
+    --connect-timeout "$GITHUB_API_TIMEOUT_SECONDS" \
+    --max-time "$GITHUB_API_TIMEOUT_SECONDS" \
+    --speed-time "$GITHUB_API_TIMEOUT_SECONDS" \
+    --speed-limit "$GITHUB_API_SPEED_LIMIT_BYTES" \
     -H 'Accept: application/vnd.github+json' \
     -H 'X-GitHub-Api-Version: 2022-11-28' \
     -H 'User-Agent: tenon-release-installer' "$1"

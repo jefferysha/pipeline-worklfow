@@ -4,6 +4,18 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
+## v1.0.4 · 2026-08-11
+
+### Public installation and update network budget
+
+- The shell installer’s GitHub Release metadata/tag proof, `tenon update` Release metadata fetch, and the npm bootstrap installer download now share a bounded 30-second network budget.
+- Exact stable Release, tag/object, digest, host trust, HTTPS host, size, and atomicity checks are unchanged.
+- There are still no retries or source/branch/cache fallbacks; failures remain closed before mutation.
+
+### Upgrade
+
+Install the immutable `v1.0.4` entrypoint, then use `tenon update --codex` (or `--claude`) for routine upgrades.
+
 ## v1.0.3 · 2026-08-11
 
 ### Stable Release proof diagnostics

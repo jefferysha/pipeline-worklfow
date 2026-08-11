@@ -171,7 +171,7 @@ export const REAL_STABLE_RELEASE_HTTP: StableReleaseHttp = {
         'user-agent': 'tenon-release-resolver',
         'x-github-api-version': '2022-11-28',
       },
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(STABLE_RELEASE_NETWORK_TIMEOUT_MS),
     })
     if (!response.ok) throw new Error(`stable Release request failed: HTTP ${response.status}`)
     const raw = record(await response.json())

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import { TENON_RELEASE_VERSION } from '../commands/plugin-host.js'
 import { defaultRuntimeCommandRunner, inspectCandidatePayload } from './release-payload.js'
 import { parseManifest, runtimeReleaseIdV2 } from './release-store-codecs.js'
 
@@ -30,7 +31,7 @@ describe('release payload subprocess boundary', () => {
   test('rejects a v2 manifest whose stable target version contradicts its source version', () => {
     const payloadDigest = 'b'.repeat(64)
     const source = { host: 'codex' as const, pluginVersion: '1.0.2' }
-    const stableTarget = { version: '1.0.3', tag: 'v1.0.3', commit: 'a'.repeat(40) }
+    const stableTarget = { version: TENON_RELEASE_VERSION, tag: `v${TENON_RELEASE_VERSION}`, commit: 'a'.repeat(40) }
     const releaseId = runtimeReleaseIdV2(payloadDigest, source, stableTarget)
 
     expect(parseManifest(JSON.stringify({

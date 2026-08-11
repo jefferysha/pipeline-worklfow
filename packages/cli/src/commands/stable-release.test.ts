@@ -3,6 +3,7 @@ import type { SetupEnv } from './setup.js'
 import {
   compareStableVersions,
   decodeStableReleaseMetadata,
+  REAL_STABLE_RELEASE_HTTP,
   resolveStableReleaseTarget,
   resolveStableTagTarget,
   stableTagForVersion,
@@ -124,6 +125,27 @@ describe('stable Release identity', () => {
       { command: 'rev-parse', timeoutMs: 10_000 },
       { command: 'cat-file', timeoutMs: 10_000 },
     ])
+  })
+
+  test('Release metadata HTTP keeps the bounded 30 second network budget', async () => {
+    const originalFetch = globalThis.fetch
+    const originalTimeout = AbortSignal.timeout
+    let timeoutMs: number | undefined
+    globalThis.fetch = async () => new Response(JSON.stringify(metadata), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+    AbortSignal.timeout = ((milliseconds: number) => {
+      timeoutMs = milliseconds
+      return originalTimeout.call(AbortSignal, milliseconds)
+    }) as typeof AbortSignal.timeout
+    try {
+      await expect(REAL_STABLE_RELEASE_HTTP.getJson('https://api.github.com/test')).resolves.toEqual(metadata)
+    } finally {
+      globalThis.fetch = originalFetch
+      AbortSignal.timeout = originalTimeout
+    }
+    expect(timeoutMs).toBe(30_000)
   })
 
   test('resolves an explicitly selected stable tag without a Release API or branch lookup', () => {
