@@ -91,17 +91,17 @@ test('Tenon 公开插件与 workspace 使用同一发行版本', async () => {
     const value = JSON.parse(await readFile(new URL(path, root), 'utf8'))
     return path === '.claude-plugin/marketplace.json' ? value.metadata.version : value.version
   }))
-  assert.deepEqual([...new Set(versions)], ['1.0.2'])
+  assert.deepEqual([...new Set(versions)], ['1.0.3'])
   const [installer, pluginHost, serverHostPlan, dashboardHostPlan] = await Promise.all([
     readFile(new URL('install.sh', root), 'utf8'),
     readFile(new URL('packages/cli/src/commands/plugin-host.ts', root), 'utf8'),
     readFile(new URL('packages/server/src/hostTargetPlanProtocol.ts', root), 'utf8'),
     readFile(new URL('packages/dashboard-app/src/api/hostTargetPlanDecoders.ts', root), 'utf8'),
   ])
-  assert.match(installer, /TENON_RELEASE_VERSION="1\.0\.2"/)
-  assert.match(pluginHost, /TENON_RELEASE_VERSION = '1\.0\.2'/)
-  assert.match(serverHostPlan, /HOST_PLAN_RELEASE_TAG = 'v1\.0\.2'/)
-  assert.match(dashboardHostPlan, /HOST_PLAN_RELEASE_TAG = 'v1\.0\.2'/)
+  assert.match(installer, /TENON_RELEASE_VERSION="1\.0\.3"/)
+  assert.match(pluginHost, /TENON_RELEASE_VERSION = '1\.0\.3'/)
+  assert.match(serverHostPlan, /HOST_PLAN_RELEASE_TAG = 'v1\.0\.3'/)
+  assert.match(dashboardHostPlan, /HOST_PLAN_RELEASE_TAG = 'v1\.0\.3'/)
 })
 
 test('入口 Skill 必须是安全 slug，不能越过 first-party skills 根', () => {

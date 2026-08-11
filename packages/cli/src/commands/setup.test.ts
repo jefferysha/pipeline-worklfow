@@ -40,8 +40,10 @@ import {
   readHostPluginConvergenceReceipt,
   recordPendingHostPluginConflict,
 } from './host-plugin-convergence.js'
-import { parseHostPluginInventory } from './plugin-host.js'
+import { parseHostPluginInventory, TENON_RELEASE_VERSION } from './plugin-host.js'
 import type { TrustedExecutable } from './trusted-executable.js'
+
+const CURRENT_RELEASE_TAG = `v${TENON_RELEASE_VERSION}` as const
 
 // ── spy env:记录全部 fs mutation + exec 调用,断言「零副作用」/「未碰 PATH」/「零执行」──────
 interface SpyCalls {
@@ -93,7 +95,7 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
     writeText: (p, text) => { calls.writeText.push([p, text]) },
     writeTextAtomic: (p, text) => { calls.writeText.push([p, text]) },
     inspectCandidatePayload: async () => ({
-      pluginVersion: '1.0.2',
+      pluginVersion: TENON_RELEASE_VERSION,
       payloadDigest: 'a'.repeat(64),
     }),
     migrateProjectRegistry: async () => ({
@@ -107,10 +109,10 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
       if (cmd === 'git' && args.join(' ') === [
         'ls-remote',
         'https://github.com/jefferysha/tenon.git',
-        'refs/tags/v1.0.2',
-        'refs/tags/v1.0.2^{}',
+        `refs/tags/${CURRENT_RELEASE_TAG}`,
+        `refs/tags/${CURRENT_RELEASE_TAG}^{}`,
       ].join(' ')) {
-        return { code: 0, stdout: `${'a'.repeat(40)}\trefs/tags/v1.0.2\n`, stderr: '' }
+        return { code: 0, stdout: `${'a'.repeat(40)}\trefs/tags/${CURRENT_RELEASE_TAG}\n`, stderr: '' }
       }
       if (cmd === 'git' && args[0] === 'init') return { code: 0, stdout: '', stderr: '' }
       if (cmd === 'git' && args[2] === 'fetch') return { code: 0, stdout: '', stderr: '' }
@@ -161,7 +163,7 @@ function spyEnv(over: Partial<SetupEnv> = {}, exec?: ExecStub, confirmAns = true
         return { code: 1, stdout: '', stderr: '' }
       }
       if (text === 'git -C /installed/tenon describe --tags --exact-match HEAD') {
-        return { code: 0, stdout: 'v1.0.2\n', stderr: '' }
+        return { code: 0, stdout: `${CURRENT_RELEASE_TAG}\n`, stderr: '' }
       }
       return result
     },
@@ -267,11 +269,11 @@ function setupPathExists(path: string): boolean {
 function setupReadText(path: string): string | undefined {
   if (path.endsWith('/.codex/hooks.json')) return '{}\n'
   if (path.endsWith('/.codex-marketplace-install.json')) {
-    return JSON.stringify({ ref_name: 'v1.0.2' })
+    return JSON.stringify({ ref_name: CURRENT_RELEASE_TAG })
   }
   if (path.endsWith('/.codex-plugin/plugin.json')
     || path.endsWith('/.claude-plugin/plugin.json')) {
-    return JSON.stringify({ version: '1.0.2' })
+    return JSON.stringify({ version: TENON_RELEASE_VERSION })
   }
   return undefined
 }
@@ -394,7 +396,7 @@ function fakeRuntimeInstaller(
 function fakeDashboardStarter(
   fail = false,
   initialRelease: string | null = null,
-  initialServerVersion = '1.0.2',
+  initialServerVersion = TENON_RELEASE_VERSION,
 ): { starter: ReleasedDashboardStarter; calls: DashboardCalls } {
   const calls: DashboardCalls = { starts: [] }
   let running = initialRelease === null
@@ -417,7 +419,7 @@ function fakeDashboardStarter(
         if (!fail) {
           running = {
             version: 1,
-            serverVersion: opts.expectedServerVersion ?? '1.0.2',
+            serverVersion: opts.expectedServerVersion ?? TENON_RELEASE_VERSION,
             port: opts.port ?? 18_765,
             pid: 321,
             releaseId,
@@ -432,7 +434,7 @@ function fakeDashboardStarter(
               session: {
                 ownership: {
                   version: 1,
-                  serverVersion: opts.expectedServerVersion ?? '1.0.2',
+                  serverVersion: opts.expectedServerVersion ?? TENON_RELEASE_VERSION,
                   port: opts.port ?? 18_765,
                   pid: 321,
                   releaseId,
@@ -484,7 +486,7 @@ const codexInstallExec: ExecStub = (cmd, args) => {
           pluginId: 'tenon@tenon',
           name: 'tenon',
           marketplaceName: 'tenon',
-          version: '1.0.2',
+          version: TENON_RELEASE_VERSION,
           source: { path: '/installed/tenon' },
         }],
       }),
@@ -542,7 +544,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     const commands = calls.exec.map(([cmd, args]) => [cmd, args.join(' ')] as const)
     expect(commands[0]).toEqual([
       'git',
-      'ls-remote https://github.com/jefferysha/tenon.git refs/tags/v1.0.2 refs/tags/v1.0.2^{}',
+      `ls-remote https://github.com/jefferysha/tenon.git refs/tags/${CURRENT_RELEASE_TAG} refs/tags/${CURRENT_RELEASE_TAG}^{}`,
     ])
     expect(commands.find(([cmd, args]) => cmd === 'codex' && args === 'plugin list --json'))
       .toEqual(['codex', 'plugin list --json'])
@@ -554,12 +556,12 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(deps.outLines.join('\n')).toContain('输入 /hooks')
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     const frozenIndex = runtime.calls.journalWrites.findIndex((record) =>
-      record.stableTarget?.tag === 'v1.0.2'
+      record.stableTarget?.tag === CURRENT_RELEASE_TAG
       && record.stableTarget.commit === 'a'.repeat(40))
     expect(frozenIndex).toBeGreaterThanOrEqual(0)
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
-      { openBrowser: true, port: 43_210, transactionId: 'setup-test-transaction', expectedServerVersion: '1.0.2' },
+      { openBrowser: true, port: 43_210, transactionId: 'setup-test-transaction', expectedServerVersion: TENON_RELEASE_VERSION },
     ]])
   })
 
@@ -594,7 +596,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       installer,
       fakeDashboardStarter().starter,
       true,
-      async () => ({ pluginVersion: '1.0.2', payloadDigest: 'a'.repeat(64) }),
+      async () => ({ pluginVersion: TENON_RELEASE_VERSION, payloadDigest: 'a'.repeat(64) }),
     )).toBe(0)
     expect(Reflect.get(activationScope ?? {}, 'trustedBashPath')).toBe('/trusted/bin/bash')
   })
@@ -610,7 +612,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
           stdout: JSON.stringify({
             installed: inventoryReads === 1
               ? []
-              : [{ pluginId: 'tenon@tenon', name: 'tenon', marketplaceName: 'tenon', version: '1.0.2', source: { path: '/installed/tenon' } }],
+              : [{ pluginId: 'tenon@tenon', name: 'tenon', marketplaceName: 'tenon', version: TENON_RELEASE_VERSION, source: { path: '/installed/tenon' } }],
           }),
           stderr: '',
         }
@@ -633,12 +635,12 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin remove tenon@tenon --json'],
       ['codex', 'plugin marketplace remove tenon --json'],
-      ['codex', 'plugin marketplace add jefferysha/tenon --ref v1.0.2 --json'],
+      ['codex', `plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json`],
       ['codex', 'plugin add tenon@tenon --json'],
     ])
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     const frozenIndex = runtime.calls.journalWrites.findIndex((record) =>
-      record.stableTarget?.tag === 'v1.0.2'
+      record.stableTarget?.tag === CURRENT_RELEASE_TAG
       && record.stableTarget.commit === 'a'.repeat(40))
     const firstMutationIndex = runtime.calls.journalWrites.findIndex((record) =>
       (record.hostSteps?.length ?? 0) > 0)
@@ -646,7 +648,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(firstMutationIndex).toBeGreaterThan(frozenIndex)
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
-      { openBrowser: true, port: 18_765, transactionId: 'setup-test-transaction', expectedServerVersion: '1.0.2' },
+      { openBrowser: true, port: 18_765, transactionId: 'setup-test-transaction', expectedServerVersion: TENON_RELEASE_VERSION },
     ]])
   })
 
@@ -663,7 +665,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       ] as const
     ).map((phase) => [operation, phase] as const)),
   )(
-    'single setup retires a real-shape v1.0.1 %s/%s WAL before publishing v1.0.2',
+    `single setup retires a real-shape v1.0.1 %s/%s WAL before publishing ${CURRENT_RELEASE_TAG}`,
     async (operation, phase) => {
     const deps = makeDeps()
     const legacyReleaseId = `sha256-${'c'.repeat(64)}`
@@ -763,7 +765,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
         const releaseId = payloadRoot.split('/').at(-2)!
         running = {
           version: 1,
-          serverVersion: opts.expectedServerVersion ?? '1.0.2',
+          serverVersion: opts.expectedServerVersion ?? TENON_RELEASE_VERSION,
           port: opts.port ?? 18_765,
           pid: 902,
           releaseId,
@@ -796,10 +798,10 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     const convertedIndex = runtime.calls.journalWrites.findIndex((record) =>
       record.transactionId === legacyTransactionId
       && record.phase === 'preparing-host'
-      && record.stableTarget?.tag === 'v1.0.2')
+      && record.stableTarget?.tag === CURRENT_RELEASE_TAG)
     const activatedIndex = runtime.calls.journalWrites.findIndex((record) =>
       record.phase === 'runtime-activated'
-      && record.activation?.release.source.pluginVersion === '1.0.2')
+      && record.activation?.release.source.pluginVersion === TENON_RELEASE_VERSION)
     expect(convertedIndex).toBeGreaterThanOrEqual(0)
     expect(activatedIndex).toBeGreaterThan(convertedIndex)
     },
@@ -831,7 +833,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       transactionId: journal.transactionId,
       operation: 'setup',
       phase: 'preparing-host',
-      stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) },
+      stableTarget: { version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG, commit: 'a'.repeat(40) },
     }))
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
   })
@@ -917,7 +919,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
         starts.push(payloadRoot)
         current = {
           ...lateIdentity,
-          serverVersion: opts.expectedServerVersion ?? '1.0.2',
+          serverVersion: opts.expectedServerVersion ?? TENON_RELEASE_VERSION,
           pid: 902,
           releaseId: payloadRoot.split('/').at(-2)!,
           stateScopeId: `sha256-v1-${'8'.repeat(64)}`,
@@ -939,7 +941,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(lateStopped).toBe(true)
     expect(starts).toEqual([`/runtime/releases/sha256-${'a'.repeat(64)}/payload`])
     const converted = runtime.calls.journalWrites.find((record) =>
-      record.phase === 'preparing-host' && record.stableTarget?.tag === 'v1.0.2')
+      record.phase === 'preparing-host' && record.stableTarget?.tag === CURRENT_RELEASE_TAG)
     expect(converted?.transactionId).toBe(transactionId)
   })
 
@@ -1036,7 +1038,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     expect(dashboardStops).toBe(0)
   })
 
-  test('单次 installer 将 v1.0.1 pending receipt 桥接到已绑定的 v1.0.2 host/runtime', async () => {
+  test(`单次 installer 将 v1.0.1 pending receipt 桥接到已绑定的 ${CURRENT_RELEASE_TAG} host/runtime`, async () => {
     const deps = makeDeps()
     const oldReleaseId = `sha256-${'c'.repeat(64)}`
     const newReleaseId = `sha256-${'a'.repeat(64)}`
@@ -1064,7 +1066,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
           name: 'tenon',
           marketplaceName: 'tenon',
           enabled: true,
-          version: '1.0.2',
+          version: TENON_RELEASE_VERSION,
           source: { path: '/installed/tenon' },
         },
       ],
@@ -1106,7 +1108,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       start: async (_deps, payloadRoot, opts) => {
         running = {
           version: 1,
-          serverVersion: opts.expectedServerVersion ?? '1.0.2',
+          serverVersion: opts.expectedServerVersion ?? TENON_RELEASE_VERSION,
           port: opts.port ?? 18_765,
           pid: 902,
           releaseId: payloadRoot.split('/').at(-2)!,
@@ -1129,7 +1131,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       runtime.installer,
       dashboard,
       true,
-      async () => ({ pluginVersion: '1.0.2', payloadDigest: 'a'.repeat(64) }),
+      async () => ({ pluginVersion: TENON_RELEASE_VERSION, payloadDigest: 'a'.repeat(64) }),
     ), `${deps.errLines.join('\n')}\n${deps.outLines.join('\n')}`).toBe(0)
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(oldDashboardStops).toBe(1)
@@ -1142,7 +1144,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       version: 4,
       state: 'cleanup-pending',
       releaseId: newReleaseId,
-      stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) },
+      stableTarget: { version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG, commit: 'a'.repeat(40) },
     })
   })
 
@@ -1176,7 +1178,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
           name: 'tenon',
           marketplaceName: 'tenon',
           enabled: true,
-          version: '1.0.2',
+          version: TENON_RELEASE_VERSION,
           source: { path: '/installed/tenon' },
         },
       ],
@@ -1200,7 +1202,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       }
       return { code: 0, stdout: '', stderr: '' }
     })
-    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, '1.0.2')
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, TENON_RELEASE_VERSION)
     const dashboard = fakeDashboardStarter(false, releaseId)
     const proofEvents: string[] = []
     const baseWriteTextAtomic = env.writeTextAtomic
@@ -1221,19 +1223,19 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       async () => {
         candidateProofs += 1
         proofEvents.push(`candidate:${candidateProofs}`)
-        return { pluginVersion: '1.0.2', payloadDigest: 'a'.repeat(64) }
+        return { pluginVersion: TENON_RELEASE_VERSION, payloadDigest: 'a'.repeat(64) }
       },
     )).toBe(0)
     const receiptWrites = calls.writeText.filter(([path]) => path === receiptPath)
     const upgraded = JSON.parse(receiptWrites[0]![1])
     const completedText = receiptWrites.at(-1)![1]
     const completed = JSON.parse(completedText)
-    expect(upgraded).toMatchObject({ state: 'cleanup-pending', stableTarget: { tag: 'v1.0.2' } })
+    expect(upgraded).toMatchObject({ state: 'cleanup-pending', stableTarget: { tag: CURRENT_RELEASE_TAG } })
     expect(completed).toMatchObject({
       version: 4,
       state: 'completed',
       conflictScopes: [],
-      stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) },
+      stableTarget: { version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG, commit: 'a'.repeat(40) },
     })
     expect(proofEvents).toEqual(['candidate:1', 'candidate:2', 'completed'])
     env.readText = (path) => path === receiptPath ? completedText : setupReadText(path)
@@ -1242,7 +1244,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       : { state: 'missing' }
     expect(readHostPluginConvergenceReceipt(env, 'codex')).toMatchObject({
       state: 'receipt',
-      receipt: { state: 'completed', stableTarget: { tag: 'v1.0.2' } },
+      receipt: { state: 'completed', stableTarget: { tag: CURRENT_RELEASE_TAG } },
     })
   })
 
@@ -1276,7 +1278,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
         name: 'tenon',
         marketplaceName: 'tenon',
         enabled: true,
-        version: '1.0.2',
+        version: TENON_RELEASE_VERSION,
         source: { path: '/installed/tenon' },
       }],
     }))
@@ -1287,7 +1289,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
         releaseId: newReleaseId,
         payloadDigest: 'a'.repeat(64),
         createdAt: '2026-08-08T00:00:00Z',
-        source: { host: 'codex' as const, pluginVersion: '1.0.2' },
+        source: { host: 'codex' as const, pluginVersion: TENON_RELEASE_VERSION },
       },
       selection: {
         version: 1 as const,
@@ -1307,7 +1309,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       activation,
       '/installed/tenon',
       'new-transaction',
-      { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) },
+      { version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG, commit: 'a'.repeat(40) },
     )).toBe(true)
     const written = calls.writeText
       .filter(([path]) => path === receiptPath)
@@ -1319,7 +1321,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       conflictScopes: [],
       releaseId: newReleaseId,
       candidateRoot: '/installed/tenon',
-      stableTarget: { version: '1.0.2', tag: 'v1.0.2' },
+      stableTarget: { version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG },
     })
   })
 
@@ -1336,8 +1338,8 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       const paths = resolveRuntimePaths({ homeDir: '/home/test', env: {} })
       const receiptPath = join(paths.migrationsRoot, 'host-plugin-convergence', 'codex.json')
       const stableTarget = {
-        version: '1.0.2',
-        tag: 'v1.0.2',
+        version: TENON_RELEASE_VERSION,
+        tag: CURRENT_RELEASE_TAG,
         commit: 'a'.repeat(40),
       }
       const completed = JSON.stringify({
@@ -1485,7 +1487,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
                 name: 'tenon',
                 marketplaceName: 'tenon',
                 enabled: true,
-                version: '1.0.2',
+                version: TENON_RELEASE_VERSION,
                 source: { path: '/installed/tenon' },
               },
             ],
@@ -1521,8 +1523,8 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       host: 'codex',
       releaseId: `sha256-${'a'.repeat(64)}`,
       stableTarget: {
-        version: '1.0.2',
-        tag: 'v1.0.2',
+        version: TENON_RELEASE_VERSION,
+        tag: CURRENT_RELEASE_TAG,
         commit: 'a'.repeat(40),
       },
     })
@@ -1555,7 +1557,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
           name: 'tenon',
           marketplaceName: 'tenon',
           enabled: true,
-          version: '1.0.2',
+          version: TENON_RELEASE_VERSION,
           source: { path: '/installed/tenon' },
         },
       ],
@@ -1578,7 +1580,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       }
       return { code: 0, stdout: '', stderr: '' }
     })
-    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, '1.0.2')
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, TENON_RELEASE_VERSION)
 
     const dashboard = fakeDashboardStarter(false, releaseId)
     expect(await cmdSetupHost(
@@ -1589,7 +1591,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       runtime.installer,
       dashboard.starter,
       true,
-      async () => ({ pluginVersion: '1.0.2', payloadDigest: 'a'.repeat(64) }),
+      async () => ({ pluginVersion: TENON_RELEASE_VERSION, payloadDigest: 'a'.repeat(64) }),
     )).toBe(1)
     expect(runtime.calls.activations).toEqual([])
     const commands = calls.exec.map(([cmd, args]) => `${cmd} ${args.join(' ')}`)
@@ -1615,7 +1617,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       releaseId,
       releaseRoot: `/runtime/releases/${releaseId}/payload`,
       candidateRoot: '/installed/tenon',
-      stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) },
+      stableTarget: { version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG, commit: 'a'.repeat(40) },
       createdAtEpoch: 1_700_000_000,
       updatedAt: '2026-07-26T00:00:00Z',
     })
@@ -1627,7 +1629,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
           name: 'tenon',
           marketplaceName: 'tenon',
           enabled: true,
-          version: '1.0.2',
+          version: TENON_RELEASE_VERSION,
           source: { path: '/installed/tenon' },
         },
       ],
@@ -1652,7 +1654,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
     }, (cmd, args) => cmd === 'codex' && args.join(' ') === 'plugin list --json'
       ? { code: 0, stdout: inventory, stderr: '' }
       : { code: 0, stdout: '', stderr: '' })
-    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, '1.0.2')
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, TENON_RELEASE_VERSION)
     const guardedInstaller: RuntimeInstaller = {
       ...runtime.installer,
       inspect: async (scope) => {
@@ -1673,7 +1675,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       guardedInstaller,
       fakeDashboardStarter(false, releaseId).starter,
       true,
-      async () => ({ pluginVersion: '1.0.2', payloadDigest: 'a'.repeat(64) }),
+      async () => ({ pluginVersion: TENON_RELEASE_VERSION, payloadDigest: 'a'.repeat(64) }),
     )).toBe(1)
     expect(calls.exec.some(([, args]) =>
       args.join(' ') === 'plugin remove pipeline-lite@pipeline-lite --json')).toBe(false)
@@ -1709,7 +1711,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
         return setupReadText(path)
       },
     }, codexInstallExec)
-    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, '1.0.2')
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, TENON_RELEASE_VERSION)
     const dashboard = fakeDashboardStarter(false, releaseId)
 
     expect(await cmdSetupHost(
@@ -1720,7 +1722,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       runtime.installer,
       dashboard.starter,
       true,
-      async () => ({ pluginVersion: '1.0.2', payloadDigest: 'a'.repeat(64) }),
+      async () => ({ pluginVersion: TENON_RELEASE_VERSION, payloadDigest: 'a'.repeat(64) }),
     )).toBe(0)
     expect(calls.exec.some(([cmd, args]) => cmd === 'codex'
       && (args.includes('remove') || args.includes('add')))).toBe(false)
@@ -1773,7 +1775,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
                   { id: legacyId, enabled: true, scope: 'local' },
                 ]
               : []),
-            { id: 'tenon@tenon', enabled: true, scope: 'user', version: '1.0.2', installPath: '/installed/tenon' },
+            { id: 'tenon@tenon', enabled: true, scope: 'user', version: TENON_RELEASE_VERSION, installPath: '/installed/tenon' },
           ]),
           stderr: '',
         }
@@ -1784,7 +1786,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       }
       return { code: 0, stdout: '', stderr: '' }
     })
-    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, '1.0.2', 'claude')
+    const runtime = fakeRuntimeInstaller(false, null, releaseId, null, undefined, TENON_RELEASE_VERSION, 'claude')
     const dashboard = fakeDashboardStarter(false, releaseId)
 
     expect(await cmdSetupHost(
@@ -1795,7 +1797,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       runtime.installer,
       dashboard.starter,
       true,
-      async () => ({ pluginVersion: '1.0.2', payloadDigest: 'a'.repeat(64) }),
+      async () => ({ pluginVersion: TENON_RELEASE_VERSION, payloadDigest: 'a'.repeat(64) }),
     )).toBe(1)
     expect(calls.exec.some(([cmd, args]) => cmd === 'claude'
       && args[0] === 'plugin' && args[1] === 'uninstall')).toBe(false)
@@ -1825,7 +1827,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
                 name: 'tenon',
                 marketplaceName: 'tenon',
                 enabled: true,
-                version: '1.0.2',
+                version: TENON_RELEASE_VERSION,
                 source: { path: '/installed/tenon' },
               },
             ],
@@ -1852,7 +1854,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
           code: 0,
           stdout: JSON.stringify({
             installed: [{
-              pluginId: 'tenon@tenon', name: 'tenon', marketplaceName: 'tenon', version: '1.0.2',
+              pluginId: 'tenon@tenon', name: 'tenon', marketplaceName: 'tenon', version: TENON_RELEASE_VERSION,
               source: { path: inventoryReads === 1 ? '/stale/tenon' : '/installed/tenon' },
             }],
           }),
@@ -1877,7 +1879,7 @@ describe('①a 自动更新偏好 —— 只允许原生宿主，且在插件校
       .map(([cmd, args]) => [cmd, args.join(' ')])).toEqual([
       ['codex', 'plugin remove tenon@tenon --json'],
       ['codex', 'plugin marketplace remove tenon --json'],
-      ['codex', 'plugin marketplace add jefferysha/tenon --ref v1.0.2 --json'],
+      ['codex', `plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json`],
       ['codex', 'plugin add tenon@tenon --json'],
     ])
     expect(deps.outLines.join('\n')).toContain('不完整或未通过校验')
@@ -2132,7 +2134,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
       env,
       runtime.installer,
       dashboard.starter,
-      { resolve: async () => ({ version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) }) },
+      { resolve: async () => ({ version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG, commit: 'a'.repeat(40) }) },
     )
 
     expect(code).toBe(0)
@@ -2200,7 +2202,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
                   name: 'tenon',
                   marketplaceName: 'tenon',
                   enabled: pluginEnabled,
-                  version: '1.0.2',
+                  version: TENON_RELEASE_VERSION,
                   source: { path: '/installed/tenon' },
                 }]
               : [] }),
@@ -2242,14 +2244,14 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
             env,
             runtime.installer,
             dashboard.starter,
-            { resolve: async () => ({ version: '1.0.2', tag: 'v1.0.2', commit: 'a'.repeat(40) }) },
+            { resolve: async () => ({ version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG, commit: 'a'.repeat(40) }) },
           )
 
       expect(code, `${deps.errLines.join('\n')}\n${deps.outLines.join('\n')}`).toBe(0)
       expect(hostMutations).toEqual([
         'codex plugin remove tenon@tenon --json',
         'codex plugin marketplace remove tenon --json',
-        'codex plugin marketplace add jefferysha/tenon --ref v1.0.2 --json',
+        `codex plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json`,
         'codex plugin add tenon@tenon --json',
       ])
       expect(pluginPresent).toBe(true)
@@ -2345,7 +2347,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
         return {
           code: 0,
           stdout: JSON.stringify({
-            installed: [{ pluginId: 'tenon@tenon', name: 'tenon', marketplaceName: 'tenon', version: '1.0.2', source: { path: '/installed/tenon' } }],
+            installed: [{ pluginId: 'tenon@tenon', name: 'tenon', marketplaceName: 'tenon', version: TENON_RELEASE_VERSION, source: { path: '/installed/tenon' } }],
           }),
           stderr: '',
         }
@@ -2444,7 +2446,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     expect(runtime.calls.activations).toEqual([['/installed/tenon', 'codex', '/home/test']])
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
-      { openBrowser: true, port: 18_765, transactionId: 'setup-test-transaction', expectedServerVersion: '1.0.2' },
+      { openBrowser: true, port: 18_765, transactionId: 'setup-test-transaction', expectedServerVersion: TENON_RELEASE_VERSION },
     ]])
   })
 
@@ -2466,7 +2468,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     )).toBe(0)
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
-      { openBrowser: false, port: 18_765, transactionId: 'setup-test-transaction', expectedServerVersion: '1.0.2' },
+      { openBrowser: false, port: 18_765, transactionId: 'setup-test-transaction', expectedServerVersion: TENON_RELEASE_VERSION },
     ]])
   })
 
@@ -2491,7 +2493,7 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
     )).toBe(0)
     expect(dashboard.calls.starts).toEqual([[
       `/runtime/releases/sha256-${'a'.repeat(64)}/payload`,
-      { openBrowser: false, port: 18_765, transactionId: 'setup-test-transaction', expectedServerVersion: '1.0.2' },
+      { openBrowser: false, port: 18_765, transactionId: 'setup-test-transaction', expectedServerVersion: TENON_RELEASE_VERSION },
     ]])
     expect(deps.outLines.join('\n')).toContain('http://127.0.0.1:18765/')
     expect(deps.outLines.join('\n')).toContain('tenon dashboard --open')
@@ -2554,7 +2556,11 @@ describe('⑨空 sub 全流程 —— 技能段后接运行时就绪清单（dry
       },
     }, (cmd, args) => {
       if (cmd === 'claude' && args.join(' ') === 'plugin list --json') {
-        return { code: 0, stdout: '[{"id":"tenon@tenon","version":"1.0.2","installPath":"/installed/tenon"}]', stderr: '' }
+        return {
+          code: 0,
+          stdout: JSON.stringify([{ id: 'tenon@tenon', version: TENON_RELEASE_VERSION, installPath: '/installed/tenon' }]),
+          stderr: '',
+        }
       }
       return { code: 0, stdout: '', stderr: '' }
     })

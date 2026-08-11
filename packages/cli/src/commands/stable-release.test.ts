@@ -9,10 +9,16 @@ import {
   type StableReleaseHttp,
 } from './stable-release.js'
 
+type TimeoutCall = {
+  readonly command: string
+  readonly timeoutMs: number | undefined
+}
+
 function envFor(
   output: string,
   code = 0,
   objectType: 'commit' | 'tree' | 'blob' = 'commit',
+  timeoutCalls?: TimeoutCall[],
 ): SetupEnv {
   const advertised = output.trim().split(/\r?\n/u)
     .map((line) => line.trim().split(/\s+/u))
@@ -36,7 +42,14 @@ function envFor(
     writeTextAtomic: () => undefined,
     runCommand: (cmd, args, options) => {
       expect(cmd).toBe('git')
-      expect(options).toEqual({ timeoutMs: 10_000 })
+      const command = args[0] === 'ls-remote'
+        ? 'ls-remote'
+        : args[0] === 'init'
+          ? 'init'
+          : args[2] ?? 'unknown'
+      timeoutCalls?.push({ command, timeoutMs: options?.timeoutMs })
+      const networkProof = command === 'ls-remote' || command === 'fetch'
+      expect(options).toEqual({ timeoutMs: networkProof ? 30_000 : 10_000 })
       if (args[0] === 'ls-remote') {
         expect(args).toEqual([
           'ls-remote',
@@ -95,6 +108,22 @@ describe('stable Release identity', () => {
     await expect(resolveStableReleaseTarget(envFor(
       `${tagObject}\trefs/tags/v1.2.3\n${commit}\trefs/tags/v1.2.3^{}\n`,
     ), http)).resolves.toEqual({ version: '1.2.3', tag: 'v1.2.3', commit })
+  })
+
+  test('network proof keeps a bounded slow-link budget while local validation keeps a short budget', () => {
+    const commit = 'e'.repeat(40)
+    const timeoutCalls: TimeoutCall[] = []
+    expect(resolveStableTagTarget(
+      envFor(`${commit}\trefs/tags/v1.2.3\n`, 0, 'commit', timeoutCalls),
+      '1.2.3',
+    )).toEqual({ version: '1.2.3', tag: 'v1.2.3', commit })
+    expect(timeoutCalls).toEqual([
+      { command: 'ls-remote', timeoutMs: 30_000 },
+      { command: 'init', timeoutMs: 10_000 },
+      { command: 'fetch', timeoutMs: 30_000 },
+      { command: 'rev-parse', timeoutMs: 10_000 },
+      { command: 'cat-file', timeoutMs: 10_000 },
+    ])
   })
 
   test('resolves an explicitly selected stable tag without a Release API or branch lookup', () => {

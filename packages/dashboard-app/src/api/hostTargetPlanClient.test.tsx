@@ -5,6 +5,7 @@ import {
   fetchHostTargets,
   HostTargetPlanClientError,
 } from './hostTargetPlanClient'
+import { HOST_PLAN_RELEASE_TAG } from './hostTargetPlanDecoders'
 
 const HOST_IDS = [
   'codex', 'claude', 'cursor', 'gemini', 'copilot', 'pi',
@@ -42,7 +43,7 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
           command('codex', ['plugin', 'remove', 'tenon@tenon', '--json']),
           command('codex', ['plugin', 'marketplace', 'remove', 'tenon', '--json']),
           command('codex', [
-            'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'v1.0.2', '--json',
+            'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', HOST_PLAN_RELEASE_TAG, '--json',
           ]),
           command('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
           command('codex', ['plugin', 'list', '--json']),
@@ -60,7 +61,7 @@ function nativePlan(host: 'codex' | 'claude', operation: 'setup' | 'update') {
       ? [
           command('claude', ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user']),
           command('claude', ['plugin', 'marketplace', 'remove', 'tenon']),
-          command('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon@v1.0.2']),
+          command('claude', ['plugin', 'marketplace', 'add', `jefferysha/tenon@${HOST_PLAN_RELEASE_TAG}`]),
           command('claude', ['plugin', 'install', 'tenon@tenon']),
           command('claude', ['plugin', 'list', '--json']),
         ]

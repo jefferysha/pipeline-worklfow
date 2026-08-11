@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { build as esbuild } from 'esbuild'
 import { serializeProductRootContract } from '@tenon/kernel'
 import { afterEach, describe, expect, it } from 'vitest'
+import { TENON_RELEASE_VERSION } from '../commands/plugin-host.js'
 import { publishManagedRelease } from '../commands/release-coordinator.js'
 import type { ReleasedDashboardStarter } from '../commands/dashboard.js'
 import { makeDeps } from '../test-support.js'
@@ -24,6 +25,7 @@ import { RuntimeReleaseStore } from './release-store.js'
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
 const roots: string[] = []
 const execFileAsync = promisify(execFile)
+const CURRENT_RELEASE_TAG = `v${TENON_RELEASE_VERSION}` as const
 
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))))
 
@@ -253,8 +255,8 @@ describe('RuntimeReleaseStore', () => {
       'utf8',
     )
     const target = {
-      version: '1.0.2',
-      tag: 'v1.0.2',
+      version: TENON_RELEASE_VERSION,
+      tag: CURRENT_RELEASE_TAG,
       commit: 'a'.repeat(40),
     }
 
@@ -535,7 +537,7 @@ describe('RuntimeReleaseStore', () => {
   }, 30_000)
 
   it.each([
-    ['different-commit', { version: '1.0.2', tag: 'v1.0.2', commit: 'b'.repeat(40) }],
+    ['different-commit', { version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG, commit: 'b'.repeat(40) }],
     ['missing-target', undefined],
   ] as const)(
     'fails closed when real activating-runtime recovery returns a %s release identity',
@@ -545,8 +547,8 @@ describe('RuntimeReleaseStore', () => {
       const candidate = await candidateCopy(root)
       const scope = isolatedScope(home)
       const frozenTarget = {
-        version: '1.0.2',
-        tag: 'v1.0.2',
+        version: TENON_RELEASE_VERSION,
+        tag: CURRENT_RELEASE_TAG,
         commit: 'a'.repeat(40),
       }
       await REAL_RUNTIME_INSTALLER.withManagedTransaction(scope, async (transaction) => {
@@ -598,8 +600,8 @@ describe('RuntimeReleaseStore', () => {
     const paths = resolveRuntimePaths({ homeDir: home, env: {} })
     const journalPath = join(paths.managedTransactionRoot, 'release-transaction.json')
     const target = {
-      version: '1.0.2',
-      tag: 'v1.0.2',
+      version: TENON_RELEASE_VERSION,
+      tag: CURRENT_RELEASE_TAG,
       commit: 'a'.repeat(40),
     }
     await mkdir(paths.managedTransactionRoot, { recursive: true })
@@ -689,11 +691,11 @@ describe('RuntimeReleaseStore', () => {
       home,
       candidate,
       host,
-      operation === 'update' && advanced ? '1.0.2' : '1.0.1',
+      operation === 'update' && advanced ? TENON_RELEASE_VERSION : '1.0.1',
     )
     const target = {
-      version: '1.0.2',
-      tag: 'v1.0.2',
+      version: TENON_RELEASE_VERSION,
+      tag: CURRENT_RELEASE_TAG,
       commit: 'a'.repeat(40),
     }
     await mkdir(paths.managedTransactionRoot, { recursive: true })
@@ -862,8 +864,8 @@ describe('RuntimeReleaseStore', () => {
     const paths = resolveRuntimePaths({ homeDir: home, env: {} })
     const journalPath = join(paths.managedTransactionRoot, 'release-transaction.json')
     const target = {
-      version: '1.0.2',
-      tag: 'v1.0.2',
+      version: TENON_RELEASE_VERSION,
+      tag: CURRENT_RELEASE_TAG,
       commit: 'a'.repeat(40),
     }
     const { checkpoint, activation } = await REAL_RUNTIME_INSTALLER.withManagedTransaction(
@@ -1047,18 +1049,18 @@ describe('RuntimeReleaseStore', () => {
       const candidate = await candidateCopy(root)
       const store = storeFor(root)
       const target = {
-        version: '1.0.2',
-        tag: 'v1.0.2',
+        version: TENON_RELEASE_VERSION,
+        tag: CURRENT_RELEASE_TAG,
         commit: 'a'.repeat(40),
       }
 
-      const first = await store.stageAndActivate(candidate, firstHost, '1.0.2', target)
-      const second = await store.stageAndActivate(candidate, secondHost, '1.0.2', target)
+      const first = await store.stageAndActivate(candidate, firstHost, TENON_RELEASE_VERSION, target)
+      const second = await store.stageAndActivate(candidate, secondHost, TENON_RELEASE_VERSION, target)
 
       expect(second.release.releaseId).not.toBe(first.release.releaseId)
       expect(second.release).toMatchObject({
         version: 2,
-        source: { host: secondHost, pluginVersion: '1.0.2' },
+        source: { host: secondHost, pluginVersion: TENON_RELEASE_VERSION },
         stableTarget: target,
       })
       expect((await store.inspect()).active).toMatchObject({
@@ -2185,7 +2187,7 @@ describe('RuntimeReleaseStore', () => {
           const [mode, crashStep, root, candidate] = process.argv.slice(2)
           const marketplaceRoot = root + '/marketplace'
           const hostPath = root + '/host.json'
-          const target = { version: '1.0.2', tag: 'v1.0.2', commit: 'b'.repeat(40) }
+          const target = { version: ${JSON.stringify(TENON_RELEASE_VERSION)}, tag: ${JSON.stringify(CURRENT_RELEASE_TAG)}, commit: 'b'.repeat(40) }
           const scope = {
             homeDir: root + '/home',
             env: { TENON_RUNTIME_HOME: root + '/runtime' },
@@ -2279,7 +2281,7 @@ describe('RuntimeReleaseStore', () => {
                 })
                 return { code: 0, stdout: '', stderr: '' }
               }
-              if (command === 'codex plugin marketplace add jefferysha/tenon --ref v1.0.2 --json') {
+              if (command === 'codex plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json') {
                 mutate('marketplace-register', (value) => {
                   value.marketplacePresent = true
                   value.pluginPresent = false
@@ -2302,7 +2304,7 @@ describe('RuntimeReleaseStore', () => {
           const commands = [
             ['plugin-remove', ['plugin', 'remove', 'tenon@tenon', '--json']],
             ['marketplace-remove', ['plugin', 'marketplace', 'remove', 'tenon', '--json']],
-            ['marketplace-register', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'v1.0.2', '--json']],
+            ['marketplace-register', ['plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', ${JSON.stringify(CURRENT_RELEASE_TAG)}, '--json']],
             ['plugin-install', ['plugin', 'add', 'tenon@tenon', '--json']],
           ]
           const outcome = await publishManagedRelease(
@@ -2396,7 +2398,7 @@ describe('RuntimeReleaseStore', () => {
         const crashedJournal = JSON.parse(await readFile(journalPath, 'utf8'))
         expect(crashedJournal).toMatchObject({
           phase: 'preparing-host',
-          stableTarget: { version: '1.0.2', tag: 'v1.0.2', commit: 'b'.repeat(40) },
+          stableTarget: { version: TENON_RELEASE_VERSION, tag: CURRENT_RELEASE_TAG, commit: 'b'.repeat(40) },
         })
         expect(crashedJournal.hostSteps.at(-1)).toMatchObject({ id: step, state: checkpointState })
 
@@ -2411,9 +2413,9 @@ describe('RuntimeReleaseStore', () => {
           marketplacePresent: true,
           pluginPresent: true,
           head: 'b'.repeat(40),
-          ref: 'v1.0.2',
-          marketplaceVersion: '1.0.2',
-          pluginVersion: '1.0.2',
+          ref: CURRENT_RELEASE_TAG,
+          marketplaceVersion: TENON_RELEASE_VERSION,
+          pluginVersion: TENON_RELEASE_VERSION,
           resolverCalls: 1,
           executions: {
             'plugin-remove': 1,

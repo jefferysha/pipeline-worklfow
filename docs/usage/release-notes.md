@@ -4,6 +4,18 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
+## v1.0.3 · 2026-08-11
+
+### Stable Release proof diagnostics
+
+- Remote tag and object proof now keeps a bounded 30-second network budget instead of the previous 10-second budget; local proof commands remain on a 10-second budget.
+- Timeout failures now preserve actionable stderr diagnostics such as `ETIMEDOUT` instead of returning an empty error detail.
+- Security validation, atomic publication, and the no-retry/no-fallback behavior are unchanged.
+
+### Upgrade
+
+Routine upgrades still use `tenon update --codex` (or `--claude`) and remain bound to the verified stable Release tag.
+
 ## v1.0.2 · 2026-08-08
 
 ### Versioned installation and updates

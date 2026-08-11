@@ -162,10 +162,11 @@ export const REAL_SETUP_ENV: SetupEnv = {
     } catch (e) {
       // execFileSync 非零退出会抛;把 status/stdout/stderr 折算回结构（不抛,逐条容错的前提）
       const err = e as { status?: number | null; stdout?: string | Buffer | null; stderr?: string | Buffer | null }
+      const stderr = err.stderr == null ? '' : String(err.stderr)
       return {
         code: typeof err.status === 'number' ? err.status : 1,
         stdout: err.stdout != null ? String(err.stdout) : '',
-        stderr: err.stderr != null ? String(err.stderr) : errMsg(e),
+        stderr: stderr !== '' ? stderr : errMsg(e),
       }
     }
   },
