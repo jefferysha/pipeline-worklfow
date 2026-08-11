@@ -31341,7 +31341,8 @@ var STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 var GIT_OID = /^[0-9a-f]{40}$/;
 var RELEASE_API = `https://api.github.com/repos/${PRODUCT_IDENTITY.repository}/releases/latest`;
 var RELEASE_REPOSITORY = `${PRODUCT_IDENTITY.repositoryUrl}.git`;
-var STABLE_RELEASE_NETWORK_TIMEOUT_MS = 3e4;
+var STABLE_RELEASE_GIT_REMOTE_TIMEOUT_MS = 6e4;
+var STABLE_RELEASE_HTTP_TIMEOUT_MS = 3e4;
 var STABLE_RELEASE_LOCAL_TIMEOUT_MS = 1e4;
 function record7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
@@ -31393,7 +31394,7 @@ function tagCommit(env, tag2) {
   const result = env.runCommand(
     "git",
     ["ls-remote", RELEASE_REPOSITORY, directRef, peeledRef],
-    { timeoutMs: STABLE_RELEASE_NETWORK_TIMEOUT_MS }
+    { timeoutMs: STABLE_RELEASE_GIT_REMOTE_TIMEOUT_MS }
   );
   if (result.code !== 0) {
     throw new Error(`stable Release tag proof failed: ${result.stderr.trim() || `exit ${result.code}`}`);
@@ -31422,7 +31423,7 @@ function tagCommit(env, tag2) {
     const fetched = env.runCommand(
       "git",
       ["-C", proofRoot, "fetch", "--no-tags", "--depth=1", RELEASE_REPOSITORY, directRef],
-      { timeoutMs: STABLE_RELEASE_NETWORK_TIMEOUT_MS }
+      { timeoutMs: STABLE_RELEASE_GIT_REMOTE_TIMEOUT_MS }
     );
     if (fetched.code !== 0) {
       throw new Error(`stable Release object proof failed: ${fetched.stderr.trim() || `exit ${fetched.code}`}`);
@@ -31460,7 +31461,7 @@ var REAL_STABLE_RELEASE_HTTP = {
         "user-agent": "tenon-release-resolver",
         "x-github-api-version": "2022-11-28"
       },
-      signal: AbortSignal.timeout(STABLE_RELEASE_NETWORK_TIMEOUT_MS)
+      signal: AbortSignal.timeout(STABLE_RELEASE_HTTP_TIMEOUT_MS)
     });
     if (!response.ok) throw new Error(`stable Release request failed: HTTP ${response.status}`);
     const raw = record7(await response.json());
@@ -31495,7 +31496,7 @@ var TENON_HOSTS = [
 var TENON_MARKETPLACE_SOURCE = "jefferysha/tenon";
 var TENON_MARKETPLACE_NAME = "tenon";
 var TENON_PLUGIN_NAME = "tenon";
-var TENON_RELEASE_VERSION = "1.0.5";
+var TENON_RELEASE_VERSION = "1.0.6";
 function parseHostPluginInventory(host, stdout) {
   let parsed;
   try {

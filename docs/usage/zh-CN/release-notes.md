@@ -12,6 +12,18 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 面向用户的解释、影响与操作步骤默认使用中文。
 
+## v1.0.6 · 2026-08-11
+
+### Stable Git proof 网络预算
+
+- 慢链路实测显示公开 stable tag/object proof 可能超过此前 30 秒 Git 预算：proxy `ls-remote`/fetch 为 6.9 秒/11.3 秒，直连 fetch 达到 22.9 秒，而正式事务中仍偶发更长阶段。
+- Git 远端 `ls-remote` 与 fetch 现在采用有界 60 秒预算；GitHub Release API metadata 和 npm bootstrap raw installer 下载仍为 30 秒；本地 init/rev-parse/cat-file proof 仍为 10 秒，宿主 observation 默认仍为 5 秒。
+- exact stable tag/object/commit、digest、trusted executable、官方 HTTPS host、大小限制与原子性校验保持不变；不重试、不使用 source/branch/cache fallback，失败继续在 mutation 前 fail-closed。
+
+### 升级动作
+
+当前公开入口使用不可变 `v1.0.6`；日常升级仍运行 `tenon update --codex`（或 `--claude`）。
+
 ## v1.0.5 · 2026-08-11
 
 ### Doctor 发布身份证明

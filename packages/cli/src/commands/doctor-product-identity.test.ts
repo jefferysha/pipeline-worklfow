@@ -252,9 +252,9 @@ describe('doctor native immutable product identity probe', () => {
       timeoutMs: 5_000,
       cwd: undefined,
     })
-    expect(call((args) => args[0] === 'ls-remote')).toMatchObject({ timeoutMs: 30_000 })
+    expect(call((args) => args[0] === 'ls-remote')).toMatchObject({ timeoutMs: 60_000 })
     expect(call((args) => args[0] === 'init' && args[1] === '--bare')).toMatchObject({ timeoutMs: 10_000 })
-    expect(call((args) => args.includes('fetch') && args.includes('--no-tags'))).toMatchObject({ timeoutMs: 30_000 })
+    expect(call((args) => args.includes('fetch') && args.includes('--no-tags'))).toMatchObject({ timeoutMs: 60_000 })
     expect(call((args) => args.includes('rev-parse') && args.includes('FETCH_HEAD^{commit}'))).toMatchObject({ timeoutMs: 10_000 })
     expect(call((args) => args.includes('cat-file') && args.includes('-t'))).toMatchObject({ timeoutMs: 10_000 })
   })
