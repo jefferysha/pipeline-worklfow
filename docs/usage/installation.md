@@ -20,31 +20,31 @@ Tenon does not require users to install mandatory Skills one by one.
 New users install the complete Codex plugin without cloning the repository:
 
 ```bash
-/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --codex
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.3/install.sh | /bin/bash -s -- --codex
 ```
 
 For Claude:
 
 ```bash
-/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --claude
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.3/install.sh | /bin/bash -s -- --claude
 ```
 
 Preview the complete Codex Marketplace and packaged setup plan without invoking
 the host or writing user/project state:
 
 ```bash
-/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh | /bin/bash -s -- --codex --dry-run
+/usr/bin/curl -fsSL https://raw.githubusercontent.com/jefferysha/tenon/v1.0.3/install.sh | /bin/bash -s -- --codex --dry-run
 ```
 
 The versioned script installs only prebuilt assets from the immutable stable
-`v1.0.2` release. It never clones or compiles the source repository.
+`v1.0.3` release. It never clones or compiles the source repository.
 The bootstrap adds the selected native marketplace plugin, resolves the install
 root from the host's own inventory, and invokes the same
 `tenon setup --<host>` operation. Tenon does not guess private host
 cache locations.
 
 For an existing published `v1.0.1` installation, run the versioned
-`v1.0.2/install.sh` command above once as the migration bridge. The v1.0.1
+historical `v1.0.2/install.sh` command once as the migration bridge. The v1.0.1
 launcher dispatches its old updater only once and cannot safely rebind the new
 release tag in that same invocation. From v1.0.2 onward, every routine upgrade
 is one `tenon update --codex` (or `--claude`) command and uses a stable release

@@ -8,6 +8,8 @@ const STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
 const GIT_OID = /^[0-9a-f]{40}$/
 const RELEASE_API = `https://api.github.com/repos/${PRODUCT_IDENTITY.repository}/releases/latest`
 const RELEASE_REPOSITORY = `${PRODUCT_IDENTITY.repositoryUrl}.git`
+const STABLE_RELEASE_NETWORK_TIMEOUT_MS = 30_000
+const STABLE_RELEASE_LOCAL_TIMEOUT_MS = 10_000
 
 export interface StableReleaseMetadata {
   readonly tag_name: string
@@ -94,7 +96,7 @@ function tagCommit(env: SetupEnv, tag: string): string {
   const result = env.runCommand(
     'git',
     ['ls-remote', RELEASE_REPOSITORY, directRef, peeledRef],
-    { timeoutMs: 10_000 },
+    { timeoutMs: STABLE_RELEASE_NETWORK_TIMEOUT_MS },
   )
   if (result.code !== 0) {
     throw new Error(`stable Release tag proof failed: ${result.stderr.trim() || `exit ${result.code}`}`)
@@ -117,24 +119,24 @@ function tagCommit(env: SetupEnv, tag: string): string {
 
   const proofRoot = mkdtempSync(join(tmpdir(), 'tenon-stable-tag-'))
   try {
-    const initialized = env.runCommand('git', ['init', '--bare', proofRoot], { timeoutMs: 10_000 })
+    const initialized = env.runCommand('git', ['init', '--bare', proofRoot], { timeoutMs: STABLE_RELEASE_LOCAL_TIMEOUT_MS })
     if (initialized.code !== 0) {
       throw new Error(`stable Release object proof could not initialize: ${initialized.stderr.trim() || `exit ${initialized.code}`}`)
     }
     const fetched = env.runCommand(
       'git',
       ['-C', proofRoot, 'fetch', '--no-tags', '--depth=1', RELEASE_REPOSITORY, directRef],
-      { timeoutMs: 10_000 },
+      { timeoutMs: STABLE_RELEASE_NETWORK_TIMEOUT_MS },
     )
     if (fetched.code !== 0) {
       throw new Error(`stable Release object proof failed: ${fetched.stderr.trim() || `exit ${fetched.code}`}`)
     }
-    const resolved = env.runCommand('git', ['-C', proofRoot, 'rev-parse', 'FETCH_HEAD^{commit}'], { timeoutMs: 10_000 })
+    const resolved = env.runCommand('git', ['-C', proofRoot, 'rev-parse', 'FETCH_HEAD^{commit}'], { timeoutMs: STABLE_RELEASE_LOCAL_TIMEOUT_MS })
     const commit = resolved.stdout.trim()
     if (resolved.code !== 0 || !GIT_OID.test(commit)) {
       throw new Error('stable Release tag does not resolve to a commit object')
     }
-    const objectType = env.runCommand('git', ['-C', proofRoot, 'cat-file', '-t', commit], { timeoutMs: 10_000 })
+    const objectType = env.runCommand('git', ['-C', proofRoot, 'cat-file', '-t', commit], { timeoutMs: STABLE_RELEASE_LOCAL_TIMEOUT_MS })
     if (objectType.code !== 0 || objectType.stdout.trim() !== 'commit') {
       throw new Error('stable Release tag final object is not a commit')
     }

@@ -9,6 +9,12 @@ import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const { version: CURRENT_RELEASE_VERSION } = JSON.parse(
+  await readFile(join(root, 'package.json'), 'utf8'),
+)
+const CURRENT_RELEASE_TAG = `v${CURRENT_RELEASE_VERSION}`
+const CURRENT_RELEASE_VERSION_PATTERN = CURRENT_RELEASE_VERSION.replaceAll('.', '\\.')
+const CURRENT_RELEASE_TAG_PATTERN = CURRENT_RELEASE_TAG.replaceAll('.', '\\.')
 const AUTH_COMMANDS = [
   'codex login',
   'codex login --device-auth',
@@ -54,7 +60,7 @@ async function prepareReleasedBootstrapFixture(
   {
     initiallyInstalled = false,
     initialMarketplaceKind = 'exact',
-    reportedVersion = '1.0.2',
+    reportedVersion = CURRENT_RELEASE_VERSION,
     reportedEnabled = true,
     remoteTagProofFails = false,
     releaseState = 'published',
@@ -87,7 +93,7 @@ async function prepareReleasedBootstrapFixture(
     'templates',
     'tools',
   ]) await mkdir(join(plugin, directory), { recursive: true })
-  const manifest = `${JSON.stringify({ name: 'tenon', version: '1.0.2' })}\n`
+  const manifest = `${JSON.stringify({ name: 'tenon', version: CURRENT_RELEASE_VERSION })}\n`
   await writeFile(join(plugin, '.claude-plugin', 'plugin.json'), manifest)
   await writeFile(join(plugin, '.codex-plugin', 'plugin.json'), manifest)
   await writeFile(join(plugin, 'packages', 'server', 'dist', 'dashboard.mjs'), 'export {}\n')
@@ -105,15 +111,15 @@ writeFileSync(process.env.TENON_TEST_SETUP_ARGS, JSON.stringify(process.argv.sli
   await exec('/usr/bin/git', ['-C', plugin, 'config', 'user.name', 'Tenon Test'])
   await exec('/usr/bin/git', ['-C', plugin, 'add', '.'])
   await exec('/usr/bin/git', ['-C', plugin, 'commit', '--quiet', '-m', 'release'])
-  await exec('/usr/bin/git', ['-C', plugin, 'tag', 'v1.0.2'])
+  await exec('/usr/bin/git', ['-C', plugin, 'tag', CURRENT_RELEASE_TAG])
   await exec('/usr/bin/git', ['-C', plugin, 'remote', 'add', 'origin', 'https://github.com/jefferysha/tenon.git'])
-  await exec('/usr/bin/git', ['-C', plugin, 'checkout', '--quiet', '--detach', 'v1.0.2'])
+  await exec('/usr/bin/git', ['-C', plugin, 'checkout', '--quiet', '--detach', CURRENT_RELEASE_TAG])
   const { stdout: commitOut } = await exec('/usr/bin/git', ['-C', plugin, 'rev-parse', 'HEAD'])
   const commit = commitOut.trim()
   if (host === 'codex') {
     await writeFile(
       join(plugin, '.codex-marketplace-install.json'),
-      `${JSON.stringify({ ref_name: 'v1.0.2' })}\n`,
+      `${JSON.stringify({ ref_name: CURRENT_RELEASE_TAG })}\n`,
     )
   }
   if (initialMarketplaceKind === 'main' || initialMarketplaceKind === 'local') {
@@ -131,7 +137,7 @@ set -eu
 if [ "${'$'}{1:-}" = "ls-remote" ]; then
   ${remoteTagProofFails
     ? 'echo "injected stable tag proof failure" >&2; exit 73'
-    : `printf '%s\\trefs/tags/v1.0.2\\n' "${commit}"`}
+    : `printf '%s\\trefs/tags/${CURRENT_RELEASE_TAG}\\n' "${commit}"`}
   exit 0
 fi
 exec /usr/bin/git "${'$'}@"
@@ -139,10 +145,10 @@ exec /usr/bin/git "${'$'}@"
   await chmod(join(bin, 'git'), 0o755)
 
   const releaseMetadata = {
-    tag_name: 'v1.0.2',
+    tag_name: CURRENT_RELEASE_TAG,
     draft: releaseState === 'draft',
     prerelease: releaseState === 'prerelease',
-    html_url: 'https://github.com/jefferysha/tenon/releases/tag/v1.0.2',
+    html_url: `https://github.com/jefferysha/tenon/releases/tag/${CURRENT_RELEASE_TAG}`,
     published_at: '2026-08-09T00:00:00Z',
   }
   await writeFile(join(bin, 'curl'), `#!/usr/bin/env bash
@@ -150,9 +156,9 @@ set -eu
 url="${'$'}{@:${'$'}#}"
 ${remoteTagProofFails ? 'echo "injected stable tag proof failure" >&2; exit 73' : ':'}
 case "${'$'}url" in
-  */releases/tags/v1.0.2) printf '%s\\n' '${JSON.stringify(releaseMetadata)}' ;;
-  */git/ref/tags/v1.0.2) printf '%s\\n' '${JSON.stringify({
-    ref: 'refs/tags/v1.0.2',
+  */releases/tags/${CURRENT_RELEASE_TAG}) printf '%s\\n' '${JSON.stringify(releaseMetadata)}' ;;
+  */git/ref/tags/${CURRENT_RELEASE_TAG}) printf '%s\\n' '${JSON.stringify({
+    ref: `refs/tags/${CURRENT_RELEASE_TAG}`,
     object: { type: tagObjectType, sha: commit },
   })}' ;;
   *) echo "unexpected GitHub API URL: ${'$'}url" >&2; exit 74 ;;
@@ -212,9 +218,9 @@ case "${'$'}*" in
     fi ;;
   "plugin remove tenon@tenon --json") rm -f "${'$'}TENON_TEST_PLUGIN_STATE" "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" ;;
   "plugin marketplace remove tenon --json") rm -f "${'$'}TENON_TEST_MARKETPLACE_STATE" "${'$'}TENON_TEST_LEGACY_MARKETPLACE_STATE" ;;
-  "plugin marketplace add jefferysha/tenon --ref v1.0.2 --json")
-    /usr/bin/git -C "${'$'}TENON_TEST_PLUGIN_ROOT" checkout --quiet --detach v1.0.2
-    printf '{"ref_name":"v1.0.2"}\\n' > "${'$'}TENON_TEST_PLUGIN_ROOT/.codex-marketplace-install.json"
+  "plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json")
+    /usr/bin/git -C "${'$'}TENON_TEST_PLUGIN_ROOT" checkout --quiet --detach ${CURRENT_RELEASE_TAG}
+    printf '{"ref_name":"${CURRENT_RELEASE_TAG}"}\\n' > "${'$'}TENON_TEST_PLUGIN_ROOT/.codex-marketplace-install.json"
     : > "${'$'}TENON_TEST_MARKETPLACE_STATE" ;;
   "plugin add tenon@tenon --json")
     : > "${'$'}TENON_TEST_PLUGIN_STATE"
@@ -247,8 +253,8 @@ case "${'$'}*" in
     fi ;;
   "plugin uninstall tenon@tenon --scope user") rm -f "${'$'}TENON_TEST_PLUGIN_STATE" "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" ;;
   "plugin marketplace remove tenon") rm -f "${'$'}TENON_TEST_MARKETPLACE_STATE" "${'$'}TENON_TEST_LEGACY_MARKETPLACE_STATE" ;;
-  "plugin marketplace add jefferysha/tenon@v1.0.2")
-    /usr/bin/git -C "${'$'}TENON_TEST_PLUGIN_ROOT" checkout --quiet --detach v1.0.2
+  "plugin marketplace add jefferysha/tenon@${CURRENT_RELEASE_TAG}")
+    /usr/bin/git -C "${'$'}TENON_TEST_PLUGIN_ROOT" checkout --quiet --detach ${CURRENT_RELEASE_TAG}
     : > "${'$'}TENON_TEST_MARKETPLACE_STATE" ;;
   "plugin install tenon@tenon")
     : > "${'$'}TENON_TEST_PLUGIN_STATE"
@@ -339,7 +345,10 @@ exit 97
       },
     })
 
-    assert.match(result.stdout, /codex plugin marketplace add jefferysha\/tenon --ref v1\.0\.2/)
+    assert.match(
+      result.stdout,
+      new RegExp(`codex plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG_PATTERN}`),
+    )
     assert.match(result.stdout, /codex plugin add tenon@tenon --json/)
     assert.match(result.stdout, /npm install -g @openai\/codex/)
     assert.match(result.stdout, /codex login status/)
@@ -358,13 +367,13 @@ test('Codex bootstrap accepts only an explicit complete stable SemVer Marketplac
       join(root, 'install.sh'),
       '--codex',
       '--ref',
-      'v1.0.2',
+      CURRENT_RELEASE_TAG,
       '--dry-run',
     ],
   )
   assert.match(
     result.stdout,
-    /codex plugin marketplace add jefferysha\/tenon --ref v1\.0\.2/,
+    new RegExp(`codex plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG_PATTERN}`),
   )
 })
 
@@ -372,7 +381,7 @@ test('a versioned installer rejects a different stable release tag', async () =>
   await assert.rejects(
     exec('bash', [join(root, 'install.sh'), '--codex', '--ref', 'v1.2.3', '--dry-run']),
     (error) => {
-      assert.match(error.stderr, /can only install v1\.0\.2/)
+      assert.match(error.stderr, new RegExp(`can only install ${CURRENT_RELEASE_TAG_PATTERN}`))
       return true
     },
   )
@@ -431,7 +440,10 @@ exit 98
 
     await assert.rejects(readFile(maliciousLog, 'utf8'), /ENOENT/)
     const commands = await readFile(prepared.log, 'utf8')
-    assert.match(commands, /plugin marketplace add jefferysha\/tenon --ref v1\.0\.2/)
+    assert.match(
+      commands,
+      new RegExp(`plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG_PATTERN}`),
+    )
     assert.match(commands, /plugin add tenon@tenon --json/)
     assert.match(commands, /plugin list --json/)
   } finally {
@@ -458,11 +470,11 @@ exit 96
     for (const document of ['README.md', 'README.en.md']) {
       const readme = await readFile(join(root, document), 'utf8')
       const documented = readme.split(/\r?\n/u).find((line) =>
-        line.includes('/v1.0.2/install.sh') && line.includes('--codex'))
+        line.includes(`/${CURRENT_RELEASE_TAG}/install.sh`) && line.includes('--codex'))
       assert.equal(typeof documented, 'string', document)
       assert.match(documented, /^\/usr\/bin\/curl .*\| \/bin\/bash -s -- --codex$/u, document)
       const command = documented.replace(
-        'https://raw.githubusercontent.com/jefferysha/tenon/v1.0.2/install.sh',
+        `https://raw.githubusercontent.com/jefferysha/tenon/${CURRENT_RELEASE_TAG}/install.sh`,
         `file://${installer}`,
       )
 
@@ -614,7 +626,10 @@ test('Codex one-line bootstrap registers Marketplace and invokes the packaged Te
     })
     assert.match(result.stdout, /Tenon installed for --codex/)
     const commands = await readFile(prepared.log, 'utf8')
-    assert.match(commands, /plugin marketplace add jefferysha\/tenon --ref v1\.0\.2/)
+    assert.match(
+      commands,
+      new RegExp(`plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG_PATTERN}`),
+    )
     assert.match(commands, /plugin add tenon@tenon --json/)
     assert.deepEqual(JSON.parse(await readFile(prepared.setupArgs, 'utf8')), [
       'setup', '--codex', '--yes', '--auto-update',
@@ -625,7 +640,7 @@ test('Codex one-line bootstrap registers Marketplace and invokes the packaged Te
 })
 
 for (const initialMarketplaceKind of ['exact', 'main', 'local']) {
-  test(`Codex bootstrap transactionally replaces an existing ${initialMarketplaceKind} marketplace with v1.0.2`, async () => {
+  test(`Codex bootstrap transactionally replaces an existing ${initialMarketplaceKind} marketplace with ${CURRENT_RELEASE_VERSION}`, async () => {
     const fixture = await mkdtemp(join(tmpdir(), `tenon-install-bootstrap-rebind-${initialMarketplaceKind}-`))
     try {
       const prepared = await prepareReleasedBootstrapFixture(fixture, 'codex', {
@@ -639,7 +654,9 @@ for (const initialMarketplaceKind of ['exact', 'main', 'local']) {
       const commands = (await readFile(prepared.log, 'utf8')).trim().split(/\r?\n/u)
       const pluginRemove = commands.indexOf('plugin remove tenon@tenon --json')
       const marketplaceRemove = commands.indexOf('plugin marketplace remove tenon --json')
-      const marketplaceAdd = commands.indexOf('plugin marketplace add jefferysha/tenon --ref v1.0.2 --json')
+      const marketplaceAdd = commands.indexOf(
+        `plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json`,
+      )
       const pluginAdd = commands.indexOf('plugin add tenon@tenon --json')
       assert.ok(pluginRemove >= 0)
       assert.ok(marketplaceRemove > pluginRemove)
@@ -664,7 +681,7 @@ test('Codex bootstrap resumes the same durable bridge transaction after marketpl
     const marker = join(fixture, 'fail-once')
     const env = {
       ...prepared.env,
-      TENON_TEST_FAIL_AFTER_COMMAND: 'plugin marketplace add jefferysha/tenon --ref v1.0.2 --json',
+      TENON_TEST_FAIL_AFTER_COMMAND: `plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json`,
       TENON_TEST_FAIL_AFTER_COMMAND_MARKER: marker,
     }
     await assert.rejects(exec('/bin/bash', [join(root, 'install.sh'), '--codex'], {
@@ -686,7 +703,7 @@ test('Codex bootstrap resumes the same durable bridge transaction after marketpl
     const commands = (await readFile(prepared.log, 'utf8')).trim().split(/\r?\n/u)
     assert.equal(
       commands.filter((command) =>
-        command === 'plugin marketplace add jefferysha/tenon --ref v1.0.2 --json').length,
+        command === `plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json`).length,
       1,
     )
     assert.equal(commands.filter((command) => command === 'plugin add tenon@tenon --json').length, 1)
@@ -705,7 +722,7 @@ test('Codex bootstrap preserves a third marketplace state encountered while resu
     })
     const env = {
       ...prepared.env,
-      TENON_TEST_FAIL_AFTER_COMMAND: 'plugin marketplace add jefferysha/tenon --ref v1.0.2 --json',
+      TENON_TEST_FAIL_AFTER_COMMAND: `plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json`,
       TENON_TEST_FAIL_AFTER_COMMAND_MARKER: join(fixture, 'fail-once'),
     }
     await assert.rejects(exec('/bin/bash', [join(root, 'install.sh'), '--codex'], {
@@ -1077,7 +1094,10 @@ test('Codex bootstrap fails closed when the host reports a different installed v
         env: prepared.env,
       }),
       (error) => {
-        assert.match(error.stderr, /installed plugin version 1\.0\.1 does not equal release 1\.0\.2/)
+        assert.match(
+          error.stderr,
+          new RegExp(`installed plugin version 1\\.0\\.1 does not equal release ${CURRENT_RELEASE_VERSION_PATTERN}`),
+        )
         return true
       },
     )
@@ -1098,7 +1118,10 @@ test('Claude one-line bootstrap uses the same stable Marketplace channel before 
     })
     assert.match(result.stdout, /Tenon installed for --claude/)
     const commands = await readFile(prepared.log, 'utf8')
-    assert.match(commands, /plugin marketplace add jefferysha\/tenon@v1\.0\.2/)
+    assert.match(
+      commands,
+      new RegExp(`plugin marketplace add jefferysha/tenon@${CURRENT_RELEASE_TAG_PATTERN}`),
+    )
     assert.match(commands, /plugin install tenon@tenon/)
     assert.deepEqual(JSON.parse(await readFile(prepared.setupArgs, 'utf8')), [
       'setup', '--claude', '--yes',

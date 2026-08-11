@@ -31341,6 +31341,8 @@ var STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 var GIT_OID = /^[0-9a-f]{40}$/;
 var RELEASE_API = `https://api.github.com/repos/${PRODUCT_IDENTITY.repository}/releases/latest`;
 var RELEASE_REPOSITORY = `${PRODUCT_IDENTITY.repositoryUrl}.git`;
+var STABLE_RELEASE_NETWORK_TIMEOUT_MS = 3e4;
+var STABLE_RELEASE_LOCAL_TIMEOUT_MS = 1e4;
 function record7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
@@ -31391,7 +31393,7 @@ function tagCommit(env, tag2) {
   const result = env.runCommand(
     "git",
     ["ls-remote", RELEASE_REPOSITORY, directRef, peeledRef],
-    { timeoutMs: 1e4 }
+    { timeoutMs: STABLE_RELEASE_NETWORK_TIMEOUT_MS }
   );
   if (result.code !== 0) {
     throw new Error(`stable Release tag proof failed: ${result.stderr.trim() || `exit ${result.code}`}`);
@@ -31413,24 +31415,24 @@ function tagCommit(env, tag2) {
   if (advertisedCommit === void 0) throw new Error("stable Release tag proof is missing");
   const proofRoot = mkdtempSync(join39(tmpdir(), "tenon-stable-tag-"));
   try {
-    const initialized = env.runCommand("git", ["init", "--bare", proofRoot], { timeoutMs: 1e4 });
+    const initialized = env.runCommand("git", ["init", "--bare", proofRoot], { timeoutMs: STABLE_RELEASE_LOCAL_TIMEOUT_MS });
     if (initialized.code !== 0) {
       throw new Error(`stable Release object proof could not initialize: ${initialized.stderr.trim() || `exit ${initialized.code}`}`);
     }
     const fetched = env.runCommand(
       "git",
       ["-C", proofRoot, "fetch", "--no-tags", "--depth=1", RELEASE_REPOSITORY, directRef],
-      { timeoutMs: 1e4 }
+      { timeoutMs: STABLE_RELEASE_NETWORK_TIMEOUT_MS }
     );
     if (fetched.code !== 0) {
       throw new Error(`stable Release object proof failed: ${fetched.stderr.trim() || `exit ${fetched.code}`}`);
     }
-    const resolved = env.runCommand("git", ["-C", proofRoot, "rev-parse", "FETCH_HEAD^{commit}"], { timeoutMs: 1e4 });
+    const resolved = env.runCommand("git", ["-C", proofRoot, "rev-parse", "FETCH_HEAD^{commit}"], { timeoutMs: STABLE_RELEASE_LOCAL_TIMEOUT_MS });
     const commit = resolved.stdout.trim();
     if (resolved.code !== 0 || !GIT_OID.test(commit)) {
       throw new Error("stable Release tag does not resolve to a commit object");
     }
-    const objectType = env.runCommand("git", ["-C", proofRoot, "cat-file", "-t", commit], { timeoutMs: 1e4 });
+    const objectType = env.runCommand("git", ["-C", proofRoot, "cat-file", "-t", commit], { timeoutMs: STABLE_RELEASE_LOCAL_TIMEOUT_MS });
     if (objectType.code !== 0 || objectType.stdout.trim() !== "commit") {
       throw new Error("stable Release tag final object is not a commit");
     }
@@ -31493,7 +31495,7 @@ var TENON_HOSTS = [
 var TENON_MARKETPLACE_SOURCE = "jefferysha/tenon";
 var TENON_MARKETPLACE_NAME = "tenon";
 var TENON_PLUGIN_NAME = "tenon";
-var TENON_RELEASE_VERSION = "1.0.2";
+var TENON_RELEASE_VERSION = "1.0.3";
 function parseHostPluginInventory(host, stdout) {
   let parsed;
   try {
@@ -58645,10 +58647,11 @@ var REAL_SETUP_ENV = {
       return { code: 0, stdout, stderr: "" };
     } catch (e) {
       const err = e;
+      const stderr = err.stderr == null ? "" : String(err.stderr);
       return {
         code: typeof err.status === "number" ? err.status : 1,
         stdout: err.stdout != null ? String(err.stdout) : "",
-        stderr: err.stderr != null ? String(err.stderr) : errMsg(e)
+        stderr: stderr !== "" ? stderr : errMsg(e)
       };
     }
   },

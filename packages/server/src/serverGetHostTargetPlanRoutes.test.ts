@@ -19,6 +19,7 @@ import {
 import type { DashboardServer } from './types.js'
 import type { PipelineCliRunner } from './operations.js'
 import { detectNativeHostTargets } from './hostTargetDetection.js'
+import { HOST_PLAN_RELEASE_TAG } from './hostTargetPlanProtocol.js'
 
 const CODEX_TARGET = {
   id: 'codex',
@@ -64,7 +65,7 @@ const NATIVE_COMMANDS = {
       planCommand('codex', ['plugin', 'remove', 'tenon@tenon', '--json']),
       planCommand('codex', ['plugin', 'marketplace', 'remove', 'tenon', '--json']),
       planCommand('codex', [
-        'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', 'v1.0.2', '--json',
+        'plugin', 'marketplace', 'add', 'jefferysha/tenon', '--ref', HOST_PLAN_RELEASE_TAG, '--json',
       ]),
       planCommand('codex', ['plugin', 'add', 'tenon@tenon', '--json']),
       planCommand('codex', ['plugin', 'list', '--json']),
@@ -83,7 +84,7 @@ const NATIVE_COMMANDS = {
     setup: [
       planCommand('claude', ['plugin', 'uninstall', 'tenon@tenon', '--scope', 'user']),
       planCommand('claude', ['plugin', 'marketplace', 'remove', 'tenon']),
-      planCommand('claude', ['plugin', 'marketplace', 'add', 'jefferysha/tenon@v1.0.2']),
+      planCommand('claude', ['plugin', 'marketplace', 'add', `jefferysha/tenon@${HOST_PLAN_RELEASE_TAG}`]),
       planCommand('claude', ['plugin', 'install', 'tenon@tenon']),
       planCommand('claude', ['plugin', 'list', '--json']),
     ],

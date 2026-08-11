@@ -7,6 +7,9 @@ import {
   observeNativeHost,
 } from './managed-host-observation.js'
 import { equivalentNativeHostDesired } from './managed-host-desired-identity.js'
+import { TENON_RELEASE_VERSION } from './plugin-host.js'
+
+const CURRENT_RELEASE_TAG = `v${TENON_RELEASE_VERSION}` as const
 
 function observationEnv(state: {
   head: string
@@ -36,7 +39,7 @@ function observationEnv(state: {
       }
       if (path === `${root}/.codex-marketplace-install.json`) {
         if (state.omitLegacyRefMetadata === true) return undefined
-        return JSON.stringify({ ref_name: state.marketplaceRef ?? 'v1.0.2' })
+        return JSON.stringify({ ref_name: state.marketplaceRef ?? CURRENT_RELEASE_TAG })
       }
       return undefined
     },
