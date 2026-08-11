@@ -9,7 +9,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync }
 import { cp, readFile, writeFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { makeDeps } from '../test-support.js'
 import { buildProgram, CliExit } from '../program.js'
@@ -44,6 +44,18 @@ import { parseHostPluginInventory, TENON_RELEASE_VERSION } from './plugin-host.j
 import type { TrustedExecutable } from './trusted-executable.js'
 
 const CURRENT_RELEASE_TAG = `v${TENON_RELEASE_VERSION}` as const
+
+function hermeticProvenancePath(): string {
+  const required = process.platform === 'win32'
+    ? [
+        dirname(process.execPath),
+        process.env.SystemRoot === undefined ? undefined : join(process.env.SystemRoot, 'System32'),
+        process.env.ComSpec === undefined ? undefined : dirname(process.env.ComSpec),
+        process.env.PATH ?? process.env.Path,
+      ]
+    : [dirname(process.execPath), '/usr/bin', '/bin']
+  return required.filter((entry): entry is string => entry !== undefined && entry !== '').join(delimiter)
+}
 
 // ── spy env:记录全部 fs mutation + exec 调用,断言「零副作用」/「未碰 PATH」/「零执行」──────
 interface SpyCalls {
@@ -3169,7 +3181,12 @@ describe('canonical provenance setup gate', () => {
         execFileSync(process.execPath, [
           join(root, 'packages', 'cli', 'dist', 'tenon.mjs'),
           'setup', 'skills', '--yes',
-        ], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+        ], {
+          cwd: root,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: hermeticProvenancePath() },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
       } catch (error) {
         const e = error as { status?: number; stdout?: string; stderr?: string }
         status = e.status ?? 1
