@@ -31495,7 +31495,7 @@ var TENON_HOSTS = [
 var TENON_MARKETPLACE_SOURCE = "jefferysha/tenon";
 var TENON_MARKETPLACE_NAME = "tenon";
 var TENON_PLUGIN_NAME = "tenon";
-var TENON_RELEASE_VERSION = "1.0.4";
+var TENON_RELEASE_VERSION = "1.0.5";
 function parseHostPluginInventory(host, stdout) {
   let parsed;
   try {
@@ -34354,7 +34354,7 @@ var REAL_PRODUCT_IDENTITY_RUNTIME = {
       return void 0;
     }
   },
-  run(file, args, cwd) {
+  run(file, args, options) {
     const asText = (value) => Buffer.isBuffer(value) ? value.toString("utf8") : typeof value === "string" ? value : "";
     try {
       return {
@@ -34362,8 +34362,8 @@ var REAL_PRODUCT_IDENTITY_RUNTIME = {
         stdout: execFileSync(file, [...args], {
           encoding: "utf8",
           stdio: ["ignore", "pipe", "pipe"],
-          timeout: 5e3,
-          ...cwd === void 0 ? {} : { cwd }
+          timeout: options?.timeoutMs ?? 5e3,
+          ...options?.cwd === void 0 ? {} : { cwd: options.cwd }
         }),
         stderr: ""
       };
@@ -34446,10 +34446,13 @@ function createDoctorProductIdentityProbe(runtimeScope2, installer, runtime = RE
         homeDir: () => scope.homeDir,
         runtimeEnv: () => scope.env,
         readText: (path9) => runtime.readText(path9),
-        runCommand: (command2, args) => {
+        runCommand: (command2, args, options) => {
           if (command2 === host) {
             const invocation = hostBinding.invocation(args);
-            return invocation === void 0 ? { code: 127, stdout: "", stderr: "trusted host identity drifted" } : runtime.run(invocation.file, invocation.args, invocation.cwd);
+            return invocation === void 0 ? { code: 127, stdout: "", stderr: "trusted host identity drifted" } : runtime.run(invocation.file, invocation.args, {
+              ...options,
+              ...invocation.cwd === void 0 ? {} : { cwd: invocation.cwd }
+            });
           }
           if (command2 !== "git") return { code: 127, stdout: "", stderr: "untrusted command" };
           try {
@@ -34457,7 +34460,7 @@ function createDoctorProductIdentityProbe(runtimeScope2, installer, runtime = RE
           } catch {
             return { code: 127, stdout: "", stderr: "trusted git identity drifted" };
           }
-          return runtime.run(trustedGit.executable, args);
+          return runtime.run(trustedGit.executable, args, options);
         }
       };
       const observation = decodeNativeHostObservation(observeNativeHost(diagnosticEnv, host));
