@@ -202,7 +202,7 @@ interface ExpectedStep {
 }
 
 /** Release projection validated against package/plugin manifests by the product identity gate. */
-export const HOST_PLAN_RELEASE_TAG = 'v1.0.6'
+export const HOST_PLAN_RELEASE_TAG = 'v1.0.7'
 const LATEST_STABLE_TAG = '<latest-stable>'
 
 function nativeCommandSteps(host: 'codex' | 'claude', operation: HostOperation): readonly ExpectedStep[] {

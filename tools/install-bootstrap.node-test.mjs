@@ -15,6 +15,12 @@ const { version: CURRENT_RELEASE_VERSION } = JSON.parse(
 const CURRENT_RELEASE_TAG = `v${CURRENT_RELEASE_VERSION}`
 const CURRENT_RELEASE_VERSION_PATTERN = CURRENT_RELEASE_VERSION.replaceAll('.', '\\.')
 const CURRENT_RELEASE_TAG_PATTERN = CURRENT_RELEASE_TAG.replaceAll('.', '\\.')
+const PRIOR_RELEASE_VERSION = CURRENT_RELEASE_VERSION.replace(/\.(\d+)$/u, (_, patch) => `.${Number(patch) - 1}`)
+const PRIOR_RELEASE_TAG = `v${PRIOR_RELEASE_VERSION}`
+const TWO_BACK_RELEASE_VERSION = CURRENT_RELEASE_VERSION.replace(/\.(\d+)$/u, (_, patch) => `.${Number(patch) - 2}`)
+const TWO_BACK_RELEASE_TAG = `v${TWO_BACK_RELEASE_VERSION}`
+const NEXT_RELEASE_VERSION = CURRENT_RELEASE_VERSION.replace(/\.(\d+)$/u, (_, patch) => `.${Number(patch) + 1}`)
+const NEXT_RELEASE_TAG = `v${NEXT_RELEASE_VERSION}`
 const AUTH_COMMANDS = [
   'codex login',
   'codex login --device-auth',
@@ -61,6 +67,7 @@ async function prepareReleasedBootstrapFixture(
     initiallyInstalled = false,
     initialMarketplaceKind = 'exact',
     reportedVersion = CURRENT_RELEASE_VERSION,
+    reportedVersionAfterInstall = reportedVersion,
     reportedEnabled = true,
     remoteTagProofFails = false,
     releaseState = 'published',
@@ -73,6 +80,7 @@ async function prepareReleasedBootstrapFixture(
   const setupArgs = join(fixture, 'setup-args.json')
   const pluginState = join(fixture, 'plugin-present')
   const pluginEnabledState = join(fixture, 'plugin-enabled')
+  const pluginVersionState = join(fixture, 'plugin-version')
   const marketplaceState = join(fixture, 'marketplace-present')
   const legacyMarketplaceState = join(fixture, 'marketplace-legacy')
   const home = join(fixture, 'home')
@@ -202,7 +210,11 @@ case "${'$'}*" in
   "plugin list --json")
     if [ -f "${'$'}TENON_TEST_PLUGIN_STATE" ]; then
       if [ -f "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" ]; then enabled=true; else enabled=false; fi
-      printf '{"installed":[{"pluginId":"tenon@tenon","name":"tenon","marketplaceName":"tenon","version":"${reportedVersion}","enabled":%s,"source":{"path":"%s"}}]}\\n' "${'$'}enabled" "${'$'}TENON_TEST_PLUGIN_ROOT"
+      reported_version="${reportedVersion}"
+      [ ! -f "${'$'}TENON_TEST_PLUGIN_VERSION_STATE" ] || reported_version="${'$'}(/bin/cat "${'$'}TENON_TEST_PLUGIN_VERSION_STATE")"
+      reported_root="${'$'}TENON_TEST_PLUGIN_ROOT"
+      [ -z "${'$'}{TENON_TEST_PLUGIN_REPORTED_ROOT:-}" ] || reported_root="${'$'}TENON_TEST_PLUGIN_REPORTED_ROOT"
+      printf '{"installed":[{"pluginId":"tenon@tenon","name":"tenon","marketplaceName":"tenon","version":"%s","enabled":%s,"source":{"path":"%s"}}]}\\n' "${'$'}reported_version" "${'$'}enabled" "${'$'}reported_root"
     else
       printf '{"installed":[]}\\n'
     fi ;;
@@ -216,7 +228,7 @@ case "${'$'}*" in
     else
       printf '{"marketplaces":[]}\\n'
     fi ;;
-  "plugin remove tenon@tenon --json") rm -f "${'$'}TENON_TEST_PLUGIN_STATE" "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" ;;
+  "plugin remove tenon@tenon --json") rm -f "${'$'}TENON_TEST_PLUGIN_STATE" "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" "${'$'}TENON_TEST_PLUGIN_VERSION_STATE" ;;
   "plugin marketplace remove tenon --json") rm -f "${'$'}TENON_TEST_MARKETPLACE_STATE" "${'$'}TENON_TEST_LEGACY_MARKETPLACE_STATE" ;;
   "plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json")
     /usr/bin/git -C "${'$'}TENON_TEST_PLUGIN_ROOT" checkout --quiet --detach ${CURRENT_RELEASE_TAG}
@@ -224,6 +236,7 @@ case "${'$'}*" in
     : > "${'$'}TENON_TEST_MARKETPLACE_STATE" ;;
   "plugin add tenon@tenon --json")
     : > "${'$'}TENON_TEST_PLUGIN_STATE"
+    printf '%s\\n' "${'$'}TENON_TEST_PLUGIN_VERSION_AFTER_INSTALL" > "${'$'}TENON_TEST_PLUGIN_VERSION_STATE"
     [ "${'$'}{TENON_TEST_KEEP_DISABLED_AFTER_ADD:-0}" = 1 ] || : > "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" ;;
   *) echo "unexpected codex command: ${'$'}*" >&2; exit 90 ;;
 esac
@@ -241,7 +254,11 @@ case "${'$'}*" in
   "plugin list --json")
     if [ -f "${'$'}TENON_TEST_PLUGIN_STATE" ]; then
       if [ -f "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" ]; then enabled=true; else enabled=false; fi
-      printf '[{"id":"tenon@tenon","version":"${reportedVersion}","enabled":%s,"scope":"user","installPath":"%s"}]\\n' "${'$'}enabled" "${'$'}TENON_TEST_PLUGIN_ROOT"
+      reported_version="${reportedVersion}"
+      [ ! -f "${'$'}TENON_TEST_PLUGIN_VERSION_STATE" ] || reported_version="${'$'}(/bin/cat "${'$'}TENON_TEST_PLUGIN_VERSION_STATE")"
+      reported_root="${'$'}TENON_TEST_PLUGIN_ROOT"
+      [ -z "${'$'}{TENON_TEST_PLUGIN_REPORTED_ROOT:-}" ] || reported_root="${'$'}TENON_TEST_PLUGIN_REPORTED_ROOT"
+      printf '[{"id":"tenon@tenon","version":"%s","enabled":%s,"scope":"user","installPath":"%s"}]\\n' "${'$'}reported_version" "${'$'}enabled" "${'$'}reported_root"
     else
       printf '[]\\n'
     fi ;;
@@ -251,13 +268,14 @@ case "${'$'}*" in
     else
       printf '[]\\n'
     fi ;;
-  "plugin uninstall tenon@tenon --scope user") rm -f "${'$'}TENON_TEST_PLUGIN_STATE" "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" ;;
+  "plugin uninstall tenon@tenon --scope user") rm -f "${'$'}TENON_TEST_PLUGIN_STATE" "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" "${'$'}TENON_TEST_PLUGIN_VERSION_STATE" ;;
   "plugin marketplace remove tenon") rm -f "${'$'}TENON_TEST_MARKETPLACE_STATE" "${'$'}TENON_TEST_LEGACY_MARKETPLACE_STATE" ;;
   "plugin marketplace add jefferysha/tenon@${CURRENT_RELEASE_TAG}")
     /usr/bin/git -C "${'$'}TENON_TEST_PLUGIN_ROOT" checkout --quiet --detach ${CURRENT_RELEASE_TAG}
     : > "${'$'}TENON_TEST_MARKETPLACE_STATE" ;;
   "plugin install tenon@tenon")
     : > "${'$'}TENON_TEST_PLUGIN_STATE"
+    printf '%s\\n' "${'$'}TENON_TEST_PLUGIN_VERSION_AFTER_INSTALL" > "${'$'}TENON_TEST_PLUGIN_VERSION_STATE"
     [ "${'$'}{TENON_TEST_KEEP_DISABLED_AFTER_ADD:-0}" = 1 ] || : > "${'$'}TENON_TEST_PLUGIN_ENABLED_STATE" ;;
   *) echo "unexpected claude command: ${'$'}*" >&2; exit 90 ;;
 esac
@@ -266,6 +284,7 @@ esac
   await chmod(join(bin, host), 0o755)
   if (initiallyInstalled) {
     await writeFile(pluginState, '')
+    await writeFile(pluginVersionState, `${reportedVersion}\n`)
     await writeFile(marketplaceState, '')
   }
   if (initiallyInstalled && reportedEnabled) await writeFile(pluginEnabledState, '')
@@ -275,6 +294,7 @@ esac
     plugin,
     log,
     setupArgs,
+    host,
     env: {
       ...process.env,
       HOME: home,
@@ -284,11 +304,111 @@ esac
       TENON_TEST_PLUGIN_ROOT: plugin,
       TENON_TEST_PLUGIN_STATE: pluginState,
       TENON_TEST_PLUGIN_ENABLED_STATE: pluginEnabledState,
+      TENON_TEST_PLUGIN_VERSION_STATE: pluginVersionState,
+      TENON_TEST_PLUGIN_VERSION_AFTER_INSTALL: reportedVersionAfterInstall,
       TENON_TEST_MARKETPLACE_STATE: marketplaceState,
       TENON_TEST_LEGACY_MARKETPLACE_STATE: legacyMarketplaceState,
       TENON_TEST_SETUP_ARGS: setupArgs,
     },
   }
+}
+
+async function writeInstallerBridgeJournal(prepared, {
+  host = prepared.host,
+  version,
+  tag = `v${version}`,
+  commit,
+  phase = 'plugin-installed',
+  transactionId = '11111111-1111-4111-8111-111111111111',
+  beforePlugin = 'absent',
+  beforeMarketplace = 'absent',
+  extra = {},
+} = {}) {
+  const journal = join(
+    prepared.env.TENON_RUNTIME_HOME,
+    'state',
+    'installer-bridge',
+    `${host}.json`,
+  )
+  await mkdir(dirname(journal), { recursive: true })
+  await writeFile(journal, `${JSON.stringify({
+    version: 1,
+    transactionId,
+    host,
+    target: { version, tag, commit },
+    phase,
+    before: { plugin: beforePlugin, marketplace: beforeMarketplace },
+    ...extra,
+  })}\n`)
+  return journal
+}
+
+async function preparePriorStableBridgeFixture(fixture, {
+  host = 'codex',
+  phase = 'plugin-installed',
+  targetVersion = PRIOR_RELEASE_VERSION,
+  reportedVersion = targetVersion,
+  reportedEnabled = true,
+  initialMarketplaceKind = 'exact',
+  marketplaceMutation = 'none',
+  extra = {},
+} = {}) {
+  const prepared = await prepareReleasedBootstrapFixture(fixture, host, {
+    initiallyInstalled: true,
+    initialMarketplaceKind,
+    reportedVersion,
+    reportedVersionAfterInstall: CURRENT_RELEASE_VERSION,
+    reportedEnabled,
+  })
+  const targetTag = `v${targetVersion}`
+  await writeFile(join(prepared.plugin, 'prior-release-marker'), 'prior stable release\n')
+  await exec('/usr/bin/git', ['-C', prepared.plugin, 'add', 'prior-release-marker'])
+  await exec('/usr/bin/git', ['-C', prepared.plugin, 'commit', '--quiet', '-m', 'prior release'])
+  await exec('/usr/bin/git', ['-C', prepared.plugin, 'tag', '--force', targetTag])
+  await exec('/usr/bin/git', ['-C', prepared.plugin, 'checkout', '--quiet', '--detach', targetTag])
+  if (host === 'codex') {
+    await writeFile(
+      join(prepared.plugin, '.codex-marketplace-install.json'),
+      `${JSON.stringify({ ref_name: targetTag })}\n`,
+    )
+  }
+  const { stdout: oldCommitOutput } = await exec('/usr/bin/git', ['-C', prepared.plugin, 'rev-parse', 'HEAD'])
+  const oldCommit = oldCommitOutput.trim()
+  switch (marketplaceMutation) {
+    case 'head':
+      await writeFile(join(prepared.plugin, 'head-drift-marker'), 'head drift\n')
+      await exec('/usr/bin/git', ['-C', prepared.plugin, 'add', 'head-drift-marker'])
+      await exec('/usr/bin/git', ['-C', prepared.plugin, 'commit', '--quiet', '-m', 'head drift'])
+      break
+    case 'ref':
+      await writeFile(
+        join(prepared.plugin, '.codex-marketplace-install.json'),
+        `${JSON.stringify({ ref_name: 'main' })}\n`,
+      )
+      break
+    case 'origin':
+      await exec('/usr/bin/git', ['-C', prepared.plugin, 'remote', 'set-url', 'origin', 'https://example.invalid/tenon.git'])
+      break
+    case 'dirty':
+      await writeFile(join(prepared.plugin, 'prior-release-marker'), 'dirty\n')
+      break
+    default:
+      break
+  }
+  const journal = await writeInstallerBridgeJournal(prepared, {
+    host,
+    version: targetVersion,
+    tag: targetTag,
+    commit: oldCommit,
+    phase,
+    extra,
+  })
+  return { prepared, journal, oldCommit }
+}
+
+async function assertNoHostMutation(prepared) {
+  const commands = await readFile(prepared.log, 'utf8').catch(() => '')
+  assert.doesNotMatch(commands, /plugin remove|plugin uninstall|marketplace remove|marketplace add|plugin add|plugin install/u)
 }
 
 test('Codex auth commands stay consistent across Chinese, English, troubleshooting, and npm bootstrap docs', async () => {
@@ -685,6 +805,262 @@ for (const initialMarketplaceKind of ['exact', 'main', 'local']) {
     }
   })
 }
+
+test(`Codex bootstrap takes over an exact current-2 ${TWO_BACK_RELEASE_VERSION} plugin-installed WAL before the ${CURRENT_RELEASE_VERSION} upgrade`, async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-cross-version-'))
+  try {
+    const prepared = await prepareReleasedBootstrapFixture(fixture, 'codex', {
+      initiallyInstalled: true,
+      reportedVersion: TWO_BACK_RELEASE_VERSION,
+      reportedVersionAfterInstall: CURRENT_RELEASE_VERSION,
+    })
+    await writeFile(join(prepared.plugin, 'prior-release-marker'), 'prior stable release\n')
+    await exec('/usr/bin/git', ['-C', prepared.plugin, 'add', 'prior-release-marker'])
+    await exec('/usr/bin/git', ['-C', prepared.plugin, 'commit', '--quiet', '-m', 'prior release'])
+    await exec('/usr/bin/git', ['-C', prepared.plugin, 'tag', TWO_BACK_RELEASE_TAG])
+    await exec('/usr/bin/git', ['-C', prepared.plugin, 'checkout', '--quiet', '--detach', TWO_BACK_RELEASE_TAG])
+    await writeFile(
+      join(prepared.plugin, '.codex-marketplace-install.json'),
+      `${JSON.stringify({ ref_name: TWO_BACK_RELEASE_TAG })}\n`,
+    )
+    const { stdout: oldCommitOutput } = await exec('/usr/bin/git', ['-C', prepared.plugin, 'rev-parse', 'HEAD'])
+    const oldCommit = oldCommitOutput.trim()
+    const journal = await writeInstallerBridgeJournal(prepared, {
+      version: TWO_BACK_RELEASE_VERSION,
+      tag: TWO_BACK_RELEASE_TAG,
+      commit: oldCommit,
+    })
+
+    const result = await exec('/bin/bash', [join(root, 'install.sh'), '--codex'], {
+      cwd: fixture,
+      env: prepared.env,
+    })
+    assert.match(result.stdout, /Tenon installed for --codex/u)
+    const commands = (await readFile(prepared.log, 'utf8')).trim().split(/\r?\n/u)
+    const pluginRemove = commands.indexOf('plugin remove tenon@tenon --json')
+    const marketplaceRemove = commands.indexOf('plugin marketplace remove tenon --json')
+    const marketplaceAdd = commands.indexOf(
+      `plugin marketplace add jefferysha/tenon --ref ${CURRENT_RELEASE_TAG} --json`,
+    )
+    const pluginAdd = commands.indexOf('plugin add tenon@tenon --json')
+    assert.ok(pluginRemove >= 0)
+    assert.ok(marketplaceRemove > pluginRemove)
+    assert.ok(marketplaceAdd > marketplaceRemove)
+    assert.ok(pluginAdd > marketplaceAdd)
+    assert.equal(commands.filter((command) => command === 'plugin remove tenon@tenon --json').length, 1)
+    assert.equal(commands.filter((command) => command === 'plugin marketplace remove tenon --json').length, 1)
+    assert.equal(commands.filter((command) => command.startsWith('plugin marketplace add ')).length, 1)
+    assert.equal(commands.filter((command) => command === 'plugin add tenon@tenon --json').length, 1)
+    assert.deepEqual(JSON.parse(await readFile(prepared.setupArgs, 'utf8')), [
+      'setup', '--codex', '--yes',
+    ])
+    await assert.rejects(readFile(journal, 'utf8'), /ENOENT/u)
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
+
+test(`Claude bootstrap takes over an exact current-2 ${TWO_BACK_RELEASE_VERSION} plugin-installed WAL before the ${CURRENT_RELEASE_VERSION} upgrade`, async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-claude-cross-version-'))
+  try {
+    const { prepared, journal } = await preparePriorStableBridgeFixture(fixture, {
+      host: 'claude',
+      targetVersion: TWO_BACK_RELEASE_VERSION,
+    })
+    const result = await exec('/bin/bash', [join(root, 'install.sh'), '--claude'], {
+      cwd: fixture,
+      env: prepared.env,
+    })
+    assert.match(result.stdout, /Tenon installed for --claude/u)
+    const commands = (await readFile(prepared.log, 'utf8')).trim().split(/\r?\n/u)
+    const pluginRemove = commands.indexOf('plugin uninstall tenon@tenon --scope user')
+    const marketplaceRemove = commands.indexOf('plugin marketplace remove tenon')
+    const marketplaceAdd = commands.indexOf(`plugin marketplace add jefferysha/tenon@${CURRENT_RELEASE_TAG}`)
+    const pluginAdd = commands.indexOf('plugin install tenon@tenon')
+    assert.ok(pluginRemove >= 0)
+    assert.ok(marketplaceRemove > pluginRemove)
+    assert.ok(marketplaceAdd > marketplaceRemove)
+    assert.ok(pluginAdd > marketplaceAdd)
+    assert.equal(commands.filter((command) => command === 'plugin uninstall tenon@tenon --scope user').length, 1)
+    assert.equal(commands.filter((command) => command === 'plugin marketplace remove tenon').length, 1)
+    assert.equal(commands.filter((command) => command.startsWith('plugin marketplace add ')).length, 1)
+    assert.equal(commands.filter((command) => command === 'plugin install tenon@tenon').length, 1)
+    assert.deepEqual(JSON.parse(await readFile(prepared.setupArgs, 'utf8')), [
+      'setup', '--claude', '--yes',
+    ])
+    await assert.rejects(readFile(journal, 'utf8'), /ENOENT/u)
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
+
+for (const phase of ['prepared', 'plugin-absent', 'marketplace-absent', 'marketplace-registered']) {
+  test(`Codex bootstrap retains a prior WAL in ${phase} phase without host mutation`, async () => {
+    const fixture = await mkdtemp(join(tmpdir(), `tenon-install-bootstrap-cross-version-phase-${phase}-`))
+    try {
+      const { prepared, journal } = await preparePriorStableBridgeFixture(fixture, { phase })
+      await assert.rejects(
+        exec('/bin/bash', [join(root, 'install.sh'), '--codex'], { cwd: fixture, env: prepared.env }),
+        (error) => {
+          assert.match(error.stderr, /not an adoptable completed prior stable target/i)
+          return true
+        },
+      )
+      await assertNoHostMutation(prepared)
+      assert.equal(JSON.parse(await readFile(journal, 'utf8')).phase, phase)
+    } finally {
+      await rm(fixture, { recursive: true, force: true })
+    }
+  })
+}
+
+test('Codex bootstrap rejects a current-version tag WAL whose commit is not the current proven target', async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-cross-version-current-commit-'))
+  try {
+    const { prepared, journal } = await preparePriorStableBridgeFixture(fixture, {
+      targetVersion: CURRENT_RELEASE_VERSION,
+    })
+    await assert.rejects(
+      exec('/bin/bash', [join(root, 'install.sh'), '--codex'], { cwd: fixture, env: prepared.env }),
+      (error) => {
+        assert.match(error.stderr, /not an adoptable completed prior stable target/i)
+        return true
+      },
+    )
+    await assertNoHostMutation(prepared)
+    assert.equal(JSON.parse(await readFile(journal, 'utf8')).target.version, CURRENT_RELEASE_VERSION)
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
+
+test('Codex bootstrap rejects a newer stable target WAL before host mutation', async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-cross-version-newer-'))
+  try {
+    const { prepared, journal } = await preparePriorStableBridgeFixture(fixture, {
+      targetVersion: NEXT_RELEASE_VERSION,
+    })
+    await assert.rejects(
+      exec('/bin/bash', [join(root, 'install.sh'), '--codex'], { cwd: fixture, env: prepared.env }),
+      (error) => {
+        assert.match(error.stderr, /not an adoptable completed prior stable target/i)
+        return true
+      },
+    )
+    await assertNoHostMutation(prepared)
+    assert.equal(JSON.parse(await readFile(journal, 'utf8')).target.version, NEXT_RELEASE_VERSION)
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
+
+for (const scenario of [
+  { name: 'plugin disabled', reportedEnabled: false },
+  { name: 'plugin version drift', reportedVersion: '0.0.1' },
+  { name: 'plugin and Marketplace root drift', pluginRootDrift: true },
+  { name: 'marketplace source/type drift', initialMarketplaceKind: 'local' },
+  { name: 'marketplace HEAD drift', marketplaceMutation: 'head' },
+  { name: 'marketplace ref drift', marketplaceMutation: 'ref' },
+  { name: 'marketplace origin drift', marketplaceMutation: 'origin' },
+  { name: 'marketplace dirty drift', marketplaceMutation: 'dirty' },
+]) {
+  test(`Codex bootstrap rejects ${scenario.name} while retaining the prior WAL and avoiding host mutation`, async () => {
+    const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-cross-version-drift-'))
+    try {
+      const { prepared, journal } = await preparePriorStableBridgeFixture(fixture, scenario)
+      if (scenario.pluginRootDrift) {
+        prepared.env.TENON_TEST_PLUGIN_REPORTED_ROOT = join(fixture, 'different-plugin-root')
+      }
+      await assert.rejects(
+        exec('/bin/bash', [join(root, 'install.sh'), '--codex'], { cwd: fixture, env: prepared.env }),
+        (error) => {
+          assert.match(
+            error.stderr,
+            scenario.name.startsWith('plugin') && !scenario.pluginRootDrift
+              ? /does not match the installed plugin/i
+              : scenario.pluginRootDrift
+                ? /split plugin and Marketplace roots/i
+                : /does not match the official clean Marketplace target/i,
+          )
+          return true
+        },
+      )
+      await assertNoHostMutation(prepared)
+      const retained = JSON.parse(await readFile(journal, 'utf8'))
+      assert.equal(retained.phase, 'plugin-installed')
+      assert.equal(retained.target.version, PRIOR_RELEASE_VERSION)
+    } finally {
+      await rm(fixture, { recursive: true, force: true })
+    }
+  })
+}
+
+test('Codex bootstrap rejects malformed and unknown-key prior WALs before host mutation', async () => {
+  for (const mode of ['malformed', 'unknown', 'swapped']) {
+    const fixture = await mkdtemp(join(tmpdir(), `tenon-install-bootstrap-cross-version-${mode}-`))
+    try {
+      const { prepared, journal, oldCommit } = await preparePriorStableBridgeFixture(fixture)
+      if (mode === 'malformed') {
+        await writeFile(journal, '{not-json\n')
+      } else if (mode === 'unknown') {
+        const value = JSON.parse(await readFile(journal, 'utf8'))
+        value.unexpected = true
+        await writeFile(journal, `${JSON.stringify(value)}\n`)
+      } else {
+        const pluginSnapshot = `present\t${prepared.plugin}\t${PRIOR_RELEASE_VERSION}\tuser\tenabled`
+        const marketplaceSnapshot = `present\t${prepared.plugin}\tjefferysha/tenon\tgit\t${oldCommit}\t${PRIOR_RELEASE_TAG}\tclean\thttps://github.com/jefferysha/tenon.git`
+        const value = JSON.parse(await readFile(journal, 'utf8'))
+        value.before = { plugin: marketplaceSnapshot, marketplace: pluginSnapshot }
+        await writeFile(journal, `${JSON.stringify(value)}\n`)
+      }
+      await assert.rejects(
+        exec('/bin/bash', [join(root, 'install.sh'), '--codex'], { cwd: fixture, env: prepared.env }),
+        (error) => {
+          assert.match(error.stderr, /invalid or belongs to another target/i)
+          return true
+        },
+      )
+      await assertNoHostMutation(prepared)
+      const retained = await readFile(journal, 'utf8')
+      assert.match(retained, mode === 'malformed' ? /not-json/u : mode === 'unknown' ? /unexpected/u : /marketplace/u)
+    } finally {
+      await rm(fixture, { recursive: true, force: true })
+    }
+  }
+})
+
+test('Codex bootstrap resumes a current prepared WAL after takeover crashes during the first host mutation', async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-cross-version-crash-'))
+  try {
+    const { prepared, journal } = await preparePriorStableBridgeFixture(fixture)
+    const env = {
+      ...prepared.env,
+      TENON_TEST_FAIL_AFTER_COMMAND: 'plugin remove tenon@tenon --json',
+      TENON_TEST_FAIL_AFTER_COMMAND_MARKER: join(fixture, 'fail-once'),
+    }
+    await assert.rejects(exec('/bin/bash', [join(root, 'install.sh'), '--codex'], {
+      cwd: fixture,
+      env,
+    }))
+    const interruptedJournal = JSON.parse(await readFile(journal, 'utf8'))
+    assert.equal(interruptedJournal.target.version, CURRENT_RELEASE_VERSION)
+    assert.equal(interruptedJournal.target.tag, CURRENT_RELEASE_TAG)
+    assert.equal(interruptedJournal.phase, 'prepared')
+
+    await exec('/bin/bash', [join(root, 'install.sh'), '--codex'], {
+      cwd: fixture,
+      env,
+    })
+    const commands = (await readFile(prepared.log, 'utf8')).trim().split(/\r?\n/u)
+    assert.equal(commands.filter((command) => command === 'plugin remove tenon@tenon --json').length, 1)
+    assert.equal(commands.filter((command) => command === 'plugin marketplace remove tenon --json').length, 1)
+    assert.equal(commands.filter((command) => command.startsWith('plugin marketplace add ')).length, 1)
+    assert.equal(commands.filter((command) => command === 'plugin add tenon@tenon --json').length, 1)
+    await assert.rejects(readFile(journal, 'utf8'), /ENOENT/u)
+  } finally {
+    await rm(fixture, { recursive: true, force: true })
+  }
+})
 
 test('Codex bootstrap resumes the same durable bridge transaction after marketplace add committed before phase write', async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'tenon-install-bootstrap-resume-'))
