@@ -49,8 +49,8 @@ function envFor(
           ? 'init'
           : args[2] ?? 'unknown'
       timeoutCalls?.push({ command, timeoutMs: options?.timeoutMs })
-      const networkProof = command === 'ls-remote' || command === 'fetch'
-      expect(options).toEqual({ timeoutMs: networkProof ? 30_000 : 10_000 })
+      const remoteProof = command === 'ls-remote' || command === 'fetch'
+      expect(options).toEqual({ timeoutMs: remoteProof ? 60_000 : 10_000 })
       if (args[0] === 'ls-remote') {
         expect(args).toEqual([
           'ls-remote',
@@ -111,7 +111,7 @@ describe('stable Release identity', () => {
     ), http)).resolves.toEqual({ version: '1.2.3', tag: 'v1.2.3', commit })
   })
 
-  test('network proof keeps a bounded slow-link budget while local validation keeps a short budget', () => {
+  test('remote Git proof keeps a bounded slow-link budget while HTTP and local budgets stay explicit', () => {
     const commit = 'e'.repeat(40)
     const timeoutCalls: TimeoutCall[] = []
     expect(resolveStableTagTarget(
@@ -119,9 +119,9 @@ describe('stable Release identity', () => {
       '1.2.3',
     )).toEqual({ version: '1.2.3', tag: 'v1.2.3', commit })
     expect(timeoutCalls).toEqual([
-      { command: 'ls-remote', timeoutMs: 30_000 },
+      { command: 'ls-remote', timeoutMs: 60_000 },
       { command: 'init', timeoutMs: 10_000 },
-      { command: 'fetch', timeoutMs: 30_000 },
+      { command: 'fetch', timeoutMs: 60_000 },
       { command: 'rev-parse', timeoutMs: 10_000 },
       { command: 'cat-file', timeoutMs: 10_000 },
     ])

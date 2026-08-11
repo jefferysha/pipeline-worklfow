@@ -4,6 +4,18 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
+## v1.0.6 · 2026-08-11
+
+### Stable Git proof budget
+
+- Real slow-link measurements showed that the public stable tag/object proof can exceed the previous 30-second Git budget: proxy `ls-remote`/fetch took 6.9s/11.3s, while direct fetch reached 22.9s and formal transactions still observed occasional longer phases.
+- Git remote `ls-remote` and fetch now use a bounded 60-second budget. GitHub Release API metadata and the npm bootstrap raw installer download remain bounded at 30 seconds; local init/rev-parse/cat-file proof remains 10 seconds, and host observation keeps its default 5 seconds.
+- Exact stable tag/object/commit, digest, trusted executable, official HTTPS host, size, and atomicity checks are unchanged. There are no retries or source/branch/cache fallbacks, and failures remain closed before mutation.
+
+### Upgrade
+
+Install the immutable `v1.0.6` entrypoint, then use `tenon update --codex` (or `--claude`) for routine upgrades.
+
 ## v1.0.5 · 2026-08-11
 
 ### Doctor release identity proof

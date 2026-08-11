@@ -8,7 +8,8 @@ const STABLE_VERSION = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/
 const GIT_OID = /^[0-9a-f]{40}$/
 const RELEASE_API = `https://api.github.com/repos/${PRODUCT_IDENTITY.repository}/releases/latest`
 const RELEASE_REPOSITORY = `${PRODUCT_IDENTITY.repositoryUrl}.git`
-const STABLE_RELEASE_NETWORK_TIMEOUT_MS = 30_000
+const STABLE_RELEASE_GIT_REMOTE_TIMEOUT_MS = 60_000
+const STABLE_RELEASE_HTTP_TIMEOUT_MS = 30_000
 const STABLE_RELEASE_LOCAL_TIMEOUT_MS = 10_000
 
 export interface StableReleaseMetadata {
@@ -96,7 +97,7 @@ function tagCommit(env: SetupEnv, tag: string): string {
   const result = env.runCommand(
     'git',
     ['ls-remote', RELEASE_REPOSITORY, directRef, peeledRef],
-    { timeoutMs: STABLE_RELEASE_NETWORK_TIMEOUT_MS },
+    { timeoutMs: STABLE_RELEASE_GIT_REMOTE_TIMEOUT_MS },
   )
   if (result.code !== 0) {
     throw new Error(`stable Release tag proof failed: ${result.stderr.trim() || `exit ${result.code}`}`)
@@ -126,7 +127,7 @@ function tagCommit(env: SetupEnv, tag: string): string {
     const fetched = env.runCommand(
       'git',
       ['-C', proofRoot, 'fetch', '--no-tags', '--depth=1', RELEASE_REPOSITORY, directRef],
-      { timeoutMs: STABLE_RELEASE_NETWORK_TIMEOUT_MS },
+      { timeoutMs: STABLE_RELEASE_GIT_REMOTE_TIMEOUT_MS },
     )
     if (fetched.code !== 0) {
       throw new Error(`stable Release object proof failed: ${fetched.stderr.trim() || `exit ${fetched.code}`}`)
@@ -171,7 +172,7 @@ export const REAL_STABLE_RELEASE_HTTP: StableReleaseHttp = {
         'user-agent': 'tenon-release-resolver',
         'x-github-api-version': '2022-11-28',
       },
-      signal: AbortSignal.timeout(STABLE_RELEASE_NETWORK_TIMEOUT_MS),
+      signal: AbortSignal.timeout(STABLE_RELEASE_HTTP_TIMEOUT_MS),
     })
     if (!response.ok) throw new Error(`stable Release request failed: HTTP ${response.status}`)
     const raw = record(await response.json())
