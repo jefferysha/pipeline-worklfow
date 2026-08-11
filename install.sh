@@ -7,7 +7,7 @@ set -euo pipefail
 
 MARKETPLACE_SOURCE="jefferysha/tenon"
 MARKETPLACE_NAME="tenon"
-TENON_RELEASE_VERSION="1.0.6"
+TENON_RELEASE_VERSION="1.0.7"
 GITHUB_API_TIMEOUT_SECONDS=30
 GITHUB_API_SPEED_LIMIT_BYTES=1024
 HOST=""
@@ -653,19 +653,32 @@ trap 'trap - TERM; exit 143' TERM
 read_installer_journal() {
   run_node -e '
     const fs = require("node:fs");
-    const [file, host, version, tag, commit] = process.argv.slice(1);
+    const [file, host] = process.argv.slice(1);
     let j; try { j = JSON.parse(fs.readFileSync(file, "utf8")); } catch { process.exit(90); }
     const keys = Object.keys(j ?? {}).sort().join(",");
     const targetKeys = Object.keys(j?.target ?? {}).sort().join(",");
     const beforeKeys = Object.keys(j?.before ?? {}).sort().join(",");
+    const stableVersion = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
+    const safePluginState = value => typeof value === "string" && (
+      value === "absent"
+      || /^present\t\/[^\r\n\t]+\t[^\r\n\t]+\t[^\r\n\t]+\t(?:enabled|disabled)$/u.test(value)
+    );
+    const safeMarketplaceState = value => typeof value === "string" && (
+      value === "absent"
+      || /^present\t\/[^\r\n\t]+\t[^\r\n\t]+\t[^\r\n\t]+\t[a-f0-9]{40}\t[^\r\n\t]+\t(?:clean|dirty)\t[^\r\n\t]+$/u.test(value)
+    );
     if (keys !== "before,host,phase,target,transactionId,version" || j.version !== 1
-      || j.host !== host || targetKeys !== "commit,tag,version"
-      || j.target.version !== version || j.target.tag !== tag || j.target.commit !== commit
-      || beforeKeys !== "marketplace,plugin" || typeof j.before.plugin !== "string"
-      || typeof j.before.marketplace !== "string" || !/^[0-9a-f-]{36}$/u.test(j.transactionId)
+      || j.host !== host || targetKeys !== "commit,tag,version" || typeof j.target?.version !== "string"
+      || !stableVersion.test(j.target.version) || j.target.tag !== `v${j.target.version}`
+      || typeof j.target.commit !== "string" || !/^[a-f0-9]{40}$/u.test(j.target.commit)
+      || beforeKeys !== "marketplace,plugin" || !safePluginState(j.before.plugin)
+      || !safeMarketplaceState(j.before.marketplace)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(j.transactionId)
       || !["prepared", "plugin-absent", "marketplace-absent", "marketplace-registered", "plugin-installed"].includes(j.phase)) process.exit(91);
-    process.stdout.write(`${j.transactionId}\t${j.phase}`);
-  ' "$INSTALL_JOURNAL" "$HOST" "$TENON_RELEASE_VERSION" "$MARKETPLACE_REF" "$TARGET_COMMIT"
+    process.stdout.write([
+      j.transactionId, j.phase, j.target.version, j.target.tag, j.target.commit,
+    ].join("\t"));
+  ' "$INSTALL_JOURNAL" "$HOST"
 }
 
 create_installer_journal() {
@@ -723,12 +736,83 @@ complete_installer_transaction() {
   ' "$INSTALL_JOURNAL" "$INSTALL_TRANSACTION"
 }
 
+stable_version_is_less() {
+  run_node -e '
+    const [older, current] = process.argv.slice(1);
+    const parse = value => {
+      const match = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.exec(value);
+      return match?.slice(1).map(BigInt) ?? null;
+    };
+    const left = parse(older); const right = parse(current);
+    if (!left || !right) process.exit(1);
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) process.exit(left[index] < right[index] ? 0 : 1);
+    }
+    process.exit(1);
+  ' "$1" "$2"
+}
+
+prove_marketplace_target() {
+  local expected_tag="${1:-$MARKETPLACE_REF}" expected_commit="${2:-$TARGET_COMMIT}"
+  local state presence root source source_type head ref clean origin
+  state="$(read_marketplace_state)" || return 1
+  IFS=$'\t' read -r presence root source source_type head ref clean origin <<< "$state"
+  [ "$presence" = present ] || return 1
+  case "$source" in
+    "$MARKETPLACE_SOURCE"|"https://github.com/${MARKETPLACE_SOURCE}"|"https://github.com/${MARKETPLACE_SOURCE}.git") ;;
+    *) return 1 ;;
+  esac
+  if [ "$HOST" = codex ]; then [ "$source_type" = git ] || return 1
+  else [ "$source_type" = github ] || return 1
+  fi
+  [ "$head" = "$expected_commit" ] || return 1
+  [ "$ref" = "$expected_tag" ] || return 1
+  [ "$clean" = clean ] || return 1
+  case "$origin" in
+    "$MARKETPLACE_SOURCE"|"https://github.com/${MARKETPLACE_SOURCE}"|"https://github.com/${MARKETPLACE_SOURCE}.git") ;;
+    *) return 1 ;;
+  esac
+}
+
 if [ -f "$INSTALL_JOURNAL" ]; then
   JOURNAL_STATE="$(read_installer_journal)" || {
     echo "install.sh: existing installer bridge journal is invalid or belongs to another target; refusing host mutation." >&2
     exit 1
   }
-  IFS=$'\t' read -r INSTALL_TRANSACTION INSTALL_PHASE <<< "$JOURNAL_STATE"
+  IFS=$'\t' read -r INSTALL_TRANSACTION INSTALL_PHASE JOURNAL_TARGET_VERSION JOURNAL_TARGET_TAG \
+    JOURNAL_TARGET_COMMIT <<< "$JOURNAL_STATE"
+  if [ "$JOURNAL_TARGET_VERSION" = "$TENON_RELEASE_VERSION" ] \
+    && [ "$JOURNAL_TARGET_TAG" = "$MARKETPLACE_REF" ] \
+    && [ "$JOURNAL_TARGET_COMMIT" = "$TARGET_COMMIT" ]; then
+    :
+  elif [ "$INSTALL_PHASE" = plugin-installed ] \
+    && stable_version_is_less "$JOURNAL_TARGET_VERSION" "$TENON_RELEASE_VERSION"; then
+    PLUGIN_STATE="$(read_plugin_state)" || exit 1
+    IFS=$'\t' read -r PLUGIN_PRESENCE _PLUGIN_ROOT PLUGIN_VERSION _PLUGIN_SCOPE PLUGIN_ENABLED <<< "$PLUGIN_STATE"
+    [ "$PLUGIN_PRESENCE" = present ] \
+      && [ "$PLUGIN_VERSION" = "$JOURNAL_TARGET_VERSION" ] \
+      && [ "$PLUGIN_ENABLED" = enabled ] || {
+        echo "install.sh: completed prior installer journal does not match the installed plugin; refusing host mutation." >&2
+        exit 1
+      }
+    MARKETPLACE_STATE="$(read_marketplace_state)" || exit 1
+    IFS=$'\t' read -r _MARKETPLACE_PRESENCE _MARKETPLACE_ROOT _MARKETPLACE_SOURCE _MARKETPLACE_TYPE \
+      _MARKETPLACE_HEAD _MARKETPLACE_REF _MARKETPLACE_CLEAN _MARKETPLACE_ORIGIN <<< "$MARKETPLACE_STATE"
+    [ "$_PLUGIN_ROOT" = "$_MARKETPLACE_ROOT" ] || {
+      echo "install.sh: completed prior installer journal has split plugin and Marketplace roots; refusing host mutation." >&2
+      exit 1
+    }
+    prove_marketplace_target "$JOURNAL_TARGET_TAG" "$JOURNAL_TARGET_COMMIT" || {
+      echo "install.sh: completed prior installer journal does not match the official clean Marketplace target; refusing host mutation." >&2
+      exit 1
+    }
+    # Atomically replace the completed prior transaction with a fresh current-target transaction;
+    # the verified host state becomes the before-snapshot for normal current-release recovery.
+    create_installer_journal "$PLUGIN_STATE" "$MARKETPLACE_STATE"
+  else
+    echo "install.sh: existing installer bridge journal is not an adoptable completed prior stable target; refusing host mutation." >&2
+    exit 1
+  fi
 else
   PLUGIN_BEFORE="$(read_plugin_state)" || exit 1
   MARKETPLACE_BEFORE="$(read_marketplace_state)" || exit 1
@@ -794,27 +878,6 @@ if [ "$INSTALL_PHASE" = marketplace-absent ] && [ "$(read_marketplace_state)" = 
     claude) run_host plugin marketplace add "${MARKETPLACE_SOURCE}@${MARKETPLACE_REF}" ;;
   esac
 fi
-
-prove_marketplace_target() {
-  local state presence root source source_type head ref clean origin
-  state="$(read_marketplace_state)" || return 1
-  IFS=$'\t' read -r presence root source source_type head ref clean origin <<< "$state"
-  [ "$presence" = present ] || return 1
-  case "$source" in
-    "$MARKETPLACE_SOURCE"|"https://github.com/${MARKETPLACE_SOURCE}"|"https://github.com/${MARKETPLACE_SOURCE}.git") ;;
-    *) return 1 ;;
-  esac
-  if [ "$HOST" = codex ]; then [ "$source_type" = git ] || return 1
-  else [ "$source_type" = github ] || return 1
-  fi
-  [ "$head" = "$TARGET_COMMIT" ] || return 1
-  [ "$ref" = "$MARKETPLACE_REF" ] || return 1
-  [ "$clean" = clean ] || return 1
-  case "$origin" in
-    "$MARKETPLACE_SOURCE"|"https://github.com/${MARKETPLACE_SOURCE}"|"https://github.com/${MARKETPLACE_SOURCE}.git") ;;
-    *) return 1 ;;
-  esac
-}
 
 prove_marketplace_target || {
   echo "install.sh: marketplace state is neither the frozen target nor an adoptable bridge postcondition; refusing further mutation." >&2
@@ -904,6 +967,11 @@ while IFS= read -r untracked; do
   exit 1
 done < <(run_git -C "$MARKETPLACE_ROOT" ls-files --others --exclude-standard)
 
+run_release_verification() {
+  verify_tool NODE || { echo "install.sh: trusted node executable identity changed before verify-skills; refusing spawn." >&2; exit 126; }
+  run_bash "$ROOT/tools/verify-skills.sh" --quiet --root "$ROOT" --node "$NODE_BIN"
+}
+
 if [ "$HOST" = codex ]; then
   CODEX_CONFIG_HOME="${CODEX_HOME:-$HOME/.codex}"
   CODEX_CONFIGURED_REF="$(run_node -e '
@@ -967,8 +1035,7 @@ if [ "$MARKETPLACE_ROOT" != "$ROOT" ]; then
     }
   done
 fi
-verify_tool NODE || { echo "install.sh: trusted node executable identity changed before verify-skills; refusing spawn." >&2; exit 126; }
-run_bash "$ROOT/tools/verify-skills.sh" --quiet --root "$ROOT" --node "$NODE_BIN"
+run_release_verification
 
 if [ "$INSTALL_PHASE" = marketplace-registered ]; then
   advance_installer_phase marketplace-registered plugin-installed

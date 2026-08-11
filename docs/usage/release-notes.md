@@ -4,6 +4,19 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
+## v1.0.7 · 2026-08-11
+
+### Cross-version installer bridge recovery
+
+- The public installer can take over a durable WAL from an older stable release only after that transaction reached the completed host phase `plugin-installed` and the installed plugin plus Marketplace still exactly match the older stable version, tag, commit, official origin, ref, and clean checkout.
+- WALs in any other phase, with malformed or unknown data, a same-version target whose tag/commit is not the exact current proven target, any newer target, or any host inventory drift fail closed before host mutation and remain available for diagnosis or recovery.
+- An exact same-target WAL keeps the existing same-target recovery semantics.
+- The old transaction is atomically replaced by a current-target transaction whose before-snapshot is the verified host state; existing exact provenance, trusted-host, lock, atomicity, and packaged setup checks remain unchanged. There are no retries, fallbacks, or weakened stable Release/object proof checks.
+
+### Upgrade
+
+Install the immutable `v1.0.7` entrypoint, then use `tenon update --codex` (or `--claude`) for routine upgrades.
+
 ## v1.0.6 · 2026-08-11
 
 ### Stable Git proof budget

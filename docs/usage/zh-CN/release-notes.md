@@ -12,6 +12,18 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 面向用户的解释、影响与操作步骤默认使用中文。
 
+## v1.0.7 · 2026-08-11
+
+### 跨版本 installer bridge 恢复
+
+- 公开 installer 只有在旧稳定版本的 durable WAL 已精确到达宿主阶段 `plugin-installed`，并且当前插件与 Marketplace 仍逐项匹配旧版本的 plugin version、稳定 tag、commit、官方 source/type/origin、ref 与 clean checkout 时，才会接管它。
+- 任何其他 phase、malformed/unknown 数据、同版但 tag/commit 不等于当前已证明 target 的 WAL、更高目标版本，或任意宿主 inventory drift，都会在 host mutation 前 fail-closed，并保留原 WAL 供诊断或恢复；精确匹配当前 target 的同版 WAL 仍沿用既有恢复路径。
+- 旧事务会被原子替换为 current-target 事务，并以已验证的宿主状态作为 before 快照；现有 exact provenance、trusted host、锁、原子性与 packaged setup 校验保持不变。不增加 retry/fallback，也不弱化 stable Release/object proof。
+
+### 升级动作
+
+当前公开入口使用不可变 `v1.0.7`；日常升级仍运行 `tenon update --codex`（或 `--claude`）。
+
 ## v1.0.6 · 2026-08-11
 
 ### Stable Git proof 网络预算
