@@ -32,7 +32,7 @@ const STEP_IDS = [
 ] as const
 
 /** Release projection validated against package/plugin manifests by the product identity gate. */
-export const HOST_PLAN_RELEASE_TAG = 'v1.0.4'
+export const HOST_PLAN_RELEASE_TAG = 'v1.0.5'
 const LATEST_STABLE_TAG = '<latest-stable>'
 
 const NOTICE_IDS = [

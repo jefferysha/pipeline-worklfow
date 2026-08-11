@@ -4,6 +4,17 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
+## v1.0.5 · 2026-08-11
+
+### Doctor release identity proof
+
+- The `tenon doctor` release-identity probe now propagates the bounded 30-second budget for remote Git tag/object proof and the 10-second budget for local proof commands.
+- Host observation commands retain their default 5-second timeout; no retry, source/branch/cache fallback, or trusted-executable/security validation is weakened.
+
+### Upgrade
+
+Install the immutable `v1.0.5` entrypoint, then use `tenon update --codex` (or `--claude`) for routine upgrades.
+
 ## v1.0.4 · 2026-08-11
 
 ### Public installation and update network budget

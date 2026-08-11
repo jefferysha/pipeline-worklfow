@@ -20,6 +20,11 @@ function probeFixture(options: {
   readonly remoteCommit?: string
   readonly driftGitAfterCandidate?: boolean
   readonly verificationCounts?: Record<'host' | 'bash' | 'git' | 'node', number>
+  readonly runtimeCalls?: Array<{
+    readonly args: readonly string[]
+    readonly cwd?: string
+    readonly timeoutMs: number
+  }>
 } = {}) {
   let head = options.head ?? target.commit
   const ref = options.ref ?? target.tag
@@ -85,7 +90,12 @@ function probeFixture(options: {
         || path === join(marketplaceRoot, '.claude-plugin', 'plugin.json')
         ? JSON.stringify({ version: target.version })
         : undefined,
-      run: (_file, args) => {
+      run: (_file, args, commandOptions) => {
+        options.runtimeCalls?.push({
+          args: [...args],
+          cwd: commandOptions?.cwd,
+          timeoutMs: commandOptions?.timeoutMs ?? 5_000,
+        })
         const text = args.join(' ')
         if (text === 'plugin marketplace list --json') {
           return {
@@ -222,5 +232,30 @@ describe('doctor native immutable product identity probe', () => {
     expect(verificationCounts.git).toBeGreaterThan(1)
     expect(verificationCounts.bash).toBeGreaterThan(0)
     expect(verificationCounts.node).toBeGreaterThan(0)
+  })
+
+  test('propagates bounded release proof budgets while host observation keeps its default timeout', async () => {
+    const runtimeCalls: Array<{
+      readonly args: readonly string[]
+      readonly cwd?: string
+      readonly timeoutMs: number
+    }> = []
+    await expect(probeFixture({ runtimeCalls })()).resolves.toMatchObject({ state: 'native' })
+
+    const call = (predicate: (args: readonly string[]) => boolean) => {
+      const matching = runtimeCalls.find((entry) => predicate(entry.args))
+      expect(matching, `missing runtime call: ${runtimeCalls.map((entry) => entry.args.join(' ')).join(' | ')}`).toBeDefined()
+      return matching as (typeof runtimeCalls)[number]
+    }
+
+    expect(call((args) => args.join(' ') === 'plugin marketplace list --json')).toMatchObject({
+      timeoutMs: 5_000,
+      cwd: undefined,
+    })
+    expect(call((args) => args[0] === 'ls-remote')).toMatchObject({ timeoutMs: 30_000 })
+    expect(call((args) => args[0] === 'init' && args[1] === '--bare')).toMatchObject({ timeoutMs: 10_000 })
+    expect(call((args) => args.includes('fetch') && args.includes('--no-tags'))).toMatchObject({ timeoutMs: 30_000 })
+    expect(call((args) => args.includes('rev-parse') && args.includes('FETCH_HEAD^{commit}'))).toMatchObject({ timeoutMs: 10_000 })
+    expect(call((args) => args.includes('cat-file') && args.includes('-t'))).toMatchObject({ timeoutMs: 10_000 })
   })
 })

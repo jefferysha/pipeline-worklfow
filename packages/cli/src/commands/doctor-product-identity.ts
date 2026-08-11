@@ -36,7 +36,7 @@ interface DoctorProductIdentityProbeRuntime {
   run(
     file: string,
     args: readonly string[],
-    cwd?: string,
+    options?: { readonly cwd?: string; readonly timeoutMs?: number },
   ): { readonly code: number; readonly stdout: string; readonly stderr: string }
   inspectCandidate: typeof inspectCandidatePayload
   probeDashboard: typeof probeHealthyDashboard
@@ -82,7 +82,7 @@ const REAL_PRODUCT_IDENTITY_RUNTIME: DoctorProductIdentityProbeRuntime = {
       return undefined
     }
   },
-  run(file, args, cwd) {
+  run(file, args, options) {
     const asText = (value: unknown): string => Buffer.isBuffer(value)
       ? value.toString('utf8')
       : typeof value === 'string' ? value : ''
@@ -92,8 +92,8 @@ const REAL_PRODUCT_IDENTITY_RUNTIME: DoctorProductIdentityProbeRuntime = {
         stdout: execFileSync(file, [...args], {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
-          timeout: 5_000,
-          ...(cwd === undefined ? {} : { cwd }),
+          timeout: options?.timeoutMs ?? 5_000,
+          ...(options?.cwd === undefined ? {} : { cwd: options.cwd }),
         }),
         stderr: '',
       }
@@ -189,12 +189,19 @@ export function createDoctorProductIdentityProbe(
         homeDir: () => scope.homeDir,
         runtimeEnv: () => scope.env,
         readText: (path: string) => runtime.readText(path),
-        runCommand: (command: string, args: string[]) => {
+        runCommand: (
+          command: string,
+          args: string[],
+          options?: { readonly cwd?: string; readonly timeoutMs?: number },
+        ) => {
           if (command === host) {
             const invocation = hostBinding.invocation(args)
             return invocation === undefined
               ? { code: 127, stdout: '', stderr: 'trusted host identity drifted' }
-              : runtime.run(invocation.file, invocation.args, invocation.cwd)
+              : runtime.run(invocation.file, invocation.args, {
+                  ...options,
+                  ...(invocation.cwd === undefined ? {} : { cwd: invocation.cwd }),
+                })
           }
           if (command !== 'git') return { code: 127, stdout: '', stderr: 'untrusted command' }
           try {
@@ -202,7 +209,7 @@ export function createDoctorProductIdentityProbe(
           } catch {
             return { code: 127, stdout: '', stderr: 'trusted git identity drifted' }
           }
-          return runtime.run(trustedGit.executable, args)
+          return runtime.run(trustedGit.executable, args, options)
         },
       } as SetupEnv
       const observation = decodeNativeHostObservation(observeNativeHost(diagnosticEnv, host))

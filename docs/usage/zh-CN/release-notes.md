@@ -12,6 +12,17 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 面向用户的解释、影响与操作步骤默认使用中文。
 
+## v1.0.5 · 2026-08-11
+
+### Doctor 发布身份证明
+
+- `tenon doctor` 的发布身份探针现在会传递远端 Git tag/object proof 的有界 30 秒预算，以及本地证明命令的 10 秒预算。
+- 宿主 observation 命令仍保留默认 5 秒超时；不增加 retry、不使用 source/branch/cache fallback，也不弱化 trusted-executable 或其他安全校验。
+
+### 升级动作
+
+当前公开入口使用不可变 `v1.0.5`；日常升级仍运行 `tenon update --codex`（或 `--claude`）。
+
 ## v1.0.4 · 2026-08-11
 
 ### 公开安装与更新网络预算
