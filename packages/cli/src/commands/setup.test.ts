@@ -5,7 +5,7 @@
  * ④program 装配 flag 解析(--dry-run/--yes 透传);⑤技能安装段 S2 七钉(命令生成/官方第三方标注/幂等/
  * dry-run 零执行/失败容错/engine 附加/禁整装)。候选根仅经 managed-runtime 发布边界进入稳定启动器。
  */
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { cp, readFile, writeFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
@@ -41,19 +41,36 @@ import {
   recordPendingHostPluginConflict,
 } from './host-plugin-convergence.js'
 import { parseHostPluginInventory, TENON_RELEASE_VERSION } from './plugin-host.js'
-import type { TrustedExecutable } from './trusted-executable.js'
+import { freezeTrustedExecutable, type TrustedExecutable } from './trusted-executable.js'
 
 const CURRENT_RELEASE_TAG = `v${TENON_RELEASE_VERSION}` as const
 
-function hermeticProvenancePath(): string {
+async function createTrustedNode(root: string): Promise<{ bin: string; executable: string }> {
+  const bin = join(root, 'trusted-bin')
+  mkdirSync(bin, { recursive: true, mode: 0o700 })
+  chmodSync(bin, 0o700)
+  const executable = join(bin, process.platform === 'win32' ? 'node.exe' : 'node')
+  await cp(process.execPath, executable)
+  chmodSync(executable, 0o700)
+  if (process.platform === 'darwin') {
+    const nodeLibDir = join(dirname(process.execPath), '..', 'lib')
+    const nodeLib = readdirSync(nodeLibDir).find((entry) => /^libnode\..+\.dylib$/u.test(entry))
+    if (nodeLib !== undefined) {
+      await cp(join(nodeLibDir, nodeLib), join(bin, nodeLib))
+    }
+  }
+  return { bin, executable }
+}
+
+function hermeticProvenancePath(bin: string): string {
   const required = process.platform === 'win32'
     ? [
-        dirname(process.execPath),
+        bin,
         process.env.SystemRoot === undefined ? undefined : join(process.env.SystemRoot, 'System32'),
         process.env.ComSpec === undefined ? undefined : dirname(process.env.ComSpec),
         process.env.PATH ?? process.env.Path,
       ]
-    : [dirname(process.execPath), '/usr/bin', '/bin']
+    : [bin, '/usr/bin', '/bin']
   return required.filter((entry): entry is string => entry !== undefined && entry !== '').join(delimiter)
 }
 
@@ -3151,6 +3168,9 @@ describe('canonical provenance setup gate', () => {
   test('real bundled setup rejects Skill content drift before producing a plan', async () => {
     const root = mkdtempSync(join(tmpdir(), 'tenon-setup-provenance-'))
     try {
+      const trustedNode = await createTrustedNode(root)
+      const frozenNode = freezeTrustedExecutable(trustedNode.executable)
+      expect(frozenNode).toBeDefined()
       await cp(join(process.cwd(), 'templates'), join(root, 'templates'), { recursive: true })
       await cp(join(process.cwd(), 'skills'), join(root, 'skills'), { recursive: true })
       for (const rel of ['.claude-plugin', '.codex-plugin', '.agents', 'hooks', 'runtime', 'tools']) {
@@ -3184,7 +3204,7 @@ describe('canonical provenance setup gate', () => {
         ], {
           cwd: root,
           encoding: 'utf8',
-          env: { ...process.env, PATH: hermeticProvenancePath() },
+          env: { ...process.env, PATH: hermeticProvenancePath(trustedNode.bin) },
           stdio: ['ignore', 'pipe', 'pipe'],
         })
       } catch (error) {
