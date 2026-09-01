@@ -27,3 +27,25 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 2: Orchestration invariant hardening
+<!-- trellis-session: v=2 fp=985a345916e0bf47 -->
+
+**Date**: 2026-09-01
+**Task**: Orchestration invariant hardening
+**Branch**: `codex/autonomous-loop-v1`
+
+### Summary
+
+完成 v1 编排器收尾复核，清理未使用路由状态并确认 Kernel 状态机、codec、架构导入图测试继续通过。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ed34ee2` | fix(kernel): tighten orchestration invariants |
+
+### Status
+
+[OK] **Completed**
