@@ -81,6 +81,10 @@ export * from './starters/execution-guard.js'
 export * from './task-plan-run/journal.js'
 export * from './task-plan-run/admission.js'
 export * from './task-plan-run/executor.js'
+// autonomous orchestration application boundary: provider-neutral assessment and
+// Kernel-command-driven Skill execution. No vendor/provider implementation is bundled here.
+export * from './orchestration/proposal.js'
+export * from './orchestration/execution.js'
 export {
   readSealedAfkSkillInvocationContext,
   SealedAfkSkillInvocationContextError,

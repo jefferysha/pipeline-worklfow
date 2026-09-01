@@ -23036,6 +23036,18 @@ async function appendTaskRunOperation(changeDir, revisionId, operation) {
   });
 }
 
+// packages/automation/dist/orchestration/jsonBoundary.js
+var encoder3 = new TextEncoder();
+
+// packages/automation/dist/orchestration/proposal.js
+var DEFAULT_CAPABILITY_PROPOSAL_MAX_BYTES = 256 * 1024;
+
+// packages/automation/dist/orchestration/execution-types.js
+var DEFAULT_SKILL_OUTPUT_MAX_BYTES = 256 * 1024;
+
+// packages/automation/dist/orchestration/execution-boundary.js
+var DECISION_MAX_BYTES = 64 * 1024;
+
 // packages/server/src/workflows.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
 import {

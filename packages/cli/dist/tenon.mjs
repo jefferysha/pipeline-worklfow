@@ -45784,6 +45784,18 @@ async function enforceActiveLoopExecutionWiring(loopIds, deps) {
 // packages/automation/dist/task-plan-run/journal.js
 var MAX_JOURNAL_BYTES = 8 * 1024 * 1024;
 
+// packages/automation/dist/orchestration/jsonBoundary.js
+var encoder3 = new TextEncoder();
+
+// packages/automation/dist/orchestration/proposal.js
+var DEFAULT_CAPABILITY_PROPOSAL_MAX_BYTES = 256 * 1024;
+
+// packages/automation/dist/orchestration/execution-types.js
+var DEFAULT_SKILL_OUTPUT_MAX_BYTES = 256 * 1024;
+
+// packages/automation/dist/orchestration/execution-boundary.js
+var DECISION_MAX_BYTES = 64 * 1024;
+
 // packages/cli/src/commands/transition.ts
 function canonicalPipelineSkillId(skillId) {
   return skillId.startsWith("tenon:") ? skillId.slice("tenon:".length) : skillId;
@@ -51002,14 +51014,14 @@ function parseArgs(args) {
   let loopId = null;
   let json = false;
   let dryRun = false;
-  let apply = false;
+  let apply2 = false;
   let expectedRegistrySha = null;
   let expectedWorkflowSha = null;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg === void 0) break;
     if (arg === "--dry-run") dryRun = true;
-    else if (arg === "--apply") apply = true;
+    else if (arg === "--apply") apply2 = true;
     else if (arg === "--json") json = true;
     else if (arg === "--auto-fix") {
       throw new LoopSyncUsageError(
@@ -51033,7 +51045,7 @@ function parseArgs(args) {
     else throw new Error(`loop sync \u53EA\u63A5\u53D7\u4E00\u4E2A <loop-id>\uFF08\u591A\u4F59\u53C2\u6570: ${arg}\uFF09`);
   }
   if (loopId === null) throw new Error("\u7528\u6CD5\uFF1Aloop sync <loop-id> <--dry-run|--apply> [--json] [--expected-registry-sha SHA] [--expected-workflow-sha LOOP.md-SHA]");
-  if (dryRun === apply) throw new Error("\u5FC5\u987B\u4E14\u53EA\u80FD\u9009\u62E9 --dry-run \u6216 --apply");
+  if (dryRun === apply2) throw new Error("\u5FC5\u987B\u4E14\u53EA\u80FD\u9009\u62E9 --dry-run \u6216 --apply");
   return {
     loopId,
     json,

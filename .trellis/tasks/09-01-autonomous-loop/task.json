@@ -18,7 +18,9 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [],
+  "children": [
+    "09-01-capability-routing-execution-v1"
+  ],
   "parent": null,
   "relatedFiles": [],
   "notes": "",
