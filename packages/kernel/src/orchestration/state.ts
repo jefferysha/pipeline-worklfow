@@ -2,7 +2,6 @@ import type {
   ApplyCommandResult,
   BoardCommandV1,
   BoardSnapshotV1,
-  CapabilityResolutionV1,
   ChangeStatusV1,
   GateEvaluationV1,
   RepositoryContextSnapshotV1,

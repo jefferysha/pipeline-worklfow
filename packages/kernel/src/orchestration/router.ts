@@ -106,11 +106,9 @@ export function resolveCapabilities(input: ResolveCapabilitiesInput): Capability
     selectedSkills.push({ id: descriptor.id, version: descriptor.version, source: 'user', mode: selection.mode, depends_on: selection.depends_on })
   }
 
-  const covered = new Set<string>()
   for (const requirement of requiredCapabilities) {
     const explicit = selectedSkills.find((skill) => hasAllCapabilities(findSkill(input.skills, skill.id) ?? { capabilities: [] }, requirement))
     if (explicit !== undefined) {
-      covered.add(requirement)
       decisions.push({ capability: requirement, selected_id: explicit.id, source: 'user', rationale: '命中用户显式 Skill 选择' })
       continue
     }
@@ -120,7 +118,6 @@ export function resolveCapabilities(input: ResolveCapabilitiesInput): Capability
         if (!selectedSkills.some((skill) => skill.id === candidate.id)) {
           selectedSkills.push({ id: candidate.id, version: candidate.version, source: 'auto', mode: 'serial', depends_on: [] })
         }
-        covered.add(requirement)
         decisions.push({ capability: requirement, selected_id: candidate.id, source: 'auto', rationale: '按 descriptor 输入顺序自动选择' })
         continue
       }
