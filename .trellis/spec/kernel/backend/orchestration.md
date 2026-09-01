@@ -51,7 +51,7 @@ decodeBoardCommandV1(input): OrchestrationDecodeResult<BoardCommandV1>
 | `expected_revision` differs from snapshot | `revision-conflict`; no state change |
 | Assessment or context bound to another request/project | `contract-invalid` |
 | Unfrozen TaskPlan or graph bound to another Change | `contract-invalid` |
-| Capability resolution blocked | `blocked`; no transition to ready |
+| Capability resolution blocked | snapshot persists the resolution and enters `blocked`; no transition to ready |
 | Missing Skill/MCP, dependency cycle, unsupported parallelism, write conflict | resolver records blocker; execution cannot start |
 | Opaque, incomplete, corrupt, failed, or unvalidated Skill output | work item becomes blocked/failed; never completed |
 | Failed validation | work item becomes blocked and retains report |

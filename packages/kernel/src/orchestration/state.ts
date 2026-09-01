@@ -146,7 +146,7 @@ export function applyBoardCommand(state: BoardSnapshotV1, command: BoardCommandV
 
   switch (command.type) {
     case 'record-assessment': {
-      if (!['draft', 'contextualizing', 'assessing', 'waiting-input'].includes(state.status)) {
+      if (!['draft', 'contextualizing', 'assessing', 'waiting-input', 'blocked'].includes(state.status)) {
         return failure('invalid-transition', `当前状态 ${state.status} 不能记录 assessment`)
       }
       if (command.assessment.request_id !== state.request.request_id || command.context.project_id !== state.request.project_id) {
@@ -166,8 +166,7 @@ export function applyBoardCommand(state: BoardSnapshotV1, command: BoardCommandV
     case 'resolve-capabilities': {
       if (state.status !== 'planned') return failure('invalid-transition', `当前状态 ${state.status} 不能解析能力`)
       if (command.resolution.assessment_id !== state.assessment?.assessment_id) return failure('contract-invalid', 'resolution 未绑定当前 assessment')
-      if (command.resolution.status === 'blocked') return failure('blocked', command.resolution.blockers.join('; ') || '能力解析被阻塞')
-      return ok(commit(state, command, { status: command.resolution.status === 'resolved' ? 'ready' : 'waiting-input', resolution: command.resolution }))
+      return ok(commit(state, command, { status: command.resolution.status === 'resolved' ? 'ready' : command.resolution.status === 'needs-input' ? 'waiting-input' : 'blocked', resolution: command.resolution }))
     }
     case 'start': {
       const next = transition(state, ['ready'], 'executing', command)

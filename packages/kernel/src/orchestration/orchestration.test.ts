@@ -109,6 +109,23 @@ describe('autonomous orchestration v1', () => {
     expect(state5.status).toBe('ready')
   })
 
+  test('阻塞 resolution 仍写入看板，后续 assessment 可恢复规划', () => {
+    const noAutoRequest = { ...request, auto_select: false }
+    const missingAssessment = { ...assessment, capability_requirements: ['missing-capability'] }
+    let state = createOrchestrationState(noAutoRequest)
+    state = expectOk(applyBoardCommand(state, command(state.revision, 'record-assessment', { assessment: missingAssessment, context })))
+    state = expectOk(applyBoardCommand(state, command(state.revision, 'attach-work-graph', { graph })))
+    const blockedResolution = {
+      schema_version: 'capability-resolution/v1' as const, resolution_id: 'resolution-blocked', assessment_id: missingAssessment.assessment_id,
+      status: 'blocked' as const, required_capabilities: ['missing-capability'], selected_skills: [], selected_mcps: [],
+      unresolved_capabilities: ['missing-capability'], blockers: ['不可用'], decisions: [], resolved_at: now,
+    }
+    state = expectOk(applyBoardCommand(state, command(state.revision, 'resolve-capabilities', { resolution: blockedResolution })))
+    expect(state.status).toBe('blocked')
+    state = expectOk(applyBoardCommand(state, command(state.revision, 'record-assessment', { assessment, context })))
+    expect(state.status).toBe('planning')
+  })
+
   test('codec 拒绝未知字段和未声明的 Skill result contract', () => {
     const requestDecode = decodeDevelopmentRequestV1({ ...request, extra: true })
     expect(requestDecode.ok).toBe(false)
