@@ -1,47 +1,41 @@
-# Minimal autonomous development loop — implementation plan
+# Production autonomous development platform — implementation plan
 
-## Implementation order
+## Dependency-ordered delivery
 
-1. **Contract layer in Kernel**
-   - Add schema types, codecs, limits and structured decode errors for the new orchestration records.
-   - Reuse `TaskPlanRevisionV1`, `SkillInvocationEventV1`, `EffectiveWorkflowPlan` and existing artifact/validator types through adapters.
-   - Add pure graph readiness and transition functions; no filesystem, network or model calls.
+1. **Canonical Orchestration Aggregate v2** (`canonical-orchestration-aggregate-v2`)
+   - Freeze all v2 schemas, states, commands, events, effects, guards and compatibility projections.
+   - Prove command decision and event fold determinism before any storage protocol is added.
+2. **Durable Kernel/application repository** (`orchestration-persistence-recovery`)
+   - Define durable event/snapshot schemas, codecs, checksums and bounded readers.
+   - Add atomic append + snapshot publication, revision CAS, idempotent command IDs and recovery report.
+   - Prove crash points, concurrent writers, corrupted temp files and legacy compatibility.
+3. **Automatic planner and catalog** (`automatic-planning-routing`)
+   - Capture repository context; connect provider proposal to normalized assessment.
+   - Build user/custom Skill and MCP descriptor catalog, deterministic resolver and frozen WorkGraph planner.
+   - Record candidate/rejection rationale and clarification blockers; never infer a fixed scene enum.
+4. **Persistent scheduler and runtime adapters** (`persistent-execution-adapters`)
+   - Move v1 execution sequencing behind the durable repository.
+   - Add leases, heartbeat, timeout, orphan recovery, bounded retries, cancel and validator/gate handoff.
+   - Integrate existing Automation runner/sandbox through ports; preserve opaque output policy.
+5. **Server control plane** (`orchestration-server-api`)
+   - Wire repository and scheduler into authenticated HTTP/SSE routes.
+   - Add idempotent typed commands, conflict responses, replay cursors, readiness and metrics.
+6. **Dashboard** (`production-orchestration-dashboard`)
+   - Consume the typed snapshot/event client, render board lanes/detail panels and output evidence.
+   - Add safe controls with confirmation, stale-revision recovery, reconnect and accessibility coverage.
+7. **CLI/observability/release** (`orchestration-cli-observability-release`)
+   - Add CLI parity and JSON output, structured metrics/audit and golden E2E fixture.
+   - Add migration/readiness, backups, graceful shutdown, security/resource limits, packaging and rollback checks.
+8. **Parent integration gate**
+   - Run full build/type/test/architecture/comments/security/E2E/release checks.
+   - Validate no false completion, no unbounded output, no stale writes and no unclaimed external side effect.
 
-2. **Inference and routing application layer**
-   - Add a model-proposal boundary that produces bounded raw evidence.
-   - Normalize the proposal into capability requirements and clarification gates.
-   - Build a capability catalog for user Skills and MCPs.
-   - Implement deterministic filtering first (availability, permissions, dependencies, resource conflicts), then optional model scoring.
-   - Persist the complete candidate list, selected entry, rationale and pinned versions.
-
-3. **Minimal execution loop**
-   - Adapt existing Automation admission/runner to create `SkillRunV1` and `SkillResultEnvelopeV1`.
-   - Support one Change, one repository, serial/parallel Work Items and retryable failure.
-   - Treat non-conforming Skill output as opaque/untyped and route it to a validator or clarification gate.
-
-4. **Validation and gate integration**
-   - Bind artifacts to existing validators and review receipts.
-   - Ensure `unknown`/`untyped` cannot authorize a required gate.
-   - Reuse canonical Workflow guards for verify/review; do not create a parallel transition engine.
-
-5. **Server and Dashboard control surface**
-   - Add board snapshot projection and SSE updates.
-   - Add typed command endpoints for pause/resume/approve/retry/cancel/replan.
-   - Enforce expected revision/CAS on every board command.
-   - Display selected Skill/MCP, output references, validation status and blocker reasons.
-
-6. **CLI parity and evidence**
-   - Add CLI commands only as thin adapters over the same application commands.
-   - Add an end-to-end fixture that runs natural-language request → graph → routing → Skill run → artifact → validation/review.
-   - Record the usage metrics needed to identify redundant stages.
-
-## Validation commands
-
-Run after implementation in a clean, explicitly isolated worktree:
+## Required validation
 
 ```bash
 npm run build
 npm run check:architecture
+npm run check:comments
 npm run typecheck:web
 npm run test:web
 npx vitest run packages/kernel/src packages/automation/src packages/server/src packages/cli/src
@@ -50,12 +44,12 @@ npm run check:release-workflows
 git diff --check
 ```
 
-The full `npm test` result must distinguish source failures from stale generated artifacts and honest credential-based skips.
+Child tasks must add focused crash/CAS/security tests and record exact failures. The parent cannot be called production-ready if only targeted tests pass.
 
 ## Risk and rollback points
 
-- New schema codecs must be additive and independently testable before wiring runtime behavior.
-- Do not change existing `FIELD_ORDER`, canonical state semantics or generated workflow files in the first implementation slice.
-- Do not fast-forward `main` while `.trellis/`, `AGENTS.md`, `.gitattributes` and user screenshots remain uncommitted.
-- If routing behavior is unstable, disable automatic selection and retain explicit user Skill plans; the rest of the execution loop must remain usable.
-- If a custom Skill cannot produce a validator-compatible artifact, stop at `blocked`/`waiting-input`; never downgrade the gate.
+- Persisted schema or reducer changes: stop and return to planning if Kernel cannot express the transition; do not add a parallel state engine.
+- Planner uncertainty: disable automatic candidate selection and leave explicit user bindings usable.
+- Executor/validator instability: keep the Change blocked or waiting-input; never downgrade the gate.
+- Server/Dashboard compatibility: ship additive endpoints and feature-capability flags; old clients receive a truthful unavailable state.
+- Migration/release failure: retain old snapshot/event files, disable scheduler, and use replay/backup to restore the previous binary.

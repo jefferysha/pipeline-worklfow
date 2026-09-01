@@ -1,8 +1,8 @@
 {
   "id": "autonomous-loop",
   "name": "autonomous-loop",
-  "title": "Minimal autonomous development loop",
-  "description": "基于用户自定义 Skill/MCP 与自动场景识别，建立可观察、可控制、可恢复的最小开发闭环",
+  "title": "Production autonomous development platform",
+  "description": "将自然语言目标、用户自定义 Skill/MCP、持久化执行、实时看板和安全恢复收敛为生产可用闭环",
   "status": "planning",
   "dev_type": null,
   "scope": null,
@@ -19,7 +19,14 @@
   "pr_url": null,
   "subtasks": [],
   "children": [
-    "09-01-capability-routing-execution-v1"
+    "09-01-capability-routing-execution-v1",
+    "09-01-orchestration-persistence-recovery",
+    "09-01-automatic-planning-routing",
+    "09-01-persistent-execution-adapters",
+    "09-01-orchestration-server-api",
+    "09-01-production-orchestration-dashboard",
+    "09-01-orchestration-cli-observability-release",
+    "09-01-canonical-orchestration-aggregate-v2"
   ],
   "parent": null,
   "relatedFiles": [],
