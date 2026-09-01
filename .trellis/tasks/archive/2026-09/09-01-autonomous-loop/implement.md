@@ -14,7 +14,7 @@
    - Build user/custom Skill and MCP descriptor catalog, deterministic resolver and frozen WorkGraph planner.
    - Record candidate/rejection rationale and clarification blockers; never infer a fixed scene enum.
 4. **Persistent scheduler and runtime adapters** (`persistent-execution-adapters`)
-   - Move v1 execution sequencing behind the durable repository.
+   - Move execution sequencing behind the durable v2 repository and lease-aware runtime.
    - Add leases, heartbeat, timeout, orphan recovery, bounded retries, cancel and validator/gate handoff.
    - Integrate existing Automation runner/sandbox through ports; preserve opaque output policy.
 5. **Server control plane** (`orchestration-server-api`)

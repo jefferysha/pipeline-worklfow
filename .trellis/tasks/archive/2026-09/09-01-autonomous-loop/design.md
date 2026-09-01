@@ -25,14 +25,15 @@ Canonical board snapshot ← typed commands ← Server/SSE ← Dashboard / CLI
 
 ## 2. Durable data model
 
-The existing `BoardSnapshotV1` remains the decoded state. Add a versioned durable repository around it:
+The canonical `BoardSnapshotV2` aggregate is the only new mutation state. V1 remains a read-only compatibility adapter. The durable repository is the v2 `OrchestrationLedger`:
 
 ```ts
-interface OrchestrationRepository {
-  read(changeDir: string): Promise<BoardSnapshotV1 | undefined>
-  append(changeDir: string, command: BoardCommandV1): Promise<AppendResult>
-  events(changeDir: string, afterRevision?: number): AsyncIterable<BoardEventV1>
-  recover(changeDir: string): Promise<RecoveryReportV1>
+interface OrchestrationLedger {
+  initialize(changeDir: string, seed: OrchestrationSeed): Promise<BoardSnapshotV2>
+  readSnapshot(changeDir: string): Promise<BoardSnapshotV2 | undefined>
+  append(changeDir: string, command: BoardCommandV2): Promise<LedgerAppendResult>
+  readEvents(changeDir: string, options?: RevisionWindow): Promise<readonly BoardEventV2[]>
+  recover(changeDir: string): Promise<LedgerRecoveryResult>
 }
 ```
 
@@ -42,7 +43,7 @@ Persisted records are append-compatible and include `schema_version`, `change_id
 
 ## 3. Planning and routing
 
-`DevelopmentRequestV1` is accepted with repository identity and policy snapshot. A context adapter captures branch/head/dirty/runtime/catalog facts. Provider output is `unknown` and passes the existing bounded JSON boundary; Kernel codecs normalize it exactly once. A deterministic planner maps requirements to a frozen `WorkGraphV1`, preserving explicit user dependencies. Resolver order is:
+`DevelopmentRequestV2` is accepted with repository identity and policy snapshot. A context adapter captures branch/head/dirty/runtime/catalog facts. Provider output is `unknown` and passes the existing bounded JSON boundary; Kernel codecs normalize it exactly once. A deterministic planner maps requirements to a frozen `WorkGraphV2`, preserving explicit user dependencies. Resolver order is:
 
 1. reject unavailable or malformed descriptors;
 2. enforce user-selected IDs, versions, modes and dependencies;
