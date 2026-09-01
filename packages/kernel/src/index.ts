@@ -41,6 +41,8 @@ export * from './scaffold/index.js'
 // verification/ 子 barrel 自做具名导出，符号与其它子 barrel 无碰撞，故整体 re-export。
 export * from './verification/index.js'
 export * from './triage/index.js'
+// Autonomous development loop v1: pure orchestration contracts, capability routing and board reducer.
+export * from './orchestration/index.js'
 // skill source registry 是 CLI setup/doctor 与 Dashboard machine readiness 的共享安装契约。
 export * from './skills/index.js'
 // workflow 自定义引擎（GOAL 清单 E）——loadWorkflow（Task 5）+ evaluateStepGuards（Task 7）+
