@@ -71,3 +71,41 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 4: Capability routing and execution adapter v1
+<!-- trellis-session: v=2 fp=8ed2f354fc45be42 -->
+
+**Date**: 2026-09-01
+**Task**: Capability routing and execution adapter v1
+**Package**: automation
+**Branch**: `codex/autonomous-loop-v1`
+
+### Summary
+
+完成第一版能力提案边界、Kernel 路由接入与 Skill 执行闭环；异构输出经边界快照和验证器判定，安全并行与依赖结果引用已覆盖。
+
+### Main Changes
+
+- 新增未知值安全快照、提案 provenance/evidence 归一化与稳定失败码。
+- 新增显式 Work Item→Skill/MCP 绑定校验、串行/安全并行波次、资源冲突串行化和 Kernel 命令驱动执行。
+- 新增验证器专属 contract_status、opaque 结果引用、取消/失败 fail-closed 处理与 automation 公共导出。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1618f8f` | feat(automation): add capability routing execution adapter |
+
+### Testing
+
+- [OK] orchestration/kernel 目标测试：25/25 通过。
+- [OK] npm run build：通过；check:architecture、check:comments、git diff --check：通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 下一子任务接入持久化快照、Server/SSE 投影与 Dashboard 看板控制，保持 revision CAS 和上述边界。
