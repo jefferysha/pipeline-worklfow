@@ -49,3 +49,25 @@
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: Blocked resolution recovery
+<!-- trellis-session: v=2 fp=378d761086429f3e -->
+
+**Date**: 2026-09-01
+**Task**: Blocked resolution recovery
+**Branch**: `codex/autonomous-loop-v1`
+
+### Summary
+
+修正能力解析阻塞语义：blocked resolution 现在保留在 BoardSnapshot，允许后续重新评估并回到 planning；补充回归测试与契约矩阵。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d079e3c` | fix(kernel): retain blocked capability resolutions |
+
+### Status
+
+[OK] **Completed**

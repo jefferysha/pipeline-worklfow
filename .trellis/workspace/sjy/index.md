@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 2
+- **Total Sessions**: 3
 - **Last Active**: 2026-09-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~51 | Active |
+| `journal-1.md` | ~73 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 3 | 2026-09-01 | Blocked resolution recovery | `d079e3c` | `codex/autonomous-loop-v1` |
 | 2 | 2026-09-01 | Orchestration invariant hardening | `ed34ee2` | `codex/autonomous-loop-v1` |
 | 1 | 2026-09-01 | Autonomous orchestration v1 kernel | `633817c` | `codex/autonomous-loop-v1` |
 <!-- @@@/auto:session-history -->
