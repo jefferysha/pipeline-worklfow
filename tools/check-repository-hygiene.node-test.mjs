@@ -80,6 +80,24 @@ test('rejects reference identities in tracked paths and ordinary managed text', 
   }
 })
 
+test('allows the first-party workflow directory while retaining competitor checks', async () => {
+  const root = await fixture()
+  const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)
+  const secondIdentity = String.fromCharCode(99, 111, 109, 101, 116)
+  const workflowDir = `.${firstIdentity}`
+  await mkdir(join(root, workflowDir), { recursive: true })
+  await writeFile(join(root, workflowDir, 'workflow.md'), `Managed by ${firstIdentity}.\n`)
+  await writeFile(join(root, workflowDir, 'unsafe.md'), `Reference to ${secondIdentity}.\n`)
+  try {
+    assert.deepEqual(checkReferenceIdentities(root, [`${workflowDir}/workflow.md`]), [])
+    const failures = checkReferenceIdentities(root, [`${workflowDir}/unsafe.md`])
+    assert.equal(failures.length, 1)
+    assert.match(failures[0], /文本/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('allows fixed trace-timeline research and governance paths but rejects source and unrelated docs', async () => {
   const root = await fixture()
   const firstIdentity = String.fromCharCode(116, 114, 101, 108, 108, 105, 115)

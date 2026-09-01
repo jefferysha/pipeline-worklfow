@@ -78,6 +78,12 @@ const FORBIDDEN_TEST_PROJECT_IDENTITIES = [
     112, 101, 116, 45, 97, 100, 111, 112, 116, 105, 111, 110,
   ),
 ]
+// The checked-in workflow directory is first-party infrastructure. Its
+// path and implementation necessarily use the product name, so only that
+// identity is exempt there; competitor/reference identities remain blocked.
+const FIRST_PARTY_TOOLING_PATH = new RegExp(
+  `^\\.${FORBIDDEN_REFERENCE_IDENTITIES[0]}(?:/|$)`,
+)
 
 function posixPath(path) {
   return path.split('\\').join('/')
@@ -183,6 +189,7 @@ function disallowedReferenceIdentity(rel, value) {
   return FORBIDDEN_REFERENCE_IDENTITIES.find(
     (identity) => (
       normalized.includes(identity)
+      && !(FIRST_PARTY_TOOLING_PATH.test(rel) && identity === FORBIDDEN_REFERENCE_IDENTITIES[0])
       && !allowedHostTargetPlanReference(rel, identity)
       && !allowedTraceTimelineReference(rel, identity)
       && !allowedReviewHandshakeReference(rel, identity)
