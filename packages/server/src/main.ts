@@ -15,7 +15,7 @@ import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createTraceStore } from '@tenon/tap'
-import { fingerprintWorkspace, machineStateScopeId } from '@tenon/kernel'
+import { createOrchestrationLedger, fingerprintWorkspace, machineStateScopeId } from '@tenon/kernel'
 import { createDashboardServer } from './server.js'
 import { resolveServerPaths } from './paths.js'
 import { decidePreemption, preemptOldServer, probeHealth } from './preempt.js'
@@ -128,6 +128,7 @@ async function main(): Promise<void> {
     traceStore: createTraceStore(),
     // H15：生产 server 显式启用真实 cadence；执行复用已构建 CLI，不在 server 复制 runner。
     cadence: { pollIntervalMs: cadencePollInterval() },
+    orchestrationLedger: createOrchestrationLedger(),
   })
 
   try {

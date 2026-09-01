@@ -85,6 +85,12 @@ export {
 
 export { searchRelatedSessions } from './memoryClient'
 export {
+  fetchOrchestrationV2Snapshot,
+  postOrchestrationV2Control,
+  subscribeOrchestrationV2,
+  type OrchestrationV2Envelope,
+} from './orchestrationV2Client'
+export {
   postVerificationEvidenceCompose,
   VerificationEvidenceApiError,
 } from './verificationEvidenceClient'

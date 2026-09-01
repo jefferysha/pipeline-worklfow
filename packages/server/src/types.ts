@@ -14,6 +14,7 @@ import type {
   ProductPaths,
   ReadinessByTransition,
   StateStore,
+  OrchestrationLedger,
   WorkflowAction,
   WorkflowDecompositionPolicyV1,
   WorkflowInteractionPolicyV1,
@@ -288,6 +289,8 @@ export interface DashboardServerOptions {
   cadence?: false | Omit<import('./cadence.js').CadenceSchedulerOptions, 'roots' | 'clock' | 'runPipelineCli'>
   /** Track Router 预览计分器；缺省真执行 `grep -ciE`，测试可注入 hermetic scorer。 */
   scoreRouterPattern?: import('./routerPreview.js').RouterPatternScorer
+  /** Canonical v2 orchestration ledger. Production defaults to the filesystem ledger; tests may inject a fake. */
+  orchestrationLedger?: OrchestrationLedger
 }
 
 export interface DashboardServer {

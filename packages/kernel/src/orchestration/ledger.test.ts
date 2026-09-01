@@ -33,6 +33,15 @@ function accept(expectedRevision = 0, commandId = `cmd-${expectedRevision + 1}`)
   }
 }
 
+function cancel(expectedRevision: number, commandId = `cancel-${expectedRevision + 1}`): BoardCommandV2 {
+  return {
+    schema_version: 'board-command/v2', command_id: commandId, idempotency_key: `idem-${commandId}`,
+    expected_revision: expectedRevision, actor: { kind: 'user', id: 'u-1' },
+    issued_at: `2026-09-01T00:00:0${expectedRevision}.000Z`, correlation_id: 'corr-1', change_id: 'change-1',
+    type: 'cancel-change', reason: 'user requested stop',
+  }
+}
+
 async function tempRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), 'tenon-orchestration-ledger-'))
   roots.push(root)
@@ -75,6 +84,32 @@ describe('OrchestrationLedger v2', () => {
     if (keyConflict.kind === 'rejected') expect(keyConflict.rejection.code).toBe('idempotency-conflict')
   })
 
+  it('serializes concurrent appenders into one CAS winner', async () => {
+    const dir = await tempRoot()
+    const ledger = createOrchestrationLedger()
+    await ledger.initialize(dir, { project_id: 'project-1', change_id: 'change-1', correlation_id: 'corr-1' })
+    const results = await Promise.all(Array.from({ length: 8 }, (_, index) => ledger.append(dir, accept(0, `concurrent-${index}`))))
+    expect(results.filter((result) => result.kind === 'committed')).toHaveLength(1)
+    expect(results.filter((result) => result.kind === 'rejected' && result.rejection.code === 'revision-conflict')).toHaveLength(7)
+    expect((await ledger.readEvents(dir)).map((event) => event.revision)).toEqual([1])
+  })
+
+  it('replays the original committed snapshot and produces a deterministic recovery report', async () => {
+    const dir = await tempRoot()
+    const ledger = createOrchestrationLedger()
+    await ledger.initialize(dir, { project_id: 'project-1', change_id: 'change-1', correlation_id: 'corr-1' })
+    const first = await ledger.append(dir, accept())
+    expect(first.kind).toBe('committed')
+    const second = await ledger.append(dir, cancel(1))
+    expect(second.kind).toBe('committed')
+    const replay = await ledger.append(dir, accept())
+    expect(replay.kind).toBe('replayed')
+    if (replay.kind === 'replayed') expect(replay.snapshot.revision).toBe(1)
+    const one = await ledger.recover(dir, '2026-09-01T00:00:00.000Z')
+    const two = await ledger.recover(dir, '2026-09-01T00:00:00.000Z')
+    expect(two.report).toEqual(one.report)
+  })
+
   it('recovers the last valid snapshot and ignores an event orphaned by a crash', async () => {
     const dir = await tempRoot()
     const ledger = createOrchestrationLedger()
@@ -104,6 +139,7 @@ describe('OrchestrationLedger v2', () => {
     expect(recovered.snapshot?.revision).toBe(1)
     expect(recovered.report.recovered_from).toBe('immutable')
     expect(recovered.report.corrupt_boundary?.kind).toBe('current-snapshot')
+    expect((await ledger.readSnapshot(dir))?.revision).toBe(1)
   })
 
   it('rejects symlinked and traversal paths before reading any record', async () => {

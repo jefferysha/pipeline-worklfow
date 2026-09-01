@@ -22,6 +22,7 @@ import { ProgressActions } from './ProgressActions'
 import type { ProgressViewProps } from './progressViewTypes'
 import { CanonicalStateVersionNotice } from './CanonicalStateVersionNotice'
 import { SnapshotInlineError } from './SnapshotInlineError'
+import { OrchestrationV2Panel } from './OrchestrationV2Panel'
 import {
   BADGE_TONE_CLS,
   deckMatch,
@@ -37,7 +38,6 @@ import {
   type RowBadge,
   type RowPatch,
 } from './progressViewModel'
-
 gsap.registerPlugin(useGSAP)
 
 /**
@@ -89,7 +89,6 @@ export function ProgressView({
   // 工作流筛选保持为单一 select，避免工作流增多后横向堆满筛选栏。
   const [wfFilter, setWfFilter] = useState<string>('all')
   const [createOpen, setCreateOpen] = useState(false)
-
   useEffect(() => {
     setCreateOpen(false)
   }, [currentRoot])
@@ -99,7 +98,6 @@ export function ProgressView({
       mounted.current = false
     }
   }, [])
-
   // Bug4：新 snapshot 到达即按 change **逐条**清乐观 patch——只清「已落地（真值达目标）或已离开
   // 施加基线（server 已推进）」的那条，保留其余项目仍在途、尚未反映的 patch。
   useEffect(() => {
@@ -548,6 +546,8 @@ export function ProgressView({
 
       {error && <SnapshotInlineError error={error} loading={loading} onRefresh={onRefresh} />}
       {loading && !snapshot && <p className="py-2 text-[13px] text-text-3" role="status" aria-live="polite">{t('common.loading')}</p>}
+
+      <OrchestrationV2Panel root={currentRoot} change={selectedChange} readOnly={readOnly} onToast={onToast} />
 
       {snapshot && flatRows.length > 0 && (
         <WorkflowCanvas groups={canvasGroups} onOpen={openDrawer} />

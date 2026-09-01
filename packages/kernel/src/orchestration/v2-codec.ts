@@ -14,6 +14,8 @@ import {
   type WorkItemV2,
   type BoardEventV2,
   type RunLeaseV2,
+  type OrchestrationEffectV2,
+  type V2Schema,
 } from './v2-types.js'
 
 export interface V2CodecError { readonly code: 'json-invalid' | 'object-invalid' | 'unknown-field' | 'field-invalid' | 'limit-exceeded'; readonly path: string; readonly message?: string }
@@ -133,9 +135,56 @@ export function decodeCapabilityResolutionV2(input: unknown): V2DecodeResult<Cap
 
 export function decodeWorkItemV2(input: unknown): V2DecodeResult<WorkItemV2> { return genericMetaRecord(input, V2_SCHEMAS.workItem, ['work_item_id', 'title', 'status', 'group_id', 'depends_on', 'required_artifact_refs', 'validation_refs', 'selected_skill_id', 'selected_skill_version', 'mode', 'attempt_count', 'active_run_id', 'blockers'], (r, e, m) => { const work_item_id = text(r.work_item_id, '$.work_item_id', e, ID); const title = text(r.title, '$.title', e); const status = ['pending', 'ready', 'queued', 'claimed', 'running', 'waiting-input', 'reviewing', 'verifying', 'completed', 'blocked', 'failed', 'interrupted', 'cancelled'].includes(String(r.status)) ? r.status as WorkItemV2['status'] : undefined; if (!status) e.push({ code: 'field-invalid', path: '$.status' }); const mode = r.mode === 'serial' || r.mode === 'parallel' ? r.mode : undefined; if (!mode) e.push({ code: 'field-invalid', path: '$.mode' }); const attempt_count = integer(r.attempt_count, '$.attempt_count', e); if (!work_item_id || !title || !status || !mode || attempt_count === undefined) return undefined; return { ...m, schema_version: V2_SCHEMAS.workItem, work_item_id, title, status, ...(optionalText(r.group_id, '$.group_id', e, ID) ? { group_id: optionalText(r.group_id, '$.group_id', e, ID) } : {}), depends_on: strings(r.depends_on, '$.depends_on', e), required_artifact_refs: strings(r.required_artifact_refs, '$.required_artifact_refs', e), validation_refs: strings(r.validation_refs, '$.validation_refs', e), ...(optionalText(r.selected_skill_id, '$.selected_skill_id', e, ID) ? { selected_skill_id: optionalText(r.selected_skill_id, '$.selected_skill_id', e, ID) } : {}), ...(optionalText(r.selected_skill_version, '$.selected_skill_version', e, ID) ? { selected_skill_version: optionalText(r.selected_skill_version, '$.selected_skill_version', e, ID) } : {}), mode, attempt_count, ...(optionalText(r.active_run_id, '$.active_run_id', e, ID) ? { active_run_id: optionalText(r.active_run_id, '$.active_run_id', e, ID) } : {}), blockers: strings(r.blockers, '$.blockers', e) } }) }
 
-export function decodeSkillRunV2(input: unknown): V2DecodeResult<SkillRunV2> { return genericMetaRecord(input, V2_SCHEMAS.run, ['run_id', 'attempt_id', 'attempt', 'work_item_id', 'skill_id', 'skill_version', 'mcp_ids', 'status', 'lease', 'input_refs', 'result_id', 'prior_attempt_id', 'failure', 'started_at', 'finished_at'], (r, e, m) => { const run_id = text(r.run_id, '$.run_id', e, ID); const attempt_id = text(r.attempt_id, '$.attempt_id', e, ID); const attempt = integer(r.attempt, '$.attempt', e); const work_item_id = text(r.work_item_id, '$.work_item_id', e, ID); const skill_id = text(r.skill_id, '$.skill_id', e, ID); const skill_version = text(r.skill_version, '$.skill_version', e, ID); const status = ['queued', 'claimed', 'running', 'waiting-input', 'completed', 'failed', 'interrupted', 'cancelled'].includes(String(r.status)) ? r.status as SkillRunV2['status'] : undefined; if (!status) e.push({ code: 'field-invalid', path: '$.status' }); if (!run_id || !attempt_id || attempt === undefined || !work_item_id || !skill_id || !skill_version || !status) return undefined; return { ...m, schema_version: V2_SCHEMAS.run, run_id, attempt_id, attempt, work_item_id, skill_id, skill_version, mcp_ids: strings(r.mcp_ids, '$.mcp_ids', e), status, input_refs: strings(r.input_refs, '$.input_refs', e), ...(optionalText(r.result_id, '$.result_id', e, ID) ? { result_id: optionalText(r.result_id, '$.result_id', e, ID) } : {}), ...(optionalText(r.prior_attempt_id, '$.prior_attempt_id', e, ID) ? { prior_attempt_id: optionalText(r.prior_attempt_id, '$.prior_attempt_id', e, ID) } : {}) } }) }
+function decodeSkillRunV2Legacy(input: unknown): V2DecodeResult<SkillRunV2> { return genericMetaRecord(input, V2_SCHEMAS.run, ['run_id', 'attempt_id', 'attempt', 'work_item_id', 'skill_id', 'skill_version', 'mcp_ids', 'status', 'lease', 'input_refs', 'result_id', 'prior_attempt_id', 'failure', 'started_at', 'finished_at'], (r, e, m) => { const run_id = text(r.run_id, '$.run_id', e, ID); const attempt_id = text(r.attempt_id, '$.attempt_id', e, ID); const attempt = integer(r.attempt, '$.attempt', e); const work_item_id = text(r.work_item_id, '$.work_item_id', e, ID); const skill_id = text(r.skill_id, '$.skill_id', e, ID); const skill_version = text(r.skill_version, '$.skill_version', e, ID); const status = ['queued', 'claimed', 'running', 'waiting-input', 'completed', 'failed', 'interrupted', 'cancelled'].includes(String(r.status)) ? r.status as SkillRunV2['status'] : undefined; if (!status) e.push({ code: 'field-invalid', path: '$.status' }); if (!run_id || !attempt_id || attempt === undefined || !work_item_id || !skill_id || !skill_version || !status) return undefined; return { ...m, schema_version: V2_SCHEMAS.run, run_id, attempt_id, attempt, work_item_id, skill_id, skill_version, mcp_ids: strings(r.mcp_ids, '$.mcp_ids', e), status, input_refs: strings(r.input_refs, '$.input_refs', e), ...(optionalText(r.result_id, '$.result_id', e, ID) ? { result_id: optionalText(r.result_id, '$.result_id', e, ID) } : {}), ...(optionalText(r.prior_attempt_id, '$.prior_attempt_id', e, ID) ? { prior_attempt_id: optionalText(r.prior_attempt_id, '$.prior_attempt_id', e, ID) } : {}) } }) }
 
-export function decodeSkillResultV2(input: unknown): V2DecodeResult<SkillResultV2> { return genericMetaRecord(input, V2_SCHEMAS.result, ['result_id', 'run_id', 'status', 'contract_status', 'output_schema_id', 'summary', 'raw_output', 'artifacts', 'validation_refs', 'diagnostics'], (r, e, m) => { const result_id = text(r.result_id, '$.result_id', e, ID); const run_id = text(r.run_id, '$.run_id', e, ID); const status = ['completed', 'failed', 'blocked', 'incomplete', 'corrupt'].includes(String(r.status)) ? r.status as SkillResultV2['status'] : undefined; const contract_status = ['validated', 'unknown', 'invalid'].includes(String(r.contract_status)) ? r.contract_status as SkillResultV2['contract_status'] : undefined; if (!status) e.push({ code: 'field-invalid', path: '$.status' }); if (!contract_status) e.push({ code: 'field-invalid', path: '$.contract_status' }); if (!result_id || !run_id || !status || !contract_status) return undefined; return { ...m, schema_version: V2_SCHEMAS.result, result_id, run_id, status, contract_status, ...(optionalText(r.output_schema_id, '$.output_schema_id', e, ID) ? { output_schema_id: optionalText(r.output_schema_id, '$.output_schema_id', e, ID) } : {}), ...(optionalText(r.summary, '$.summary', e) ? { summary: optionalText(r.summary, '$.summary', e) } : {}), artifacts: array(r.artifacts, '$.artifacts', e).map((x, i) => { const v = object(x, `$.artifacts[${i}]`, e); if (!v) return undefined; closed(v, ['id', 'kind', 'ref', 'digest', 'media_type', 'byte_length'], `$.artifacts[${i}]`, e); const id = text(v.id, `$.artifacts[${i}].id`, e, ID); const kind = ['file', 'diff', 'document', 'json', 'text', 'url', 'report', 'value', 'unknown'].includes(String(v.kind)) ? v.kind as SkillResultV2['artifacts'][number]['kind'] : undefined; const ref = text(v.ref, `$.artifacts[${i}].ref`, e); const d = digest(v.digest, `$.artifacts[${i}].digest`, e); if (!kind) e.push({ code: 'field-invalid', path: `$.artifacts[${i}].kind` }); return id && kind && ref && d ? { id, kind, ref, digest: d, ...(optionalText(v.media_type, `$.artifacts[${i}].media_type`, e) ? { media_type: optionalText(v.media_type, `$.artifacts[${i}].media_type`, e) } : {}) } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined), validation_refs: strings(r.validation_refs, '$.validation_refs', e), diagnostics: strings(r.diagnostics, '$.diagnostics', e) } }) }
+export function decodeSkillRunV2(input: unknown): V2DecodeResult<SkillRunV2> {
+  return genericMetaRecord(input, V2_SCHEMAS.run, ['run_id', 'attempt_id', 'attempt', 'work_item_id', 'skill_id', 'skill_version', 'mcp_ids', 'status', 'lease', 'input_refs', 'result_id', 'prior_attempt_id', 'failure', 'started_at', 'finished_at'], (r, e, m) => {
+    const run_id = text(r.run_id, '$.run_id', e, ID); const attempt_id = text(r.attempt_id, '$.attempt_id', e, ID); const attempt = integer(r.attempt, '$.attempt', e)
+    const work_item_id = text(r.work_item_id, '$.work_item_id', e, ID); const skill_id = text(r.skill_id, '$.skill_id', e, ID); const skill_version = text(r.skill_version, '$.skill_version', e, ID)
+    const status = ['queued', 'claimed', 'running', 'waiting-input', 'completed', 'failed', 'interrupted', 'cancelled'].includes(String(r.status)) ? r.status as SkillRunV2['status'] : undefined
+    if (!status) e.push({ code: 'field-invalid', path: '$.status' })
+    const lease = nested(r.lease, decodeRunLeaseV2, '$.lease', e)
+    const result_id = optionalText(r.result_id, '$.result_id', e, ID); const prior_attempt_id = optionalText(r.prior_attempt_id, '$.prior_attempt_id', e, ID)
+    const started_at = optionalText(r.started_at, '$.started_at', e, UTC); const finished_at = optionalText(r.finished_at, '$.finished_at', e, UTC)
+    let failure: SkillRunV2['failure'] | undefined
+    if (r.failure !== undefined) {
+      const rawFailure = object(r.failure, '$.failure', e)
+      if (rawFailure) {
+        closed(rawFailure, ['code', 'retryable', 'detail_ref'], '$.failure', e)
+        const code = text(rawFailure.code, '$.failure.code', e, ID); const retryable = bool(rawFailure.retryable, '$.failure.retryable', e); const detail_ref = optionalText(rawFailure.detail_ref, '$.failure.detail_ref', e, ID)
+        if (code && retryable !== undefined) failure = { code, retryable, ...(detail_ref === undefined ? {} : { detail_ref }) }
+      }
+    }
+    if (!run_id || !attempt_id || attempt === undefined || !work_item_id || !skill_id || !skill_version || !status) return undefined
+    return { ...m, schema_version: V2_SCHEMAS.run, run_id, attempt_id, attempt, work_item_id, skill_id, skill_version, mcp_ids: strings(r.mcp_ids, '$.mcp_ids', e), status, ...(lease === undefined ? {} : { lease }), input_refs: strings(r.input_refs, '$.input_refs', e), ...(result_id === undefined ? {} : { result_id }), ...(prior_attempt_id === undefined ? {} : { prior_attempt_id }), ...(failure === undefined ? {} : { failure }), ...(started_at === undefined ? {} : { started_at }), ...(finished_at === undefined ? {} : { finished_at }) }
+  })
+}
+
+function decodeSkillResultV2Legacy(input: unknown): V2DecodeResult<SkillResultV2> { return genericMetaRecord(input, V2_SCHEMAS.result, ['result_id', 'run_id', 'status', 'contract_status', 'output_schema_id', 'summary', 'raw_output', 'artifacts', 'validation_refs', 'diagnostics'], (r, e, m) => { const result_id = text(r.result_id, '$.result_id', e, ID); const run_id = text(r.run_id, '$.run_id', e, ID); const status = ['completed', 'failed', 'blocked', 'incomplete', 'corrupt'].includes(String(r.status)) ? r.status as SkillResultV2['status'] : undefined; const contract_status = ['validated', 'unknown', 'invalid'].includes(String(r.contract_status)) ? r.contract_status as SkillResultV2['contract_status'] : undefined; if (!status) e.push({ code: 'field-invalid', path: '$.status' }); if (!contract_status) e.push({ code: 'field-invalid', path: '$.contract_status' }); if (!result_id || !run_id || !status || !contract_status) return undefined; return { ...m, schema_version: V2_SCHEMAS.result, result_id, run_id, status, contract_status, ...(optionalText(r.output_schema_id, '$.output_schema_id', e, ID) ? { output_schema_id: optionalText(r.output_schema_id, '$.output_schema_id', e, ID) } : {}), ...(optionalText(r.summary, '$.summary', e) ? { summary: optionalText(r.summary, '$.summary', e) } : {}), artifacts: array(r.artifacts, '$.artifacts', e).map((x, i) => { const v = object(x, `$.artifacts[${i}]`, e); if (!v) return undefined; closed(v, ['id', 'kind', 'ref', 'digest', 'media_type', 'byte_length'], `$.artifacts[${i}]`, e); const id = text(v.id, `$.artifacts[${i}].id`, e, ID); const kind = ['file', 'diff', 'document', 'json', 'text', 'url', 'report', 'value', 'unknown'].includes(String(v.kind)) ? v.kind as SkillResultV2['artifacts'][number]['kind'] : undefined; const ref = text(v.ref, `$.artifacts[${i}].ref`, e); const d = digest(v.digest, `$.artifacts[${i}].digest`, e); if (!kind) e.push({ code: 'field-invalid', path: `$.artifacts[${i}].kind` }); return id && kind && ref && d ? { id, kind, ref, digest: d, ...(optionalText(v.media_type, `$.artifacts[${i}].media_type`, e) ? { media_type: optionalText(v.media_type, `$.artifacts[${i}].media_type`, e) } : {}) } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined), validation_refs: strings(r.validation_refs, '$.validation_refs', e), diagnostics: strings(r.diagnostics, '$.diagnostics', e) } }) }
+
+export function decodeSkillResultV2(input: unknown): V2DecodeResult<SkillResultV2> {
+  return genericMetaRecord(input, V2_SCHEMAS.result, ['result_id', 'run_id', 'status', 'contract_status', 'output_schema_id', 'summary', 'raw_output', 'artifacts', 'validation_refs', 'diagnostics'], (r, e, m) => {
+    const result_id = text(r.result_id, '$.result_id', e, ID); const run_id = text(r.run_id, '$.run_id', e, ID)
+    const status = ['completed', 'failed', 'blocked', 'incomplete', 'corrupt'].includes(String(r.status)) ? r.status as SkillResultV2['status'] : undefined
+    const contract_status = ['validated', 'unknown', 'invalid'].includes(String(r.contract_status)) ? r.contract_status as SkillResultV2['contract_status'] : undefined
+    if (!status) e.push({ code: 'field-invalid', path: '$.status' }); if (!contract_status) e.push({ code: 'field-invalid', path: '$.contract_status' })
+    const output_schema_id = optionalText(r.output_schema_id, '$.output_schema_id', e, ID); const summary = optionalText(r.summary, '$.summary', e)
+    let raw_output: SkillResultV2['raw_output'] | undefined
+    if (r.raw_output !== undefined) {
+      const v = object(r.raw_output, '$.raw_output', e)
+      if (v) { closed(v, ['ref', 'digest', 'media_type', 'byte_length'], '$.raw_output', e); const ref = text(v.ref, '$.raw_output.ref', e); const d = digest(v.digest, '$.raw_output.digest', e); const media_type = text(v.media_type, '$.raw_output.media_type', e); const byte_length = integer(v.byte_length, '$.raw_output.byte_length', e); if (ref && d && media_type && byte_length !== undefined) raw_output = { ref, digest: d, media_type, byte_length } }
+    }
+    const artifacts = array(r.artifacts, '$.artifacts', e).map((x, i) => {
+      const v = object(x, `$.artifacts[${i}]`, e); if (!v) return undefined
+      closed(v, ['id', 'kind', 'ref', 'digest', 'media_type', 'byte_length'], `$.artifacts[${i}]`, e)
+      const id = text(v.id, `$.artifacts[${i}].id`, e, ID); const kind = ['file', 'diff', 'document', 'json', 'text', 'url', 'report', 'value', 'unknown'].includes(String(v.kind)) ? v.kind as SkillResultV2['artifacts'][number]['kind'] : undefined; const ref = text(v.ref, `$.artifacts[${i}].ref`, e); const d = digest(v.digest, `$.artifacts[${i}].digest`, e); const media_type = optionalText(v.media_type, `$.artifacts[${i}].media_type`, e); const byte_length = v.byte_length === undefined ? undefined : integer(v.byte_length, `$.artifacts[${i}].byte_length`, e)
+      if (!kind) e.push({ code: 'field-invalid', path: `$.artifacts[${i}].kind` })
+      return id && kind && ref && d ? { id, kind, ref, digest: d, ...(media_type === undefined ? {} : { media_type }), ...(byte_length === undefined ? {} : { byte_length }) } : undefined
+    }).filter((x): x is NonNullable<typeof x> => x !== undefined)
+    if (!result_id || !run_id || !status || !contract_status) return undefined
+    return { ...m, schema_version: V2_SCHEMAS.result, result_id, run_id, status, contract_status, ...(output_schema_id === undefined ? {} : { output_schema_id }), ...(summary === undefined ? {} : { summary }), ...(raw_output === undefined ? {} : { raw_output }), artifacts, validation_refs: strings(r.validation_refs, '$.validation_refs', e), diagnostics: strings(r.diagnostics, '$.diagnostics', e) }
+  })
+}
 
 export function decodeValidationReportV2(input: unknown): V2DecodeResult<ValidationReportV2> { return genericMetaRecord(input, V2_SCHEMAS.validation, ['report_id', 'work_item_id', 'result_id', 'validator_id', 'validator_version', 'status', 'target_digests', 'evidence_refs', 'checks'], (r, e, m) => { const report_id = text(r.report_id, '$.report_id', e, ID); const work_item_id = text(r.work_item_id, '$.work_item_id', e, ID); const result_id = text(r.result_id, '$.result_id', e, ID); const validator_id = text(r.validator_id, '$.validator_id', e, ID); const validator_version = text(r.validator_version, '$.validator_version', e, ID); const status = ['pass', 'fail', 'unknown', 'incomplete'].includes(String(r.status)) ? r.status as ValidationReportV2['status'] : undefined; if (!status) e.push({ code: 'field-invalid', path: '$.status' }); if (!report_id || !work_item_id || !result_id || !validator_id || !validator_version || !status) return undefined; const target_digests = array(r.target_digests, '$.target_digests', e).map((x, i) => digest(x, `$.target_digests[${i}]`, e) ?? 'sha256:' + '0'.repeat(64)) as `sha256:${string}`[]; const checks = array(r.checks, '$.checks', e).map((x, i) => { const v = object(x, `$.checks[${i}]`, e); if (!v) return undefined; closed(v, ['id', 'status', 'message'], `$.checks[${i}]`, e); const id = text(v.id, `$.checks[${i}].id`, e, ID); const s = ['pass', 'fail', 'unknown'].includes(String(v.status)) ? v.status as 'pass' | 'fail' | 'unknown' : undefined; if (!s) e.push({ code: 'field-invalid', path: `$.checks[${i}].status` }); return id && s ? { id, status: s, ...(optionalText(v.message, `$.checks[${i}].message`, e) ? { message: optionalText(v.message, `$.checks[${i}].message`, e) } : {}) } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); return { ...m, schema_version: V2_SCHEMAS.validation, report_id, work_item_id, result_id, validator_id, validator_version, status, target_digests, evidence_refs: strings(r.evidence_refs, '$.evidence_refs', e), checks } }) }
 
@@ -143,7 +192,35 @@ export function decodeGateEvaluationV2(input: unknown): V2DecodeResult<GateEvalu
 
 export function decodeRunLeaseV2(input: unknown): V2DecodeResult<RunLeaseV2> { const errors: V2CodecError[] = []; const raw = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : undefined; if (!raw) return { ok: false, errors: [{ code: 'object-invalid', path: '$' }] }; closed(raw, ['lease_id', 'owner_id', 'acquired_at', 'heartbeat_at', 'expires_at', 'generation', 'status'], '$', errors); const lease_id = text(raw.lease_id, '$.lease_id', errors, ID); const owner_id = text(raw.owner_id, '$.owner_id', errors, ID); const acquired_at = text(raw.acquired_at, '$.acquired_at', errors, UTC); const heartbeat_at = text(raw.heartbeat_at, '$.heartbeat_at', errors, UTC); const expires_at = text(raw.expires_at, '$.expires_at', errors, UTC); const generation = integer(raw.generation, '$.generation', errors); const status = ['active', 'renewed', 'expired', 'released', 'revoked'].includes(String(raw.status)) ? raw.status as RunLeaseV2['status'] : undefined; if (!status) errors.push({ code: 'field-invalid', path: '$.status' }); if (!lease_id || !owner_id || !acquired_at || !heartbeat_at || !expires_at || generation === undefined || !status) return { ok: false, errors }; return result({ lease_id, owner_id, acquired_at, heartbeat_at, expires_at, generation, status }, errors) }
 
-export function decodeBoardEventV2(input: unknown): V2DecodeResult<BoardEventV2> { const errors: V2CodecError[] = []; const raw = prepare(input, V2_SCHEMAS.event, ['schema_version', 'event_id', 'event_type', 'command_id', 'idempotency_key', 'project_id', 'change_id', 'correlation_id', 'causation_id', 'actor', 'revision', 'issued_at', 'before_digest', 'after_digest', 'payload', 'effects'], errors); if (!raw) return { ok: false, errors }; const event_id = text(raw.event_id, '$.event_id', errors, ID); const command_id = text(raw.command_id, '$.command_id', errors, ID); const idempotency_key = text(raw.idempotency_key, '$.idempotency_key', errors, ID); const project_id = text(raw.project_id, '$.project_id', errors, ID); const change_id = text(raw.change_id, '$.change_id', errors, ID); const correlation_id = text(raw.correlation_id, '$.correlation_id', errors, ID); const event_type = text(raw.event_type, '$.event_type', errors, ID) as BoardEventV2['event_type'] | undefined; const revision = integer(raw.revision, '$.revision', errors); const issued_at = text(raw.issued_at, '$.issued_at', errors, UTC); const before_digest = digest(raw.before_digest, '$.before_digest', errors); const after_digest = digest(raw.after_digest, '$.after_digest', errors); const actorValue = actor(raw.actor, '$.actor', errors); const payload = decodeBoardCommandV2(raw.payload); if (!payload.ok) errors.push(...payload.errors.map((error) => ({ ...error, path: `$.payload${error.path.slice(1)}` }))); if (!event_id || !command_id || !idempotency_key || !project_id || !change_id || !correlation_id || !event_type || revision === undefined || !issued_at || !before_digest || !after_digest || !actorValue || !payload.ok) return { ok: false, errors }; return result({ schema_version: V2_SCHEMAS.event, event_id, event_type, command_id, idempotency_key, project_id, change_id, correlation_id, ...(optionalText(raw.causation_id, '$.causation_id', errors, ID) ? { causation_id: optionalText(raw.causation_id, '$.causation_id', errors, ID) } : {}), actor: actorValue, revision, issued_at, before_digest, after_digest, payload: payload.value, effects: Array.isArray(raw.effects) ? raw.effects as BoardEventV2['effects'] : [] }, errors) }
+function decodeEffects(input: unknown, path: string, errors: V2CodecError[]): readonly OrchestrationEffectV2[] {
+  return array(input, path, errors).map((entry, index) => {
+    const itemPath = `${path}[${index}]`
+    const raw = object(entry, itemPath, errors)
+    if (!raw) return undefined
+    const type = raw.type
+    if (type === 'persist-record') {
+      closed(raw, ['type', 'record_schema', 'record_id'], itemPath, errors)
+      const schemaValue = text(raw.record_schema, `${itemPath}.record_schema`, errors, ID)
+      const record_schema = schemaValue !== undefined && (Object.values(V2_SCHEMAS) as readonly string[]).includes(schemaValue) ? schemaValue as V2Schema : undefined
+      if (schemaValue !== undefined && record_schema === undefined) errors.push({ code: 'field-invalid', path: `${itemPath}.record_schema` })
+      const record_id = text(raw.record_id, `${itemPath}.record_id`, errors, ID)
+      if (record_schema && record_id) return { type, record_schema, record_id }
+    } else if (type === 'request-executor-cancel') {
+      closed(raw, ['type', 'run_id'], itemPath, errors)
+      const run_id = text(raw.run_id, `${itemPath}.run_id`, errors, ID)
+      if (run_id) return { type, run_id }
+    } else if (type === 'wake-scheduler') {
+      closed(raw, ['type', 'reason'], itemPath, errors)
+      const reason = text(raw.reason, `${itemPath}.reason`, errors, ID)
+      if (reason) return { type, reason }
+    } else {
+      errors.push({ code: 'field-invalid', path: `${itemPath}.type` })
+    }
+    return undefined
+  }).filter((value): value is OrchestrationEffectV2 => value !== undefined)
+}
+
+export function decodeBoardEventV2(input: unknown): V2DecodeResult<BoardEventV2> { const errors: V2CodecError[] = []; const raw = prepare(input, V2_SCHEMAS.event, ['schema_version', 'event_id', 'event_type', 'command_id', 'idempotency_key', 'project_id', 'change_id', 'correlation_id', 'causation_id', 'actor', 'revision', 'issued_at', 'before_digest', 'after_digest', 'payload', 'effects'], errors); if (!raw) return { ok: false, errors }; const event_id = text(raw.event_id, '$.event_id', errors, ID); const command_id = text(raw.command_id, '$.command_id', errors, ID); const idempotency_key = text(raw.idempotency_key, '$.idempotency_key', errors, ID); const project_id = text(raw.project_id, '$.project_id', errors, ID); const change_id = text(raw.change_id, '$.change_id', errors, ID); const correlation_id = text(raw.correlation_id, '$.correlation_id', errors, ID); const event_type = text(raw.event_type, '$.event_type', errors, ID) as BoardEventV2['event_type'] | undefined; const revision = integer(raw.revision, '$.revision', errors); const issued_at = text(raw.issued_at, '$.issued_at', errors, UTC); const before_digest = digest(raw.before_digest, '$.before_digest', errors); const after_digest = digest(raw.after_digest, '$.after_digest', errors); const actorValue = actor(raw.actor, '$.actor', errors); const payload = decodeBoardCommandV2(raw.payload); if (!payload.ok) errors.push(...payload.errors.map((error) => ({ ...error, path: `$.payload${error.path.slice(1)}` }))); const effects = decodeEffects(raw.effects, '$.effects', errors); if (!event_id || !command_id || !idempotency_key || !project_id || !change_id || !correlation_id || !event_type || revision === undefined || !issued_at || !before_digest || !after_digest || !actorValue || !payload.ok) return { ok: false, errors }; return result({ schema_version: V2_SCHEMAS.event, event_id, event_type, command_id, idempotency_key, project_id, change_id, correlation_id, ...(optionalText(raw.causation_id, '$.causation_id', errors, ID) ? { causation_id: optionalText(raw.causation_id, '$.causation_id', errors, ID) } : {}), actor: actorValue, revision, issued_at, before_digest, after_digest, payload: payload.value, effects }, errors) }
 
 export function decodeBoardSnapshotV2(input: unknown): V2DecodeResult<BoardSnapshotV2> {
   // Snapshots are read models with host provenance, but do not use the generic
@@ -210,4 +287,105 @@ export function decodeBoardSnapshotV2(input: unknown): V2DecodeResult<BoardSnaps
   return result(value, errors)
 }
 
-export function decodeBoardCommandV2(input: unknown): V2DecodeResult<BoardCommandV2> { const errors: V2CodecError[] = []; const raw = prepare(input, V2_SCHEMAS.command, ['schema_version', 'command_id', 'idempotency_key', 'expected_revision', 'actor', 'issued_at', 'correlation_id', 'causation_id', 'change_id', 'type', 'request', 'context', 'assessment', 'graph', 'resolution', 'work_item_id', 'run', 'lease', 'run_id', 'lease_id', 'owner_id', 'generation', 'heartbeat_at', 'expires_at', 'result', 'report', 'gate', 'reason', 'attempt_id', 'artifact_ref', 'digest'], errors); if (!raw) return { ok: false, errors }; const command_id = text(raw.command_id, '$.command_id', errors, ID); const idempotency_key = text(raw.idempotency_key, '$.idempotency_key', errors, ID); const expected_revision = integer(raw.expected_revision, '$.expected_revision', errors); const actorValue = actor(raw.actor, '$.actor', errors); const issued_at = text(raw.issued_at, '$.issued_at', errors, UTC); const correlation_id = text(raw.correlation_id, '$.correlation_id', errors, ID); const change_id = text(raw.change_id, '$.change_id', errors, ID); const type = typeof raw.type === 'string' ? raw.type as BoardCommandV2['type'] : undefined; const allowed = ['accept-request', 'record-context', 'record-assessment', 'freeze-work-graph', 'resolve-capabilities', 'start-change', 'enqueue-work-item', 'claim-run', 'heartbeat-run', 'begin-run', 'complete-run', 'record-validation', 'evaluate-gate', 'pause-change', 'resume-change', 'retry-work-item', 'cancel-change', 'replan-change', 'bind-artifact']; if (!type || !allowed.includes(type)) errors.push({ code: 'field-invalid', path: '$.type' }); if (!command_id || !idempotency_key || expected_revision === undefined || !actorValue || !issued_at || !correlation_id || !change_id || !type || !allowed.includes(type)) return { ok: false, errors }; const base = { schema_version: V2_SCHEMAS.command, command_id, idempotency_key, expected_revision, actor: actorValue, issued_at, correlation_id, ...(optionalText(raw.causation_id, '$.causation_id', errors, ID) ? { causation_id: optionalText(raw.causation_id, '$.causation_id', errors, ID) } : {}), change_id }; const value = { ...base, type, ...raw } as BoardCommandV2; return result(value, errors) }
+export function decodeBoardCommandV2(input: unknown): V2DecodeResult<BoardCommandV2> {
+  const errors: V2CodecError[] = []
+  const raw = prepare(input, V2_SCHEMAS.command, [
+    'schema_version', 'command_id', 'idempotency_key', 'expected_revision', 'actor', 'issued_at',
+    'correlation_id', 'causation_id', 'change_id', 'type', 'request', 'context', 'assessment',
+    'graph', 'resolution', 'work_item_id', 'run', 'lease', 'run_id', 'lease_id', 'owner_id',
+    'generation', 'heartbeat_at', 'expires_at', 'result', 'report', 'gate', 'reason', 'attempt_id',
+    'artifact_ref', 'digest',
+  ], errors)
+  if (!raw) return { ok: false, errors }
+  const command_id = text(raw.command_id, '$.command_id', errors, ID)
+  const idempotency_key = text(raw.idempotency_key, '$.idempotency_key', errors, ID)
+  const expected_revision = integer(raw.expected_revision, '$.expected_revision', errors)
+  const actorValue = actor(raw.actor, '$.actor', errors)
+  const issued_at = text(raw.issued_at, '$.issued_at', errors, UTC)
+  const correlation_id = text(raw.correlation_id, '$.correlation_id', errors, ID)
+  const change_id = text(raw.change_id, '$.change_id', errors, ID)
+  const type = typeof raw.type === 'string' ? raw.type as BoardCommandV2['type'] : undefined
+  const allowedTypes: readonly BoardCommandV2['type'][] = [
+    'accept-request', 'record-context', 'record-assessment', 'freeze-work-graph',
+    'resolve-capabilities', 'start-change', 'enqueue-work-item', 'claim-run', 'heartbeat-run',
+    'begin-run', 'complete-run', 'record-validation', 'evaluate-gate', 'pause-change',
+    'resume-change', 'retry-work-item', 'cancel-change', 'replan-change', 'bind-artifact',
+  ]
+  if (type === undefined || !allowedTypes.includes(type)) errors.push({ code: 'field-invalid', path: '$.type' })
+  const causation_id = optionalText(raw.causation_id, '$.causation_id', errors, ID)
+  if (!command_id || !idempotency_key || expected_revision === undefined || !actorValue || !issued_at || !correlation_id || !change_id || type === undefined || !allowedTypes.includes(type)) return { ok: false, errors }
+  const base = { schema_version: V2_SCHEMAS.command, command_id, idempotency_key, expected_revision, actor: actorValue, issued_at, correlation_id, ...(causation_id === undefined ? {} : { causation_id }), change_id }
+  const requireText = (key: string, pattern: RegExp = ID, max = 8_192): string | undefined => text(raw[key], `$.${key}`, errors, pattern, max)
+  const rejectExtra = (allowed: readonly string[]): void => {
+    const set = new Set(['schema_version', 'command_id', 'idempotency_key', 'expected_revision', 'actor', 'issued_at', 'correlation_id', 'causation_id', 'change_id', 'type', ...allowed])
+    for (const key of Object.keys(raw)) if (!set.has(key)) errors.push({ code: 'unknown-field', path: `$.${key}` })
+  }
+  let value: BoardCommandV2 | undefined
+  switch (type) {
+    case 'accept-request': {
+      rejectExtra(['request']); const request = nested(raw.request, decodeDevelopmentRequestV2, '$.request', errors)
+      if (request) value = { ...base, type, request }; break
+    }
+    case 'record-context': {
+      rejectExtra(['context']); const context = nested(raw.context, decodeRepositoryContextV2, '$.context', errors)
+      if (context) value = { ...base, type, context }; break
+    }
+    case 'record-assessment': {
+      rejectExtra(['assessment']); const assessment = nested(raw.assessment, decodeCapabilityAssessmentV2, '$.assessment', errors)
+      if (assessment) value = { ...base, type, assessment }; break
+    }
+    case 'freeze-work-graph': {
+      rejectExtra(['graph']); const graph = nested(raw.graph, decodeWorkGraphV2, '$.graph', errors)
+      if (graph) value = { ...base, type, graph }; break
+    }
+    case 'resolve-capabilities': {
+      rejectExtra(['resolution']); const resolution = nested(raw.resolution, decodeCapabilityResolutionV2, '$.resolution', errors)
+      if (resolution) value = { ...base, type, resolution }; break
+    }
+    case 'start-change': case 'resume-change': {
+      rejectExtra([]); value = { ...base, type }; break
+    }
+    case 'enqueue-work-item': {
+      rejectExtra(['work_item_id']); const work_item_id = requireText('work_item_id')
+      if (work_item_id) value = { ...base, type, work_item_id }; break
+    }
+    case 'claim-run': {
+      rejectExtra(['run', 'lease']); const run = nested(raw.run, decodeSkillRunV2, '$.run', errors); const lease = nested(raw.lease, decodeRunLeaseV2, '$.lease', errors)
+      if (run && lease) value = { ...base, type, run, lease }; break
+    }
+    case 'heartbeat-run': {
+      rejectExtra(['run_id', 'lease_id', 'owner_id', 'generation', 'heartbeat_at', 'expires_at'])
+      const run_id = requireText('run_id'); const lease_id = requireText('lease_id'); const owner_id = requireText('owner_id'); const generation = integer(raw.generation, '$.generation', errors); const heartbeat_at = text(raw.heartbeat_at, '$.heartbeat_at', errors, UTC); const expires_at = text(raw.expires_at, '$.expires_at', errors, UTC)
+      if (run_id && lease_id && owner_id && generation !== undefined && heartbeat_at && expires_at) value = { ...base, type, run_id, lease_id, owner_id, generation, heartbeat_at, expires_at }; break
+    }
+    case 'begin-run': {
+      rejectExtra(['run_id', 'lease_id', 'owner_id', 'generation']); const run_id = requireText('run_id'); const lease_id = requireText('lease_id'); const owner_id = requireText('owner_id'); const generation = integer(raw.generation, '$.generation', errors)
+      if (run_id && lease_id && owner_id && generation !== undefined) value = { ...base, type, run_id, lease_id, owner_id, generation }; break
+    }
+    case 'complete-run': {
+      rejectExtra(['run_id', 'result']); const run_id = requireText('run_id'); const resultValue = nested(raw.result, decodeSkillResultV2, '$.result', errors)
+      if (run_id && resultValue) value = { ...base, type, run_id, result: resultValue }; break
+    }
+    case 'record-validation': {
+      rejectExtra(['report']); const report = nested(raw.report, decodeValidationReportV2, '$.report', errors)
+      if (report) value = { ...base, type, report }; break
+    }
+    case 'evaluate-gate': {
+      rejectExtra(['gate']); const gate = nested(raw.gate, decodeGateEvaluationV2, '$.gate', errors)
+      if (gate) value = { ...base, type, gate }; break
+    }
+    case 'pause-change': case 'cancel-change': case 'replan-change': {
+      rejectExtra(['reason']); const reason = text(raw.reason, '$.reason', errors, undefined, 8_192)
+      if (reason) value = { ...base, type, reason }; break
+    }
+    case 'retry-work-item': {
+      rejectExtra(['work_item_id', 'attempt_id', 'run_id']); const work_item_id = requireText('work_item_id'); const attempt_id = requireText('attempt_id'); const run_id = requireText('run_id')
+      if (work_item_id && attempt_id && run_id) value = { ...base, type, work_item_id, attempt_id, run_id }; break
+    }
+    case 'bind-artifact': {
+      rejectExtra(['work_item_id', 'artifact_ref', 'digest']); const work_item_id = requireText('work_item_id'); const artifact_ref = requireText('artifact_ref', /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,511}$/u, 512); const digestValue = digest(raw.digest, '$.digest', errors)
+      if (work_item_id && artifact_ref && digestValue) value = { ...base, type, work_item_id, artifact_ref, digest: digestValue }; break
+    }
+  }
+  return value === undefined ? { ok: false, errors } : result(value, errors)
+}

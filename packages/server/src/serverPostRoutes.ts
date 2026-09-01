@@ -75,6 +75,7 @@ import { handlePostOperationsRoutes } from './serverPostOperationsRoutes.js'
 import { handlePostMemoryRoutes } from './serverPostMemoryRoutes.js'
 import type { RelatedSessionSearchExecutor } from './relatedSessionMemory.js'
 import { handlePostVerificationRoutes } from './serverPostVerificationRoutes.js'
+import { handleOrchestrationV2PostRoute, type OrchestrationV2RouteDeps } from './serverOrchestrationV2Routes.js'
 
 type WorkflowRootCheck =
   | { ok: true; anchor: WorkflowRootAnchor }
@@ -121,6 +122,8 @@ export interface PostRouteDeps {
   errMsg: (error: unknown) => string
   realGraduationFs: GraduationFs
   relatedSessionSearch: RelatedSessionSearchExecutor
+  /** Canonical v2 orchestration ledger; omitted by legacy embedders. */
+  orchestrationV2?: OrchestrationV2RouteDeps
 }
 
 export async function handlePostRoute(
@@ -156,6 +159,18 @@ export async function handlePostRoute(
     const ctype = (String(req.headers['content-type'] ?? '').split(';', 1)[0] ?? '').trim().toLowerCase()
     if (ctype !== 'application/json') {
       return sendJson(res, 400, { ok: false, error: '写回端点要求 Content-Type: application/json' })
+    }
+
+    if (deps.orchestrationV2) {
+      const handled = await handleOrchestrationV2PostRoute(req, res, path, {
+        ...deps.orchestrationV2,
+        sendJson,
+        readJsonBody,
+        token,
+        isLocalHost,
+        boundPort: () => boundPort,
+      })
+      if (handled) return
     }
 
     // ── Track Router 公共预览：消费 effective registry，生产默认 scorer 真执行 grep -ciE。──

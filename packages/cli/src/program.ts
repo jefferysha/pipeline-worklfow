@@ -51,6 +51,7 @@ import { registerHandoffCommand, registerWorkflowCommands } from './program-work
 import { registerSkillInvocationInternalCommands } from './program-skill-invocations.js'
 import { registerReviewCommands } from './program-review.js'
 import { LOOPS_HELP } from './program-help.js'
+import { registerOrchestrationCommands } from './program-orchestration.js'
 export { CliExit } from './program-exit.js'
 
 export interface ProgramRuntimes {
@@ -82,6 +83,7 @@ export function buildProgram(deps: CliDeps, runtimes: ProgramRuntimes = {}): Com
     .action(async (name: string, opts: InitCmdOpts) => bail(await cmdInit(deps, name, opts)))
 
   registerInstallCommands(program, deps, runtimes.dashboard)
+  registerOrchestrationCommands(program, deps)
 
   program
     .command('get <name> <field>')

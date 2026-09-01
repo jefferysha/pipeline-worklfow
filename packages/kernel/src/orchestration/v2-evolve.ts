@@ -2,9 +2,10 @@ import { sha256Hex } from '../sha256.js'
 import type { BoardCommandV2, BoardEventV2, BoardSnapshotV2, OrchestrationAggregateV2, SkillRunV2, WorkItemV2 } from './v2-types.js'
 
 function stable(value: unknown): string {
+  if (value === undefined) return 'null'
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
-  return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`
+  return `{${Object.keys(value as Record<string, unknown>).filter((key) => (value as Record<string, unknown>)[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`
 }
 /** Digest the logical aggregate state. The event-head digest is transport metadata
  * derived from this digest and is intentionally excluded to avoid a self-referential
@@ -20,7 +21,29 @@ export function createAggregateV2(projectId: string, changeId: string, correlati
 function find<T extends object>(items: readonly T[], key: keyof T, id: unknown): T | undefined { return items.find((entry) => entry[key] === id) }
 function replaceBy<T extends object>(items: readonly T[], key: keyof T, value: T): readonly T[] { return items.map((entry) => entry[key] === value[key] ? value : entry) }
 function itemStatusForRun(status: SkillRunV2['status']): WorkItemV2['status'] { return status === 'completed' ? 'verifying' : status === 'failed' ? 'failed' : status === 'cancelled' ? 'cancelled' : status === 'interrupted' ? 'interrupted' : status === 'waiting-input' ? 'waiting-input' : status === 'running' ? 'running' : 'claimed' }
-function initialItems(aggregate: BoardSnapshotV2, graph: Extract<BoardCommandV2, { type: 'freeze-work-graph' }>['graph']): readonly WorkItemV2[] { return graph.execution_groups.flatMap((group) => group.work_item_ids).map((id, index) => ({ schema_version: 'work-item/v2', record_id: `work-item:${id}`, project_id: aggregate.project_id, change_id: aggregate.change_id, revision: aggregate.revision + 1, correlation_id: aggregate.correlation_id, actor: { kind: 'system', id: 'kernel' }, created_at: graph.created_at, work_item_id: id, title: id, status: index === 0 ? 'ready' : 'pending', depends_on: graph.dependency_edges.filter((edge) => edge.to === id).map((edge) => edge.from), required_artifact_refs: [], validation_refs: [], mode: graph.execution_groups.find((group) => group.work_item_ids.includes(id))?.mode ?? 'serial', attempt_count: 0, blockers: [] })) }
+function initialItems(aggregate: BoardSnapshotV2, graph: Extract<BoardCommandV2, { type: 'freeze-work-graph' }>['graph']): readonly WorkItemV2[] {
+  return graph.execution_groups.flatMap((group) => group.work_item_ids).map((id) => {
+    const depends_on = graph.dependency_edges.filter((edge) => edge.to === id).map((edge) => edge.from)
+    return {
+      schema_version: 'work-item/v2', record_id: `work-item:${id}`, project_id: aggregate.project_id,
+      change_id: aggregate.change_id, revision: aggregate.revision + 1, correlation_id: aggregate.correlation_id,
+      actor: { kind: 'system', id: 'kernel' }, created_at: graph.created_at, work_item_id: id, title: id,
+      // Every root item is immediately schedulable.  Index-based readiness made
+      // independent parallel work accidentally serial in the previous version.
+      status: depends_on.length === 0 ? 'ready' as const : 'pending' as const,
+      depends_on, required_artifact_refs: [], validation_refs: [],
+      mode: graph.execution_groups.find((group) => group.work_item_ids.includes(id))?.mode ?? 'serial',
+      attempt_count: 0, blockers: [],
+    }
+  })
+}
+
+function promoteReadyDependents(items: readonly WorkItemV2[]): readonly WorkItemV2[] {
+  const completed = new Set(items.filter((item) => item.status === 'completed').map((item) => item.work_item_id))
+  return items.map((item) => item.status === 'pending' && item.depends_on.every((id) => completed.has(id))
+    ? { ...item, status: 'ready' as const }
+    : item)
+}
 
 export function evolveV2(aggregate: OrchestrationAggregateV2, event: BoardEventV2): OrchestrationAggregateV2 {
   if (event.revision !== aggregate.revision + 1) throw new Error('event revision is not monotonic')
@@ -38,11 +61,30 @@ export function evolveV2(aggregate: OrchestrationAggregateV2, event: BoardEventV
     case 'heartbeat-run': { const run = find(next.runs, 'run_id', command.run_id); if (run?.lease !== undefined) { const lease = { ...run.lease, heartbeat_at: command.heartbeat_at, expires_at: command.expires_at, generation: command.generation, status: 'renewed' as const }; next = { ...next, runs: replaceBy(next.runs, 'run_id', { ...run, lease, revision: event.revision }), leases: replaceBy(next.leases, 'lease_id', lease) } } break }
     case 'begin-run': { const run = find(next.runs, 'run_id', command.run_id); const item = run === undefined ? undefined : find(next.work_items, 'work_item_id', run.work_item_id); if (run !== undefined && item !== undefined) next = { ...next, runs: replaceBy(next.runs, 'run_id', { ...run, status: 'running', started_at: event.issued_at, revision: event.revision }), work_items: replaceBy(next.work_items, 'work_item_id', { ...item, status: 'running', revision: event.revision }) }; break }
     case 'complete-run': { const run = find(next.runs, 'run_id', command.run_id); if (run !== undefined) { const runStatus: SkillRunV2['status'] = command.result.status === 'completed' && command.result.contract_status === 'validated' ? 'completed' : 'failed'; const releasedLease = run.lease === undefined ? undefined : { ...run.lease, status: 'released' as const }; const updated = { ...run, status: runStatus, result_id: command.result.result_id, finished_at: event.issued_at, ...(releasedLease === undefined ? {} : { lease: releasedLease }), revision: event.revision }; const item = find(next.work_items, 'work_item_id', run.work_item_id); next = { ...next, runs: replaceBy(next.runs, 'run_id', updated), results: [...next.results.filter((entry) => entry.result_id !== command.result.result_id), { ...command.result, revision: event.revision }], leases: releasedLease === undefined ? next.leases : replaceBy(next.leases, 'lease_id', releasedLease), work_items: item === undefined ? next.work_items : replaceBy(next.work_items, 'work_item_id', { ...item, status: itemStatusForRun(runStatus), active_run_id: undefined, revision: event.revision, blockers: runStatus === 'completed' ? [] : ['run-result-invalid'] }), status: runStatus === 'completed' ? 'verifying' : 'failed', next_actions: runStatus === 'completed' ? ['record-validation'] : ['retry-work-item'] } } break }
-    case 'record-validation': { const item = find(next.work_items, 'work_item_id', command.report.work_item_id); next = { ...next, validations: [...next.validations.filter((entry) => entry.report_id !== command.report.report_id), { ...command.report, revision: event.revision }], work_items: item === undefined ? next.work_items : replaceBy(next.work_items, 'work_item_id', { ...item, status: command.report.status === 'pass' ? 'completed' : 'blocked', validation_refs: [...item.validation_refs, command.report.report_id], revision: event.revision }), status: command.report.status === 'pass' ? 'verifying' : 'blocked', next_actions: command.report.status === 'pass' ? ['evaluate-gate'] : ['bind-artifact'] }; break }
+    case 'record-validation': {
+      const item = find(next.work_items, 'work_item_id', command.report.work_item_id)
+      const validatedItems = item === undefined
+        ? next.work_items
+        : replaceBy(next.work_items, 'work_item_id', {
+            ...item,
+            status: command.report.status === 'pass' ? 'completed' : 'blocked',
+            validation_refs: [...item.validation_refs, command.report.report_id],
+            revision: event.revision,
+          })
+      const promoted = command.report.status === 'pass' ? promoteReadyDependents(validatedItems) : validatedItems
+      next = {
+        ...next,
+        validations: [...next.validations.filter((entry) => entry.report_id !== command.report.report_id), { ...command.report, revision: event.revision }],
+        work_items: promoted,
+        status: command.report.status === 'pass' ? 'verifying' : 'blocked',
+        next_actions: command.report.status === 'pass' ? ['evaluate-gate', 'enqueue-work-item'] : ['bind-artifact'],
+      }
+      break
+    }
     case 'evaluate-gate': { const gates = [...next.gates.filter((entry) => entry.gate_id !== command.gate.gate_id), { ...command.gate, revision: event.revision }]; const allDone = next.work_items.length > 0 && next.work_items.every((item) => item.status === 'completed'); const allGates = gates.filter((gate) => gate.status !== 'pending').every((gate) => gate.status === 'passed' || gate.status === 'waived'); next = { ...next, gates, status: allDone && allGates ? 'completed' : command.gate.status === 'rejected' ? 'reviewing' : 'verifying', next_actions: allDone && allGates ? [] : ['evaluate-gate'] }; break }
     case 'pause-change': next = { ...next, status: 'paused', resume_status: aggregate.status === 'paused' ? 'ready' : aggregate.status, next_actions: ['resume-change'] }; break
     case 'resume-change': next = { ...next, status: aggregate.resume_status ?? 'ready', next_actions: ['start-change'] }; break
-    case 'retry-work-item': { const item = find(next.work_items, 'work_item_id', command.work_item_id); const previous = item?.active_run_id === undefined ? next.runs.filter((run) => run.work_item_id === command.work_item_id).at(-1) : find(next.runs, 'run_id', item.active_run_id); if (item !== undefined) { const newRun: SkillRunV2 | undefined = previous === undefined ? undefined : { ...previous, record_id: `run:${command.run_id}`, run_id: command.run_id, attempt_id: command.attempt_id, attempt: item.attempt_count + 1, prior_attempt_id: previous.attempt_id, status: 'queued', result_id: undefined, failure: undefined, lease: undefined, started_at: undefined, finished_at: undefined, revision: event.revision }; next = { ...next, ...(newRun === undefined ? {} : { runs: [...next.runs, newRun] }), work_items: replaceBy(next.work_items, 'work_item_id', { ...item, status: 'queued', attempt_count: item.attempt_count + 1, active_run_id: newRun?.run_id, blockers: [], revision: event.revision }), next_actions: ['claim-run'] } } break }
+    case 'retry-work-item': { const item = find(next.work_items, 'work_item_id', command.work_item_id); const previous = item?.active_run_id === undefined ? next.runs.filter((run) => run.work_item_id === command.work_item_id).at(-1) : find(next.runs, 'run_id', item.active_run_id); if (item !== undefined) { const nextAttempt = (previous?.attempt ?? item.attempt_count) + 1; const newRun: SkillRunV2 | undefined = previous === undefined ? undefined : { ...previous, record_id: `run:${command.run_id}`, run_id: command.run_id, attempt_id: command.attempt_id, attempt: nextAttempt, prior_attempt_id: previous.attempt_id, status: 'queued', result_id: undefined, failure: undefined, lease: undefined, started_at: undefined, finished_at: undefined, revision: event.revision }; next = { ...next, ...(newRun === undefined ? {} : { runs: [...next.runs, newRun] }), work_items: replaceBy(next.work_items, 'work_item_id', { ...item, status: 'queued', attempt_count: nextAttempt, active_run_id: newRun?.run_id, blockers: [], revision: event.revision }), next_actions: ['claim-run'] } } break }
     case 'cancel-change': next = { ...next, status: 'cancelled', leases: next.leases.map((lease) => ({ ...lease, status: 'revoked' as const })), runs: next.runs.map((run) => run.status === 'claimed' || run.status === 'running' ? { ...run, status: 'cancelled', revision: event.revision } : run), work_items: next.work_items.map((item) => item.status === 'completed' ? item : { ...item, status: 'cancelled', revision: event.revision }), next_actions: [] }; break
     case 'replan-change': next = { ...next, status: 'planning', graph: next.graph === undefined ? undefined : { ...next.graph, status: 'superseded', revision: event.revision }, resolution: undefined, next_actions: ['freeze-work-graph'] }; break
     case 'bind-artifact': { const item = find(next.work_items, 'work_item_id', command.work_item_id); if (item !== undefined) next = { ...next, work_items: replaceBy(next.work_items, 'work_item_id', { ...item, required_artifact_refs: [...item.required_artifact_refs, command.artifact_ref], blockers: item.blockers.filter((b) => b !== 'missing-evidence'), revision: event.revision }), next_actions: ['record-validation'] }; break }

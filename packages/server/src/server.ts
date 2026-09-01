@@ -16,6 +16,7 @@ import {
   validateWorkflow,
   stateStorageExistsSync, validateWorkflowTrackReferences, withRegistryGovernanceLock, withTrackRegistryLock,
   writeRegistryWithGovernance,
+  createOrchestrationLedger,
 } from '@tenon/kernel'
 import { createRunnerSkillContentLocator, evaluateLoopExecutionWiring } from '@tenon/automation'
 import type {
@@ -95,6 +96,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
   const registry: () => string[] = options.registry ?? (() => readRegistry(paths.registryPath))
   const store: StateStore = options.store ?? createStateStore()
   const recordStore = createTransitionRecordStore()
+  const orchestrationLedger = options.orchestrationLedger ?? createOrchestrationLedger()
   const loopLedger = createLoopLedgerStore()
   const runRepo = createWorkflowRunRepository({ store, recordStore, clock })
   const history = createHistoryWriter()
@@ -183,7 +185,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
   const capabilities: Record<string, boolean> = {
     afk: true, loops: true, operations: operationsAvailable, config: Boolean(manifestPath),
     traffic: traceStore !== undefined && hasTraceTimelineReader(traceStore),
-    router_preview: true, cadence: cadenceScheduler !== null,
+    router_preview: true, cadence: cadenceScheduler !== null, orchestration_v2: true,
   }
   let snapshotRootAnchor: ((root: string) => WorkflowRootAnchor | undefined) | undefined
   const snapshotDeps = snapshotDepsFactory({
@@ -305,6 +307,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
       handleStream, isRegisteredRoot, clock, store, recordStore, loopLedger, registry, traceStore,
       workflowRootForRequest, trackValidationContextFor, trackRegistryBody, manifestPath, paths,
       hostHome, operationsAvailable, hostTargetPlanRuntime, options, operationRunner, resolveSessionLink, errMsg,
+      orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest },
     })
   const handlePost = (req: IncomingMessage, res: ServerResponse, path: string): Promise<void> =>
     handlePostRoute(req, res, path, {
@@ -316,6 +319,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
       mutateTrackForApi: mutateTrackForRoutes, trackRegistryBody, sendTrackError, errMsg,
       realGraduationFs: REAL_GRADUATION_FS,
       relatedSessionSearch,
+      orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest },
     })
   const mutationRouteDeps = {
     isLocalHost,

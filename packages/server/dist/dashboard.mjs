@@ -4,7 +4,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 // packages/server/src/main.ts
 import { execFile as execFile7 } from "node:child_process";
 import { mkdirSync as mkdirSync5, unlinkSync as unlinkSync4, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname18, join as join68 } from "node:path";
+import { dirname as dirname18, join as join69 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/tap/dist/paths.js
@@ -763,191 +763,191 @@ var TASK_PLAN_LIMITS = Object.freeze({
 });
 
 // packages/kernel/dist/task-plan/codec.js
-function error(collector, code, path7) {
+function error(collector, code, path8) {
   if (collector.errors.length < TASK_PLAN_LIMITS.maxErrors)
-    collector.errors.push({ code, path: path7 });
+    collector.errors.push({ code, path: path8 });
   else
     collector.overflow = true;
 }
-function consumeBudget(collector, nodes, bytes, path7) {
+function consumeBudget(collector, nodes, bytes, path8) {
   if (collector.budgetExceeded)
     return false;
   collector.decodeNodes += nodes;
   collector.textBytes += bytes;
   if (collector.decodeNodes > TASK_PLAN_LIMITS.maxDecodeNodes || collector.textBytes > TASK_PLAN_LIMITS.maxDocumentBytes) {
     collector.budgetExceeded = true;
-    error(collector, "document_too_large", path7);
+    error(collector, "document_too_large", path8);
     return false;
   }
   return true;
 }
-function record(value, path7, collector, allowed) {
+function record(value, path8, collector, allowed) {
   try {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      error(collector, "object_invalid", path7);
+      error(collector, "object_invalid", path8);
       return void 0;
     }
     const prototype = Object.getPrototypeOf(value);
     if (prototype !== Object.prototype && prototype !== null) {
-      error(collector, "object_invalid", path7);
+      error(collector, "object_invalid", path8);
       return void 0;
     }
-    const result = /* @__PURE__ */ Object.create(null);
-    if (!consumeBudget(collector, 1, 0, path7))
+    const result2 = /* @__PURE__ */ Object.create(null);
+    if (!consumeBudget(collector, 1, 0, path8))
       return void 0;
     const keys = collector.source === "json" ? Reflect.ownKeys(value) : allowed;
     for (const key of keys) {
       if (typeof key !== "string") {
-        error(collector, "object_invalid", path7);
+        error(collector, "object_invalid", path8);
         return void 0;
       }
       const descriptor = Object.getOwnPropertyDescriptor(value, key);
       if (descriptor === void 0 && collector.source === "object")
         continue;
-      if (!consumeBudget(collector, 1, 0, path7))
+      if (!consumeBudget(collector, 1, 0, path8))
         return void 0;
       const remainingBytes = TASK_PLAN_LIMITS.maxDocumentBytes - collector.textBytes;
       const keyBytes = byteLengthWithin(key, remainingBytes);
       if (keyBytes === void 0) {
-        consumeBudget(collector, 0, remainingBytes + 1, path7);
+        consumeBudget(collector, 0, remainingBytes + 1, path8);
         return void 0;
       }
-      if (!consumeBudget(collector, 0, keyBytes, path7))
+      if (!consumeBudget(collector, 0, keyBytes, path8))
         return void 0;
       if (!descriptor?.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
-        error(collector, "object_invalid", path7);
+        error(collector, "object_invalid", path8);
         return void 0;
       }
-      result[key] = descriptor.value;
+      result2[key] = descriptor.value;
     }
-    return result;
+    return result2;
   } catch {
-    error(collector, "object_invalid", path7);
+    error(collector, "object_invalid", path8);
     return void 0;
   }
 }
-function closed(raw, allowed, path7, collector) {
+function closed(raw, allowed, path8, collector) {
   const keys = new Set(allowed);
   for (const key of Object.keys(raw).sort()) {
     if (keys.has(key))
       continue;
-    const fallbackPath = `${path7}.[unknown-field-too-large]`;
-    const maximumKeyUnits = TASK_PLAN_LIMITS.maxTextBytes - path7.length - 1;
+    const fallbackPath = `${path8}.[unknown-field-too-large]`;
+    const maximumKeyUnits = TASK_PLAN_LIMITS.maxTextBytes - path8.length - 1;
     if (key.length > maximumKeyUnits) {
       error(collector, "unknown_field", fallbackPath);
       continue;
     }
-    const candidatePath = `${path7}.${key}`;
+    const candidatePath = `${path8}.${key}`;
     error(collector, "unknown_field", byteLengthWithin(candidatePath, TASK_PLAN_LIMITS.maxTextBytes) === void 0 ? fallbackPath : candidatePath);
   }
 }
-function array(value, path7, limit, collector) {
+function array(value, path8, limit, collector) {
   try {
     if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
-      error(collector, "array_invalid", path7);
+      error(collector, "array_invalid", path8);
       return void 0;
     }
     const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
     if (lengthDescriptor === void 0 || !Object.prototype.hasOwnProperty.call(lengthDescriptor, "value") || typeof lengthDescriptor.value !== "number" || !Number.isSafeInteger(lengthDescriptor.value) || lengthDescriptor.value < 0) {
-      error(collector, "array_invalid", path7);
+      error(collector, "array_invalid", path8);
       return void 0;
     }
     const length = lengthDescriptor.value;
     if (length > limit) {
-      error(collector, "array_too_large", path7);
+      error(collector, "array_too_large", path8);
       return void 0;
     }
-    if (!consumeBudget(collector, length + 1, 0, path7))
+    if (!consumeBudget(collector, length + 1, 0, path8))
       return void 0;
     if (collector.source === "json") {
       const keys = Reflect.ownKeys(value);
       if (keys.length !== length + 1 || keys.some((key) => typeof key !== "string")) {
-        error(collector, "array_invalid", path7);
+        error(collector, "array_invalid", path8);
         return void 0;
       }
     }
-    const result = [];
+    const result2 = [];
     for (let index = 0; index < length; index += 1) {
       const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
       if (descriptor === void 0 || !descriptor.enumerable || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
-        error(collector, "array_invalid", path7);
+        error(collector, "array_invalid", path8);
         return void 0;
       }
-      result.push(descriptor.value);
+      result2.push(descriptor.value);
     }
-    return result;
+    return result2;
   } catch {
-    error(collector, "array_invalid", path7);
+    error(collector, "array_invalid", path8);
     return void 0;
   }
 }
-function text(value, path7, collector, maxBytes = TASK_PLAN_LIMITS.maxTextBytes) {
+function text(value, path8, collector, maxBytes = TASK_PLAN_LIMITS.maxTextBytes) {
   if (value === void 0) {
-    error(collector, "field_required", path7);
+    error(collector, "field_required", path8);
     return void 0;
   }
   if (typeof value !== "string") {
-    error(collector, "field_type", path7);
+    error(collector, "field_type", path8);
     return void 0;
   }
   if (value.length > maxBytes) {
-    error(collector, "field_too_large", path7);
+    error(collector, "field_too_large", path8);
     return void 0;
   }
   const bytes = byteLengthWithin(value, maxBytes);
   if (bytes === void 0) {
-    error(collector, "field_too_large", path7);
+    error(collector, "field_too_large", path8);
     return void 0;
   }
-  if (!consumeBudget(collector, 0, bytes, path7))
+  if (!consumeBudget(collector, 0, bytes, path8))
     return void 0;
   if (hasInvalidSurrogate(value)) {
-    error(collector, "unicode_invalid", path7);
+    error(collector, "unicode_invalid", path8);
     return void 0;
   }
   if (hasUnsafeControl(value)) {
-    error(collector, "control_character", path7);
+    error(collector, "control_character", path8);
     return void 0;
   }
   if (value === "" || value !== value.trim()) {
-    error(collector, "field_required", path7);
+    error(collector, "field_required", path8);
     return void 0;
   }
   return value;
 }
-function identifier(value, path7, collector) {
-  const candidate = text(value, path7, collector, TASK_PLAN_LIMITS.maxIdBytes);
+function identifier(value, path8, collector) {
+  const candidate = text(value, path8, collector, TASK_PLAN_LIMITS.maxIdBytes);
   if (candidate !== void 0 && (candidate !== candidate.normalize("NFC") || !/^[\p{L}\p{N}][\p{L}\p{N}\p{M}._-]*$/u.test(candidate) || candidate.includes("--"))) {
-    error(collector, "identifier_invalid", path7);
+    error(collector, "identifier_invalid", path8);
     return void 0;
   }
   return candidate;
 }
-function enumValue(value, values, path7, collector) {
-  const candidate = text(value, path7, collector, TASK_PLAN_LIMITS.maxIdBytes);
+function enumValue(value, values, path8, collector) {
+  const candidate = text(value, path8, collector, TASK_PLAN_LIMITS.maxIdBytes);
   if (candidate === void 0)
     return void 0;
   if (!values.has(candidate)) {
-    error(collector, "enum_invalid", path7);
+    error(collector, "enum_invalid", path8);
     return void 0;
   }
   return candidate;
 }
-function stringArray(value, path7, collector) {
-  const values = array(value, path7, TASK_PLAN_LIMITS.maxRelationsPerItem, collector);
+function stringArray(value, path8, collector) {
+  const values = array(value, path8, TASK_PLAN_LIMITS.maxRelationsPerItem, collector);
   if (values === void 0)
     return [];
   return values.flatMap((entry, index) => {
-    const decoded = identifier(entry, `${path7}[${index}]`, collector);
+    const decoded = identifier(entry, `${path8}[${index}]`, collector);
     return decoded === void 0 ? [] : [decoded];
   });
 }
-function catalog(value, path7, collector) {
-  const values = array(value, path7, TASK_PLAN_LIMITS.maxCatalogEntries, collector);
+function catalog(value, path8, collector) {
+  const values = array(value, path8, TASK_PLAN_LIMITS.maxCatalogEntries, collector);
   if (values === void 0)
     return [];
   return values.flatMap((entry, index) => {
-    const itemPath = `${path7}[${index}]`;
+    const itemPath = `${path8}[${index}]`;
     const allowed = ["id", "title"];
     const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
@@ -959,12 +959,12 @@ function catalog(value, path7, collector) {
   });
 }
 function groups(value, collector) {
-  const path7 = "$.groups";
-  const values = array(value, path7, TASK_PLAN_LIMITS.maxGroups, collector);
+  const path8 = "$.groups";
+  const values = array(value, path8, TASK_PLAN_LIMITS.maxGroups, collector);
   if (values === void 0)
     return [];
   return values.flatMap((entry, index) => {
-    const itemPath = `${path7}[${index}]`;
+    const itemPath = `${path8}[${index}]`;
     const allowed = ["id", "title", "parent_id", "work_item_ids"];
     const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
@@ -986,12 +986,12 @@ var RESOURCE_KINDS = /* @__PURE__ */ new Set(["path", "logical", "external"]);
 var RESOURCE_ACCESS = /* @__PURE__ */ new Set(["read", "write"]);
 var OUTPUT_KINDS = /* @__PURE__ */ new Set(["file", "artifact", "value"]);
 var VALIDATOR_KINDS = /* @__PURE__ */ new Set(["file-exists", "json-schema", "test-report", "artifact-digest"]);
-function resourceClaims(value, path7, collector) {
-  const values = array(value, path7, TASK_PLAN_LIMITS.maxRelationsPerItem, collector);
+function resourceClaims(value, path8, collector) {
+  const values = array(value, path8, TASK_PLAN_LIMITS.maxRelationsPerItem, collector);
   if (values === void 0)
     return [];
   return values.flatMap((entry, index) => {
-    const itemPath = `${path7}[${index}]`;
+    const itemPath = `${path8}[${index}]`;
     const allowed = ["kind", "access", "key"];
     const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
@@ -1007,12 +1007,12 @@ function resourceClaims(value, path7, collector) {
     return kind === void 0 || access === void 0 || key === void 0 ? [] : [{ kind, access, key }];
   });
 }
-function outputs(value, path7, collector) {
-  const values = array(value, path7, TASK_PLAN_LIMITS.maxRelationsPerItem, collector);
+function outputs(value, path8, collector) {
+  const values = array(value, path8, TASK_PLAN_LIMITS.maxRelationsPerItem, collector);
   if (values === void 0)
     return [];
   return values.flatMap((entry, index) => {
-    const itemPath = `${path7}[${index}]`;
+    const itemPath = `${path8}[${index}]`;
     const allowed = ["id", "kind", "ref"];
     const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
@@ -1028,12 +1028,12 @@ function outputs(value, path7, collector) {
     return id2 === void 0 || kind === void 0 || ref === void 0 ? [] : [{ id: id2, kind, ref }];
   });
 }
-function validators(value, path7, collector) {
-  const values = array(value, path7, TASK_PLAN_LIMITS.maxRelationsPerItem, collector);
+function validators(value, path8, collector) {
+  const values = array(value, path8, TASK_PLAN_LIMITS.maxRelationsPerItem, collector);
   if (values === void 0)
     return [];
   return values.flatMap((entry, index) => {
-    const itemPath = `${path7}[${index}]`;
+    const itemPath = `${path8}[${index}]`;
     const allowed = ["id", "kind", "version", "output_ids"];
     const raw = record(entry, itemPath, collector, allowed);
     if (raw === void 0)
@@ -1048,12 +1048,12 @@ function validators(value, path7, collector) {
   });
 }
 function workItems(value, collector) {
-  const path7 = "$.work_items";
-  const values = array(value, path7, TASK_PLAN_LIMITS.maxWorkItems, collector);
+  const path8 = "$.work_items";
+  const values = array(value, path8, TASK_PLAN_LIMITS.maxWorkItems, collector);
   if (values === void 0)
     return [];
   return values.flatMap((entry, index) => {
-    const itemPath = `${path7}[${index}]`;
+    const itemPath = `${path8}[${index}]`;
     const allowed = [
       "id",
       "title",
@@ -1074,7 +1074,7 @@ function workItems(value, collector) {
     const title = text(raw.title, `${itemPath}.title`, collector);
     const description = raw.description === void 0 ? void 0 : text(raw.description, `${itemPath}.description`, collector);
     const groupId = identifier(raw.group_id, `${itemPath}.group_id`, collector);
-    const result = id2 === void 0 || title === void 0 || groupId === void 0 ? void 0 : {
+    const result2 = id2 === void 0 || title === void 0 || groupId === void 0 ? void 0 : {
       id: id2,
       title,
       ...description === void 0 ? {} : { description },
@@ -1086,14 +1086,14 @@ function workItems(value, collector) {
       expected_outputs: outputs(raw.expected_outputs, `${itemPath}.expected_outputs`, collector),
       validators: validators(raw.validators, `${itemPath}.validators`, collector)
     };
-    return result === void 0 ? [] : [result];
+    return result2 === void 0 ? [] : [result2];
   });
 }
 function duplicateIds(value, collector) {
   const seen = /* @__PURE__ */ new Set();
-  for (const { id: id2, path: path7 } of taskPlanEntityIdEntries(value)) {
+  for (const { id: id2, path: path8 } of taskPlanEntityIdEntries(value)) {
     if (seen.has(id2))
-      error(collector, "duplicate_id", path7);
+      error(collector, "duplicate_id", path8);
     else
       seen.add(id2);
   }
@@ -1130,7 +1130,7 @@ function decodeUnknown(input, collector) {
     if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== createdAt)
       error(collector, "timestamp_invalid", "$.created_at");
   }
-  const result = planId !== void 0 && revisionId !== void 0 && status2 !== void 0 && createdAt !== void 0 && Number.isSafeInteger(raw.revision_number) && raw.revision_number >= 1 ? {
+  const result2 = planId !== void 0 && revisionId !== void 0 && status2 !== void 0 && createdAt !== void 0 && Number.isSafeInteger(raw.revision_number) && raw.revision_number >= 1 ? {
     schema_version: TASK_PLAN_SCHEMA_VERSION,
     plan_id: planId,
     revision_id: revisionId,
@@ -1142,9 +1142,9 @@ function decodeUnknown(input, collector) {
     groups: groups(raw.groups, collector),
     work_items: workItems(raw.work_items, collector)
   } : void 0;
-  if (result !== void 0)
-    duplicateIds(result, collector);
-  return result;
+  if (result2 !== void 0)
+    duplicateIds(result2, collector);
+  return result2;
 }
 function decodeTaskPlanRevisionAttemptV1(input) {
   const source = typeof input === "string" ? "json" : "object";
@@ -1373,7 +1373,7 @@ function sha256Hex(content) {
 function ordinalCompare(left, right) {
   return left < right ? -1 : left > right ? 1 : 0;
 }
-function issue(collector, code, path7, relatedIds) {
+function issue(collector, code, path8, relatedIds) {
   if (collector.items.length >= TASK_PLAN_LIMITS.maxValidationIssues - 1) {
     collector.truncated = true;
     return;
@@ -1381,7 +1381,7 @@ function issue(collector, code, path7, relatedIds) {
   collector.items.push({
     severity: "error",
     code,
-    path: path7,
+    path: path8,
     related_ids: [...new Set(relatedIds)].sort(ordinalCompare)
   });
 }
@@ -1403,23 +1403,23 @@ function cyclicIds(graph) {
   const visiting = /* @__PURE__ */ new Set();
   const visited = /* @__PURE__ */ new Set();
   const cycle = /* @__PURE__ */ new Set();
-  const path7 = [];
+  const path8 = [];
   const visit = (id2) => {
     if (visited.has(id2))
       return;
-    const activeIndex = path7.indexOf(id2);
+    const activeIndex = path8.indexOf(id2);
     if (activeIndex >= 0) {
-      for (const cyclic of path7.slice(activeIndex))
+      for (const cyclic of path8.slice(activeIndex))
         cycle.add(cyclic);
       return;
     }
     visiting.add(id2);
-    path7.push(id2);
+    path8.push(id2);
     for (const next of graph.get(id2) ?? []) {
       if (graph.has(next))
         visit(next);
     }
-    path7.pop();
+    path8.pop();
     visiting.delete(id2);
     visited.add(id2);
   };
@@ -1558,9 +1558,9 @@ function validateTaskPlanRevisionV1(revision) {
 function validateTaskPlanAggregate(validatedRevision) {
   const collector = { items: [], truncated: false };
   const entityIds = /* @__PURE__ */ new Set();
-  for (const { id: id2, path: path7 } of taskPlanAggregateEntityIdEntries(validatedRevision)) {
+  for (const { id: id2, path: path8 } of taskPlanAggregateEntityIdEntries(validatedRevision)) {
     if (entityIds.has(id2))
-      issue(collector, "entity-id-duplicate", path7, [id2]);
+      issue(collector, "entity-id-duplicate", path8, [id2]);
     else
       entityIds.add(id2);
   }
@@ -2150,99 +2150,99 @@ var ID = /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/u;
 var DecodeFailure = class extends Error {
   code;
   path;
-  constructor(code, path7) {
-    super(`${code}: ${path7}`);
+  constructor(code, path8) {
+    super(`${code}: ${path8}`);
     this.code = code;
-    this.path = path7;
+    this.path = path8;
   }
 };
-function record2(value, path7) {
+function record2(value, path8) {
   if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new DecodeFailure("object-invalid", path7);
+    throw new DecodeFailure("object-invalid", path8);
   return value;
 }
-function closed2(value, keys, path7) {
+function closed2(value, keys, path8) {
   const allowed = new Set(keys);
   for (const key of Object.keys(value)) {
     if (!allowed.has(key))
-      throw new DecodeFailure("unknown-field", `${path7}.${key}`);
+      throw new DecodeFailure("unknown-field", `${path8}.${key}`);
   }
 }
-function string(value, path7, max = SKILL_INVOCATION_LIMITS.maxRefBytes) {
+function string(value, path8, max = SKILL_INVOCATION_LIMITS.maxRefBytes) {
   if (typeof value !== "string" || value === "" || Buffer.byteLength(value) > max || /[\u0000-\u001f\u007f]/u.test(value)) {
-    throw new DecodeFailure("field-invalid", path7);
+    throw new DecodeFailure("field-invalid", path8);
   }
   return value;
 }
-function id(value, path7) {
-  const result = string(value, path7, SKILL_INVOCATION_LIMITS.maxIdBytes);
-  if (!ID.test(result) || result.includes(".."))
-    throw new DecodeFailure("field-invalid", path7);
-  return result;
+function id(value, path8) {
+  const result2 = string(value, path8, SKILL_INVOCATION_LIMITS.maxIdBytes);
+  if (!ID.test(result2) || result2.includes(".."))
+    throw new DecodeFailure("field-invalid", path8);
+  return result2;
 }
-function digest(value, path7) {
-  const result = string(value, path7, 71);
-  if (!DIGEST.test(result))
-    throw new DecodeFailure("field-invalid", path7);
-  return result;
+function digest(value, path8) {
+  const result2 = string(value, path8, 71);
+  if (!DIGEST.test(result2))
+    throw new DecodeFailure("field-invalid", path8);
+  return result2;
 }
-function artifactRef(value, path7) {
-  const result = string(value, path7);
-  if (result.startsWith("/") || result.includes("\\") || /^[A-Za-z]:/u.test(result) || result.split("/").some((segment) => segment === "" || segment === "." || segment === ".."))
-    throw new DecodeFailure("field-invalid", path7);
-  return result;
+function artifactRef(value, path8) {
+  const result2 = string(value, path8);
+  if (result2.startsWith("/") || result2.includes("\\") || /^[A-Za-z]:/u.test(result2) || result2.split("/").some((segment) => segment === "" || segment === "." || segment === ".."))
+    throw new DecodeFailure("field-invalid", path8);
+  return result2;
 }
-function timestamp(value, path7) {
-  const result = string(value, path7, 64);
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(result) || Number.isNaN(Date.parse(result))) {
-    throw new DecodeFailure("field-invalid", path7);
+function timestamp(value, path8) {
+  const result2 = string(value, path8, 64);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(result2) || Number.isNaN(Date.parse(result2))) {
+    throw new DecodeFailure("field-invalid", path8);
   }
-  return result;
+  return result2;
 }
-function integer(value, path7, minimum = 0) {
+function integer(value, path8, minimum = 0) {
   if (!Number.isSafeInteger(value) || value < minimum)
-    throw new DecodeFailure("field-invalid", path7);
+    throw new DecodeFailure("field-invalid", path8);
   return value;
 }
-function boolean(value, path7) {
+function boolean(value, path8) {
   if (typeof value !== "boolean")
-    throw new DecodeFailure("field-invalid", path7);
+    throw new DecodeFailure("field-invalid", path8);
   return value;
 }
-function enumValue2(value, values, path7) {
-  const result = string(value, path7, 64);
+function enumValue2(value, values, path8) {
+  const result2 = string(value, path8, 64);
   for (const candidate of values) {
-    if (candidate === result)
+    if (candidate === result2)
       return candidate;
   }
-  throw new DecodeFailure("field-invalid", path7);
+  throw new DecodeFailure("field-invalid", path8);
 }
-function ids(value, path7, maximum = SKILL_INVOCATION_LIMITS.maxOptions) {
+function ids(value, path8, maximum = SKILL_INVOCATION_LIMITS.maxOptions) {
   if (!Array.isArray(value) || value.length > maximum)
-    throw new DecodeFailure("limit-exceeded", path7);
-  const result = value.map((item2, index) => id(item2, `${path7}[${index}]`));
-  if (new Set(result).size !== result.length)
-    throw new DecodeFailure("field-invalid", path7);
-  return result;
+    throw new DecodeFailure("limit-exceeded", path8);
+  const result2 = value.map((item2, index) => id(item2, `${path8}[${index}]`));
+  if (new Set(result2).size !== result2.length)
+    throw new DecodeFailure("field-invalid", path8);
+  return result2;
 }
-function validator(value, path7) {
-  const item2 = record2(value, path7);
-  closed2(item2, ["id", "status", "code"], path7);
+function validator(value, path8) {
+  const item2 = record2(value, path8);
+  closed2(item2, ["id", "status", "code"], path8);
   return {
-    id: id(item2.id, `${path7}.id`),
-    status: enumValue2(item2.status, VALIDATOR_STATUSES, `${path7}.status`),
-    ...item2.code === void 0 ? {} : { code: id(item2.code, `${path7}.code`) }
+    id: id(item2.id, `${path8}.id`),
+    status: enumValue2(item2.status, VALIDATOR_STATUSES, `${path8}.status`),
+    ...item2.code === void 0 ? {} : { code: id(item2.code, `${path8}.code`) }
   };
 }
-function io(value, path7) {
-  const item2 = record2(value, path7);
-  closed2(item2, ["schema_id", "fields"], path7);
+function io(value, path8) {
+  const item2 = record2(value, path8);
+  closed2(item2, ["schema_id", "fields"], path8);
   if (!Array.isArray(item2.fields) || item2.fields.length > SKILL_INVOCATION_LIMITS.maxFields) {
-    throw new DecodeFailure("limit-exceeded", `${path7}.fields`);
+    throw new DecodeFailure("limit-exceeded", `${path8}.fields`);
   }
   const names = /* @__PURE__ */ new Set();
   const fields = item2.fields.map((field2, index) => {
-    const fieldPath = `${path7}.fields[${index}]`;
+    const fieldPath = `${path8}.fields[${index}]`;
     const entry = record2(field2, fieldPath);
     closed2(entry, ["name", "classification", "digest", "validator"], fieldPath);
     const name = id(entry.name, `${fieldPath}.name`);
@@ -2256,18 +2256,18 @@ function io(value, path7) {
       validator: validator(entry.validator, `${fieldPath}.validator`)
     };
   });
-  return { schema_id: id(item2.schema_id, `${path7}.schema_id`), fields };
+  return { schema_id: id(item2.schema_id, `${path8}.schema_id`), fields };
 }
-function adapter(value, path7) {
-  const item2 = record2(value, path7);
-  closed2(item2, ["kind", "proof_ref"], path7);
+function adapter(value, path8) {
+  const item2 = record2(value, path8);
+  closed2(item2, ["kind", "proof_ref"], path8);
   return {
-    kind: enumValue2(item2.kind, ADAPTERS, `${path7}.kind`),
-    proof_ref: id(item2.proof_ref, `${path7}.proof_ref`)
+    kind: enumValue2(item2.kind, ADAPTERS, `${path8}.kind`),
+    proof_ref: id(item2.proof_ref, `${path8}.proof_ref`)
   };
 }
-function subject(value, path7) {
-  const item2 = record2(value, path7);
+function subject(value, path8) {
+  const item2 = record2(value, path8);
   closed2(item2, [
     "project_id",
     "workflow_definition_id",
@@ -2277,31 +2277,31 @@ function subject(value, path7) {
     "task_plan_revision_id",
     "work_item_id",
     "attempt"
-  ], path7);
-  const visit = record2(item2.step_visit, `${path7}.step_visit`);
-  closed2(visit, ["run_id", "transition_sequence"], `${path7}.step_visit`);
+  ], path8);
+  const visit = record2(item2.step_visit, `${path8}.step_visit`);
+  closed2(visit, ["run_id", "transition_sequence"], `${path8}.step_visit`);
   const base = {
-    project_id: id(item2.project_id, `${path7}.project_id`),
-    workflow_definition_id: id(item2.workflow_definition_id, `${path7}.workflow_definition_id`),
-    workflow_run_id: id(item2.workflow_run_id, `${path7}.workflow_run_id`),
-    step_id: id(item2.step_id, `${path7}.step_id`),
+    project_id: id(item2.project_id, `${path8}.project_id`),
+    workflow_definition_id: id(item2.workflow_definition_id, `${path8}.workflow_definition_id`),
+    workflow_run_id: id(item2.workflow_run_id, `${path8}.workflow_run_id`),
+    step_id: id(item2.step_id, `${path8}.step_id`),
     step_visit: {
-      run_id: id(visit.run_id, `${path7}.step_visit.run_id`),
-      transition_sequence: integer(visit.transition_sequence, `${path7}.step_visit.transition_sequence`)
+      run_id: id(visit.run_id, `${path8}.step_visit.run_id`),
+      transition_sequence: integer(visit.transition_sequence, `${path8}.step_visit.transition_sequence`)
     }
   };
-  const taskPlanRevisionId = item2.task_plan_revision_id === void 0 ? void 0 : id(item2.task_plan_revision_id, `${path7}.task_plan_revision_id`);
-  const workItemId = item2.work_item_id === void 0 ? void 0 : id(item2.work_item_id, `${path7}.work_item_id`);
+  const taskPlanRevisionId = item2.task_plan_revision_id === void 0 ? void 0 : id(item2.task_plan_revision_id, `${path8}.task_plan_revision_id`);
+  const workItemId = item2.work_item_id === void 0 ? void 0 : id(item2.work_item_id, `${path8}.work_item_id`);
   if (workItemId === void 0 !== (taskPlanRevisionId === void 0)) {
-    throw new DecodeFailure("field-invalid", path7);
+    throw new DecodeFailure("field-invalid", path8);
   }
   let attempt;
   if (item2.attempt !== void 0) {
-    const attemptValue = record2(item2.attempt, `${path7}.attempt`);
-    closed2(attemptValue, ["attempt_id", "reservation_id"], `${path7}.attempt`);
+    const attemptValue = record2(item2.attempt, `${path8}.attempt`);
+    closed2(attemptValue, ["attempt_id", "reservation_id"], `${path8}.attempt`);
     attempt = {
-      attempt_id: id(attemptValue.attempt_id, `${path7}.attempt.attempt_id`),
-      reservation_id: id(attemptValue.reservation_id, `${path7}.attempt.reservation_id`)
+      attempt_id: id(attemptValue.attempt_id, `${path8}.attempt.attempt_id`),
+      reservation_id: id(attemptValue.reservation_id, `${path8}.attempt.reservation_id`)
     };
   }
   return {
@@ -2311,87 +2311,87 @@ function subject(value, path7) {
     ...attempt === void 0 ? {} : { attempt }
   };
 }
-function policy(value, path7) {
-  const item2 = record2(value, path7);
-  closed2(item2, ["id", "version", "rule_id"], path7);
-  return { id: id(item2.id, `${path7}.id`), version: id(item2.version, `${path7}.version`), rule_id: id(item2.rule_id, `${path7}.rule_id`) };
+function policy(value, path8) {
+  const item2 = record2(value, path8);
+  closed2(item2, ["id", "version", "rule_id"], path8);
+  return { id: id(item2.id, `${path8}.id`), version: id(item2.version, `${path8}.version`), rule_id: id(item2.rule_id, `${path8}.rule_id`) };
 }
-function decodePayload(type, value, path7) {
-  const item2 = record2(value, path7);
+function decodePayload(type, value, path8) {
+  const item2 = record2(value, path8);
   if (type === "invocation-started") {
-    closed2(item2, ["skill", "input", "adapter"], path7);
-    const skill = record2(item2.skill, `${path7}.skill`);
-    closed2(skill, ["id", "version"], `${path7}.skill`);
-    return { skill: { id: id(skill.id, `${path7}.skill.id`), version: id(skill.version, `${path7}.skill.version`) }, input: io(item2.input, `${path7}.input`), adapter: adapter(item2.adapter, `${path7}.adapter`) };
+    closed2(item2, ["skill", "input", "adapter"], path8);
+    const skill = record2(item2.skill, `${path8}.skill`);
+    closed2(skill, ["id", "version"], `${path8}.skill`);
+    return { skill: { id: id(skill.id, `${path8}.skill.id`), version: id(skill.version, `${path8}.skill.version`) }, input: io(item2.input, `${path8}.input`), adapter: adapter(item2.adapter, `${path8}.adapter`) };
   }
   if (type === "question-recorded") {
-    closed2(item2, ["question_id", "key", "schema_id", "option_ids", "requiredness", "shown"], path7);
-    return { question_id: id(item2.question_id, `${path7}.question_id`), key: id(item2.key, `${path7}.key`), schema_id: id(item2.schema_id, `${path7}.schema_id`), option_ids: ids(item2.option_ids, `${path7}.option_ids`), requiredness: enumValue2(item2.requiredness, REQUIREDNESS, `${path7}.requiredness`), shown: boolean(item2.shown, `${path7}.shown`) };
+    closed2(item2, ["question_id", "key", "schema_id", "option_ids", "requiredness", "shown"], path8);
+    return { question_id: id(item2.question_id, `${path8}.question_id`), key: id(item2.key, `${path8}.key`), schema_id: id(item2.schema_id, `${path8}.schema_id`), option_ids: ids(item2.option_ids, `${path8}.option_ids`), requiredness: enumValue2(item2.requiredness, REQUIREDNESS, `${path8}.requiredness`), shown: boolean(item2.shown, `${path8}.shown`) };
   }
   if (type === "decision-recorded") {
-    closed2(item2, ["decision_id", "question_id", "mode", "selected_option_ids", "free_text", "policy", "rationale_code"], path7);
+    closed2(item2, ["decision_id", "question_id", "mode", "selected_option_ids", "free_text", "policy", "rationale_code"], path8);
     let freeText;
     if (item2.free_text !== void 0) {
-      const freeTextValue = record2(item2.free_text, `${path7}.free_text`);
-      closed2(freeTextValue, ["classification", "digest"], `${path7}.free_text`);
+      const freeTextValue = record2(item2.free_text, `${path8}.free_text`);
+      closed2(freeTextValue, ["classification", "digest"], `${path8}.free_text`);
       freeText = {
-        classification: enumValue2(freeTextValue.classification, CLASSIFICATIONS, `${path7}.free_text.classification`),
-        digest: digest(freeTextValue.digest, `${path7}.free_text.digest`)
+        classification: enumValue2(freeTextValue.classification, CLASSIFICATIONS, `${path8}.free_text.classification`),
+        digest: digest(freeTextValue.digest, `${path8}.free_text.digest`)
       };
     }
     return {
-      decision_id: id(item2.decision_id, `${path7}.decision_id`),
-      question_id: id(item2.question_id, `${path7}.question_id`),
-      mode: enumValue2(item2.mode, DECISION_MODES, `${path7}.mode`),
-      selected_option_ids: ids(item2.selected_option_ids, `${path7}.selected_option_ids`),
+      decision_id: id(item2.decision_id, `${path8}.decision_id`),
+      question_id: id(item2.question_id, `${path8}.question_id`),
+      mode: enumValue2(item2.mode, DECISION_MODES, `${path8}.mode`),
+      selected_option_ids: ids(item2.selected_option_ids, `${path8}.selected_option_ids`),
       ...freeText === void 0 ? {} : { free_text: freeText },
-      ...item2.policy === void 0 ? {} : { policy: policy(item2.policy, `${path7}.policy`) },
-      ...item2.rationale_code === void 0 ? {} : { rationale_code: id(item2.rationale_code, `${path7}.rationale_code`) }
+      ...item2.policy === void 0 ? {} : { policy: policy(item2.policy, `${path8}.policy`) },
+      ...item2.rationale_code === void 0 ? {} : { rationale_code: id(item2.rationale_code, `${path8}.rationale_code`) }
     };
   }
   if (type === "invocation-completed") {
-    closed2(item2, ["output", "adapter"], path7);
-    return { output: io(item2.output, `${path7}.output`), adapter: adapter(item2.adapter, `${path7}.adapter`) };
+    closed2(item2, ["output", "adapter"], path8);
+    return { output: io(item2.output, `${path8}.output`), adapter: adapter(item2.adapter, `${path8}.adapter`) };
   }
   if (type === "invocation-failed") {
-    closed2(item2, ["code"], path7);
-    return { code: id(item2.code, `${path7}.code`) };
+    closed2(item2, ["code"], path8);
+    return { code: id(item2.code, `${path8}.code`) };
   }
   if (type === "invocation-interrupted") {
-    closed2(item2, ["code", "recovery"], path7);
-    const recovery = record2(item2.recovery, `${path7}.recovery`);
-    closed2(recovery, ["owner_id", "proof_ref"], `${path7}.recovery`);
-    return { code: id(item2.code, `${path7}.code`), recovery: { owner_id: id(recovery.owner_id, `${path7}.recovery.owner_id`), proof_ref: id(recovery.proof_ref, `${path7}.recovery.proof_ref`) } };
+    closed2(item2, ["code", "recovery"], path8);
+    const recovery = record2(item2.recovery, `${path8}.recovery`);
+    closed2(recovery, ["owner_id", "proof_ref"], `${path8}.recovery`);
+    return { code: id(item2.code, `${path8}.code`), recovery: { owner_id: id(recovery.owner_id, `${path8}.recovery.owner_id`), proof_ref: id(recovery.proof_ref, `${path8}.recovery.proof_ref`) } };
   }
   if (type === "artifact-binding-intent") {
-    closed2(item2, ["binding_id", "output_id", "artifact", "validator_ids"], path7);
-    const artifact = record2(item2.artifact, `${path7}.artifact`);
-    closed2(artifact, ["kind", "ref", "digest", "document"], `${path7}.artifact`);
+    closed2(item2, ["binding_id", "output_id", "artifact", "validator_ids"], path8);
+    const artifact = record2(item2.artifact, `${path8}.artifact`);
+    closed2(artifact, ["kind", "ref", "digest", "document"], `${path8}.artifact`);
     let document;
     if (artifact.document !== void 0) {
-      const documentValue = record2(artifact.document, `${path7}.artifact.document`);
-      closed2(documentValue, ["kind", "recorded_at"], `${path7}.artifact.document`);
+      const documentValue = record2(artifact.document, `${path8}.artifact.document`);
+      closed2(documentValue, ["kind", "recorded_at"], `${path8}.artifact.document`);
       document = {
-        kind: id(documentValue.kind, `${path7}.artifact.document.kind`),
-        recorded_at: timestamp(documentValue.recorded_at, `${path7}.artifact.document.recorded_at`)
+        kind: id(documentValue.kind, `${path8}.artifact.document.kind`),
+        recorded_at: timestamp(documentValue.recorded_at, `${path8}.artifact.document.recorded_at`)
       };
     }
     return {
-      binding_id: id(item2.binding_id, `${path7}.binding_id`),
-      output_id: id(item2.output_id, `${path7}.output_id`),
+      binding_id: id(item2.binding_id, `${path8}.binding_id`),
+      output_id: id(item2.output_id, `${path8}.output_id`),
       artifact: {
-        kind: enumValue2(artifact.kind, ARTIFACT_KINDS, `${path7}.artifact.kind`),
-        ref: artifactRef(artifact.ref, `${path7}.artifact.ref`),
-        digest: digest(artifact.digest, `${path7}.artifact.digest`),
+        kind: enumValue2(artifact.kind, ARTIFACT_KINDS, `${path8}.artifact.kind`),
+        ref: artifactRef(artifact.ref, `${path8}.artifact.ref`),
+        digest: digest(artifact.digest, `${path8}.artifact.digest`),
         ...document === void 0 ? {} : { document }
       },
-      validator_ids: ids(item2.validator_ids, `${path7}.validator_ids`)
+      validator_ids: ids(item2.validator_ids, `${path8}.validator_ids`)
     };
   }
-  closed2(item2, ["binding_id", "artifact_digest", "validators"], path7);
+  closed2(item2, ["binding_id", "artifact_digest", "validators"], path8);
   if (!Array.isArray(item2.validators) || item2.validators.length > SKILL_INVOCATION_LIMITS.maxFields)
-    throw new DecodeFailure("limit-exceeded", `${path7}.validators`);
-  return { binding_id: id(item2.binding_id, `${path7}.binding_id`), artifact_digest: digest(item2.artifact_digest, `${path7}.artifact_digest`), validators: item2.validators.map((entry, index) => validator(entry, `${path7}.validators[${index}]`)) };
+    throw new DecodeFailure("limit-exceeded", `${path8}.validators`);
+  return { binding_id: id(item2.binding_id, `${path8}.binding_id`), artifact_digest: digest(item2.artifact_digest, `${path8}.artifact_digest`), validators: item2.validators.map((entry, index) => validator(entry, `${path8}.validators[${index}]`)) };
 }
 function decodeSkillInvocationEventV1(input) {
   try {
@@ -2675,28 +2675,28 @@ async function atomicReplaceFile(target, content) {
 // packages/kernel/dist/loops/automation-policy.js
 var EXCEED_ACTIONS = /* @__PURE__ */ new Set(["skip-run", "pause-loop", "halt-round"]);
 var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
-function closed3(value, keys, path7) {
+function closed3(value, keys, path8) {
   const allowed = new Set(keys);
   for (const key of Object.keys(value))
     if (!allowed.has(key))
-      throw new Error(`${path7}: unknown key '${key}'`);
+      throw new Error(`${path8}: unknown key '${key}'`);
   for (const key of keys)
     if (!Object.hasOwn(value, key))
-      throw new Error(`${path7}.${key}: missing`);
+      throw new Error(`${path8}.${key}: missing`);
 }
-function stringAt(value, path7) {
+function stringAt(value, path8) {
   if (typeof value !== "string" || value === "")
-    throw new Error(`${path7}: expected non-empty string`);
+    throw new Error(`${path8}: expected non-empty string`);
   return value;
 }
-function numberAt(value, path7) {
+function numberAt(value, path8) {
   if (!Number.isSafeInteger(value) || value < 0)
-    throw new Error(`${path7}: expected non-negative safe integer`);
+    throw new Error(`${path8}: expected non-negative safe integer`);
   return value;
 }
-function stringsAt(value, path7) {
+function stringsAt(value, path8) {
   if (!Array.isArray(value) || !value.every((item2) => typeof item2 === "string"))
-    throw new Error(`${path7}: expected string[]`);
+    throw new Error(`${path8}: expected string[]`);
   return [...value];
 }
 function deepFreeze2(value) {
@@ -2829,13 +2829,13 @@ function validateAutomationPolicySnapshot(input) {
 }
 function explainConstraintPaths(policy2, operation, paths, matches) {
   const { allowlist, denylist } = policy2[operation];
-  return paths.map((path7) => {
-    const deniedBy = denylist.find((pattern) => matches(path7, pattern));
+  return paths.map((path8) => {
+    const deniedBy = denylist.find((pattern) => matches(path8, pattern));
     if (deniedBy !== void 0) {
-      return { path: path7, verdict: "blocked", reason: "path-denied", matched_pattern: deniedBy };
+      return { path: path8, verdict: "blocked", reason: "path-denied", matched_pattern: deniedBy };
     }
-    const allowedBy = allowlist.find((pattern) => matches(path7, pattern));
-    return allowedBy === void 0 ? { path: path7, verdict: "blocked", reason: "path-outside-allowlist", matched_pattern: null } : { path: path7, verdict: "allowed", reason: "allowlist", matched_pattern: allowedBy };
+    const allowedBy = allowlist.find((pattern) => matches(path8, pattern));
+    return allowedBy === void 0 ? { path: path8, verdict: "blocked", reason: "path-outside-allowlist", matched_pattern: null } : { path: path8, verdict: "allowed", reason: "allowlist", matched_pattern: allowedBy };
   });
 }
 function pathDecision(policy2, operation, input) {
@@ -3075,8 +3075,8 @@ function parseWorkflowGovernanceBinding(raw) {
     "document_governance_fingerprint",
     "workflow_plan_fingerprint"
   ]);
-  const digest6 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
-  if (Object.keys(record5).some((key) => !allowed.has(key)) || record5.version !== 1 || typeof record5.run_id !== "string" || record5.run_id === "" || record5.document_profile !== void 0 && record5.document_profile !== "legacy-full" && record5.document_profile !== "document-v1" || record5.document_governance_fingerprint !== void 0 && !digest6(record5.document_governance_fingerprint) || record5.workflow_plan_fingerprint !== void 0 && !digest6(record5.workflow_plan_fingerprint) || record5.document_governance_fingerprint !== void 0 && record5.document_profile === void 0) {
+  const digest7 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
+  if (Object.keys(record5).some((key) => !allowed.has(key)) || record5.version !== 1 || typeof record5.run_id !== "string" || record5.run_id === "" || record5.document_profile !== void 0 && record5.document_profile !== "legacy-full" && record5.document_profile !== "document-v1" || record5.document_governance_fingerprint !== void 0 && !digest7(record5.document_governance_fingerprint) || record5.workflow_plan_fingerprint !== void 0 && !digest7(record5.workflow_plan_fingerprint) || record5.document_governance_fingerprint !== void 0 && record5.document_profile === void 0) {
     throw new Error("workflow governance binding \u5F62\u72B6\u975E\u6CD5");
   }
   return {
@@ -3087,8 +3087,8 @@ function parseWorkflowGovernanceBinding(raw) {
     ...record5.workflow_plan_fingerprint === void 0 ? {} : { workflow_plan_fingerprint: record5.workflow_plan_fingerprint }
   };
 }
-async function readWorkflowGovernanceBinding(changeDir) {
-  const target = join4(changeDir, WORKFLOW_GOVERNANCE_BINDING_FILE);
+async function readWorkflowGovernanceBinding(changeDir2) {
+  const target = join4(changeDir2, WORKFLOW_GOVERNANCE_BINDING_FILE);
   try {
     const info = await lstat(target);
     if (!info.isFile() || info.isSymbolicLink()) {
@@ -3110,24 +3110,24 @@ function bindingFor(metadata) {
     ...metadata.workflowPlanFingerprint === void 0 ? {} : { workflow_plan_fingerprint: metadata.workflowPlanFingerprint }
   };
 }
-async function ensureWorkflowGovernanceBinding(changeDir, metadata) {
+async function ensureWorkflowGovernanceBinding(changeDir2, metadata) {
   const requested = bindingFor(metadata);
-  const existing = await readWorkflowGovernanceBinding(changeDir);
+  const existing = await readWorkflowGovernanceBinding(changeDir2);
   if (existing !== void 0) {
     if (JSON.stringify(existing) !== JSON.stringify(requested)) {
       throw new Error("Change \u5DF2\u56FA\u5B9A\u4E0D\u540C\u7684 workflow governance binding\uFF0C\u62D2\u7EDD\u8986\u76D6");
     }
     return existing;
   }
-  const target = join4(changeDir, WORKFLOW_GOVERNANCE_BINDING_FILE);
+  const target = join4(changeDir2, WORKFLOW_GOVERNANCE_BINDING_FILE);
   try {
-    await atomicLinkPublish(changeDir, ".pipeline-workflow-governance.tmp", target, `${JSON.stringify(requested)}
+    await atomicLinkPublish(changeDir2, ".pipeline-workflow-governance.tmp", target, `${JSON.stringify(requested)}
 `);
     return requested;
   } catch (error2) {
     if (errorCode(error2) !== "EEXIST")
       throw error2;
-    const raced = await readWorkflowGovernanceBinding(changeDir);
+    const raced = await readWorkflowGovernanceBinding(changeDir2);
     if (raced === void 0 || JSON.stringify(raced) !== JSON.stringify(requested)) {
       throw new Error("workflow governance binding \u5E76\u53D1\u521B\u5EFA\u540E\u5185\u5BB9\u4E0D\u4E00\u81F4");
     }
@@ -3171,18 +3171,18 @@ var LIST_FIELD_SET = new Set(LIST_FIELDS);
 var PRE_VERIFY_REVIEW_ANCHOR_PREFIX = "# tenon-internal-pre-verify-review-v1: ";
 var SHA256_RE = /^[0-9a-f]{64}$/;
 function preVerifyReviewResult(state) {
-  const result = state.fields[PRE_VERIFY_REVIEW_FIELD];
-  if (typeof result !== "string" || !["pending", "pass"].includes(result)) {
+  const result2 = state.fields[PRE_VERIFY_REVIEW_FIELD];
+  if (typeof result2 !== "string" || !["pending", "pass"].includes(result2)) {
     throw new RunStateCorruptError(`canonical ${PRE_VERIFY_REVIEW_FIELD} \u975E\u6CD5\uFF1A\u4EC5\u5141\u8BB8 pending/pass`);
   }
-  return result;
+  return result2;
 }
-function preVerifyReviewPayloadDigest(revision, revisionId, result) {
+function preVerifyReviewPayloadDigest(revision, revisionId, result2) {
   return createHash2("sha256").update(JSON.stringify({
     schemaVersion: 1,
     revision,
     revisionId,
-    result
+    result: result2
   })).digest("hex");
 }
 function parsePreVerifyReviewAnchor(encoded) {
@@ -3499,9 +3499,9 @@ import { join as join5 } from "node:path";
 var TRANSITION_RECORDS_DIR = ".pipeline-transitions";
 var RecordAlreadyExistsError = class extends Error {
   path;
-  constructor(path7) {
-    super(`TransitionRecord \u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6\uFF08\u8BB0\u5F55\u4E0D\u53EF\u53D8\uFF09: ${path7}`);
-    this.path = path7;
+  constructor(path8) {
+    super(`TransitionRecord \u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6\uFF08\u8BB0\u5F55\u4E0D\u53EF\u53D8\uFF09: ${path8}`);
+    this.path = path8;
   }
 };
 var InvalidRecordIdentityError = class extends Error {
@@ -3557,16 +3557,16 @@ function assertValidIdentity(sequence, recordId) {
     throw new InvalidRecordIdentityError(`\u975E\u6CD5 recordId\uFF08\u53EA\u5141\u8BB8\u5B57\u6BCD\u6570\u5B57/\u8FDE\u5B57\u7B26/\u4E0B\u5212\u7EBF\uFF09: ${recordId}`);
   }
 }
-function recordPath(changeDir, sequence, recordId) {
+function recordPath(changeDir2, sequence, recordId) {
   assertValidIdentity(sequence, recordId);
   const seqPart = String(sequence).padStart(6, "0");
-  return join5(changeDir, TRANSITION_RECORDS_DIR, `${seqPart}-${recordId}.json`);
+  return join5(changeDir2, TRANSITION_RECORDS_DIR, `${seqPart}-${recordId}.json`);
 }
 var FsTransitionRecordStore = class {
-  async write(changeDir, record5) {
-    const dir = join5(changeDir, TRANSITION_RECORDS_DIR);
+  async write(changeDir2, record5) {
+    const dir = join5(changeDir2, TRANSITION_RECORDS_DIR);
     await mkdir(dir, { recursive: true });
-    const target = recordPath(changeDir, record5.sequence, record5.id);
+    const target = recordPath(changeDir2, record5.sequence, record5.id);
     try {
       await atomicLinkPublish(dir, ".tmp", target, JSON.stringify(record5));
     } catch (e) {
@@ -3576,9 +3576,9 @@ var FsTransitionRecordStore = class {
       throw e;
     }
   }
-  async read(changeDir, sequence, recordId) {
+  async read(changeDir2, sequence, recordId) {
     try {
-      const raw = await readFile2(recordPath(changeDir, sequence, recordId), "utf8");
+      const raw = await readFile2(recordPath(changeDir2, sequence, recordId), "utf8");
       const parsed = JSON.parse(raw);
       return parseTransitionRecord(parsed);
     } catch (e) {
@@ -3587,7 +3587,7 @@ var FsTransitionRecordStore = class {
       throw e;
     }
   }
-  async readChain(changeDir, headSequence, headId, expectedRunId) {
+  async readChain(changeDir2, headSequence, headId, expectedRunId) {
     const chain = [];
     const visited = /* @__PURE__ */ new Set();
     let sequence = headSequence;
@@ -3599,7 +3599,7 @@ var FsTransitionRecordStore = class {
       steps++;
       let record5;
       try {
-        record5 = await this.read(changeDir, sequence, id2);
+        record5 = await this.read(changeDir2, sequence, id2);
       } catch (e) {
         if (e instanceof InvalidRecordIdentityError || e instanceof SyntaxError)
           break;
@@ -3684,7 +3684,7 @@ function parseRecord(raw, source) {
 function attach(revision, record5) {
   const { state, anchor } = splitPreVerifyReviewAnchor(revision.state);
   const anchorIsCurrent = anchor !== void 0 && anchor.revision === revision.revision && anchor.revisionId === revision.revisionId;
-  const result = anchorIsCurrent && record5 !== void 0 ? record5.result : PRE_VERIFY_REVIEW_DEFAULT;
+  const result2 = anchorIsCurrent && record5 !== void 0 ? record5.result : PRE_VERIFY_REVIEW_DEFAULT;
   if (record5 !== void 0 && (record5.revision !== revision.revision || record5.revisionId !== revision.revisionId || record5.stateDigest !== revision.stateDigest)) {
     throw new RunStateCorruptError("pre-Verify companion \u4E0E canonical revision \u8EAB\u4EFD/\u6458\u8981\u4E0D\u4E00\u81F4");
   }
@@ -3697,20 +3697,20 @@ function attach(revision, record5) {
       ...state,
       fields: {
         ...state.fields,
-        [PRE_VERIFY_REVIEW_FIELD]: result
+        [PRE_VERIFY_REVIEW_FIELD]: result2
       }
     }
   };
 }
-async function publishPreVerifyReviewRecord(changeDir, revision, logicalState) {
-  const dir = join6(changeDir, ".pipeline-run", PRE_VERIFY_REVIEW_DIR);
+async function publishPreVerifyReviewRecord(changeDir2, revision, logicalState) {
+  const dir = join6(changeDir2, ".pipeline-run", PRE_VERIFY_REVIEW_DIR);
   await mkdir2(dir, { recursive: true });
   const target = join6(dir, preVerifyReviewFileName(revision.revision, revision.revisionId));
   await atomicLinkPublish(dir, ".tmp", target, `${JSON.stringify(recordFor(revision, logicalState))}
 `);
 }
-async function hydratePreVerifyReview(changeDir, revision) {
-  const target = join6(changeDir, preVerifyReviewRelativePath(revision.revision, revision.revisionId));
+async function hydratePreVerifyReview(changeDir2, revision) {
+  const target = join6(changeDir2, preVerifyReviewRelativePath(revision.revision, revision.revisionId));
   let info;
   try {
     info = await lstat2(target);
@@ -3952,8 +3952,8 @@ function errnoCode2(error2) {
   const record5 = Object.fromEntries(Object.entries(error2));
   return typeof record5.code === "string" ? record5.code : void 0;
 }
-function stateStorageSourcePathSync(changeDir) {
-  const current = join8(changeDir, RUN_STATE_DIR, RUN_CURRENT_FILE);
+function stateStorageSourcePathSync(changeDir2) {
+  const current = join8(changeDir2, RUN_STATE_DIR, RUN_CURRENT_FILE);
   try {
     lstatSync2(current);
     return current;
@@ -3961,7 +3961,7 @@ function stateStorageSourcePathSync(changeDir) {
     if (errnoCode2(error2) !== "ENOENT")
       throw error2;
   }
-  const legacy = join8(changeDir, ".pipeline.yaml");
+  const legacy = join8(changeDir2, ".pipeline.yaml");
   try {
     lstatSync2(legacy);
     return legacy;
@@ -3971,8 +3971,8 @@ function stateStorageSourcePathSync(changeDir) {
     throw error2;
   }
 }
-function stateStorageExistsSync(changeDir) {
-  return stateStorageSourcePathSync(changeDir) !== void 0;
+function stateStorageExistsSync(changeDir2) {
+  return stateStorageSourcePathSync(changeDir2) !== void 0;
 }
 function previousRevisionIdFor(revision) {
   if (revision.previousRevisionId === void 0) {
@@ -3983,14 +3983,14 @@ function previousRevisionIdFor(revision) {
 function revisionFileName(revision, revisionId) {
   return `${String(revision).padStart(6, "0")}-${revisionId}.json`;
 }
-async function assertTransitionRecordFile(changeDir, revision, previous) {
+async function assertTransitionRecordFile(changeDir2, revision, previous) {
   if (revision.mutation.kind !== "transition")
     return void 0;
   const metadata = revision.state.runMetadata;
   if (metadata === void 0 || metadata.transitionHead === void 0 || metadata.transitionSequence < 1) {
     throw new RunStateCorruptError("transition revision \u7F3A canonical run head/sequence");
   }
-  const transitionPath = join8(changeDir, TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${revision.mutation.transitionRecordId}.json`);
+  const transitionPath = join8(changeDir2, TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${revision.mutation.transitionRecordId}.json`);
   const transitionRaw = await readRegularTextIfExists(transitionPath);
   if (transitionRaw === void 0) {
     throw new RunStateCorruptError("transition revision \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
@@ -4032,8 +4032,8 @@ function projectionMetadataFor(revision) {
     stateDigest: revision.stateDigest
   };
 }
-async function publishInitialRunRevision(changeDir, state, observedAt, kind = "init") {
-  const runDir = join8(changeDir, RUN_STATE_DIR);
+async function publishInitialRunRevision(changeDir2, state, observedAt, kind = "init") {
+  const runDir = join8(changeDir2, RUN_STATE_DIR);
   const revisionsDir = join8(runDir, RUN_REVISIONS_DIR);
   await mkdir3(revisionsDir, { recursive: true });
   const revision = createRunRevision({
@@ -4041,14 +4041,14 @@ async function publishInitialRunRevision(changeDir, state, observedAt, kind = "i
     revision: 0,
     mutation: { kind, observedAt, effects: [] }
   });
-  await publishPreVerifyReviewRecord(changeDir, revision, state);
+  await publishPreVerifyReviewRecord(changeDir2, revision, state);
   const raw = serializeRunRevision(revision);
   await atomicLinkPublish(revisionsDir, ".tmp", join8(revisionsDir, revisionFileName(revision.revision, revision.revisionId)), raw);
   await atomicLinkPublish(runDir, ".current.tmp", join8(runDir, RUN_CURRENT_FILE), raw);
   return revision;
 }
-async function publishRunRevision(changeDir, current, state, mutation) {
-  const runDir = join8(changeDir, RUN_STATE_DIR);
+async function publishRunRevision(changeDir2, current, state, mutation) {
+  const runDir = join8(changeDir2, RUN_STATE_DIR);
   const revisionsDir = join8(runDir, RUN_REVISIONS_DIR);
   await mkdir3(revisionsDir, { recursive: true });
   let transitionRaw;
@@ -4060,7 +4060,7 @@ async function publishRunRevision(changeDir, current, state, mutation) {
     if (metadata === void 0 || metadata.transitionHead !== mutation.transitionRecordId || metadata.transitionSequence < 1) {
       throw new RunStateCorruptError("transition publish \u7F3A\u5339\u914D\u7684 canonical run head/sequence");
     }
-    const transitionPath = join8(changeDir, TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${mutation.transitionRecordId}.json`);
+    const transitionPath = join8(changeDir2, TRANSITION_RECORDS_DIR, `${String(metadata.transitionSequence).padStart(6, "0")}-${mutation.transitionRecordId}.json`);
     transitionRaw = await readRegularTextIfExists(transitionPath);
     if (transitionRaw === void 0) {
       throw new RunStateCorruptError("transition publish \u5F15\u7528\u7684 TransitionRecord \u7F3A\u5931");
@@ -4093,30 +4093,30 @@ async function publishRunRevision(changeDir, current, state, mutation) {
   if (transitionRaw !== void 0) {
     assertTransitionRevisionLink(revision, transition, transitionRaw, current);
   }
-  await publishPreVerifyReviewRecord(changeDir, revision, revisionState);
+  await publishPreVerifyReviewRecord(changeDir2, revision, revisionState);
   const raw = serializeRunRevision(revision);
   await atomicLinkPublish(revisionsDir, ".tmp", join8(revisionsDir, revisionFileName(revision.revision, revision.revisionId)), raw);
   await atomicReplaceFile(join8(runDir, RUN_CURRENT_FILE), raw);
   return revision;
 }
-async function readCurrentRunRevision(changeDir) {
-  const currentPath = join8(changeDir, RUN_STATE_DIR, RUN_CURRENT_FILE);
-  const raw = await readRegularTextIfExists(currentPath);
+async function readCurrentRunRevision(changeDir2) {
+  const currentPath2 = join8(changeDir2, RUN_STATE_DIR, RUN_CURRENT_FILE);
+  const raw = await readRegularTextIfExists(currentPath2);
   if (raw === void 0)
     return void 0;
-  const current = await hydratePreVerifyReview(changeDir, parseRunRevision(raw, currentPath));
-  const immutablePath = join8(changeDir, RUN_STATE_DIR, RUN_REVISIONS_DIR, revisionFileName(current.revision, current.revisionId));
+  const current = await hydratePreVerifyReview(changeDir2, parseRunRevision(raw, currentPath2));
+  const immutablePath = join8(changeDir2, RUN_STATE_DIR, RUN_REVISIONS_DIR, revisionFileName(current.revision, current.revisionId));
   const immutableRaw = await readRegularTextIfExists(immutablePath);
   if (immutableRaw === void 0) {
     throw new RunStateCorruptError(`current \u5F15\u7528\u7684 immutable revision \u7F3A\u5931: ${immutablePath}`);
   }
-  await hydratePreVerifyReview(changeDir, parseRunRevision(immutableRaw, immutablePath));
+  await hydratePreVerifyReview(changeDir2, parseRunRevision(immutableRaw, immutablePath));
   if (immutableRaw !== raw)
     throw new RunStateCorruptError("current \u4E0E immutable revision \u5B57\u8282\u4E0D\u4E00\u81F4");
   let previous;
   if (current.revision > 0) {
     const previousRevisionId = previousRevisionIdFor(current);
-    previous = await readImmutableRunRevision(changeDir, current.revision - 1, previousRevisionId);
+    previous = await readImmutableRunRevision(changeDir2, current.revision - 1, previousRevisionId);
     if (previous === void 0) {
       throw new RunStateCorruptError("current \u5F15\u7528\u7684 previous revision \u7F3A\u5931");
     }
@@ -4125,21 +4125,21 @@ async function readCurrentRunRevision(changeDir) {
     }
     assertMutationEffects(current, previous);
   }
-  await assertTransitionRecordFile(changeDir, current, previous);
-  await validateAnchoredTransitionHead(current, (relativePath) => readRegularTextIfExists(join8(changeDir, relativePath)), changeDir);
+  await assertTransitionRecordFile(changeDir2, current, previous);
+  await validateAnchoredTransitionHead(current, (relativePath) => readRegularTextIfExists(join8(changeDir2, relativePath)), changeDir2);
   if (previous?.mutation.kind === "transition") {
-    const predecessor = assertDirectPredecessor(previous, await readImmutableRunRevision(changeDir, previous.revision - 1, previousRevisionIdFor(previous)));
-    await assertTransitionRecordFile(changeDir, previous, predecessor);
+    const predecessor = assertDirectPredecessor(previous, await readImmutableRunRevision(changeDir2, previous.revision - 1, previousRevisionIdFor(previous)));
+    await assertTransitionRecordFile(changeDir2, previous, predecessor);
   }
   return current;
 }
-async function validateCanonicalRevisionHistory(changeDir) {
-  let cursor = await readCurrentRunRevision(changeDir);
+async function validateCanonicalRevisionHistory(changeDir2) {
+  let cursor = await readCurrentRunRevision(changeDir2);
   if (cursor === void 0)
     return;
   while (cursor.revision > 0) {
     const previousRevisionId = previousRevisionIdFor(cursor);
-    const previous = await readImmutableRunRevision(changeDir, cursor.revision - 1, previousRevisionId);
+    const previous = await readImmutableRunRevision(changeDir2, cursor.revision - 1, previousRevisionId);
     if (previous === void 0) {
       throw new RunStateCorruptError(`canonical history revision ${cursor.revision - 1} \u7F3A\u5931`);
     }
@@ -4147,7 +4147,7 @@ async function validateCanonicalRevisionHistory(changeDir) {
       throw new RunStateCorruptError("canonical history previous revision \u8EAB\u4EFD\u4E0D\u4E00\u81F4");
     }
     assertMutationEffects(cursor, previous);
-    await assertTransitionRecordFile(changeDir, cursor, previous);
+    await assertTransitionRecordFile(changeDir2, cursor, previous);
     cursor = previous;
   }
 }
@@ -4212,12 +4212,12 @@ function readCurrentRunRevisionFromSync(readText, sourceRoot = "canonical state"
   }
   return current;
 }
-async function readImmutableRunRevision(changeDir, revision, revisionId) {
+async function readImmutableRunRevision(changeDir2, revision, revisionId) {
   if (!Number.isSafeInteger(revision) || revision < 0 || !SAFE_ID_RE4.test(revisionId))
     return void 0;
-  const pathname = join8(changeDir, RUN_STATE_DIR, RUN_REVISIONS_DIR, revisionFileName(revision, revisionId));
+  const pathname = join8(changeDir2, RUN_STATE_DIR, RUN_REVISIONS_DIR, revisionFileName(revision, revisionId));
   const raw = await readRegularTextIfExists(pathname);
-  return raw === void 0 ? void 0 : hydratePreVerifyReview(changeDir, parseRunRevision(raw, pathname));
+  return raw === void 0 ? void 0 : hydratePreVerifyReview(changeDir2, parseRunRevision(raw, pathname));
 }
 
 // packages/kernel/dist/state/document-path.js
@@ -4253,27 +4253,27 @@ async function readBoundedFileHandle(handle, maxBytes) {
   }
   return Buffer.concat(chunks, total);
 }
-async function readBoundedRegularFileWithParentAnchor(path7, maxBytes, label, readSource, parentAnchor) {
-  const parent = dirname2(path7);
+async function readBoundedRegularFileWithParentAnchor(path8, maxBytes, label, readSource, parentAnchor) {
+  const parent = dirname2(path8);
   const parentPath = parentAnchor === void 0 ? parent : `${parent}${sep2}.`;
   const parentBefore = await lstat4(parentPath, { bigint: true });
   if (!parentBefore.isDirectory() || parentAnchor === void 0 && parentBefore.isSymbolicLink() || parentAnchor !== void 0 && (parentBefore.dev !== BigInt(parentAnchor.dev) || parentBefore.ino !== BigInt(parentAnchor.ino))) {
     throw new DocumentLedgerError(`${label} \u4E0D\u5F97\u901A\u8FC7 symlink \u6216\u8DEF\u5F84\u522B\u540D\u8BFB\u53D6`);
   }
   const parentRealBefore = await realpath(parent);
-  const handle = await open(path7, constants2.O_RDONLY | constants2.O_NOFOLLOW | constants2.O_NONBLOCK);
+  const handle = await open(path8, constants2.O_RDONLY | constants2.O_NOFOLLOW | constants2.O_NONBLOCK);
   try {
     const opened = await handle.stat({ bigint: true });
     if (!opened.isFile())
-      throw new DocumentLedgerError(`${label} \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${path7}`);
+      throw new DocumentLedgerError(`${label} \u5FC5\u987B\u662F\u975E symlink \u666E\u901A\u6587\u4EF6: ${path8}`);
     const assertStable = async () => {
       const [parentNow, parentRealNow, targetNow] = await Promise.all([
         lstat4(parentPath, { bigint: true }),
         realpath(parent),
-        lstat4(path7, { bigint: true })
+        lstat4(path8, { bigint: true })
       ]);
       if (!parentNow.isDirectory() || parentNow.isSymbolicLink() || parentNow.dev !== parentBefore.dev || parentNow.ino !== parentBefore.ino || parentRealNow !== parentRealBefore || !targetNow.isFile() || targetNow.isSymbolicLink() || targetNow.dev !== opened.dev || targetNow.ino !== opened.ino || targetNow.size !== opened.size || targetNow.mtimeNs !== opened.mtimeNs || targetNow.ctimeNs !== opened.ctimeNs) {
-        throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path7}`);
+        throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path8}`);
       }
     };
     await assertStable();
@@ -4285,28 +4285,28 @@ async function readBoundedRegularFileWithParentAnchor(path7, maxBytes, label, re
     }
     const after = await handle.stat({ bigint: true });
     if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size || after.mtimeNs !== opened.mtimeNs || after.ctimeNs !== opened.ctimeNs) {
-      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path7}`);
+      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path8}`);
     }
     await assertStable();
     return content;
   } catch (error2) {
     if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT") {
-      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path7}`);
+      throw new DocumentLedgerError(`${label} \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316: ${path8}`);
     }
     throw error2;
   } finally {
     await handle.close();
   }
 }
-async function readBoundedRegularFile(path7, maxBytes, label, readSource = readBoundedFileHandle) {
-  return readBoundedRegularFileWithParentAnchor(path7, maxBytes, label, readSource);
+async function readBoundedRegularFile(path8, maxBytes, label, readSource = readBoundedFileHandle) {
+  return readBoundedRegularFileWithParentAnchor(path8, maxBytes, label, readSource);
 }
-async function readBoundedRegularFileFromAnchoredDirectory(path7, maxBytes, label, parentAnchor, readSource = readBoundedFileHandle) {
-  return readBoundedRegularFileWithParentAnchor(path7, maxBytes, label, readSource, parentAnchor);
+async function readBoundedRegularFileFromAnchoredDirectory(path8, maxBytes, label, parentAnchor, readSource = readBoundedFileHandle) {
+  return readBoundedRegularFileWithParentAnchor(path8, maxBytes, label, readSource, parentAnchor);
 }
-async function readOptionalBoundedRegularTextFile(path7, maxBytes, label, readSource = readBoundedFileHandle) {
+async function readOptionalBoundedRegularTextFile(path8, maxBytes, label, readSource = readBoundedFileHandle) {
   try {
-    const content = await readBoundedRegularFile(path7, maxBytes, label, readSource);
+    const content = await readBoundedRegularFile(path8, maxBytes, label, readSource);
     return decodeUtf8Text(content, label);
   } catch (error2) {
     if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
@@ -4314,9 +4314,9 @@ async function readOptionalBoundedRegularTextFile(path7, maxBytes, label, readSo
     throw error2;
   }
 }
-async function readOptionalBoundedRegularTextFileFromAnchoredDirectory(path7, maxBytes, label, parentAnchor, readSource = readBoundedFileHandle) {
+async function readOptionalBoundedRegularTextFileFromAnchoredDirectory(path8, maxBytes, label, parentAnchor, readSource = readBoundedFileHandle) {
   try {
-    const content = await readBoundedRegularFileFromAnchoredDirectory(path7, maxBytes, label, parentAnchor, readSource);
+    const content = await readBoundedRegularFileFromAnchoredDirectory(path8, maxBytes, label, parentAnchor, readSource);
     return decodeUtf8Text(content, label);
   } catch (error2) {
     if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
@@ -4324,8 +4324,8 @@ async function readOptionalBoundedRegularTextFileFromAnchoredDirectory(path7, ma
     throw error2;
   }
 }
-function normalizeRelativePath(path7) {
-  return path7.split(sep2).join("/");
+function normalizeRelativePath(path8) {
+  return path8.split(sep2).join("/");
 }
 function inside(base, candidate) {
   const pathFromBase = relative(base, candidate);
@@ -4336,21 +4336,21 @@ function isSafeProjectRelativePath(value) {
     return false;
   return value.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
 }
-function deltaSpecSlot(path7, changeDir) {
-  const parts = path7.split("/");
-  const changeName = basename(resolve2(changeDir));
+function deltaSpecSlot(path8, changeDir2) {
+  const parts = path8.split("/");
+  const changeName = basename(resolve2(changeDir2));
   if (parts.length !== 6 || parts[0] !== "openspec" || parts[1] !== "changes" || parts[2] !== changeName || parts[3] !== "specs" || !parts[4] || parts[5] !== "spec.md") {
     return void 0;
   }
   return `delta-spec:${parts[4]}`;
 }
-async function resolveDocument(repoRoot, path7, readSource = readBoundedFileHandle) {
-  if (!path7 || isAbsolute(path7))
-    throw new DocumentLedgerError(`document path \u5FC5\u987B\u662F\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84: ${path7 || "(empty)"}`);
+async function resolveDocument(repoRoot, path8, readSource = readBoundedFileHandle) {
+  if (!path8 || isAbsolute(path8))
+    throw new DocumentLedgerError(`document path \u5FC5\u987B\u662F\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84: ${path8 || "(empty)"}`);
   const lexicalRoot = resolve2(repoRoot);
-  const lexicalTarget = resolve2(repoRoot, path7);
+  const lexicalTarget = resolve2(repoRoot, path8);
   if (!inside(lexicalRoot, lexicalTarget))
-    throw new DocumentLedgerError(`document path \u8D8A\u51FA\u9879\u76EE\u6839: ${path7}`);
+    throw new DocumentLedgerError(`document path \u8D8A\u51FA\u9879\u76EE\u6839: ${path8}`);
   const relativePath = normalizeRelativePath(relative(lexicalRoot, lexicalTarget));
   if (!relativePath.startsWith("openspec/") && !relativePath.startsWith("docs/")) {
     throw new DocumentLedgerError(`document path \u53EA\u80FD\u4F4D\u4E8E openspec/ \u6216 docs/: ${relativePath}`);
@@ -4384,8 +4384,8 @@ import { join as join9 } from "node:path";
 var HISTORY_FILE = ".pipeline-history.jsonl";
 function createHistoryWriter() {
   return {
-    async append(changeDir, entry) {
-      await appendFile(join9(changeDir, HISTORY_FILE), `${JSON.stringify(entry)}
+    async append(changeDir2, entry) {
+      await appendFile(join9(changeDir2, HISTORY_FILE), `${JSON.stringify(entry)}
 `, "utf8");
     }
   };
@@ -4445,12 +4445,12 @@ function validateCommittingRecord(cursor, previous, raw) {
   }
   return assertTransitionRevisionLink(cursor, parsed, raw, previous);
 }
-async function readValidatedTransitionHead(changeDir) {
-  const current = await readCurrentRunRevision(changeDir);
+async function readValidatedTransitionHead(changeDir2) {
+  const current = await readCurrentRunRevision(changeDir2);
   const metadata = current?.state.runMetadata;
   if (current === void 0 || metadata?.transitionHead === void 0 || metadata.transitionSequence < 1)
     return void 0;
-  const anchored = await validateAnchoredTransitionHead(current, (relativePath) => readRegularTextIfExists2(join10(changeDir, relativePath)), changeDir);
+  const anchored = await validateAnchoredTransitionHead(current, (relativePath) => readRegularTextIfExists2(join10(changeDir2, relativePath)), changeDir2);
   if (anchored !== void 0)
     return { current, record: anchored };
   let cursor = current;
@@ -4458,10 +4458,10 @@ async function readValidatedTransitionHead(changeDir) {
     if (cursor.revision === 0)
       break;
     const previousId = previousRevisionIdFor2(cursor);
-    const previous = await readImmutableRunRevision(changeDir, cursor.revision - 1, previousId);
+    const previous = await readImmutableRunRevision(changeDir2, cursor.revision - 1, previousId);
     const bound = assertDirectPredecessor(cursor, previous);
     if (cursor.mutation.kind === "transition" && cursor.mutation.transitionRecordId === metadata.transitionHead) {
-      const raw = await readRegularTextIfExists2(join10(changeDir, transitionRelativePath(cursor)));
+      const raw = await readRegularTextIfExists2(join10(changeDir2, transitionRelativePath(cursor)));
       if (raw === void 0)
         throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
       const record5 = validateCommittingRecord(cursor, bound, raw);
@@ -4476,7 +4476,7 @@ async function readValidatedTransitionHead(changeDir) {
 }
 function readValidatedTransitionHeadFromSync(readText, sourceRoot = "canonical state") {
   let totalBytes = 0;
-  const boundedRead = (relativePath) => {
+  const boundedRead2 = (relativePath) => {
     const raw = readText(relativePath);
     if (raw === void 0)
       return void 0;
@@ -4486,13 +4486,13 @@ function readValidatedTransitionHeadFromSync(readText, sourceRoot = "canonical s
     }
     return raw;
   };
-  const current = readCurrentRunRevisionFromSync(boundedRead, sourceRoot);
+  const current = readCurrentRunRevisionFromSync(boundedRead2, sourceRoot);
   const metadata = current?.state.runMetadata;
   if (current === void 0)
     return void 0;
   if (metadata?.transitionHead === void 0 || metadata.transitionSequence < 1)
     return { current };
-  const anchored = validateAnchoredTransitionHeadFromSync(current, boundedRead, sourceRoot);
+  const anchored = validateAnchoredTransitionHeadFromSync(current, boundedRead2, sourceRoot);
   if (anchored !== void 0)
     return { current, record: anchored };
   const revisionsRel = join10(RUN_STATE_DIR, RUN_REVISIONS_DIR);
@@ -4502,11 +4502,11 @@ function readValidatedTransitionHeadFromSync(readText, sourceRoot = "canonical s
       break;
     const previousId = previousRevisionIdFor2(cursor);
     const previousRel = join10(revisionsRel, revisionFileName2(cursor.revision - 1, previousId));
-    const previousRaw = boundedRead(previousRel);
-    const previous = assertDirectPredecessor(cursor, previousRaw === void 0 ? void 0 : hydratePreVerifyReviewFromSync(boundedRead, parseRunRevision(previousRaw, join10(sourceRoot, previousRel)), sourceRoot));
+    const previousRaw = boundedRead2(previousRel);
+    const previous = assertDirectPredecessor(cursor, previousRaw === void 0 ? void 0 : hydratePreVerifyReviewFromSync(boundedRead2, parseRunRevision(previousRaw, join10(sourceRoot, previousRel)), sourceRoot));
     if (cursor.mutation.kind === "transition" && cursor.mutation.transitionRecordId === metadata.transitionHead) {
       const relativePath = transitionRelativePath(cursor);
-      const raw = boundedRead(relativePath);
+      const raw = boundedRead2(relativePath);
       if (raw === void 0)
         throw new RunStateCorruptError("canonical head TransitionRecord \u7F3A\u5931");
       const record5 = validateCommittingRecord(cursor, previous, raw);
@@ -5026,8 +5026,8 @@ function shouldEnforceDocumentPolicyOnTransition(policy2, from, to) {
 }
 
 // packages/kernel/dist/state/document-step-visit.js
-async function currentDocumentStepVisitId(changeDir) {
-  const metadata = (await readCurrentRunRevision(changeDir))?.state.runMetadata;
+async function currentDocumentStepVisitId(changeDir2) {
+  const metadata = (await readCurrentRunRevision(changeDir2))?.state.runMetadata;
   if (metadata === void 0)
     throw new DocumentLedgerError("\u7F3A\u5C11 canonical WorkflowRun visit identity\uFF1B\u65E7 Change \u5FC5\u987B\u5148\u901A\u8FC7\u53D7\u63A7 state mutation \u5EFA\u7ACB run identity\uFF0C\u518D\u91CD\u65B0\u8BFB\u53D6 document");
   return JSON.stringify([metadata.runId, metadata.transitionSequence]);
@@ -5077,20 +5077,20 @@ function parseReceipt(value, recordIndex, receiptIndex) {
   if (!item2)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
   const phase = string2(item2.phase);
-  const digest6 = string2(item2.sha256);
+  const digest7 = string2(item2.sha256);
   const readAt = string2(item2.readAt);
   const visitId = item2.visitId === void 0 ? void 0 : string2(item2.visitId);
   if (!phase || !/^[A-Za-z0-9_-]+$/.test(phase)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].phase \u975E\u6CD5`);
   }
-  if (!digest6 || !validDigest(digest6)) {
+  if (!digest7 || !validDigest(digest7)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].sha256 \u975E\u6CD5`);
   }
   if (!readAt)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].readAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32`);
   if (item2.visitId !== void 0 && !visitId)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].visitId \u975E\u6CD5`);
-  return { phase, sha256: digest6, readAt, ...visitId === void 0 ? {} : { visitId } };
+  return { phase, sha256: digest7, readAt, ...visitId === void 0 ? {} : { visitId } };
 }
 function receiptKey(receipt) {
   return JSON.stringify([receipt.phase, receipt.visitId ?? "legacy"]);
@@ -5100,16 +5100,16 @@ function parseRecord2(value, index) {
   if (!item2)
     throw new DocumentLedgerError(`document ledger records[${index}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
   const kind = string2(item2.kind);
-  const path7 = string2(item2.path);
-  const digest6 = string2(item2.sha256);
+  const path8 = string2(item2.path);
+  const digest7 = string2(item2.sha256);
   const producer = string2(item2.producer);
   const recordedAt = string2(item2.recordedAt);
   if (!kind || !isDocumentKind(kind))
     throw new DocumentLedgerError(`document ledger records[${index}].kind \u975E\u6CD5`);
-  if (!path7 || !isSafeProjectRelativePath(path7)) {
+  if (!path8 || !isSafeProjectRelativePath(path8)) {
     throw new DocumentLedgerError(`document ledger records[${index}].path \u5FC5\u987B\u662F\u5B89\u5168\u7684\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84`);
   }
-  if (!digest6 || !validDigest(digest6))
+  if (!digest7 || !validDigest(digest7))
     throw new DocumentLedgerError(`document ledger records[${index}].sha256 \u975E\u6CD5`);
   if (!producer || !/^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/.test(producer)) {
     throw new DocumentLedgerError(`document ledger records[${index}].producer \u975E\u6CD5`);
@@ -5129,8 +5129,8 @@ function parseRecord2(value, index) {
   }
   return {
     kind,
-    path: path7,
-    sha256: digest6,
+    path: path8,
+    sha256: digest7,
     producer,
     recordedAt,
     ...producerInvocation === void 0 ? {} : { producerInvocation },
@@ -5168,8 +5168,8 @@ function parseDocumentLedger(raw) {
   }
   return { version: 1, contract: "openspec-v1", createdAt, records };
 }
-async function readDocumentLedger(changeDir, readSource = readBoundedFileHandle) {
-  const raw = await readOptionalBoundedRegularTextFile(join11(changeDir, DOCUMENT_LEDGER_FILE), MAX_DOCUMENT_LEDGER_BYTES, "document ledger", readSource);
+async function readDocumentLedger(changeDir2, readSource = readBoundedFileHandle) {
+  const raw = await readOptionalBoundedRegularTextFile(join11(changeDir2, DOCUMENT_LEDGER_FILE), MAX_DOCUMENT_LEDGER_BYTES, "document ledger", readSource);
   return raw === void 0 ? void 0 : parseDocumentLedger(raw);
 }
 function initialDocumentLedgerContent(createdAt) {
@@ -5192,8 +5192,8 @@ var HEARTBEAT_MS = Math.floor(STALE_LOCK_MS / 3);
 var ACQUIRE_TIMEOUT_MS = 1e4;
 var POLL_MS = 10;
 var queues = /* @__PURE__ */ new Map();
-function lockDirFor(changeDir) {
-  return path.join(path.resolve(changeDir), LOCK_DIR_NAME);
+function lockDirFor(changeDir2) {
+  return path.join(path.resolve(changeDir2), LOCK_DIR_NAME);
 }
 function ownerPathFor(lockDir) {
   return path.join(lockDir, LOCK_OWNER_FILE);
@@ -5216,19 +5216,19 @@ async function processStartIdentity(pid) {
       return start2 !== void 0 && /^[0-9]+$/u.test(start2) ? `linux:${start2}` : null;
     }
     const ps = process.platform === "darwin" ? "/bin/ps" : "/usr/bin/ps";
-    const result = spawnSync(ps, ["-o", "lstart=", "-p", String(pid)], {
+    const result2 = spawnSync(ps, ["-o", "lstart=", "-p", String(pid)], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"]
     });
-    const start = result.status === 0 && typeof result.stdout === "string" ? result.stdout.trim() : "";
+    const start = result2.status === 0 && typeof result2.stdout === "string" ? result2.stdout.trim() : "";
     return start === "" ? null : `${process.platform}:${start}`;
   } catch {
     return null;
   }
 }
-function parseOwnerRecord(text3) {
+function parseOwnerRecord(text4) {
   try {
-    const value = ownRecord3(JSON.parse(text3));
+    const value = ownRecord3(JSON.parse(text4));
     if (value === null)
       return null;
     const keys = Object.keys(value).sort().join(",");
@@ -5253,8 +5253,8 @@ function parseOwnerRecord(text3) {
     return null;
   }
 }
-function parseLegacyOwner(text3) {
-  const owner = text3.trim();
+function parseLegacyOwner(text4) {
+  const owner = text4.trim();
   const pidText = owner.split(".", 1)[0] ?? "";
   if (!/^[1-9][0-9]*$/.test(pidText))
     return null;
@@ -5407,8 +5407,8 @@ async function release(lockDir, held) {
   await rmdir(lockDir).catch(() => {
   });
 }
-async function withLock(changeDir, fn) {
-  const lockDir = lockDirFor(changeDir);
+async function withLock(changeDir2, fn) {
+  const lockDir = lockDirFor(changeDir2);
   const prev = queues.get(lockDir) ?? Promise.resolve();
   const run = prev.then(async () => {
     const held = await acquire(lockDir);
@@ -5524,11 +5524,11 @@ function parseTasks(markdown, currentStage, stages, trustedCanonicalProjection =
     if (!task || target === void 0)
       continue;
     const rawText = (task[2] ?? "").trim();
-    const text3 = trustedCanonicalProjection ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
-    if (text3 === "")
+    const text4 = trustedCanonicalProjection ? rawText.replace(/\s+<!-- work-item:[^>\s]+ -->\s*$/u, "").trim() : rawText;
+    if (text4 === "")
       continue;
     const items = byStage.get(target) ?? [];
-    items.push({ text: text3, completed: (task[1] ?? "").toLowerCase() === "x" });
+    items.push({ text: text4, completed: (task[1] ?? "").toLowerCase() === "x" });
     byStage.set(target, items);
   }
   return { byStage, structured };
@@ -5617,19 +5617,19 @@ async function assertOwnedDirectory(base, candidate) {
     throw new TaskPlanStateCorruptError("TaskPlan state directory is not trusted");
   }
 }
-async function readRegular(path7, maxBytes) {
+async function readRegular(path8, maxBytes) {
   try {
-    return await readOptionalBoundedRegularTextFile(path7, maxBytes, "TaskPlan state file");
+    return await readOptionalBoundedRegularTextFile(path8, maxBytes, "TaskPlan state file");
   } catch (error2) {
     if (error2 instanceof TaskPlanStateCorruptError)
       throw error2;
     throw new TaskPlanStateCorruptError("TaskPlan state file is not a stable bounded regular file");
   }
 }
-async function readStateFile(path7, maxBytes) {
+async function readStateFile(path8, maxBytes) {
   let bytes;
   try {
-    bytes = await readBoundedRegularFile(path7, maxBytes, "TaskPlan state file");
+    bytes = await readBoundedRegularFile(path8, maxBytes, "TaskPlan state file");
   } catch (error2) {
     if (typeof error2 === "object" && error2 !== null && Reflect.get(error2, "code") === "ENOENT")
       return void 0;
@@ -5670,10 +5670,10 @@ async function readImmutableTwin(revisionsDir, revision, expectedRaw) {
     return void 0;
   throw new TaskPlanStateCorruptError("TaskPlan current immutable revision disagrees with its content");
 }
-async function readCanonicalTaskPlanState(changeDir) {
-  const stateDir = join12(changeDir, TASK_PLAN_STATE_DIR);
-  const currentPath = join12(stateDir, TASK_PLAN_CURRENT_FILE);
-  const currentRaw = await readStateFile(currentPath, TASK_PLAN_LIMITS.maxRevisionBytes);
+async function readCanonicalTaskPlanState(changeDir2) {
+  const stateDir = join12(changeDir2, TASK_PLAN_STATE_DIR);
+  const currentPath2 = join12(stateDir, TASK_PLAN_CURRENT_FILE);
+  const currentRaw = await readStateFile(currentPath2, TASK_PLAN_LIMITS.maxRevisionBytes);
   if (currentRaw === void 0)
     return void 0;
   const decoded = decodeTaskPlanRevisionRecordV1(currentRaw.text);
@@ -5681,31 +5681,31 @@ async function readCanonicalTaskPlanState(changeDir) {
     throw new TaskPlanStateCorruptError("TaskPlan current is malformed");
   const revision = decoded.value;
   assertCommittedRevisionSemantics(revision);
-  await assertOwnedDirectory(changeDir, stateDir);
-  await assertOwnedDirectory(changeDir, join12(stateDir, TASK_PLAN_REVISIONS_DIR));
+  await assertOwnedDirectory(changeDir2, stateDir);
+  await assertOwnedDirectory(changeDir2, join12(stateDir, TASK_PLAN_REVISIONS_DIR));
   const immutableRaw = await readImmutableTwin(join12(stateDir, TASK_PLAN_REVISIONS_DIR), revision, currentRaw.bytes);
   if (immutableRaw === void 0) {
     throw new TaskPlanStateCorruptError("TaskPlan current lacks an identical immutable revision");
   }
   return { revision, currentBytes: currentRaw.bytes };
 }
-async function isCurrentTaskPlanProjectionForChange(changeDir, source) {
-  return await classifyTaskPlanProjectionForChange(changeDir, source) === "current";
+async function isCurrentTaskPlanProjectionForChange(changeDir2, source) {
+  return await classifyTaskPlanProjectionForChange(changeDir2, source) === "current";
 }
-async function classifyTaskPlanProjectionForChange(changeDir, source) {
-  const state = await readCanonicalTaskPlanState(changeDir);
+async function classifyTaskPlanProjectionForChange(changeDir2, source) {
+  const state = await readCanonicalTaskPlanState(changeDir2);
   if (state === void 0)
     return "legacy";
   const expected = renderTaskPlanTasksMd(state.revision, { digest: digest2(state.currentBytes) });
   return normalizeProjectionCompletion(source) === expected ? "current" : "invalid";
 }
-async function taskPlanTasksThroughPhaseForChange(changeDir, phase, sourceOverride) {
-  const state = await readCanonicalTaskPlanState(changeDir);
+async function taskPlanTasksThroughPhaseForChange(changeDir2, phase, sourceOverride) {
+  const state = await readCanonicalTaskPlanState(changeDir2);
   const limit = state ? MAX_CANONICAL_TASKS_MD_BYTES : MAX_LEGACY_TASKS_MD_BYTES;
   let source = sourceOverride ?? void 0;
   if (sourceOverride === void 0)
     try {
-      source = await readRegular(join12(changeDir, "tasks.md"), limit);
+      source = await readRegular(join12(changeDir2, "tasks.md"), limit);
     } catch {
       return { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4E0D\u53EF\u4FE1\u6216\u8D85\u51FA\u9884\u7B97` };
     }
@@ -5718,16 +5718,16 @@ async function taskPlanTasksThroughPhaseForChange(changeDir, phase, sourceOverri
   const status2 = incompletePipelineTasksForExit({ phase, tasksMarkdown: source, trustedCanonicalProjection: state !== void 0 });
   return status2.incomplete > 0 ? { pass: false, failure: `${phase} \u51FA\u53E3\uFF1Atasks.md \u4ECD\u6709 ${status2.incomplete} \u9879\u672A\u52FE` } : { pass: true };
 }
-async function readTaskPlanForChange(changeDir) {
-  const state = await readCanonicalTaskPlanState(changeDir);
+async function readTaskPlanForChange(changeDir2) {
+  const state = await readCanonicalTaskPlanState(changeDir2);
   if (state === void 0) {
-    const legacy = await readRegular(join12(changeDir, "tasks.md"), MAX_LEGACY_TASKS_MD_BYTES);
+    const legacy = await readRegular(join12(changeDir2, "tasks.md"), MAX_LEGACY_TASKS_MD_BYTES);
     return legacy === void 0 ? null : adaptLegacyTasksMd(legacy);
   }
   let tasks;
   let projectionReadFailed = false;
   try {
-    tasks = await readRegular(join12(changeDir, "tasks.md"), MAX_CANONICAL_TASKS_MD_BYTES);
+    tasks = await readRegular(join12(changeDir2, "tasks.md"), MAX_CANONICAL_TASKS_MD_BYTES);
   } catch {
     projectionReadFailed = true;
   }
@@ -5741,13 +5741,13 @@ var SKILL_INVOCATION_LEDGER_FILE = ".pipeline-skill-invocations.jsonl";
 var SkillInvocationEvidenceCorruptError = class extends Error {
   name = "SkillInvocationEvidenceCorruptError";
 };
-function ledgerPath(changeDir) {
-  return join13(changeDir, SKILL_INVOCATION_LEDGER_FILE);
+function ledgerPath(changeDir2) {
+  return join13(changeDir2, SKILL_INVOCATION_LEDGER_FILE);
 }
-async function readLedgerEvents(changeDir, options = {}) {
+async function readLedgerEvents(changeDir2, options = {}) {
   let raw;
   try {
-    raw = options.anchoredDirectoryIdentity === void 0 ? await readOptionalBoundedRegularTextFile(ledgerPath(changeDir), SKILL_INVOCATION_LIMITS.maxLedgerBytes, "SkillInvocation evidence ledger") : await readOptionalBoundedRegularTextFileFromAnchoredDirectory(ledgerPath(changeDir), SKILL_INVOCATION_LIMITS.maxLedgerBytes, "SkillInvocation evidence ledger", options.anchoredDirectoryIdentity);
+    raw = options.anchoredDirectoryIdentity === void 0 ? await readOptionalBoundedRegularTextFile(ledgerPath(changeDir2), SKILL_INVOCATION_LIMITS.maxLedgerBytes, "SkillInvocation evidence ledger") : await readOptionalBoundedRegularTextFileFromAnchoredDirectory(ledgerPath(changeDir2), SKILL_INVOCATION_LIMITS.maxLedgerBytes, "SkillInvocation evidence ledger", options.anchoredDirectoryIdentity);
   } catch (cause) {
     throw new SkillInvocationEvidenceCorruptError(`SkillInvocation ledger cannot be read: ${String(cause)}`);
   }
@@ -5767,9 +5767,9 @@ async function readLedgerEvents(changeDir, options = {}) {
     return decoded.value;
   });
 }
-async function captureLedgerIdentity(path7) {
+async function captureLedgerIdentity(path8) {
   try {
-    const info = await lstat8(path7);
+    const info = await lstat8(path8);
     if (!info.isFile() || info.isSymbolicLink()) {
       throw new SkillInvocationEvidenceCorruptError("SkillInvocation ledger must be a regular file");
     }
@@ -5785,21 +5785,21 @@ async function captureLedgerIdentity(path7) {
 function sameLedgerIdentity(actual, expected) {
   return actual === void 0 || expected === void 0 ? actual === expected : actual.dev === expected.dev && actual.ino === expected.ino && actual.size === expected.size;
 }
-async function assertLedgerIdentity(path7, expected) {
-  if (!sameLedgerIdentity(await captureLedgerIdentity(path7), expected)) {
+async function assertLedgerIdentity(path8, expected) {
+  if (!sameLedgerIdentity(await captureLedgerIdentity(path8), expected)) {
     throw new SkillInvocationEvidenceCorruptError("SkillInvocation ledger identity changed during the transaction");
   }
 }
 function grouped(events2) {
-  const result = /* @__PURE__ */ new Map();
+  const result2 = /* @__PURE__ */ new Map();
   for (const event of events2) {
-    const bucket = result.get(event.invocation_id) ?? [];
+    const bucket = result2.get(event.invocation_id) ?? [];
     bucket.push(event);
-    result.set(event.invocation_id, bucket);
+    result2.set(event.invocation_id, bucket);
   }
-  if (result.size > SKILL_INVOCATION_LIMITS.maxInvocations)
+  if (result2.size > SKILL_INVOCATION_LIMITS.maxInvocations)
     throw new SkillInvocationEvidenceCorruptError("SkillInvocation ledger exceeds invocation budget");
-  return result;
+  return result2;
 }
 function validateExistingLedger(events2) {
   try {
@@ -5811,17 +5811,17 @@ function validateExistingLedger(events2) {
     throw new SkillInvocationEvidenceCorruptError(`SkillInvocation ledger violates aggregate invariants: ${String(cause)}`);
   }
 }
-async function readSkillInvocationEventsForApplication(changeDir) {
-  const identity = await captureLedgerIdentity(ledgerPath(changeDir));
-  const events2 = await readLedgerEvents(changeDir);
-  await assertLedgerIdentity(ledgerPath(changeDir), identity);
+async function readSkillInvocationEventsForApplication(changeDir2) {
+  const identity = await captureLedgerIdentity(ledgerPath(changeDir2));
+  const events2 = await readLedgerEvents(changeDir2);
+  await assertLedgerIdentity(ledgerPath(changeDir2), identity);
   validateExistingLedger(events2);
   return structuredClone(events2);
 }
-async function readSkillInvocationEvidence(changeDir, options = {}) {
-  const identity = await captureLedgerIdentity(ledgerPath(changeDir));
-  const events2 = await readLedgerEvents(changeDir, options);
-  await assertLedgerIdentity(ledgerPath(changeDir), identity);
+async function readSkillInvocationEvidence(changeDir2, options = {}) {
+  const identity = await captureLedgerIdentity(ledgerPath(changeDir2));
+  const events2 = await readLedgerEvents(changeDir2, options);
+  await assertLedgerIdentity(ledgerPath(changeDir2), identity);
   if (events2.length === 0)
     return { schema_version: "skill-invocation-list/v1", state: "empty", items: [] };
   try {
@@ -5871,8 +5871,8 @@ function parseConfirmation(value) {
     }
   };
 }
-async function readDocumentSkillConfirmations(changeDir) {
-  const raw = await readOptionalBoundedRegularTextFile(join14(changeDir, DOCUMENT_SKILL_CONFIRMATIONS_FILE), MAX_CONFIRMATIONS_BYTES, "document Skill confirmation ledger");
+async function readDocumentSkillConfirmations(changeDir2) {
+  const raw = await readOptionalBoundedRegularTextFile(join14(changeDir2, DOCUMENT_SKILL_CONFIRMATIONS_FILE), MAX_CONFIRMATIONS_BYTES, "document Skill confirmation ledger");
   if (raw === void 0 || raw === "" || !raw.endsWith("\n"))
     return [];
   const confirmations = [];
@@ -5934,133 +5934,133 @@ function safeErrorText(value) {
 function missing(o, key) {
   return !(key in o) || o[key] === void 0;
 }
-function checkNonEmptyStr(o, key, path7, errors, optional = false) {
+function checkNonEmptyStr(o, key, path8, errors, optional = false) {
   if (missing(o, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u975E\u7A7A string\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u975E\u7A7A string\uFF09`);
     return;
   }
   const v = o[key];
   if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
     return;
   }
   if (v.length === 0)
-    errors.push(`${path7}.${key}: \u4E0D\u5F97\u4E3A\u7A7A\u5B57\u7B26\u4E32`);
+    errors.push(`${path8}.${key}: \u4E0D\u5F97\u4E3A\u7A7A\u5B57\u7B26\u4E32`);
 }
-function checkLit(o, key, literal, path7, errors) {
+function checkLit(o, key, literal, path8, errors) {
   if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF09`);
+    errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF09`);
     return;
   }
   if (o[key] !== literal)
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(o[key])}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(o[key])}`);
 }
-function checkEnum(o, key, allowed, path7, errors) {
+function checkEnum(o, key, allowed, path8, errors) {
   if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u95ED\u96C6 ${allowed.join("|")}\uFF09`);
+    errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u95ED\u96C6 ${allowed.join("|")}\uFF09`);
     return;
   }
   const v = o[key];
   if (typeof v !== "string" || !allowed.includes(v)) {
-    errors.push(`${path7}.${key}: \u5E94\u5728\u95ED\u96C6 [${allowed.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u5728\u95ED\u96C6 [${allowed.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
   }
 }
-function checkNonNegInt(o, key, path7, errors, optional = false) {
+function checkNonNegInt(o, key, path8, errors, optional = false) {
   if (missing(o, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u975E\u8D1F\u6574\u6570\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u975E\u8D1F\u6574\u6570\uFF09`);
     return;
   }
   const v = o[key];
   if (typeof v !== "number" || !Number.isInteger(v) || v < 0) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u975E\u8D1F\u6574\u6570\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A\u975E\u8D1F\u6574\u6570\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
   }
 }
-function checkInt(o, key, path7, errors) {
+function checkInt(o, key, path8, errors) {
   if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u6574\u6570\uFF09`);
+    errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u6574\u6570\uFF09`);
     return;
   }
   const v = o[key];
   if (typeof v !== "number" || !Number.isInteger(v))
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u6574\u6570\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A\u6574\u6570\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
 }
 var SHA256_RE3 = /^[0-9a-f]{64}$/;
 var GIT_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-function checkSha256(o, key, path7, errors, optional = false) {
+function checkSha256(o, key, path8, errors, optional = false) {
   if (missing(o, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
     return;
   }
   const v = o[key];
   if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
     return;
   }
   if (!SHA256_RE3.test(v))
-    errors.push(`${path7}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
 }
-function checkGitSha(o, key, path7, errors) {
+function checkGitSha(o, key, path8, errors) {
   if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B git SHA\uFF09`);
+    errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B git SHA\uFF09`);
     return;
   }
   const v = o[key];
   if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
     return;
   }
   if (!GIT_SHA_RE.test(v))
-    errors.push(`${path7}.${key}: \u5E94\u4E3A 40 \u6216 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 git SHA\uFF08\u5B8C\u6574\u5BF9\u8C61\u540D\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A 40 \u6216 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 git SHA\uFF08\u5B8C\u6574\u5BF9\u8C61\u540D\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
 }
-function checkRepoRelPath(o, key, path7, errors) {
+function checkRepoRelPath(o, key, path8, errors) {
   if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84\uFF09`);
+    errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84\uFF09`);
     return;
   }
   const v = o[key];
   if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
     return;
   }
   if (v.length === 0) {
-    errors.push(`${path7}.${key}: \u4E0D\u5F97\u4E3A\u7A7A\u5B57\u7B26\u4E32`);
+    errors.push(`${path8}.${key}: \u4E0D\u5F97\u4E3A\u7A7A\u5B57\u7B26\u4E32`);
     return;
   }
   if (v.includes("\0")) {
-    errors.push(`${path7}.${key}: \u7981 NUL \u5B57\u8282\uFF08git tree \u8DEF\u5F84\u4E0D\u53EF\u542B NUL\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u7981 NUL \u5B57\u8282\uFF08git tree \u8DEF\u5F84\u4E0D\u53EF\u542B NUL\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
     return;
   }
   if (v.startsWith("/") || v.startsWith("\\") || /^[a-zA-Z]:/.test(v)) {
-    errors.push(`${path7}.${key}: \u7981\u7EDD\u5BF9\u8DEF\u5F84\uFF08\u987B\u9879\u76EE\u76F8\u5BF9\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u7981\u7EDD\u5BF9\u8DEF\u5F84\uFF08\u987B\u9879\u76EE\u76F8\u5BF9\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
     return;
   }
   const segs = v.split(/[/\\]/);
   if (segs.some((seg) => seg === "..")) {
-    errors.push(`${path7}.${key}: \u7981\u8DEF\u5F84\u9003\u9038 '..'\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u7981\u8DEF\u5F84\u9003\u9038 '..'\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
   }
   if (segs.some((seg) => seg === ".")) {
-    errors.push(`${path7}.${key}: \u7981 '.' \u8DEF\u5F84\u6BB5\uFF08git tree \u4E0D\u4EA7\u751F\u6B64\u5F62\u5F0F\uFF0C\u975E\u89C4\u8303\u8DEF\u5F84\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u7981 '.' \u8DEF\u5F84\u6BB5\uFF08git tree \u4E0D\u4EA7\u751F\u6B64\u5F62\u5F0F\uFF0C\u975E\u89C4\u8303\u8DEF\u5F84\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
   }
   if (segs.some((seg) => seg.length === 0)) {
-    errors.push(`${path7}.${key}: \u7981\u7A7A\u8DEF\u5F84\u6BB5\uFF08\u5F00\u5934/\u7ED3\u5C3E/\u8FDE\u7EED\u5206\u9694\u7B26\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u7981\u7A7A\u8DEF\u5F84\u6BB5\uFF08\u5F00\u5934/\u7ED3\u5C3E/\u8FDE\u7EED\u5206\u9694\u7B26\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
   }
 }
 var ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
-function checkIsoTimestamp(o, key, path7, errors) {
+function checkIsoTimestamp(o, key, path8, errors) {
   if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B ISO-8601 \u65F6\u95F4\u6233\uFF09`);
+    errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B ISO-8601 \u65F6\u95F4\u6233\uFF09`);
     return;
   }
   const v = o[key];
   if (typeof v !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
     return;
   }
   if (!ISO_TIMESTAMP_RE.test(v) || Number.isNaN(Date.parse(v))) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A ISO-8601 \u65F6\u95F4\u6233\uFF08\u5982 2026-07-18T00:00:00.000Z\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A ISO-8601 \u65F6\u95F4\u6233\uFF08\u5982 2026-07-18T00:00:00.000Z\uFF09\uFF0C\u5B9E\u5F97 ${JSON.stringify(v)}`);
   }
 }
 function subjectRevisionSha(subject2) {
@@ -6070,14 +6070,14 @@ function subjectRevisionSha(subject2) {
   const sha = revision.sha;
   return typeof sha === "string" ? sha : void 0;
 }
-function subObj(o, key, path7, errors) {
+function subObj(o, key, path8, errors) {
   if (missing(o, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5BF9\u8C61\uFF09`);
+    errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5BF9\u8C61\uFF09`);
     return null;
   }
   const v = o[key];
   if (!isObj(v)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
     return null;
   }
   return v;
@@ -6086,76 +6086,76 @@ var VERDICTS = ["passed", "failed", "inconclusive"];
 var BINDING_KINDS = ["workflow-transition", "default-transition", "runtime-verifier"];
 var ISSUER_KINDS = ["host-verifier", "human-review", "sandbox-report"];
 var EVIDENCE_KINDS = ["repo-file", "command-result"];
-function validateSubject(o, path7, errors) {
-  checkNonEmptyStr(o, "workflow_run_id", path7, errors);
-  checkNonEmptyStr(o, "attempt_id", path7, errors);
-  checkNonEmptyStr(o, "change", path7, errors);
-  const rev = subObj(o, "revision", path7, errors);
+function validateSubject(o, path8, errors) {
+  checkNonEmptyStr(o, "workflow_run_id", path8, errors);
+  checkNonEmptyStr(o, "attempt_id", path8, errors);
+  checkNonEmptyStr(o, "change", path8, errors);
+  const rev = subObj(o, "revision", path8, errors);
   if (rev !== null) {
-    const rp = `${path7}.revision`;
+    const rp = `${path8}.revision`;
     checkLit(rev, "kind", "named-branch-head", rp, errors);
     checkGitSha(rev, "sha", rp, errors);
   }
 }
-function validateBinding(o, path7, errors) {
+function validateBinding(o, path8, errors) {
   switch (o.kind) {
     case "workflow-transition":
-      checkNonEmptyStr(o, "workflow_digest", path7, errors);
-      checkNonEmptyStr(o, "workflow", path7, errors);
-      checkNonEmptyStr(o, "step", path7, errors);
-      checkNonEmptyStr(o, "event", path7, errors);
-      checkNonNegInt(o, "guard_index", path7, errors, true);
-      checkNonNegInt(o, "action_index", path7, errors, true);
+      checkNonEmptyStr(o, "workflow_digest", path8, errors);
+      checkNonEmptyStr(o, "workflow", path8, errors);
+      checkNonEmptyStr(o, "step", path8, errors);
+      checkNonEmptyStr(o, "event", path8, errors);
+      checkNonNegInt(o, "guard_index", path8, errors, true);
+      checkNonNegInt(o, "action_index", path8, errors, true);
       break;
     case "default-transition":
-      checkNonEmptyStr(o, "event", path7, errors);
+      checkNonEmptyStr(o, "event", path8, errors);
       break;
     case "runtime-verifier":
-      checkNonEmptyStr(o, "verifier", path7, errors);
-      checkNonEmptyStr(o, "version", path7, errors);
+      checkNonEmptyStr(o, "verifier", path8, errors);
+      checkNonEmptyStr(o, "version", path8, errors);
       break;
     default:
-      errors.push(`${path7}.kind: \u5E94\u5728\u95ED\u96C6 [${BINDING_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(o.kind)}`);
+      errors.push(`${path8}.kind: \u5E94\u5728\u95ED\u96C6 [${BINDING_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(o.kind)}`);
   }
 }
-function validateIssuer(o, path7, errors) {
+function validateIssuer(o, path8, errors) {
   switch (o.kind) {
     case "host-verifier":
-      checkNonEmptyStr(o, "verifier", path7, errors);
-      checkNonEmptyStr(o, "version", path7, errors);
-      checkLit(o, "trusted", true, path7, errors);
+      checkNonEmptyStr(o, "verifier", path8, errors);
+      checkNonEmptyStr(o, "version", path8, errors);
+      checkLit(o, "trusted", true, path8, errors);
       break;
     case "human-review":
-      checkNonEmptyStr(o, "actor_id", path7, errors);
-      checkLit(o, "trusted", true, path7, errors);
+      checkNonEmptyStr(o, "actor_id", path8, errors);
+      checkLit(o, "trusted", true, path8, errors);
       break;
     case "sandbox-report":
-      checkNonEmptyStr(o, "runner", path7, errors);
-      checkLit(o, "trusted", false, path7, errors);
+      checkNonEmptyStr(o, "runner", path8, errors);
+      checkLit(o, "trusted", false, path8, errors);
       break;
     default:
-      errors.push(`${path7}.kind: \u5E94\u5728\u95ED\u96C6 [${ISSUER_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(o.kind)}`);
+      errors.push(`${path8}.kind: \u5E94\u5728\u95ED\u96C6 [${ISSUER_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(o.kind)}`);
   }
 }
-function validateEvidenceRef(v, path7, errors) {
+function validateEvidenceRef(v, path8, errors) {
   if (!isObj(v)) {
-    errors.push(`${path7}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
+    errors.push(`${path8}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(v)}`);
     return;
   }
   switch (v.kind) {
     case "repo-file":
-      checkRepoRelPath(v, "path", path7, errors);
-      checkSha256(v, "sha256", path7, errors);
-      checkGitSha(v, "revision_sha", path7, errors);
+      checkRepoRelPath(v, "path", path8, errors);
+      checkSha256(v, "sha256", path8, errors);
+      checkGitSha(v, "revision_sha", path8, errors);
       break;
     case "command-result":
-      checkNonEmptyStr(v, "command_id", path7, errors);
-      checkInt(v, "exit_code", path7, errors);
-      checkSha256(v, "stdout_sha256", path7, errors, true);
-      checkSha256(v, "stderr_sha256", path7, errors, true);
+      checkNonEmptyStr(v, "command_id", path8, errors);
+      checkInt(v, "exit_code", path8, errors);
+      checkSha256(v, "stdout_sha256", path8, errors, true);
+      checkSha256(v, "stderr_sha256", path8, errors, true);
       break;
     default:
-      errors.push(`${path7}.kind: \u5E94\u5728\u95ED\u96C6 [${EVIDENCE_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(v.kind)}`);
+      errors.push(`${path8}.kind: \u5E94\u5728\u95ED\u96C6 [${EVIDENCE_KINDS.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(v.kind)}`);
   }
 }
 function extractEvidenceItem(raw) {
@@ -6167,9 +6167,9 @@ function extractEvidenceItem(raw) {
     out.kind = kind;
   switch (kind) {
     case "repo-file": {
-      const path7 = raw.path;
-      if (path7 !== void 0)
-        out.path = path7;
+      const path8 = raw.path;
+      if (path8 !== void 0)
+        out.path = path8;
       const sha2562 = raw.sha256;
       if (sha2562 !== void 0)
         out.sha256 = sha2562;
@@ -6402,70 +6402,70 @@ function sanitizeVerificationResultForEncode(input) {
     };
   }
 }
-function collectVerificationResultErrors(value, path7, errors) {
+function collectVerificationResultErrors(value, path8, errors) {
   if (!isObj(value)) {
-    errors.push(`${path7}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(value)}`);
+    errors.push(`${path8}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName(value)}`);
     return;
   }
-  checkLit(value, "schema_version", 1, path7, errors);
-  checkNonEmptyStr(value, "verification_id", path7, errors);
-  checkIsoTimestamp(value, "evaluated_at", path7, errors);
-  checkEnum(value, "verdict", VERDICTS, path7, errors);
-  const subject2 = subObj(value, "subject", path7, errors);
+  checkLit(value, "schema_version", 1, path8, errors);
+  checkNonEmptyStr(value, "verification_id", path8, errors);
+  checkIsoTimestamp(value, "evaluated_at", path8, errors);
+  checkEnum(value, "verdict", VERDICTS, path8, errors);
+  const subject2 = subObj(value, "subject", path8, errors);
   if (subject2 !== null)
-    validateSubject(subject2, `${path7}.subject`, errors);
-  const binding = subObj(value, "binding", path7, errors);
+    validateSubject(subject2, `${path8}.subject`, errors);
+  const binding = subObj(value, "binding", path8, errors);
   if (binding !== null)
-    validateBinding(binding, `${path7}.binding`, errors);
+    validateBinding(binding, `${path8}.binding`, errors);
   if (!missing(value, "automation_policy")) {
-    const policy2 = subObj(value, "automation_policy", path7, errors);
+    const policy2 = subObj(value, "automation_policy", path8, errors);
     if (policy2 !== null) {
-      checkNonEmptyStr(policy2, "policy_id", `${path7}.automation_policy`, errors);
-      checkSha256(policy2, "policy_version", `${path7}.automation_policy`, errors);
-      checkSha256(policy2, "goal_sha256", `${path7}.automation_policy`, errors);
+      checkNonEmptyStr(policy2, "policy_id", `${path8}.automation_policy`, errors);
+      checkSha256(policy2, "policy_version", `${path8}.automation_policy`, errors);
+      checkSha256(policy2, "goal_sha256", `${path8}.automation_policy`, errors);
     }
   }
-  const issuer = subObj(value, "issuer", path7, errors);
+  const issuer = subObj(value, "issuer", path8, errors);
   if (issuer !== null)
-    validateIssuer(issuer, `${path7}.issuer`, errors);
+    validateIssuer(issuer, `${path8}.issuer`, errors);
   if (missing(value, "evidence")) {
-    errors.push(`${path7}.evidence: \u7F3A\u5931\uFF08\u5FC5\u586B EvidenceRef[]\uFF09`);
+    errors.push(`${path8}.evidence: \u7F3A\u5931\uFF08\u5FC5\u586B EvidenceRef[]\uFF09`);
   } else if (!Array.isArray(value.evidence)) {
-    errors.push(`${path7}.evidence: \u5E94\u4E3A\u6570\u7EC4\uFF0C\u5B9E\u5F97 ${typeName(value.evidence)}`);
+    errors.push(`${path8}.evidence: \u5E94\u4E3A\u6570\u7EC4\uFF0C\u5B9E\u5F97 ${typeName(value.evidence)}`);
   } else {
-    value.evidence.forEach((item2, i) => validateEvidenceRef(item2, `${path7}.evidence[${i}]`, errors));
+    value.evidence.forEach((item2, i) => validateEvidenceRef(item2, `${path8}.evidence[${i}]`, errors));
     if (value.verdict === "passed" && value.evidence.length === 0) {
-      errors.push(`${path7}.evidence: verdict=passed \u81F3\u5C11\u9700\u4E00\u6761 evidence`);
+      errors.push(`${path8}.evidence: verdict=passed \u81F3\u5C11\u9700\u4E00\u6761 evidence`);
     }
     if (value.verdict === "passed" && subject2 !== null) {
       const subjectSha = subjectRevisionSha(subject2);
       if (subjectSha !== void 0) {
         value.evidence.forEach((item2, i) => {
           if (isObj(item2) && item2.kind === "repo-file" && typeof item2.revision_sha === "string" && item2.revision_sha !== subjectSha) {
-            errors.push(`${path7}.evidence[${i}].revision_sha: repo-file evidence \u5FC5\u987B\u7ED1\u5B9A subject.revision.sha\uFF08\u671F\u671B ${JSON.stringify(subjectSha)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2.revision_sha)}\u2014\u2014\u65E7 revision \u7684\u8BC1\u636E\u4E0D\u5F97\u652F\u6491\u65B0 revision \u7684 passed\uFF09`);
+            errors.push(`${path8}.evidence[${i}].revision_sha: repo-file evidence \u5FC5\u987B\u7ED1\u5B9A subject.revision.sha\uFF08\u671F\u671B ${JSON.stringify(subjectSha)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2.revision_sha)}\u2014\u2014\u65E7 revision \u7684\u8BC1\u636E\u4E0D\u5F97\u652F\u6491\u65B0 revision \u7684 passed\uFF09`);
           }
         });
       }
     }
   }
 }
-function validateVerificationResult(input, path7 = "verification") {
+function validateVerificationResult(input, path8 = "verification") {
   let snapshot;
   try {
     snapshot = snapshotVerificationResultFields(input);
   } catch (e) {
     return {
       ok: false,
-      errors: [`${path7}: \u8BFB\u53D6\u5B57\u6BB5\u65F6\u629B\u51FA\u5F02\u5E38\uFF08\u7591\u4F3C\u654C\u610F getter/Proxy trap\uFF09\uFF0C\u4E00\u5F8B\u5224\u5931\u8D25\uFF1A${safeErrorText(e)}`]
+      errors: [`${path8}: \u8BFB\u53D6\u5B57\u6BB5\u65F6\u629B\u51FA\u5F02\u5E38\uFF08\u7591\u4F3C\u654C\u610F getter/Proxy trap\uFF09\uFF0C\u4E00\u5F8B\u5224\u5931\u8D25\uFF1A${safeErrorText(e)}`]
     };
   }
   const errors = [];
   try {
-    collectVerificationResultErrors(snapshot, path7, errors);
+    collectVerificationResultErrors(snapshot, path8, errors);
   } catch (e) {
     return {
       ok: false,
-      errors: [`${path7}: \u6821\u9A8C\u5B57\u6BB5\u65F6\u629B\u51FA\u5F02\u5E38\uFF0C\u4E00\u5F8B\u5224\u5931\u8D25\uFF1A${safeErrorText(e)}`]
+      errors: [`${path8}: \u6821\u9A8C\u5B57\u6BB5\u65F6\u629B\u51FA\u5F02\u5E38\uFF0C\u4E00\u5F8B\u5224\u5931\u8D25\uFF1A${safeErrorText(e)}`]
     };
   }
   if (errors.length > 0)
@@ -6482,9 +6482,9 @@ var TRACK_ID_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 
 // packages/kernel/dist/loops/registry.js
 var KEY_RE = /^([A-Za-z_][\w.-]*):(?:\s+(.*)|\s*)$/;
-function tokenize(text3) {
+function tokenize(text4) {
   const tokens = [];
-  for (const rawLine of text3.split("\n")) {
+  for (const rawLine of text4.split("\n")) {
     const line = rawLine.replace(/\r$/, "");
     if (line.trim() === "")
       continue;
@@ -6590,25 +6590,25 @@ function parseValue(tokens, i, indent) {
     return parseMapping(tokens, i, indent);
   return { value: parseScalar(required(t.raw)), next: i + 1 };
 }
-function parseLoopsYaml(text3) {
+function parseLoopsYaml(text4) {
   try {
-    const tokens = tokenize(text3);
+    const tokens = tokenize(text4);
     if (tokens.length === 0)
       return { data: null, error: "\u7A7A\u6587\u6863\uFF08\u65E0\u5185\u5BB9\uFF09" };
     const first = required(tokens[0]);
     if (first.indent !== 0)
       throw new YamlParseError(`\u9876\u5C42\u610F\u5916\u7F29\u8FDB\uFF08\u7B2C\u4E00\u4E2A token indent=${first.indent}\uFF09`);
-    let result;
+    let result2;
     if (first.kind === "kv")
-      result = parseMapping(tokens, 0, 0);
+      result2 = parseMapping(tokens, 0, 0);
     else if (first.kind === "dash")
-      result = parseSequence(tokens, 0, 0);
+      result2 = parseSequence(tokens, 0, 0);
     else
       throw new YamlParseError("\u9876\u5C42\u5FC5\u987B\u662F mapping \u6216 sequence\uFF08\u5F97\u5230\u88F8\u6807\u91CF\uFF09");
-    if (result.next !== tokens.length) {
-      throw new YamlParseError(`\u6B8B\u7559\u672A\u89E3\u6790\u5185\u5BB9\uFF08\u81EA token #${result.next}\uFF0C\u7F29\u8FDB\u4E0D\u4E00\u81F4\u6216\u5B50\u96C6\u5916\u7ED3\u6784\uFF09`);
+    if (result2.next !== tokens.length) {
+      throw new YamlParseError(`\u6B8B\u7559\u672A\u89E3\u6790\u5185\u5BB9\uFF08\u81EA token #${result2.next}\uFF0C\u7F29\u8FDB\u4E0D\u4E00\u81F4\u6216\u5B50\u96C6\u5916\u7ED3\u6784\uFF09`);
     }
-    return { data: result.value, error: null };
+    return { data: result2.value, error: null };
   } catch (e) {
     return { data: null, error: e instanceof Error ? e.message : String(e) };
   }
@@ -6627,8 +6627,8 @@ var VALIDATION_KEYWORDS = /* @__PURE__ */ new Set([
   "properties",
   "items"
 ]);
-function joinPath(path7, key) {
-  return path7 === "" ? key : `${path7}.${key}`;
+function joinPath(path8, key) {
+  return path8 === "" ? key : `${path8}.${key}`;
 }
 function typeMatches(instance, typeSpec) {
   const types = Array.isArray(typeSpec) ? typeSpec : [typeSpec];
@@ -6650,15 +6650,15 @@ function typeMatches(instance, typeSpec) {
   }
   return false;
 }
-function validateSchema(instance, schema, path7 = "") {
+function validateSchema(instance, schema, path8 = "") {
   if (typeof schema !== "object" || schema === null)
     return [];
   for (const kw of Object.keys(schema)) {
     if (!ANNOTATION_KEYWORDS.has(kw) && !VALIDATION_KEYWORDS.has(kw)) {
-      throw new Error(`loops validator: unsupported schema keyword '${kw}' at ${path7 || "<root>"}`);
+      throw new Error(`loops validator: unsupported schema keyword '${kw}' at ${path8 || "<root>"}`);
     }
   }
-  const label = path7 || "<root>";
+  const label = path8 || "<root>";
   const errors = [];
   if ("const" in schema) {
     if (instance !== schema.const) {
@@ -6702,22 +6702,22 @@ function validateSchema(instance, schema, path7 = "") {
     const props = schema.properties ?? {};
     for (const req of schema.required ?? []) {
       if (!(req in obj))
-        errors.push(`${joinPath(path7, req)}: missing required field`);
+        errors.push(`${joinPath(path8, req)}: missing required field`);
     }
     if (schema.additionalProperties === false) {
       for (const key of Object.keys(obj)) {
         if (!(key in props))
-          errors.push(`${joinPath(path7, key)}: unexpected additional field (not in schema)`);
+          errors.push(`${joinPath(path8, key)}: unexpected additional field (not in schema)`);
       }
     }
     for (const [key, subschema] of Object.entries(props)) {
       if (key in obj)
-        errors.push(...validateSchema(obj[key], subschema, joinPath(path7, key)));
+        errors.push(...validateSchema(obj[key], subschema, joinPath(path8, key)));
     }
   }
   if (Array.isArray(instance) && "items" in schema) {
     const itemSchema = schema.items;
-    instance.forEach((item2, idx) => errors.push(...validateSchema(item2, itemSchema, `${path7}[${idx}]`)));
+    instance.forEach((item2, idx) => errors.push(...validateSchema(item2, itemSchema, `${path8}[${idx}]`)));
   }
   return errors;
 }
@@ -6845,10 +6845,10 @@ function isValidatedLoopRegistry(value, errors) {
   return errors.length === 0;
 }
 function loadRegistry(repoRoot, io2 = nodeLoopIo) {
-  const text3 = io2.readText(join15(repoRoot, ...LOOPS_REL_PATH));
-  if (text3 === null)
+  const text4 = io2.readText(join15(repoRoot, ...LOOPS_REL_PATH));
+  if (text4 === null)
     return { data: null, errors: [] };
-  const { data, error: error2 } = parseLoopsYaml(text3);
+  const { data, error: error2 } = parseLoopsYaml(text4);
   if (error2 !== null)
     return { data: null, errors: [`loops.yaml: ${error2}`] };
   if (data === null || typeof data !== "object" || Array.isArray(data)) {
@@ -6874,131 +6874,131 @@ function typeName2(value) {
 function missing2(value, key) {
   return !(key in value) || value[key] === void 0;
 }
-function checkStr(value, key, path7, errors, optional = false) {
+function checkStr(value, key, path8, errors, optional = false) {
   if (missing2(value, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B string\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B string\uFF09`);
     return;
   }
   if (typeof value[key] !== "string")
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
 }
-function checkNum(value, key, path7, errors, optional = false) {
+function checkNum(value, key, path8, errors, optional = false) {
   if (missing2(value, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B number\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B number\uFF09`);
     return;
   }
   if (typeof value[key] !== "number")
-    errors.push(`${path7}.${key}: \u5E94\u4E3A number\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A number\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
 }
-function checkBool(value, key, path7, errors, optional = false) {
+function checkBool(value, key, path8, errors, optional = false) {
   if (missing2(value, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B boolean\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B boolean\uFF09`);
     return;
   }
   if (typeof value[key] !== "boolean")
-    errors.push(`${path7}.${key}: \u5E94\u4E3A boolean\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A boolean\uFF0C\u5B9E\u5F97 ${typeName2(value[key])}`);
 }
-function checkKnownKeys(value, allowed, path7, errors) {
+function checkKnownKeys(value, allowed, path8, errors) {
   const known = new Set(allowed);
   for (const key of Object.keys(value)) {
     if (!known.has(key))
-      errors.push(`${path7}.${key}: \u672A\u77E5\u5B57\u6BB5`);
+      errors.push(`${path8}.${key}: \u672A\u77E5\u5B57\u6BB5`);
   }
 }
-function checkEnum2(value, key, allowed, path7, errors, optional = false) {
+function checkEnum2(value, key, allowed, path8, errors, optional = false) {
   if (missing2(value, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\uFF0C\u95ED\u96C6 ${allowed.join("|")}\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\uFF0C\u95ED\u96C6 ${allowed.join("|")}\uFF09`);
     return;
   }
   const item2 = value[key];
   if (typeof item2 !== "string" || !allowed.includes(item2)) {
-    errors.push(`${path7}.${key}: \u5E94\u5728\u95ED\u96C6 [${allowed.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2)}`);
+    errors.push(`${path8}.${key}: \u5E94\u5728\u95ED\u96C6 [${allowed.join("|")}] \u5185\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2)}`);
   }
 }
-function checkLit2(value, key, literal, path7, errors, optional = false) {
+function checkLit2(value, key, literal, path8, errors, optional = false) {
   if (missing2(value, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF09`);
     return;
   }
   if (value[key] !== literal) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(value[key])}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A\u5B57\u9762\u91CF ${JSON.stringify(literal)}\uFF0C\u5B9E\u5F97 ${JSON.stringify(value[key])}`);
   }
 }
-function checkStrArray(value, key, path7, errors, optional = false) {
+function checkStrArray(value, key, path8, errors, optional = false) {
   if (missing2(value, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B string[]\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B string[]\uFF09`);
     return;
   }
   const items = value[key];
   if (!Array.isArray(items)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string[]\uFF0C\u5B9E\u5F97 ${typeName2(items)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string[]\uFF0C\u5B9E\u5F97 ${typeName2(items)}`);
     return;
   }
   items.forEach((item2, index) => {
     if (typeof item2 !== "string")
-      errors.push(`${path7}.${key}[${index}]: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
+      errors.push(`${path8}.${key}[${index}]: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
   });
 }
-function subObj2(value, key, path7, errors, optional = false) {
+function subObj2(value, key, path8, errors, optional = false) {
   if (missing2(value, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5BF9\u8C61\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u5BF9\u8C61\uFF09`);
     return null;
   }
   const child = value[key];
   if (!isObj2(child)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName2(child)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName2(child)}`);
     return null;
   }
   return child;
 }
 var SHA256_HEX_RE = /^[0-9a-f]{64}$/;
-function checkSha2562(value, key, path7, errors, optional = false) {
+function checkSha2562(value, key, path8, errors, optional = false) {
   if (missing2(value, key)) {
     if (!optional)
-      errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
+      errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
     return;
   }
-  const digest6 = value[key];
-  if (typeof digest6 !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest6)}`);
+  const digest7 = value[key];
+  if (typeof digest7 !== "string") {
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest7)}`);
     return;
   }
-  if (!SHA256_HEX_RE.test(digest6)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest6)}`);
+  if (!SHA256_HEX_RE.test(digest7)) {
+    errors.push(`${path8}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest7)}`);
   }
 }
-function checkPattern(value, key, pattern, path7, errors) {
+function checkPattern(value, key, pattern, path8, errors) {
   if (missing2(value, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\uFF0C\u987B\u5339\u914D ${pattern.source}\uFF09`);
+    errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\uFF0C\u987B\u5339\u914D ${pattern.source}\uFF09`);
     return;
   }
   const item2 = value[key];
   if (typeof item2 !== "string") {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
     return;
   }
   if (!pattern.test(item2))
-    errors.push(`${path7}.${key}: \u4E0D\u5339\u914D\u8BCD\u6CD5 ${pattern.source}\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2)}`);
+    errors.push(`${path8}.${key}: \u4E0D\u5339\u914D\u8BCD\u6CD5 ${pattern.source}\uFF0C\u5B9E\u5F97 ${JSON.stringify(item2)}`);
 }
-function checkSlotArray(value, key, path7, errors) {
+function checkSlotArray(value, key, path8, errors) {
   if (missing2(value, key)) {
-    errors.push(`${path7}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u6570\u7EC4\uFF0C\u5141\u8BB8\u4E3A\u7A7A\uFF09`);
+    errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B\u6570\u7EC4\uFF0C\u5141\u8BB8\u4E3A\u7A7A\uFF09`);
     return;
   }
   const slots = value[key];
   if (!Array.isArray(slots)) {
-    errors.push(`${path7}.${key}: \u5E94\u4E3A\u6570\u7EC4\uFF0C\u5B9E\u5F97 ${typeName2(slots)}`);
+    errors.push(`${path8}.${key}: \u5E94\u4E3A\u6570\u7EC4\uFF0C\u5B9E\u5F97 ${typeName2(slots)}`);
     return;
   }
   slots.forEach((item2, index) => {
-    const itemPath = `${path7}.${key}[${index}]`;
+    const itemPath = `${path8}.${key}[${index}]`;
     if (!isObj2(item2)) {
       errors.push(`${itemPath}: \u5E94\u4E3A\u5BF9\u8C61\uFF0C\u5B9E\u5F97 ${typeName2(item2)}`);
       return;
@@ -7439,12 +7439,12 @@ function parseTimestamp(raw, now) {
 function sameUTCDate(a, b) {
   return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth() && a.getUTCDate() === b.getUTCDate();
 }
-function sumRunLogTokens(text3, loopId, now) {
-  if (text3 === null)
+function sumRunLogTokens(text4, loopId, now) {
+  if (text4 === null)
     return { spentToday: 0, runsToday: 0 };
   let spentToday = 0;
   let runsToday = 0;
-  for (const rawLine of text3.split("\n")) {
+  for (const rawLine of text4.split("\n")) {
     const line = rawLine.trim();
     if (!line.startsWith("|"))
       continue;
@@ -7812,9 +7812,9 @@ function createLoopLedgerStore() {
     });
   }
   async function read(repoRoot) {
-    let text3;
+    let text4;
     try {
-      text3 = await readFile7(ledgerFilePath(repoRoot), "utf8");
+      text4 = await readFile7(ledgerFilePath(repoRoot), "utf8");
     } catch (e) {
       if (e.code === "ENOENT")
         return { records: [], rejected: [] };
@@ -7822,7 +7822,7 @@ function createLoopLedgerStore() {
     }
     const records = [];
     const rejected = [];
-    const lines = text3.split("\n");
+    const lines = text4.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const raw = required(lines[i]);
       if (raw.trim() === "") {
@@ -8125,74 +8125,74 @@ var KNOWN_FIELDS2 = new Set(FIELD_ORDER);
 var LIST_FIELD_SET3 = new Set(LIST_FIELDS);
 var WHEN_ALLOWED_KEYS = /* @__PURE__ */ new Set(["kind", "values"]);
 var PATH_ALLOWED_KEYS = /* @__PURE__ */ new Set(["kind", "field"]);
-function compileError(path7, message) {
-  throw new Error(`compileWorkflow: ${path7}: ${message}`);
+function compileError(path8, message) {
+  throw new Error(`compileWorkflow: ${path8}: ${message}`);
 }
-function asRecord(value, path7) {
+function asRecord(value, path8) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    compileError(path7, `\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
+    compileError(path8, `\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
   }
   return value;
 }
-function asArray(value, path7) {
+function asArray(value, path8) {
   if (!Array.isArray(value))
-    compileError(path7, `\u5FC5\u987B\u662F\u6570\u7EC4\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
+    compileError(path8, `\u5FC5\u987B\u662F\u6570\u7EC4\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
   return value;
 }
-function rejectExtraKeys(record5, allowed, path7) {
+function rejectExtraKeys(record5, allowed, path8) {
   for (const key of Object.keys(record5)) {
     if (!allowed.has(key)) {
-      compileError(path7, `\u51FA\u73B0\u8BE5\u53D8\u4F53\u4E0D\u63A5\u53D7\u7684\u9644\u52A0\u952E '${key}'\uFF08\u95ED\u96C6\uFF1A${[...allowed].join("/")}\uFF09`);
+      compileError(path8, `\u51FA\u73B0\u8BE5\u53D8\u4F53\u4E0D\u63A5\u53D7\u7684\u9644\u52A0\u952E '${key}'\uFF08\u95ED\u96C6\uFF1A${[...allowed].join("/")}\uFF09`);
     }
   }
 }
-function stringArray2(value, path7) {
-  return asArray(value, path7).map((item2, index) => {
+function stringArray2(value, path8) {
+  return asArray(value, path8).map((item2, index) => {
     if (typeof item2 !== "string") {
-      compileError(`${path7}[${index}]`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(item2)}\uFF09`);
+      compileError(`${path8}[${index}]`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(item2)}\uFF09`);
     }
     return item2;
   });
 }
-function knownField(value, path7) {
+function knownField(value, path8) {
   if (typeof value !== "string" || !KNOWN_FIELDS2.has(value)) {
-    compileError(path7, `'${String(value)}' \u4E0D\u662F\u5DF2\u77E5\u72B6\u6001\u5B57\u6BB5\uFF08../types.ts FIELD_ORDER \u95ED\u96C6\uFF09`);
+    compileError(path8, `'${String(value)}' \u4E0D\u662F\u5DF2\u77E5\u72B6\u6001\u5B57\u6BB5\uFF08../types.ts FIELD_ORDER \u95ED\u96C6\uFF09`);
   }
   return value;
 }
-function scalarField(value, path7) {
-  const field2 = knownField(value, path7);
+function scalarField(value, path8) {
+  const field2 = knownField(value, path8);
   if (LIST_FIELD_SET3.has(field2)) {
-    compileError(path7, `'${field2}' \u662F\u5217\u8868\u5B57\u6BB5\uFF08../types.ts LIST_FIELDS\uFF09\uFF0Cscalar guard \u4E0D\u5B9A\u4E49\u5217\u8868\u8BED\u4E49`);
+    compileError(path8, `'${field2}' \u662F\u5217\u8868\u5B57\u6BB5\uFF08../types.ts LIST_FIELDS\uFF09\uFF0Cscalar guard \u4E0D\u5B9A\u4E49\u5217\u8868\u8BED\u4E49`);
   }
   return field2;
 }
-function compileWhen(value, path7) {
+function compileWhen(value, path8) {
   if (value === void 0)
     return void 0;
-  const record5 = asRecord(value, path7);
+  const record5 = asRecord(value, path8);
   if (record5.kind !== "track-in" && record5.kind !== "track-not-in") {
-    compileError(`${path7}.kind`, `\u5FC5\u987B\u662F 'track-in' | 'track-not-in'\uFF08\u5B9E\u9645 ${JSON.stringify(record5.kind)}\uFF09`);
+    compileError(`${path8}.kind`, `\u5FC5\u987B\u662F 'track-in' | 'track-not-in'\uFF08\u5B9E\u9645 ${JSON.stringify(record5.kind)}\uFF09`);
   }
-  const values = stringArray2(record5.values, `${path7}.values`);
-  rejectExtraKeys(record5, WHEN_ALLOWED_KEYS, path7);
+  const values = stringArray2(record5.values, `${path8}.values`);
+  rejectExtraKeys(record5, WHEN_ALLOWED_KEYS, path8);
   return { kind: record5.kind, values };
 }
 function withWhen(config, when) {
   return when === void 0 ? config : { ...config, when };
 }
-function compileGuard(raw, path7, outputs2) {
-  const record5 = asRecord(raw, path7);
+function compileGuard(raw, path8, outputs2) {
+  const record5 = asRecord(raw, path8);
   if (typeof record5.type === "string" && Object.prototype.hasOwnProperty.call(GUARD_DATA_KEYS, record5.type)) {
     const dataKeys = GUARD_DATA_KEYS[record5.type];
-    rejectExtraKeys(record5, /* @__PURE__ */ new Set(["type", "when", ...dataKeys]), path7);
+    rejectExtraKeys(record5, /* @__PURE__ */ new Set(["type", "when", ...dataKeys]), path8);
   }
-  const when = compileWhen(record5.when, `${path7}.when`);
+  const when = compileWhen(record5.when, `${path8}.when`);
   switch (record5.type) {
     case "tasks-at-least": {
       const n = record5.n;
       if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
-        compileError(`${path7}.n`, `\u5FC5\u987B\u662F\u975E\u8D1F\u6574\u6570\uFF08parse.ts \u7684 \\d+ \u53E3\u5F84\uFF1B\u5B9E\u9645 ${JSON.stringify(n)}\uFF09`);
+        compileError(`${path8}.n`, `\u5FC5\u987B\u662F\u975E\u8D1F\u6574\u6570\uFF08parse.ts \u7684 \\d+ \u53E3\u5F84\uFF1B\u5B9E\u9645 ${JSON.stringify(n)}\uFF09`);
       }
       return [withWhen({ type: "tasks-at-least", n }, when)];
     }
@@ -8201,38 +8201,38 @@ function compileGuard(raw, path7, outputs2) {
     case "field-nonempty":
       return [withWhen({
         type: "field-nonempty",
-        field: scalarField(record5.field, `${path7}.field`)
+        field: scalarField(record5.field, `${path8}.field`)
       }, when)];
     case "file-exists": {
-      const target = asRecord(record5.path, `${path7}.path`);
+      const target = asRecord(record5.path, `${path8}.path`);
       if (target.kind !== "field") {
-        compileError(`${path7}.path.kind`, `\u5FC5\u987B\u662F 'field'\uFF08\u5B9E\u9645 ${JSON.stringify(target.kind)}\uFF09`);
+        compileError(`${path8}.path.kind`, `\u5FC5\u987B\u662F 'field'\uFF08\u5B9E\u9645 ${JSON.stringify(target.kind)}\uFF09`);
       }
-      const field2 = scalarField(target.field, `${path7}.path.field`);
-      rejectExtraKeys(target, PATH_ALLOWED_KEYS, `${path7}.path`);
+      const field2 = scalarField(target.field, `${path8}.path.field`);
+      rejectExtraKeys(target, PATH_ALLOWED_KEYS, `${path8}.path`);
       return [withWhen({ type: "file-exists", path: { kind: "field", field: field2 } }, when)];
     }
     case "field-equals": {
       const value = record5.value;
       if (typeof value !== "string") {
-        compileError(`${path7}.value`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
+        compileError(`${path8}.value`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
       }
       const unrepresentable = fieldEqualsValueUnrepresentableReason(value);
       if (unrepresentable)
-        compileError(`${path7}.value`, unrepresentable);
+        compileError(`${path8}.value`, unrepresentable);
       return [withWhen({
         type: "field-equals",
-        field: scalarField(record5.field, `${path7}.field`),
+        field: scalarField(record5.field, `${path8}.field`),
         value
       }, when)];
     }
     case "field-in": {
-      const values = stringArray2(record5.values, `${path7}.values`);
+      const values = stringArray2(record5.values, `${path8}.values`);
       if (values.length === 0)
-        compileError(`${path7}.values`, "\u4E0D\u5F97\u662F\u7A7A\u6570\u7EC4\uFF08\u81F3\u5C11\u4E00\u4E2A\u5408\u6CD5\u503C\uFF09");
+        compileError(`${path8}.values`, "\u4E0D\u5F97\u662F\u7A7A\u6570\u7EC4\uFF08\u81F3\u5C11\u4E00\u4E2A\u5408\u6CD5\u503C\uFF09");
       return [withWhen({
         type: "field-in",
-        field: scalarField(record5.field, `${path7}.field`),
+        field: scalarField(record5.field, `${path8}.field`),
         values
       }, when)];
     }
@@ -8240,19 +8240,19 @@ function compileGuard(raw, path7, outputs2) {
       return [withWhen({ type: "full-direct-override" }, when)];
     case "build-head-unchanged":
       if (record5.field !== "build_sha") {
-        compileError(`${path7}.field`, `\u5FC5\u987B\u662F 'build_sha'\uFF08barrier \u53EA\u5B9A\u4E49\u5728 build \u51BB\u7ED3 SHA \u4E0A\uFF1B\u5B9E\u9645 ${JSON.stringify(record5.field)}\uFF09`);
+        compileError(`${path8}.field`, `\u5FC5\u987B\u662F 'build_sha'\uFF08barrier \u53EA\u5B9A\u4E49\u5728 build \u51BB\u7ED3 SHA \u4E0A\uFF1B\u5B9E\u9645 ${JSON.stringify(record5.field)}\uFF09`);
       }
       return [withWhen({ type: "build-head-unchanged", field: "build_sha" }, when)];
     case "spec-migration-applied":
       return [withWhen({ type: "spec-migration-applied" }, when)];
     default:
-      compileError(`${path7}.type`, `\u672A\u77E5 guard type ${JSON.stringify(record5.type)}\uFF08\u95ED\u96C6\u89C1 types.ts WorkflowGuardConfig\uFF09`);
+      compileError(`${path8}.type`, `\u672A\u77E5 guard type ${JSON.stringify(record5.type)}\uFF08\u95ED\u96C6\u89C1 types.ts WorkflowGuardConfig\uFF09`);
   }
 }
-function compileGuards(raw, path7, outputs2) {
+function compileGuards(raw, path8, outputs2) {
   if (raw === void 0)
     return [];
-  return asArray(raw, path7).flatMap((guard, index) => compileGuard(guard, `${path7}[${index}]`, outputs2));
+  return asArray(raw, path8).flatMap((guard, index) => compileGuard(guard, `${path8}[${index}]`, outputs2));
 }
 
 // packages/kernel/dist/workflow/policy.js
@@ -8294,54 +8294,54 @@ var DEFAULT_WORKFLOW_REVIEW_BUDGET_POLICY = Object.freeze({
   version: "v1",
   max_attempts: 2
 });
-function policyError(path7, message) {
-  throw new Error(`compileWorkflow: ${path7}: ${message}`);
+function policyError(path8, message) {
+  throw new Error(`compileWorkflow: ${path8}: ${message}`);
 }
-function ownRecord4(value, path7) {
+function ownRecord4(value, path8) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    policyError(path7, `\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
+    policyError(path8, `\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
   }
   return value;
 }
-function rejectUnknownKeys(record5, keys, path7) {
+function rejectUnknownKeys(record5, keys, path8) {
   const allowed = new Set(keys);
   for (const key of Object.keys(record5)) {
     if (!allowed.has(key))
-      policyError(path7, `\u672A\u77E5\u5B57\u6BB5 '${key}'`);
+      policyError(path8, `\u672A\u77E5\u5B57\u6BB5 '${key}'`);
   }
 }
-function closedValue(value, allowed, path7, fallback) {
+function closedValue(value, allowed, path8, fallback) {
   const resolved = value === void 0 ? fallback : value;
   if (typeof resolved !== "string" || !allowed.includes(resolved)) {
-    policyError(path7, `\u5FC5\u987B\u5C5E\u4E8E ${allowed.join("|")}\uFF08\u5B9E\u9645 ${JSON.stringify(resolved)}\uFF09`);
+    policyError(path8, `\u5FC5\u987B\u5C5E\u4E8E ${allowed.join("|")}\uFF08\u5B9E\u9645 ${JSON.stringify(resolved)}\uFF09`);
   }
   return resolved;
 }
-function boundedInteger(value, fallback, min, max, path7) {
+function boundedInteger(value, fallback, min, max, path8) {
   const resolved = value === void 0 ? fallback : value;
   if (!Number.isInteger(resolved) || typeof resolved !== "number" || resolved < min || resolved > max) {
-    policyError(path7, `\u5FC5\u987B\u662F ${min}..${max} \u7684\u6574\u6570\uFF08\u5B9E\u9645 ${JSON.stringify(resolved)}\uFF09`);
+    policyError(path8, `\u5FC5\u987B\u662F ${min}..${max} \u7684\u6574\u6570\uFF08\u5B9E\u9645 ${JSON.stringify(resolved)}\uFF09`);
   }
   return resolved;
 }
-function closedList(value, allowed, path7) {
+function closedList(value, allowed, path8) {
   if (value === void 0)
     return [];
   if (!Array.isArray(value))
-    policyError(path7, `\u5FC5\u987B\u662F\u6570\u7EC4\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
-  const result = [];
+    policyError(path8, `\u5FC5\u987B\u662F\u6570\u7EC4\uFF08\u5B9E\u9645 ${JSON.stringify(value)}\uFF09`);
+  const result2 = [];
   const seen = /* @__PURE__ */ new Set();
   for (let index = 0; index < value.length; index++) {
     if (!Object.hasOwn(value, index) || value[index] === void 0) {
-      policyError(`${path7}[${index}]`, "\u6761\u4EF6\u4E0D\u5F97\u4E3A\u7A7A\u6216\u7A00\u758F");
+      policyError(`${path8}[${index}]`, "\u6761\u4EF6\u4E0D\u5F97\u4E3A\u7A7A\u6216\u7A00\u758F");
     }
-    const resolved = closedValue(value[index], allowed, `${path7}[${index}]`, allowed[0]);
+    const resolved = closedValue(value[index], allowed, `${path8}[${index}]`, allowed[0]);
     if (seen.has(resolved))
-      policyError(`${path7}[${index}]`, `\u6761\u4EF6 '${resolved}' \u91CD\u590D`);
+      policyError(`${path8}[${index}]`, `\u6761\u4EF6 '${resolved}' \u91CD\u590D`);
     seen.add(resolved);
-    result.push(resolved);
+    result2.push(resolved);
   }
-  return result;
+  return result2;
 }
 function compileWorkflowDecompositionPolicy(value) {
   if (value === void 0)
@@ -8580,144 +8580,144 @@ var ACTION_KEYS = /* @__PURE__ */ new Set(["type"]);
 var DOCUMENT_CONTRACT_KEYS = /* @__PURE__ */ new Set(["version", "slots", "reads"]);
 var DOCUMENT_SLOT_KEYS = /* @__PURE__ */ new Set(["kind", "ownerStep", "producers"]);
 var DOCUMENT_READ_KEYS = /* @__PURE__ */ new Set(["step", "kinds"]);
-function compileError2(path7, msg) {
-  throw new Error(`compileWorkflow: ${path7}: ${msg}`);
+function compileError2(path8, msg) {
+  throw new Error(`compileWorkflow: ${path8}: ${msg}`);
 }
-function asRecord2(v, path7) {
+function asRecord2(v, path8) {
   if (typeof v !== "object" || v === null || Array.isArray(v)) {
-    compileError2(path7, `\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u5B9E\u9645 ${JSON.stringify(v)}\uFF09`);
+    compileError2(path8, `\u5FC5\u987B\u662F\u5BF9\u8C61\uFF08\u5B9E\u9645 ${JSON.stringify(v)}\uFF09`);
   }
   return v;
 }
-function asArray2(v, path7) {
+function asArray2(v, path8) {
   if (!Array.isArray(v))
-    compileError2(path7, `\u5FC5\u987B\u662F\u6570\u7EC4\uFF08\u5B9E\u9645 ${JSON.stringify(v)}\uFF09`);
+    compileError2(path8, `\u5FC5\u987B\u662F\u6570\u7EC4\uFF08\u5B9E\u9645 ${JSON.stringify(v)}\uFF09`);
   return v;
 }
-function rejectExtraKeys2(rec, allowed, path7) {
+function rejectExtraKeys2(rec, allowed, path8) {
   for (const key of Object.keys(rec)) {
     if (!allowed.has(key)) {
-      compileError2(path7, `\u51FA\u73B0\u8BE5\u53D8\u4F53\u4E0D\u63A5\u53D7\u7684\u9644\u52A0\u952E '${key}'\uFF08\u95ED\u96C6\uFF1A${[...allowed].join("/")}\uFF09`);
+      compileError2(path8, `\u51FA\u73B0\u8BE5\u53D8\u4F53\u4E0D\u63A5\u53D7\u7684\u9644\u52A0\u952E '${key}'\uFF08\u95ED\u96C6\uFF1A${[...allowed].join("/")}\uFF09`);
     }
   }
 }
-function nonemptyString(v, path7) {
+function nonemptyString(v, path8) {
   if (typeof v !== "string" || v === "")
-    compileError2(path7, `\u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(v)}\uFF09`);
+    compileError2(path8, `\u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(v)}\uFF09`);
   return v;
 }
-function stringArray3(v, path7) {
-  const arr = asArray2(v, path7);
+function stringArray3(v, path8) {
+  const arr = asArray2(v, path8);
   return arr.map((x, i) => {
     if (typeof x !== "string")
-      compileError2(`${path7}[${i}]`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(x)}\uFF09`);
+      compileError2(`${path8}[${i}]`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(x)}\uFF09`);
     return x;
   });
 }
-function knownField2(value, path7) {
+function knownField2(value, path8) {
   if (typeof value !== "string" || !KNOWN_FIELDS3.has(value)) {
-    compileError2(path7, `'${String(value)}' \u4E0D\u662F\u5DF2\u77E5\u72B6\u6001\u5B57\u6BB5\uFF08../types.ts FIELD_ORDER \u95ED\u96C6\uFF09`);
+    compileError2(path8, `'${String(value)}' \u4E0D\u662F\u5DF2\u77E5\u72B6\u6001\u5B57\u6BB5\uFF08../types.ts FIELD_ORDER \u95ED\u96C6\uFF09`);
   }
   return value;
 }
-function compileAction(raw, path7) {
-  const rec = asRecord2(raw, path7);
-  rejectExtraKeys2(rec, ACTION_KEYS, path7);
+function compileAction(raw, path8) {
+  const rec = asRecord2(raw, path8);
+  rejectExtraKeys2(rec, ACTION_KEYS, path8);
   if (typeof rec.type !== "string" || !ACTION_TYPES.has(rec.type)) {
-    compileError2(`${path7}.type`, `\u672A\u77E5 action type ${JSON.stringify(rec.type)}\uFF08\u95ED\u96C6\u89C1 ir.ts ActionConfig\uFF09`);
+    compileError2(`${path8}.type`, `\u672A\u77E5 action type ${JSON.stringify(rec.type)}\uFF08\u95ED\u96C6\u89C1 ir.ts ActionConfig\uFF09`);
   }
   return { type: rec.type };
 }
-function compileActions(raw, path7) {
+function compileActions(raw, path8) {
   if (raw === void 0)
     return [];
-  return asArray2(raw, path7).map((a, j) => compileAction(a, `${path7}[${j}]`));
+  return asArray2(raw, path8).map((a, j) => compileAction(a, `${path8}[${j}]`));
 }
-function compileFieldRef(raw, path7) {
-  const rec = asRecord2(raw, path7);
-  rejectExtraKeys2(rec, FIELD_REF_KEYS, path7);
+function compileFieldRef(raw, path8) {
+  const rec = asRecord2(raw, path8);
+  rejectExtraKeys2(rec, FIELD_REF_KEYS, path8);
   const type = rec.type;
   if (type !== "string" && type !== "file_path" && type !== "boolean") {
-    compileError2(`${path7}.type`, `\u5FC5\u987B\u662F ${FIELD_TYPES.join(" | ")}\uFF08\u5B9E\u9645 ${JSON.stringify(type)}\uFF09`);
+    compileError2(`${path8}.type`, `\u5FC5\u987B\u662F ${FIELD_TYPES.join(" | ")}\uFF08\u5B9E\u9645 ${JSON.stringify(type)}\uFF09`);
   }
-  const field2 = nonemptyString(rec.field, `${path7}.field`);
+  const field2 = nonemptyString(rec.field, `${path8}.field`);
   return { field: field2, type };
 }
-function compileReviewLanes(raw, path7) {
+function compileReviewLanes(raw, path8) {
   if (raw === void 0)
     return [];
-  const lanes = stringArray3(raw, path7);
+  const lanes = stringArray3(raw, path8);
   const seen = /* @__PURE__ */ new Set();
   for (const lane of lanes) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/u.test(lane)) {
-      compileError2(path7, `Review lane '${lane}' \u542B\u975E\u6CD5\u5B57\u7B26`);
+      compileError2(path8, `Review lane '${lane}' \u542B\u975E\u6CD5\u5B57\u7B26`);
     }
     if (seen.has(lane))
-      compileError2(path7, `Review lane '${lane}' \u91CD\u590D\u58F0\u660E`);
+      compileError2(path8, `Review lane '${lane}' \u91CD\u590D\u58F0\u660E`);
     seen.add(lane);
   }
   return lanes;
 }
-function compileSkillRef(raw, path7, reviewLanes) {
-  const rec = asRecord2(raw, path7);
-  rejectExtraKeys2(rec, SKILL_KEYS, path7);
-  const id2 = nonemptyString(rec.id, `${path7}.id`);
+function compileSkillRef(raw, path8, reviewLanes) {
+  const rec = asRecord2(raw, path8);
+  rejectExtraKeys2(rec, SKILL_KEYS, path8);
+  const id2 = nonemptyString(rec.id, `${path8}.id`);
   const kind = rec.kind ?? "work";
   if (kind !== "work" && kind !== "review") {
-    compileError2(`${path7}.kind`, `\u5FC5\u987B\u662F 'work' | 'review'\uFF08\u5B9E\u9645 ${JSON.stringify(kind)}\uFF09`);
+    compileError2(`${path8}.kind`, `\u5FC5\u987B\u662F 'work' | 'review'\uFF08\u5B9E\u9645 ${JSON.stringify(kind)}\uFF09`);
   }
   if (kind === "review") {
-    const reviewLane = nonemptyString(rec.review_lane, `${path7}.review_lane`);
+    const reviewLane = nonemptyString(rec.review_lane, `${path8}.review_lane`);
     if (!reviewLanes.includes(reviewLane)) {
-      compileError2(`${path7}.review_lane`, `Review lane '${reviewLane}' \u672A\u5728\u6240\u5C5E step.reviewLanes \u58F0\u660E`);
+      compileError2(`${path8}.review_lane`, `Review lane '${reviewLane}' \u672A\u5728\u6240\u5C5E step.reviewLanes \u58F0\u660E`);
     }
     return {
       id: id2,
       kind,
       review_lane: reviewLane,
-      ...rec.depends_on === void 0 ? {} : { depends_on: stringArray3(rec.depends_on, `${path7}.depends_on`) }
+      ...rec.depends_on === void 0 ? {} : { depends_on: stringArray3(rec.depends_on, `${path8}.depends_on`) }
     };
   }
   if (rec.review_lane !== void 0) {
-    compileError2(`${path7}.review_lane`, "kind=work \u4E0D\u5F97\u58F0\u660E review_lane");
+    compileError2(`${path8}.review_lane`, "kind=work \u4E0D\u5F97\u58F0\u660E review_lane");
   }
   return {
     id: id2,
     kind,
-    ...rec.depends_on === void 0 ? {} : { depends_on: stringArray3(rec.depends_on, `${path7}.depends_on`) }
+    ...rec.depends_on === void 0 ? {} : { depends_on: stringArray3(rec.depends_on, `${path8}.depends_on`) }
   };
 }
-function compileArtifact(raw, path7, outputs2, allowedPolicies) {
-  const rec = asRecord2(raw, path7);
-  rejectExtraKeys2(rec, ARTIFACT_KEYS2, path7);
+function compileArtifact(raw, path8, outputs2, allowedPolicies) {
+  const rec = asRecord2(raw, path8);
+  rejectExtraKeys2(rec, ARTIFACT_KEYS2, path8);
   if (rec.type !== void 0 && rec.type !== "file_path") {
-    compileError2(`${path7}.type`, `\u5FC5\u987B\u662F 'file_path'\uFF08\u5B9E\u9645 ${JSON.stringify(rec.type)}\uFF09`);
+    compileError2(`${path8}.type`, `\u5FC5\u987B\u662F 'file_path'\uFF08\u5B9E\u9645 ${JSON.stringify(rec.type)}\uFF09`);
   }
   if (rec.kind !== void 0 && rec.kind !== "file") {
-    compileError2(`${path7}.kind`, `\u5FC5\u987B\u662F 'file'\uFF08\u5B9E\u9645 ${JSON.stringify(rec.kind)}\uFF09`);
+    compileError2(`${path8}.kind`, `\u5FC5\u987B\u662F 'file'\uFF08\u5B9E\u9645 ${JSON.stringify(rec.kind)}\uFF09`);
   }
   if (rec.producerPolicy !== void 0) {
     if (typeof rec.producerPolicy !== "string" || !PRODUCER_POLICIES.has(rec.producerPolicy)) {
-      compileError2(`${path7}.producerPolicy`, `\u5FC5\u987B\u662F ${[...PRODUCER_POLICIES].map((p) => `'${p}'`).join(" | ")}\uFF08\u5B9E\u9645 ${JSON.stringify(rec.producerPolicy)}\uFF09`);
+      compileError2(`${path8}.producerPolicy`, `\u5FC5\u987B\u662F ${[...PRODUCER_POLICIES].map((p) => `'${p}'`).join(" | ")}\uFF08\u5B9E\u9645 ${JSON.stringify(rec.producerPolicy)}\uFF09`);
     }
     if (!allowedPolicies.has(rec.producerPolicy)) {
-      compileError2(`${path7}.producerPolicy`, `custom workflow \u4E0D\u5141\u8BB8 producerPolicy '${rec.producerPolicy}'\uFF08A \u5951\u7EA6\uFF1Acustom artifact \u53EA\u80FD ${[...allowedPolicies].map((p) => `'${p}'`).join(" | ")}\uFF1Beffective-phase-skills \u4EC5 default \u8F68\u9002\u7528\uFF09`);
+      compileError2(`${path8}.producerPolicy`, `custom workflow \u4E0D\u5141\u8BB8 producerPolicy '${rec.producerPolicy}'\uFF08A \u5951\u7EA6\uFF1Acustom artifact \u53EA\u80FD ${[...allowedPolicies].map((p) => `'${p}'`).join(" | ")}\uFF1Beffective-phase-skills \u4EC5 default \u8F68\u9002\u7528\uFF09`);
     }
   }
   const producerPolicy = rec.producerPolicy ?? "effective-step-skills";
-  const field2 = knownField2(rec.field, `${path7}.field`);
+  const field2 = knownField2(rec.field, `${path8}.field`);
   const ref = outputs2.find((o) => o.field === field2);
   if (!ref) {
-    compileError2(`${path7}.field`, `artifact \u53EA\u80FD\u6302\u5728\u672C step outputs \u58F0\u660E\u7684\u5B57\u6BB5\u4E0A\uFF08'${field2}' \u4E0D\u5728 outputs \u91CC\uFF09`);
+    compileError2(`${path8}.field`, `artifact \u53EA\u80FD\u6302\u5728\u672C step outputs \u58F0\u660E\u7684\u5B57\u6BB5\u4E0A\uFF08'${field2}' \u4E0D\u5728 outputs \u91CC\uFF09`);
   }
   if (ref.type !== "file_path") {
-    compileError2(`${path7}.field`, `artifact \u53EA\u8BB8\u6302 type:'file_path' \u7684 FieldRef\uFF08'${field2}' \u58F0\u660E\u4E3A '${ref.type}'\uFF09`);
+    compileError2(`${path8}.field`, `artifact \u53EA\u8BB8\u6302 type:'file_path' \u7684 FieldRef\uFF08'${field2}' \u58F0\u660E\u4E3A '${ref.type}'\uFF09`);
   }
-  const requiredWhen = compileWhen(rec.requiredWhen, `${path7}.requiredWhen`);
+  const requiredWhen = compileWhen(rec.requiredWhen, `${path8}.requiredWhen`);
   const base = { kind: "file", field: field2, producerPolicy };
   return requiredWhen === void 0 ? base : { ...base, requiredWhen };
 }
-function compileArtifacts(rawExplicit, path7, outputs2, outputsPath, allowedPolicies) {
+function compileArtifacts(rawExplicit, path8, outputs2, outputsPath, allowedPolicies) {
   const byField = /* @__PURE__ */ new Map();
   outputs2.forEach((o, j) => {
     if (o.type !== "file_path")
@@ -8732,10 +8732,10 @@ function compileArtifacts(rawExplicit, path7, outputs2, outputsPath, allowedPoli
   });
   if (rawExplicit !== void 0) {
     const seen = /* @__PURE__ */ new Set();
-    asArray2(rawExplicit, path7).forEach((a, j) => {
-      const artifact = compileArtifact(a, `${path7}[${j}]`, outputs2, allowedPolicies);
+    asArray2(rawExplicit, path8).forEach((a, j) => {
+      const artifact = compileArtifact(a, `${path8}[${j}]`, outputs2, allowedPolicies);
       if (seen.has(artifact.field)) {
-        compileError2(`${path7}[${j}].field`, `'${artifact.field}' \u91CD\u590D\u58F0\u660E`);
+        compileError2(`${path8}[${j}].field`, `'${artifact.field}' \u91CD\u590D\u58F0\u660E`);
       }
       seen.add(artifact.field);
       byField.set(artifact.field, artifact);
@@ -8743,48 +8743,48 @@ function compileArtifacts(rawExplicit, path7, outputs2, outputsPath, allowedPoli
   }
   return [...byField.values()];
 }
-function compileTransition(raw, path7, outputs2) {
-  const rec = asRecord2(raw, path7);
-  rejectExtraKeys2(rec, TRANSITION_KEYS2, path7);
+function compileTransition(raw, path8, outputs2) {
+  const rec = asRecord2(raw, path8);
+  rejectExtraKeys2(rec, TRANSITION_KEYS2, path8);
   return {
-    event: nonemptyString(rec.event, `${path7}.event`),
-    to: nonemptyString(rec.to, `${path7}.to`),
-    guards: compileGuards(rec.guards, `${path7}.guards`, outputs2),
-    actions: compileActions(rec.actions, `${path7}.actions`)
+    event: nonemptyString(rec.event, `${path8}.event`),
+    to: nonemptyString(rec.to, `${path8}.to`),
+    guards: compileGuards(rec.guards, `${path8}.guards`, outputs2),
+    actions: compileActions(rec.actions, `${path8}.actions`)
   };
 }
 function compileStep(step, index, allowedPolicies) {
-  const path7 = `steps[${index}]`;
-  const rec = asRecord2(step, path7);
-  rejectExtraKeys2(rec, STEP_KEYS, path7);
-  const id2 = nonemptyString(rec.id, `${path7}.id`);
+  const path8 = `steps[${index}]`;
+  const rec = asRecord2(step, path8);
+  rejectExtraKeys2(rec, STEP_KEYS, path8);
+  const id2 = nonemptyString(rec.id, `${path8}.id`);
   if (typeof rec.label !== "string")
-    compileError2(`${path7}.label`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(rec.label)}\uFF09`);
+    compileError2(`${path8}.label`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(rec.label)}\uFF09`);
   const gate = rec.gate;
   if (gate !== null && gate !== "review" && gate !== "confirm") {
-    compileError2(`${path7}.gate`, `\u5FC5\u987B\u662F null | 'review' | 'confirm'\uFF08\u5B9E\u9645 ${JSON.stringify(gate)}\uFF09`);
+    compileError2(`${path8}.gate`, `\u5FC5\u987B\u662F null | 'review' | 'confirm'\uFF08\u5B9E\u9645 ${JSON.stringify(gate)}\uFF09`);
   }
   const prompt = rec.prompt;
   if (prompt !== void 0) {
     if (typeof prompt !== "string")
-      compileError2(`${path7}.prompt`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(prompt)}\uFF09`);
+      compileError2(`${path8}.prompt`, `\u5FC5\u987B\u662F\u5B57\u7B26\u4E32\uFF08\u5B9E\u9645 ${JSON.stringify(prompt)}\uFF09`);
     if (prompt.includes("\0"))
-      compileError2(`${path7}.prompt`, "\u4E0D\u5F97\u542B NUL\uFF08\u73AF\u5883\u4E0E\u5B50\u8FDB\u7A0B\u53C2\u6570\u65E0\u6CD5\u4FDD\u771F\u627F\u8F7D\uFF09");
+      compileError2(`${path8}.prompt`, "\u4E0D\u5F97\u542B NUL\uFF08\u73AF\u5883\u4E0E\u5B50\u8FDB\u7A0B\u53C2\u6570\u65E0\u6CD5\u4FDD\u771F\u627F\u8F7D\uFF09");
     if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(prompt)) {
-      compileError2(`${path7}.prompt`, "\u542B\u672A\u914D\u5BF9 UTF-16 surrogate\uFF0CUTF-8 \u843D\u76D8\u65E0\u6CD5\u5F80\u8FD4");
+      compileError2(`${path8}.prompt`, "\u542B\u672A\u914D\u5BF9 UTF-16 surrogate\uFF0CUTF-8 \u843D\u76D8\u65E0\u6CD5\u5F80\u8FD4");
     }
   }
-  const reviewLanes = compileReviewLanes(rec.reviewLanes, `${path7}.reviewLanes`);
-  const skills = asArray2(rec.skills, `${path7}.skills`).map((s, j) => compileSkillRef(s, `${path7}.skills[${j}]`, reviewLanes));
-  const inputs = asArray2(rec.inputs, `${path7}.inputs`).map((r, j) => compileFieldRef(r, `${path7}.inputs[${j}]`));
-  const outputs2 = asArray2(rec.outputs, `${path7}.outputs`).map((r, j) => compileFieldRef(r, `${path7}.outputs[${j}]`));
-  const guards = compileGuards(rec.guards, `${path7}.guards`, outputs2);
-  const artifacts = compileArtifacts(rec.artifacts, `${path7}.artifacts`, outputs2, `${path7}.outputs`, allowedPolicies);
-  const transitions = asArray2(rec.transitions, `${path7}.transitions`).map((t, j) => compileTransition(t, `${path7}.transitions[${j}]`, outputs2));
+  const reviewLanes = compileReviewLanes(rec.reviewLanes, `${path8}.reviewLanes`);
+  const skills = asArray2(rec.skills, `${path8}.skills`).map((s, j) => compileSkillRef(s, `${path8}.skills[${j}]`, reviewLanes));
+  const inputs = asArray2(rec.inputs, `${path8}.inputs`).map((r, j) => compileFieldRef(r, `${path8}.inputs[${j}]`));
+  const outputs2 = asArray2(rec.outputs, `${path8}.outputs`).map((r, j) => compileFieldRef(r, `${path8}.outputs[${j}]`));
+  const guards = compileGuards(rec.guards, `${path8}.guards`, outputs2);
+  const artifacts = compileArtifacts(rec.artifacts, `${path8}.artifacts`, outputs2, `${path8}.outputs`, allowedPolicies);
+  const transitions = asArray2(rec.transitions, `${path8}.transitions`).map((t, j) => compileTransition(t, `${path8}.transitions[${j}]`, outputs2));
   const transitionEvents = /* @__PURE__ */ new Set();
   transitions.forEach((transition, transitionIndex) => {
     if (transitionEvents.has(transition.event)) {
-      compileError2(`${path7}.transitions[${transitionIndex}].event`, `\u540C\u4E00\u6B65\u4E0D\u5F97\u91CD\u590D\u58F0\u660E event '${transition.event}'`);
+      compileError2(`${path8}.transitions[${transitionIndex}].event`, `\u540C\u4E00\u6B65\u4E0D\u5F97\u91CD\u590D\u58F0\u660E event '${transition.event}'`);
     }
     transitionEvents.add(transition.event);
   });
@@ -8802,8 +8802,8 @@ function compileStep(step, index, allowedPolicies) {
     transitions
   };
 }
-function compileNonemptyStringArray(value, path7) {
-  return asArray2(value, path7).map((item2, index) => nonemptyString(item2, `${path7}[${index}]`));
+function compileNonemptyStringArray(value, path8) {
+  return asArray2(value, path8).map((item2, index) => nonemptyString(item2, `${path8}[${index}]`));
 }
 function compileDocumentContract(value) {
   if (value === void 0)
@@ -9044,7 +9044,7 @@ function inlineList(raw) {
   return items;
 }
 function parsePolicyBlock(cur, key, allowedKeys) {
-  const result = {};
+  const result2 = {};
   while (cur.i < cur.lines.length) {
     const line = cur.lines[cur.i] ?? "";
     if (line.trim() === "") {
@@ -9060,21 +9060,21 @@ function parsePolicyBlock(cur, key, allowedKeys) {
     const raw = match[2] ?? "";
     if (!allowedKeys.includes(field2))
       throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key} \u672A\u77E5\u5B57\u6BB5 '${field2}'`);
-    if (Object.hasOwn(result, field2))
+    if (Object.hasOwn(result2, field2))
       throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field2} \u91CD\u590D\u58F0\u660E`);
     if (raw === "")
       throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field2} \u7F3A\u503C`);
     if (field2 === "auto_when" || field2 === "ask_when")
-      result[field2] = inlineList(raw);
+      result2[field2] = inlineList(raw);
     else if (field2 === "max_items" || field2 === "max_depth" || field2 === "max_attempts") {
       if (!/^-?\d+$/.test(raw))
         throw new Error(`workflow \u89E3\u6790\u9519\u8BEF\uFF1A${key}.${field2} \u5FC5\u987B\u662F\u6574\u6570`);
-      result[field2] = Number(raw);
+      result2[field2] = Number(raw);
     } else
-      result[field2] = raw;
+      result2[field2] = raw;
     cur.i++;
   }
-  return result;
+  return result2;
 }
 function parseDecompositionPolicy(cur) {
   const raw = parsePolicyBlock(cur, "decomposition", [
@@ -9731,15 +9731,15 @@ function detectCycle(skillIds, dependsOn) {
   const WHITE = 0, GRAY = 1, BLACK = 2;
   const color = new Map(skillIds.map((id2) => [id2, WHITE]));
   const errors = [];
-  function visit(id2, path7) {
+  function visit(id2, path8) {
     color.set(id2, GRAY);
     for (const dep of dependsOn.get(id2) ?? []) {
       if (color.get(dep) === GRAY) {
-        errors.push(`\u5FAA\u73AF\u4F9D\u8D56\uFF1A${[...path7, id2, dep].join(" -> ")}`);
+        errors.push(`\u5FAA\u73AF\u4F9D\u8D56\uFF1A${[...path8, id2, dep].join(" -> ")}`);
         continue;
       }
       if (color.get(dep) === WHITE)
-        visit(dep, [...path7, id2]);
+        visit(dep, [...path8, id2]);
     }
     color.set(id2, BLACK);
   }
@@ -10559,8 +10559,8 @@ function parseDocumentLocalePin(raw) {
   }
   return { version: 1, locale: record5.locale };
 }
-async function readDocumentLocalePin(changeDir) {
-  const target = join18(changeDir, DOCUMENT_LOCALE_FILE);
+async function readDocumentLocalePin(changeDir2) {
+  const target = join18(changeDir2, DOCUMENT_LOCALE_FILE);
   try {
     const info = await lstat9(target);
     if (!info.isFile() || info.isSymbolicLink()) {
@@ -10573,8 +10573,8 @@ async function readDocumentLocalePin(changeDir) {
     throw error2;
   }
 }
-async function ensureDocumentLocalePin(changeDir, locale) {
-  const existing = await readDocumentLocalePin(changeDir);
+async function ensureDocumentLocalePin(changeDir2, locale) {
+  const existing = await readDocumentLocalePin(changeDir2);
   if (existing !== void 0) {
     if (existing.locale !== locale) {
       throw new Error(`Change \u5DF2\u56FA\u5B9A document locale '${existing.locale}'\uFF0C\u62D2\u7EDD\u6539\u4E3A '${locale}'`);
@@ -10582,15 +10582,15 @@ async function ensureDocumentLocalePin(changeDir, locale) {
     return existing;
   }
   const pin = { version: 1, locale };
-  const target = join18(changeDir, DOCUMENT_LOCALE_FILE);
+  const target = join18(changeDir2, DOCUMENT_LOCALE_FILE);
   try {
-    await atomicLinkPublish(changeDir, ".pipeline-document-locale.tmp", target, `${JSON.stringify(pin)}
+    await atomicLinkPublish(changeDir2, ".pipeline-document-locale.tmp", target, `${JSON.stringify(pin)}
 `);
     return pin;
   } catch (error2) {
     if (errorCode2(error2) !== "EEXIST")
       throw error2;
-    const raced = await readDocumentLocalePin(changeDir);
+    const raced = await readDocumentLocalePin(changeDir2);
     if (raced === void 0)
       throw new Error(`document locale pin \u5E76\u53D1\u521B\u5EFA\u540E\u4E0D\u53EF\u8BFB\u53D6: ${target}`);
     if (raced.locale !== locale) {
@@ -10626,8 +10626,8 @@ function parseWorkflowPlanSnapshot(raw) {
   } catch {
     throw new Error("workflow plan snapshot \u4E0D\u662F\u5408\u6CD5 JSON");
   }
-  const envelope = ownRecord5(value);
-  const plan = ownRecord5(envelope?.plan);
+  const envelope2 = ownRecord5(value);
+  const plan = ownRecord5(envelope2?.plan);
   const planVersion = plan?.version;
   const allowedPlanKeys = planVersion === 3 ? [
     "version",
@@ -10641,7 +10641,7 @@ function parseWorkflowPlanSnapshot(raw) {
     "workflowFingerprint"
   ] : planVersion === 2 ? ["version", "workflowId", "executionModel", "workflow", "documentPolicy", "workflowFingerprint"] : ["version", "workflowId", "executionModel", "workflow", "workflowFingerprint"];
   const documentPolicy = plan?.documentPolicy;
-  if (!envelope || Object.keys(envelope).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope.version !== 1 || typeof envelope.run_id !== "string" || envelope.run_id === "" || !plan || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key)) || planVersion !== 1 && planVersion !== 2 && planVersion !== 3 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || (planVersion === 2 || planVersion === 3) && documentPolicy !== null && ownRecord5(documentPolicy) === void 0 || planVersion === 3 && (ownRecord5(plan.decomposition) === void 0 || ownRecord5(plan.interaction) === void 0) || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
+  if (!envelope2 || Object.keys(envelope2).some((key) => !["version", "run_id", "plan"].includes(key)) || envelope2.version !== 1 || typeof envelope2.run_id !== "string" || envelope2.run_id === "" || !plan || Object.keys(plan).some((key) => !allowedPlanKeys.includes(key)) || planVersion !== 1 && planVersion !== 2 && planVersion !== 3 || typeof plan.workflowId !== "string" || plan.executionModel !== "phase-manifest" && plan.executionModel !== "step-graph" || (planVersion === 2 || planVersion === 3) && documentPolicy !== null && ownRecord5(documentPolicy) === void 0 || planVersion === 3 && (ownRecord5(plan.decomposition) === void 0 || ownRecord5(plan.interaction) === void 0) || typeof plan.workflowFingerprint !== "string" || !/^[0-9a-f]{64}$/.test(plan.workflowFingerprint) || !isWorkflowIr(plan.workflow)) {
     throw new Error("workflow plan snapshot \u5F62\u72B6\u975E\u6CD5");
   }
   const snapshot = planVersion === 1 ? {
@@ -10669,14 +10669,14 @@ function parseWorkflowPlanSnapshot(raw) {
     workflowFingerprint: plan.workflowFingerprint
   };
   effectiveWorkflowPlanFromSnapshot(snapshot);
-  return { version: 1, run_id: envelope.run_id, plan: snapshot };
+  return { version: 1, run_id: envelope2.run_id, plan: snapshot };
 }
 function workflowPlanSnapshotContent(runId, snapshot) {
   return `${JSON.stringify({ version: 1, run_id: runId, plan: snapshot })}
 `;
 }
-async function readWorkflowPlanSnapshot(changeDir) {
-  const target = join19(changeDir, WORKFLOW_PLAN_SNAPSHOT_FILE);
+async function readWorkflowPlanSnapshot(changeDir2) {
+  const target = join19(changeDir2, WORKFLOW_PLAN_SNAPSHOT_FILE);
   try {
     const info = await lstat10(target);
     if (!info.isFile() || info.isSymbolicLink()) {
@@ -10689,9 +10689,9 @@ async function readWorkflowPlanSnapshot(changeDir) {
     throw error2;
   }
 }
-async function ensureWorkflowPlanSnapshot(changeDir, runId, snapshot) {
+async function ensureWorkflowPlanSnapshot(changeDir2, runId, snapshot) {
   const requested = workflowPlanSnapshotContent(runId, snapshot);
-  const existing = await readWorkflowPlanSnapshot(changeDir);
+  const existing = await readWorkflowPlanSnapshot(changeDir2);
   if (existing !== void 0) {
     if (`${JSON.stringify(existing)}
 ` !== requested) {
@@ -10699,29 +10699,29 @@ async function ensureWorkflowPlanSnapshot(changeDir, runId, snapshot) {
     }
     return;
   }
-  const target = join19(changeDir, WORKFLOW_PLAN_SNAPSHOT_FILE);
+  const target = join19(changeDir2, WORKFLOW_PLAN_SNAPSHOT_FILE);
   try {
-    await atomicLinkPublish(changeDir, ".pipeline-workflow-plan.tmp", target, requested);
+    await atomicLinkPublish(changeDir2, ".pipeline-workflow-plan.tmp", target, requested);
   } catch (error2) {
     if (errorCode3(error2) !== "EEXIST")
       throw error2;
-    const raced = await readWorkflowPlanSnapshot(changeDir);
+    const raced = await readWorkflowPlanSnapshot(changeDir2);
     if (raced === void 0 || `${JSON.stringify(raced)}
 ` !== requested) {
       throw new Error("workflow plan snapshot \u5E76\u53D1\u521B\u5EFA\u540E\u5185\u5BB9\u4E0D\u4E00\u81F4");
     }
   }
 }
-function attachWorkflowPlanSnapshot(metadata, envelope) {
-  if (metadata === void 0 || envelope === void 0)
+function attachWorkflowPlanSnapshot(metadata, envelope2) {
+  if (metadata === void 0 || envelope2 === void 0)
     return metadata;
-  if (envelope.run_id !== metadata.runId) {
+  if (envelope2.run_id !== metadata.runId) {
     throw new Error("workflow plan snapshot \u4E0E canonical runId \u4E0D\u4E00\u81F4");
   }
-  if (metadata.workflowPlanFingerprint === void 0 || envelope.plan.workflowFingerprint !== metadata.workflowPlanFingerprint) {
+  if (metadata.workflowPlanFingerprint === void 0 || envelope2.plan.workflowFingerprint !== metadata.workflowPlanFingerprint) {
     throw new Error("workflow plan snapshot \u4E0E workflow governance fingerprint \u4E0D\u4E00\u81F4");
   }
-  return { ...metadata, workflowPlanSnapshot: envelope.plan };
+  return { ...metadata, workflowPlanSnapshot: envelope2.plan };
 }
 
 // packages/kernel/dist/state/initial-change-publish.js
@@ -10909,11 +10909,11 @@ async function prepareInitialChangePublication(inputRoot, name) {
     throw error2;
   }
 }
-async function writeInitialChangeFiles(changeDir, files) {
+async function writeInitialChangeFiles(changeDir2, files) {
   const observed = /* @__PURE__ */ new Set();
   for (const file of files ?? []) {
-    const target = path3.resolve(changeDir, file.relativePath);
-    if (file.relativePath === "" || !contained(changeDir, target) || observed.has(target)) {
+    const target = path3.resolve(changeDir2, file.relativePath);
+    if (file.relativePath === "" || !contained(changeDir2, target) || observed.has(target)) {
       throw new Error(`init: initial file \u8DEF\u5F84\u975E\u6CD5\u6216\u91CD\u590D: ${file.relativePath}`);
     }
     observed.add(target);
@@ -10937,8 +10937,8 @@ async function publishInitialChange(publication) {
     throw alreadyInitialized(finalChangeDir);
   }
 }
-async function discardInitialChangeCandidate(changeDir) {
-  await rm2(changeDir, { recursive: true, force: true }).catch(() => {
+async function discardInitialChangeCandidate(changeDir2) {
+  await rm2(changeDir2, { recursive: true, force: true }).catch(() => {
   });
 }
 
@@ -10947,8 +10947,8 @@ var STATE_FILE_NAME = ".pipeline.yaml";
 var StateProjectionDriftError = class extends Error {
   _tag = "StateProjectionDriftError";
 };
-function stateFilePath(changeDir) {
-  return path4.join(changeDir, STATE_FILE_NAME);
+function stateFilePath(changeDir2) {
+  return path4.join(changeDir2, STATE_FILE_NAME);
 }
 var atomicWriteFile = atomicReplaceFile;
 function gateValue(field2, value) {
@@ -10998,13 +10998,13 @@ function isPreciseLegacyFieldProjection(raw, parsed, current) {
     return false;
   return FIELD_ORDER.every((field2) => seen.has(field2) || omitsCompleteReviewGate && REVIEW_GATE_FIELD_SET2.has(field2) || omitsPreVerifyReview && field2 === PRE_VERIFY_REVIEW_FIELD);
 }
-async function inspectProjectionAgainst(changeDir, current) {
+async function inspectProjectionAgainst(changeDir2, current) {
   if (current === void 0)
     return { status: "legacy" };
   const identity = { revision: current.revision, revisionId: current.revisionId };
   let raw;
   try {
-    raw = await readFile11(stateFilePath(changeDir), "utf8");
+    raw = await readFile11(stateFilePath(changeDir2), "utf8");
   } catch (error2) {
     if (error2.code === "ENOENT")
       return { status: "missing", ...identity };
@@ -11037,7 +11037,7 @@ async function inspectProjectionAgainst(changeDir, current) {
   if (isPreciseLegacyFieldProjection(raw, parsed, current)) {
     return { status: "current", ...identity };
   }
-  const referenced = await readImmutableRunRevision(changeDir, metadata.stateRevision, metadata.stateRevisionId);
+  const referenced = await readImmutableRunRevision(changeDir2, metadata.stateRevision, metadata.stateRevisionId);
   if (referenced !== void 0 && referenced.stateDigest === metadata.stateDigest && (raw === projectionContent(referenced) || raw === priorLogicalProjectionContent(referenced) || isPreciseLegacyFieldProjection(raw, parsed, referenced)))
     return { status: "stale", ...identity };
   return {
@@ -11053,138 +11053,138 @@ var FsStateStore = class {
     this.writeProjection = options.writeProjection ?? atomicWriteFile;
     this.beforeInitialPublish = options.beforeInitialPublish;
   }
-  async read(changeDir) {
-    const current = await readCurrentRunRevision(changeDir);
+  async read(changeDir2) {
+    const current = await readCurrentRunRevision(changeDir2);
     if (current !== void 0) {
       const state = structuredClone(current.state);
-      const binding = await readWorkflowGovernanceBinding(changeDir);
+      const binding = await readWorkflowGovernanceBinding(changeDir2);
       const governedMetadata = attachWorkflowGovernanceBinding(state.runMetadata, binding);
-      const metadata = attachWorkflowPlanSnapshot(governedMetadata, await readWorkflowPlanSnapshot(changeDir));
+      const metadata = attachWorkflowPlanSnapshot(governedMetadata, await readWorkflowPlanSnapshot(changeDir2));
       return {
         ...state,
         ...metadata === void 0 ? {} : { runMetadata: metadata }
       };
     }
-    return parsePipeline(await readFile11(stateFilePath(changeDir), "utf8"));
+    return parsePipeline(await readFile11(stateFilePath(changeDir2), "utf8"));
   }
-  async write(changeDir, state, mutation = { kind: "replace" }) {
-    return withLock(changeDir, () => this.writeUnderLock(changeDir, state, mutation));
+  async write(changeDir2, state, mutation = { kind: "replace" }) {
+    return withLock(changeDir2, () => this.writeUnderLock(changeDir2, state, mutation));
   }
-  async writeUnderLock(changeDir, state, mutation = { kind: "replace" }) {
+  async writeUnderLock(changeDir2, state, mutation = { kind: "replace" }) {
     if (state.runMetadata !== void 0 && (state.runMetadata.documentProfile !== void 0 || state.runMetadata.documentGovernanceFingerprint !== void 0 || state.runMetadata.workflowPlanFingerprint !== void 0)) {
-      await ensureWorkflowGovernanceBinding(changeDir, state.runMetadata);
+      await ensureWorkflowGovernanceBinding(changeDir2, state.runMetadata);
     }
     if (state.runMetadata?.workflowPlanSnapshot !== void 0) {
-      await ensureWorkflowPlanSnapshot(changeDir, state.runMetadata.runId, state.runMetadata.workflowPlanSnapshot);
+      await ensureWorkflowPlanSnapshot(changeDir2, state.runMetadata.runId, state.runMetadata.workflowPlanSnapshot);
     }
     const nextState = stateWithoutProjection(state);
     serializePipeline(nextState);
-    let current = await readCurrentRunRevision(changeDir);
+    let current = await readCurrentRunRevision(changeDir2);
     if (current === void 0) {
-      const legacy = parsePipeline(await readFile11(stateFilePath(changeDir), "utf8"));
-      current = await publishInitialRunRevision(changeDir, legacy, defaultStateClock(), "migration");
+      const legacy = parsePipeline(await readFile11(stateFilePath(changeDir2), "utf8"));
+      current = await publishInitialRunRevision(changeDir2, legacy, defaultStateClock(), "migration");
     } else {
-      const status2 = await inspectProjectionAgainst(changeDir, current);
+      const status2 = await inspectProjectionAgainst(changeDir2, current);
       if (status2.status === "drift") {
         throw new StateProjectionDriftError(`YAML projection drift\uFF1A${status2.reason}`);
       }
     }
-    const next = await publishRunRevision(changeDir, current, nextState, {
+    const next = await publishRunRevision(changeDir2, current, nextState, {
       kind: mutation.kind,
       observedAt: defaultStateClock(),
       ...mutation.transitionRecordId === void 0 ? {} : { transitionRecordId: mutation.transitionRecordId }
     });
     try {
-      await this.writeProjection(stateFilePath(changeDir), projectionContent(next));
+      await this.writeProjection(stateFilePath(changeDir2), projectionContent(next));
       return { projection: { status: "updated" } };
     } catch (error2) {
       return { projection: { status: "pending", error: error2 } };
     }
   }
-  async get(changeDir, field2) {
-    const state = await this.read(changeDir);
+  async get(changeDir2, field2) {
+    const state = await this.read(changeDir2);
     return state.fields[field2];
   }
-  async set(changeDir, field2, value) {
-    await this.setMany(changeDir, { [field2]: value }, "set");
+  async set(changeDir2, field2, value) {
+    await this.setMany(changeDir2, { [field2]: value }, "set");
   }
-  async setMany(changeDir, kv, mutationKind = "set-many") {
+  async setMany(changeDir2, kv, mutationKind = "set-many") {
     const entries = Object.entries(kv).filter((e) => e[1] !== void 0);
     for (const [field2, value] of entries)
       gateValue(field2, value);
     if (entries.length === 0)
       return;
-    await withLock(changeDir, async () => {
-      const state = await this.read(changeDir);
+    await withLock(changeDir2, async () => {
+      const state = await this.read(changeDir2);
       for (const [field2, value] of entries)
         state.fields[field2] = value;
-      await this.writeUnderLock(changeDir, state, { kind: mutationKind });
+      await this.writeUnderLock(changeDir2, state, { kind: mutationKind });
     });
   }
-  async cas(changeDir, field2, expect, next) {
+  async cas(changeDir2, field2, expect, next) {
     quoteGate(field2, next);
-    return withLock(changeDir, async () => {
-      const state = await this.read(changeDir);
+    return withLock(changeDir2, async () => {
+      const state = await this.read(changeDir2);
       if (state.fields[field2] !== expect)
         return false;
       state.fields[field2] = next;
-      await this.writeUnderLock(changeDir, state, { kind: "cas" });
+      await this.writeUnderLock(changeDir2, state, { kind: "cas" });
       return true;
     });
   }
-  async casMany(changeDir, field2, expects, kv) {
+  async casMany(changeDir2, field2, expects, kv) {
     const entries = Object.entries(kv).filter((e) => e[1] !== void 0);
     for (const [entryField, value] of entries)
       gateValue(entryField, value);
-    return withLock(changeDir, async () => {
-      const state = await this.read(changeDir);
+    return withLock(changeDir2, async () => {
+      const state = await this.read(changeDir2);
       const observed = state.fields[field2];
       if (typeof observed !== "string" || !expects.includes(observed))
         return false;
       for (const [entryField, value] of entries)
         state.fields[entryField] = value;
-      await this.writeUnderLock(changeDir, state, { kind: "cas-many" });
+      await this.writeUnderLock(changeDir2, state, { kind: "cas-many" });
       return true;
     });
   }
-  async inspectProjection(changeDir) {
-    return inspectProjectionAgainst(changeDir, await readCurrentRunRevision(changeDir));
+  async inspectProjection(changeDir2) {
+    return inspectProjectionAgainst(changeDir2, await readCurrentRunRevision(changeDir2));
   }
-  async repairProjection(changeDir, opts = {}) {
-    return withLock(changeDir, async () => {
-      const current = await readCurrentRunRevision(changeDir);
+  async repairProjection(changeDir2, opts = {}) {
+    return withLock(changeDir2, async () => {
+      const current = await readCurrentRunRevision(changeDir2);
       if (current === void 0) {
         throw new StateProjectionDriftError("repair-projection: canonical current \u4E0D\u5B58\u5728\uFF1B\u4ECD\u662F legacy change");
       }
-      const status2 = await inspectProjectionAgainst(changeDir, current);
+      const status2 = await inspectProjectionAgainst(changeDir2, current);
       if (status2.status === "current")
         return status2;
       if (status2.status === "drift" && opts.forceCanonical !== true) {
         throw new StateProjectionDriftError(`repair-projection \u62D2\u7EDD\u8986\u76D6\u672A\u77E5 YAML drift\uFF1A${status2.reason}\uFF1B\u663E\u5F0F\u9009\u62E9 canonical \u8986\u76D6\u6216 legacy import`);
       }
-      await this.writeProjection(stateFilePath(changeDir), projectionContent(current));
+      await this.writeProjection(stateFilePath(changeDir2), projectionContent(current));
       return { status: "current", revision: current.revision, revisionId: current.revisionId };
     });
   }
-  async importLegacyProjection(changeDir) {
-    return withLock(changeDir, async () => {
-      const current = await readCurrentRunRevision(changeDir);
+  async importLegacyProjection(changeDir2) {
+    return withLock(changeDir2, async () => {
+      const current = await readCurrentRunRevision(changeDir2);
       if (current === void 0) {
         throw new StateProjectionDriftError("import-legacy: canonical current \u4E0D\u5B58\u5728\uFF1B\u65E0\u9700\u89E3\u51B3\u53CC\u4E3B drift");
       }
-      const legacy = parsePipeline(await readFile11(stateFilePath(changeDir), "utf8"));
+      const legacy = parsePipeline(await readFile11(stateFilePath(changeDir2), "utf8"));
       const imported = {
         fields: legacy.fields,
         ...current.state.runMetadata === void 0 ? {} : { runMetadata: structuredClone(current.state.runMetadata) },
         opaqueTail: legacy.opaqueTail
       };
       serializePipeline(imported);
-      const next = await publishRunRevision(changeDir, current, imported, {
+      const next = await publishRunRevision(changeDir2, current, imported, {
         kind: "legacy-import",
         observedAt: defaultStateClock()
       });
       try {
-        await this.writeProjection(stateFilePath(changeDir), projectionContent(next));
+        await this.writeProjection(stateFilePath(changeDir2), projectionContent(next));
         return { projection: { status: "updated" } };
       } catch (error2) {
         return { projection: { status: "pending", error: error2 } };
@@ -11196,7 +11196,7 @@ var FsStateStore = class {
     assertValidChangeName(name);
     const clock = opts.clock ?? defaultStateClock;
     const publication = await prepareInitialChangePublication(opts.repoRoot, name);
-    const { candidateChangeDir: changeDir, finalChangeDir } = publication;
+    const { candidateChangeDir: changeDir2, finalChangeDir } = publication;
     let published = false;
     try {
       const requestedDocumentLocale = opts.documentLocale ?? "zh-CN";
@@ -11218,34 +11218,34 @@ var FsStateStore = class {
         ...fullRunMetadata === void 0 ? {} : { runMetadata: withoutWorkflowGovernanceBinding(fullRunMetadata) },
         opaqueTail: ""
       };
-      await ensureDocumentLocalePin(changeDir, requestedDocumentLocale);
+      await ensureDocumentLocalePin(changeDir2, requestedDocumentLocale);
       if (fullRunMetadata !== void 0 && (fullRunMetadata.documentProfile !== void 0 || fullRunMetadata.documentGovernanceFingerprint !== void 0 || fullRunMetadata.workflowPlanFingerprint !== void 0)) {
-        await ensureWorkflowGovernanceBinding(changeDir, fullRunMetadata);
+        await ensureWorkflowGovernanceBinding(changeDir2, fullRunMetadata);
       }
       if (fullRunMetadata?.workflowPlanSnapshot !== void 0) {
         if (fullRunMetadata.workflowPlanFingerprint === void 0) {
           throw new Error("init workflow plan snapshot \u7F3A\u5C11 workflow plan fingerprint");
         }
-        await ensureWorkflowPlanSnapshot(changeDir, fullRunMetadata.runId, fullRunMetadata.workflowPlanSnapshot);
+        await ensureWorkflowPlanSnapshot(changeDir2, fullRunMetadata.runId, fullRunMetadata.workflowPlanSnapshot);
       }
-      const revision = await publishInitialRunRevision(changeDir, state, ts);
+      const revision = await publishInitialRunRevision(changeDir2, state, ts);
       try {
-        await atomicLinkPublish(changeDir, ".pipeline.yaml.tmp", stateFilePath(changeDir), projectionContent(revision));
+        await atomicLinkPublish(changeDir2, ".pipeline.yaml.tmp", stateFilePath(changeDir2), projectionContent(revision));
       } catch {
       }
-      await writeInitialChangeFiles(changeDir, opts.initialFiles);
-      await this.beforeInitialPublish?.(changeDir, finalChangeDir);
+      await writeInitialChangeFiles(changeDir2, opts.initialFiles);
+      await this.beforeInitialPublish?.(changeDir2, finalChangeDir);
       await publishInitialChange(publication);
       published = true;
       return finalChangeDir;
     } finally {
       if (!published)
-        await discardInitialChangeCandidate(changeDir);
+        await discardInitialChangeCandidate(changeDir2);
       await releaseInitialChangePublication(publication);
     }
   }
-  async withLock(changeDir, fn) {
-    return withLock(changeDir, fn);
+  async withLock(changeDir2, fn) {
+    return withLock(changeDir2, fn);
   }
 };
 function createStateStore(options = {}) {
@@ -12068,13 +12068,13 @@ function item(kind, status2, requiredRead, records, phase, currentVisitId) {
     }))
   };
 }
-function receiptMatchesVisit(receipt, phase, digest6, visitId) {
-  return receipt.phase === phase && receipt.sha256 === digest6 && receipt.visitId === visitId;
+function receiptMatchesVisit(receipt, phase, digest7, visitId) {
+  return receipt.phase === phase && receipt.sha256 === digest7 && receipt.visitId === visitId;
 }
-async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, policy2) {
+async function evaluateDocumentEvidence(repoRoot, changeDir2, phase, scope = {}, policy2) {
   let ledger;
   try {
-    ledger = await readDocumentLedger(changeDir);
+    ledger = await readDocumentLedger(changeDir2);
   } catch (error2) {
     return {
       phase,
@@ -12102,8 +12102,8 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
   let confirmations;
   let invocationEvents;
   try {
-    confirmations = await readDocumentSkillConfirmations(changeDir);
-    invocationEvents = await readSkillInvocationEventsForApplication(changeDir);
+    confirmations = await readDocumentSkillConfirmations(changeDir2);
+    invocationEvents = await readSkillInvocationEventsForApplication(changeDir2);
   } catch (error2) {
     blockers.push(`document producer invocation evidence \u4E0D\u53EF\u9A8C\u8BC1: ${error2 instanceof Error ? error2.message : String(error2)}`);
     confirmations = [];
@@ -12112,7 +12112,7 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
   let currentVisitId;
   if (readRequirements.size > 0) {
     try {
-      currentVisitId = await currentDocumentStepVisitId(changeDir);
+      currentVisitId = await currentDocumentStepVisitId(changeDir2);
     } catch (error2) {
       blockers.push(`current step visit \u4E0D\u53EF\u9A8C\u8BC1: ${error2 instanceof Error ? error2.message : String(error2)}`);
     }
@@ -12132,7 +12132,7 @@ async function evaluateDocumentEvidence(repoRoot, changeDir, phase, scope = {}, 
       items.push(item(kind, "stale", requiredRead, records, phase, currentVisitId));
       continue;
     }
-    const legacyDelta = kind === "delta-spec" ? records.filter((record5) => deltaSpecSlot(record5.path, changeDir) === void 0) : [];
+    const legacyDelta = kind === "delta-spec" ? records.filter((record5) => deltaSpecSlot(record5.path, changeDir2) === void 0) : [];
     if (legacyDelta.length > 0) {
       blockers.push(`\u5B58\u5728\u65E7 delta-spec \u8BB0\u5F55\uFF0C\u5FC5\u987B\u7528 tenon document migrate-delta \u663E\u5F0F\u8FC1\u79FB: ${legacyDelta.map((record5) => record5.path).join(", ")}`);
       items.push(item(kind, "stale", requiredRead, records, phase, currentVisitId));
@@ -12243,11 +12243,11 @@ function parseJson(raw, label) {
     throw error2;
   }
 }
-async function evaluateSpecMigrationEvidence(repoRoot, changeDir, changeName) {
+async function evaluateSpecMigrationEvidence(repoRoot, changeDir2, changeName) {
   try {
     const root = resolve6(repoRoot);
     const expectedChangeDir = resolve6(root, "openspec", "changes", changeName);
-    if (resolve6(changeDir) !== expectedChangeDir || escaped2(root, expectedChangeDir)) {
+    if (resolve6(changeDir2) !== expectedChangeDir || escaped2(root, expectedChangeDir)) {
       return { kind: "invalid", reason: "change-directory-mismatch" };
     }
     const migrationDir = resolve6(expectedChangeDir, "migration");
@@ -12277,8 +12277,8 @@ async function evaluateSpecMigrationEvidence(repoRoot, changeDir, changeName) {
     const resultRaw = await trustedOrdinaryFile(root, resolve6(migrationDir, "spec-application-result.json"), true);
     if (!resultRaw)
       return { kind: "invalid", reason: "application-result-missing" };
-    const result = parseJson(resultRaw, "migration result");
-    if (result.schemaVersion !== 1 || result.kind !== "spec-migration-application" || result.change !== changeName || result.capability !== capability || result.receiptDigest !== digest4(receiptRaw) || result.targetPath !== expectedMainPath || result.effect !== "changed" && result.effect !== "no-op" || result.expectedAfterDigest !== expectedDigest || result.afterDigest !== expectedDigest) {
+    const result2 = parseJson(resultRaw, "migration result");
+    if (result2.schemaVersion !== 1 || result2.kind !== "spec-migration-application" || result2.change !== changeName || result2.capability !== capability || result2.receiptDigest !== digest4(receiptRaw) || result2.targetPath !== expectedMainPath || result2.effect !== "changed" && result2.effect !== "no-op" || result2.expectedAfterDigest !== expectedDigest || result2.afterDigest !== expectedDigest) {
       return { kind: "invalid", reason: "application-result-mismatch" };
     }
     const mainRaw = await trustedOrdinaryFile(root, resolve6(root, expectedMainPath));
@@ -12300,8 +12300,8 @@ import { join as join20 } from "node:path";
 var BREADCRUMB_FILE = ".breadcrumb";
 function createBreadcrumbWriter() {
   return {
-    async write(changeDir, content) {
-      await writeFile4(join20(changeDir, BREADCRUMB_FILE), content, "utf8");
+    async write(changeDir2, content) {
+      await writeFile4(join20(changeDir2, BREADCRUMB_FILE), content, "utf8");
     }
   };
 }
@@ -12579,7 +12579,7 @@ function evaluateGuard(state, ctx) {
     return { pass: false, failures: [`\u672A\u77E5 phase '${phase}'\uFF0C\u65E0\u6CD5\u8BC4\u4F30\u51FA\u53E3\u6761\u4EF6`] };
   }
   const track = scalar2(state.fields.track);
-  const changeDir = ctx?.changeDirRel;
+  const changeDir2 = ctx?.changeDirRel;
   const failures = [];
   const warnings = [];
   for (const rule of rules) {
@@ -12620,9 +12620,9 @@ function evaluateGuard(state, ctx) {
         break;
       }
       case "statefile": {
-        if (changeDir === void 0)
+        if (changeDir2 === void 0)
           break;
-        const exists = ctx?.stateExists !== void 0 ? ctx.stateExists(changeDir) : ctx?.fileNonempty?.(`${changeDir}/.pipeline.yaml`);
+        const exists = ctx?.stateExists !== void 0 ? ctx.stateExists(changeDir2) : ctx?.fileNonempty?.(`${changeDir2}/.pipeline.yaml`);
         if (exists === void 0)
           break;
         if (!exists) {
@@ -12633,41 +12633,41 @@ function evaluateGuard(state, ctx) {
       case "file-nonempty": {
         if (!trackApplies(rule.when, track))
           break;
-        if (ctx?.fileNonempty === void 0 || changeDir === void 0)
+        if (ctx?.fileNonempty === void 0 || changeDir2 === void 0)
           break;
-        if (!ctx.fileNonempty(`${changeDir}/${rule.path}`)) {
+        if (!ctx.fileNonempty(`${changeDir2}/${rule.path}`)) {
           failures.push(`${phase} \u51FA\u53E3\uFF1A\u8981\u6C42 ${rule.path} \u5B58\u5728\u4E14\u975E\u7A7A${trackSuffix(rule.when, track)}`);
         }
         break;
       }
       case "file-exists": {
-        if (ctx?.fileExists === void 0 || changeDir === void 0)
+        if (ctx?.fileExists === void 0 || changeDir2 === void 0)
           break;
-        if (!ctx.fileExists(`${changeDir}/${rule.path}`)) {
+        if (!ctx.fileExists(`${changeDir2}/${rule.path}`)) {
           failures.push(`${phase} \u51FA\u53E3\uFF1A\u8981\u6C42 ${rule.path} \u5B58\u5728`);
         }
         break;
       }
       case "tasks-at-least": {
-        if (ctx?.readFile === void 0 || changeDir === void 0)
+        if (ctx?.readFile === void 0 || changeDir2 === void 0)
           break;
-        const count = taskCount(ctx.readFile(`${changeDir}/tasks.md`));
+        const count = taskCount(ctx.readFile(`${changeDir2}/tasks.md`));
         if (count < rule.n) {
           failures.push(`${phase} \u51FA\u53E3\uFF1A\u8981\u6C42 tasks.md \u81F3\u5C11 ${rule.n} \u4E2A\u4EFB\u52A1\uFF08\u5F53\u524D=${count}\uFF09`);
         }
         break;
       }
       case "tasks-through-phase": {
-        if (ctx?.readFile === void 0 || changeDir === void 0)
+        if (ctx?.readFile === void 0 || changeDir2 === void 0)
           break;
-        const content = ctx.readFile(`${changeDir}/tasks.md`);
+        const content = ctx.readFile(`${changeDir2}/tasks.md`);
         if (content === void 0) {
           if (phase === "build") {
             failures.push(`${phase} \u51FA\u53E3\uFF1A\u8981\u6C42\u622A\u81F3\u5F53\u524D\u9636\u6BB5\u7684 tasks.md \u5168\u90E8\u52FE\u9009\uFF08tasks.md \u7F3A\u5931\uFF09`);
           }
         } else {
           const projectionStatus = ctx.canonicalTasksProjectionStatus?.({
-            changeDirRel: changeDir,
+            changeDirRel: changeDir2,
             tasksMarkdown: content
           }) ?? "legacy";
           if (projectionStatus === "invalid") {
@@ -12718,10 +12718,10 @@ function evaluateGuard(state, ctx) {
       }
     }
   }
-  const result = { pass: failures.length === 0, failures };
+  const result2 = { pass: failures.length === 0, failures };
   if (warnings.length > 0)
-    result.warnings = warnings;
-  return result;
+    result2.warnings = warnings;
+  return result2;
 }
 
 // packages/kernel/dist/workflow/build-revision.js
@@ -12987,19 +12987,19 @@ var GUARD_HANDLERS = Object.freeze({
       };
     }
     try {
-      const result = await input.assessBuildRevision({
+      const result2 = await input.assessBuildRevision({
         buildSha,
         isolation: scalarValue(input.fields, "isolation"),
         expectedStep: input.currentStep,
         stateHash
       });
-      if (result.trusted)
+      if (result2.trusted)
         return PASSED;
       return {
         kind: "failed",
         guardType: "build-head-unchanged",
         field: config.field,
-        blocker: result.blocker
+        blocker: result2.blocker
       };
     } catch {
       return {
@@ -13140,8 +13140,8 @@ function normalizeDefaultGuardFields(fields) {
   }
   return out;
 }
-function renderPreconditionViolation(event, failure6, track) {
-  const { guard, decision } = failure6;
+function renderPreconditionViolation(event, failure7, track) {
+  const { guard, decision } = failure7;
   if (decision.kind === "failed" && decision.blocker !== void 0) {
     return [
       `ERROR: ${event} revision trust blocked (code=${decision.blocker.code} reason=${decision.blocker.reason})`,
@@ -13487,10 +13487,10 @@ function nonEmpty(value, label) {
   return value;
 }
 function digest5(value, label) {
-  const text3 = nonEmpty(value, label);
-  if (!/^[0-9a-f]{64}$/.test(text3))
+  const text4 = nonEmpty(value, label);
+  if (!/^[0-9a-f]{64}$/.test(text4))
     throw new Error(`${label} must be a sha256 digest`);
-  return text3;
+  return text4;
 }
 function normalizedGrants(value, label) {
   if (!Array.isArray(value) || value.some((item2) => typeof item2 !== "string" || !ACTIONS.has(item2)) || new Set(value).size !== value.length) {
@@ -13615,12 +13615,12 @@ function errorCode6(error2) {
   const code = Reflect.get(error2, "code");
   return typeof code === "string" ? code : void 0;
 }
-function workflowActionAuthorityRecordPath(changeDir, iterationId) {
+function workflowActionAuthorityRecordPath(changeDir2, iterationId) {
   const identity = createHash12("sha256").update(iterationId).digest("hex");
-  return join21(changeDir, `${WORKFLOW_ACTION_AUTHORITY_RECORD_PREFIX}${identity}.json`);
+  return join21(changeDir2, `${WORKFLOW_ACTION_AUTHORITY_RECORD_PREFIX}${identity}.json`);
 }
-async function readWorkflowActionAuthorityRecord(changeDir, iterationId) {
-  const target = workflowActionAuthorityRecordPath(changeDir, iterationId);
+async function readWorkflowActionAuthorityRecord(changeDir2, iterationId) {
+  const target = workflowActionAuthorityRecordPath(changeDir2, iterationId);
   try {
     const info = await lstat14(target);
     if (!info.isFile() || info.isSymbolicLink()) {
@@ -13637,23 +13637,23 @@ async function readWorkflowActionAuthorityRecord(changeDir, iterationId) {
     throw error2;
   }
 }
-async function ensureWorkflowActionAuthorityRecord(changeDir, snapshot) {
+async function ensureWorkflowActionAuthorityRecord(changeDir2, snapshot) {
   const requested = parseWorkflowActionAuthoritySnapshot(JSON.stringify(snapshot));
-  const existing = await readWorkflowActionAuthorityRecord(changeDir, requested.iteration_id);
+  const existing = await readWorkflowActionAuthorityRecord(changeDir2, requested.iteration_id);
   if (existing !== void 0) {
     if (!sameWorkflowActionAuthoritySnapshot(existing, requested)) {
       throw new Error("Workflow action authority binding is immutable and already contains different facts");
     }
     return existing;
   }
-  const target = workflowActionAuthorityRecordPath(changeDir, requested.iteration_id);
+  const target = workflowActionAuthorityRecordPath(changeDir2, requested.iteration_id);
   try {
-    await atomicLinkPublish(changeDir, ".pipeline-workflow-action-authority.tmp", target, workflowActionAuthoritySnapshotContent(requested));
+    await atomicLinkPublish(changeDir2, ".pipeline-workflow-action-authority.tmp", target, workflowActionAuthoritySnapshotContent(requested));
     return requested;
   } catch (error2) {
     if (errorCode6(error2) !== "EEXIST")
       throw error2;
-    const raced = await readWorkflowActionAuthorityRecord(changeDir, requested.iteration_id);
+    const raced = await readWorkflowActionAuthorityRecord(changeDir2, requested.iteration_id);
     if (raced === void 0 || !sameWorkflowActionAuthoritySnapshot(raced, requested)) {
       throw new Error("Workflow action authority concurrent immutable bind contains different facts");
     }
@@ -13687,10 +13687,10 @@ function deriveRun(fields, metadata, workflowActionAuthority) {
     workflowActionAuthority
   };
 }
-async function authorityForCurrentIteration(changeDir, metadata) {
+async function authorityForCurrentIteration(changeDir2, metadata) {
   if (metadata.iterationId === void 0)
     return void 0;
-  return readWorkflowActionAuthorityRecord(changeDir, metadata.iterationId);
+  return readWorkflowActionAuthorityRecord(changeDir2, metadata.iterationId);
 }
 var FsWorkflowRunRepository = class {
   deps;
@@ -13719,7 +13719,7 @@ var FsWorkflowRunRepository = class {
         content: initialDocumentLedgerContent(this.deps.clock())
       }] : []
     ];
-    const changeDir = await this.deps.store.init({
+    const changeDir2 = await this.deps.store.init({
       ...opts,
       runId,
       initialFiles,
@@ -13734,14 +13734,14 @@ var FsWorkflowRunRepository = class {
         }
       }
     });
-    const state = await this.deps.store.read(changeDir);
-    return { changeDir, run: deriveRun(state.fields, required(state.runMetadata)) };
+    const state = await this.deps.store.read(changeDir2);
+    return { changeDir: changeDir2, run: deriveRun(state.fields, required(state.runMetadata)) };
   }
-  async establishRun(changeDir, governance = {}) {
+  async establishRun(changeDir2, governance = {}) {
     const { store } = this.deps;
     const newId = this.deps.newId ?? randomUUID6;
-    return store.withLock(changeDir, async () => {
-      const state = await store.read(changeDir);
+    return store.withLock(changeDir2, async () => {
+      const state = await store.read(changeDir2);
       const workflowId = resolveWorkflowName(state);
       const documentProfile = governance.documentProfile ?? (governance.openspecContract === true ? "legacy-full" : governance.documentContract === true ? "document-v1" : void 0);
       const documentGovernanceFingerprint2 = governance.documentGovernanceFingerprint ?? (documentProfile === "legacy-full" ? DEFAULT_PLAN_BINDING2.documentGovernanceFingerprint : void 0);
@@ -13766,11 +13766,11 @@ var FsWorkflowRunRepository = class {
           ...existing.workflowPlanFingerprint === void 0 && workflowPlanFingerprint !== void 0 ? { workflowPlanFingerprint } : {}
         };
         if (metadata2.documentProfile !== existing.documentProfile || metadata2.documentGovernanceFingerprint !== existing.documentGovernanceFingerprint || metadata2.workflowPlanFingerprint !== existing.workflowPlanFingerprint) {
-          await ensureWorkflowGovernanceBinding(changeDir, metadata2);
+          await ensureWorkflowGovernanceBinding(changeDir2, metadata2);
         } else if (metadata2.documentProfile !== void 0 || metadata2.documentGovernanceFingerprint !== void 0 || metadata2.workflowPlanFingerprint !== void 0) {
-          await ensureWorkflowGovernanceBinding(changeDir, metadata2);
+          await ensureWorkflowGovernanceBinding(changeDir2, metadata2);
         }
-        return deriveRun(state.fields, metadata2, await authorityForCurrentIteration(changeDir, metadata2));
+        return deriveRun(state.fields, metadata2, await authorityForCurrentIteration(changeDir2, metadata2));
       }
       const metadata = {
         runId: newId(),
@@ -13781,17 +13781,17 @@ var FsWorkflowRunRepository = class {
         ...workflowPlanFingerprint === void 0 ? {} : { workflowPlanFingerprint }
       };
       if (metadata.documentProfile !== void 0 || metadata.documentGovernanceFingerprint !== void 0 || metadata.workflowPlanFingerprint !== void 0) {
-        await ensureWorkflowGovernanceBinding(changeDir, metadata);
+        await ensureWorkflowGovernanceBinding(changeDir2, metadata);
       }
-      await store.writeUnderLock(changeDir, { ...state, runMetadata: metadata });
-      return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir, metadata));
+      await store.writeUnderLock(changeDir2, { ...state, runMetadata: metadata });
+      return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir2, metadata));
     });
   }
-  async bindAutomationPolicy(changeDir, policy2, binding) {
+  async bindAutomationPolicy(changeDir2, policy2, binding) {
     const { store } = this.deps;
     const newId = this.deps.newId ?? randomUUID6;
-    return store.withLock(changeDir, async () => {
-      const state = await store.read(changeDir);
+    return store.withLock(changeDir2, async () => {
+      const state = await store.read(changeDir2);
       const metadata = state.runMetadata ? structuredClone(state.runMetadata) : { runId: newId(), transitionSequence: 0, transitionHead: void 0 };
       const existing = metadata.automationPolicy;
       if (existing !== void 0 && existing.policy_version !== policy2.policy_version) {
@@ -13811,19 +13811,19 @@ var FsWorkflowRunRepository = class {
       if (existing === void 0)
         metadata.automationPolicy = canonicalPolicy;
       if (existing !== void 0 && binding === void 0) {
-        return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir, metadata));
+        return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir2, metadata));
       }
       if (existing !== void 0 && binding !== void 0 && state.runMetadata?.loopId === binding.loopId && state.runMetadata.iterationId === binding.iterationId) {
-        return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir, metadata));
+        return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir2, metadata));
       }
-      await store.writeUnderLock(changeDir, { ...state, runMetadata: metadata });
-      return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir, metadata));
+      await store.writeUnderLock(changeDir2, { ...state, runMetadata: metadata });
+      return deriveRun(state.fields, metadata, await authorityForCurrentIteration(changeDir2, metadata));
     });
   }
-  async bindWorkflowActionAuthority(changeDir, snapshot) {
+  async bindWorkflowActionAuthority(changeDir2, snapshot) {
     const { store } = this.deps;
-    return store.withLock(changeDir, async () => {
-      const state = await store.read(changeDir);
+    return store.withLock(changeDir2, async () => {
+      const state = await store.read(changeDir2);
       const metadata = required(state.runMetadata);
       const workflowId = resolveWorkflowName(state);
       const track = state.fields.track;
@@ -13831,18 +13831,18 @@ var FsWorkflowRunRepository = class {
       if (snapshot.workflow_run_id !== metadata.runId || snapshot.workflow_id !== workflowId || snapshot.workflow_fingerprint !== metadata.workflowPlanFingerprint || snapshot.loop_id !== metadata.loopId || snapshot.iteration_id !== metadata.iterationId || snapshot.skill_bundle_id !== metadata.automationPolicy?.skill_bundle_id || snapshot.track_id !== trackId) {
         throw new Error("Workflow action authority snapshot does not match canonical WorkflowRun identity");
       }
-      const bound = await ensureWorkflowActionAuthorityRecord(changeDir, snapshot);
+      const bound = await ensureWorkflowActionAuthorityRecord(changeDir2, snapshot);
       return deriveRun(state.fields, metadata, bound);
     });
   }
-  async transact(changeDir, fn) {
+  async transact(changeDir2, fn) {
     const { store, recordStore, clock } = this.deps;
     const newId = this.deps.newId ?? randomUUID6;
-    return store.withLock(changeDir, async () => {
-      const state = await store.read(changeDir);
+    return store.withLock(changeDir2, async () => {
+      const state = await store.read(changeDir2);
       const beforeFields = structuredClone(state.fields);
       const metadata = state.runMetadata ? structuredClone(state.runMetadata) : { runId: newId(), transitionSequence: 0, transitionHead: void 0 };
-      const authority = await authorityForCurrentIteration(changeDir, metadata);
+      const authority = await authorityForCurrentIteration(changeDir2, metadata);
       const run = deriveRun(state.fields, metadata, authority);
       let committed = false;
       const tx = {
@@ -13878,7 +13878,7 @@ var FsWorkflowRunRepository = class {
             actor: draft.actor,
             observedAt
           };
-          await recordStore.write(changeDir, record5);
+          await recordStore.write(changeDir2, record5);
           const newMetadata = {
             runId: metadata.runId,
             transitionSequence: sequence,
@@ -13892,7 +13892,7 @@ var FsWorkflowRunRepository = class {
             iterationId: metadata.iterationId
           };
           const committedState = { fields: nextFields, runMetadata: newMetadata, opaqueTail: state.opaqueTail };
-          const writeResult = await store.writeUnderLock(changeDir, committedState, {
+          const writeResult = await store.writeUnderLock(changeDir2, committedState, {
             kind: "transition",
             transitionRecordId: recordId
           });
@@ -13968,9 +13968,9 @@ function assertSecretKey(key) {
     throw new Error(`\u975E\u6CD5 key '${key}'\uFF08\u4EC5\u5141\u8BB8 ${SECRET_KEYS.join(" / ")}\uFF09`);
   }
 }
-function readSecrets(path7) {
+function readSecrets(path8) {
   try {
-    const parsed = JSON.parse(readFileSync7(path7, "utf8"));
+    const parsed = JSON.parse(readFileSync7(path8, "utf8"));
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
       return { version: 1, keys: {} };
     const rawKeys = parsed.keys;
@@ -13988,36 +13988,36 @@ function readSecrets(path7) {
   }
 }
 var tmpSeq2 = 0;
-async function atomicWriteSecrets(path7, store) {
-  await mkdir10(dirname4(path7), { recursive: true });
-  const tmp = `${path7}.tmp.${process.pid}.${tmpSeq2++}`;
+async function atomicWriteSecrets(path8, store) {
+  await mkdir10(dirname4(path8), { recursive: true });
+  const tmp = `${path8}.tmp.${process.pid}.${tmpSeq2++}`;
   await writeFile6(tmp, `${JSON.stringify(store, null, 2)}
 `, { encoding: "utf8", mode: 384 });
-  await rename4(tmp, path7);
+  await rename4(tmp, path8);
 }
-async function withSecretsLock(path7, fn) {
-  const dir = dirname4(path7);
+async function withSecretsLock(path8, fn) {
+  const dir = dirname4(path8);
   await mkdir10(dir, { recursive: true });
   return withLock(dir, fn);
 }
-async function writeSecretKey(path7, key, value) {
+async function writeSecretKey(path8, key, value) {
   assertSecretKey(key);
-  await withSecretsLock(path7, async () => {
-    const current = readSecrets(path7);
-    await atomicWriteSecrets(path7, { version: 1, keys: { ...current.keys, [key]: value } });
+  await withSecretsLock(path8, async () => {
+    const current = readSecrets(path8);
+    await atomicWriteSecrets(path8, { version: 1, keys: { ...current.keys, [key]: value } });
   });
 }
-async function deleteSecretKey(path7, key) {
+async function deleteSecretKey(path8, key) {
   assertSecretKey(key);
-  if (!existsSync3(path7))
+  if (!existsSync3(path8))
     return;
-  await withSecretsLock(path7, async () => {
-    const current = readSecrets(path7);
+  await withSecretsLock(path8, async () => {
+    const current = readSecrets(path8);
     if (!(key in current.keys))
       return;
     const keys = { ...current.keys };
     delete keys[key];
-    await atomicWriteSecrets(path7, { version: 1, keys });
+    await atomicWriteSecrets(path8, { version: 1, keys });
   });
 }
 
@@ -14119,7 +14119,7 @@ function parseScalarValue(rest, ctx) {
   const m = s.match(/^(.*?)\s#/);
   return (m ? m[1] : s).trimEnd();
 }
-function parseReviewSkillsBlock(lines, start, path7) {
+function parseReviewSkillsBlock(lines, start, path8) {
   const map = /* @__PURE__ */ new Map();
   let i = start;
   while (i < lines.length) {
@@ -14132,14 +14132,14 @@ function parseReviewSkillsBlock(lines, start, path7) {
       break;
     const entry = line.match(/^\s+([A-Za-z0-9][A-Za-z0-9._-]{0,127}):\s*(\[.*\])\s*$/);
     if (!entry)
-      throw new ManifestError(`${path7}:${i + 1} review_skills \u6761\u76EE\u987B\u4E3A 'lane: [skill, ...]'`);
+      throw new ManifestError(`${path8}:${i + 1} review_skills \u6761\u76EE\u987B\u4E3A 'lane: [skill, ...]'`);
     const lane = entry[1];
     if (map.has(lane))
-      throw new ManifestError(`${path7}:${i + 1} review_skills.${lane} \u91CD\u590D`);
+      throw new ManifestError(`${path8}:${i + 1} review_skills.${lane} \u91CD\u590D`);
     const list = entry[2];
     const inner = /^\[(.*)\]$/.exec(list)?.[1] ?? "";
     if (inner.trim() !== "" && inner.split(",").some((item2) => item2.trim() === "")) {
-      throw new ManifestError(`${path7}:${i + 1} review_skills.${lane} \u542B\u7A7A skill`);
+      throw new ManifestError(`${path8}:${i + 1} review_skills.${lane} \u542B\u7A7A skill`);
     }
     const skills = parseFlowList(list, `review_skills.${lane}`);
     for (const skill of skills)
@@ -14149,7 +14149,7 @@ function parseReviewSkillsBlock(lines, start, path7) {
   }
   return { map, next: i };
 }
-function parseSkillActionAuthorityBlock(lines, start, path7) {
+function parseSkillActionAuthorityBlock(lines, start, path8) {
   let version;
   const grants = /* @__PURE__ */ new Map();
   let i = start;
@@ -14163,26 +14163,26 @@ function parseSkillActionAuthorityBlock(lines, start, path7) {
       break;
     const entry = line.match(/^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
     if (!entry)
-      throw new ManifestError(`${path7}:${i + 1} skill_action_authority \u6761\u76EE\u683C\u5F0F\u9519\u8BEF`);
+      throw new ManifestError(`${path8}:${i + 1} skill_action_authority \u6761\u76EE\u683C\u5F0F\u9519\u8BEF`);
     const key = entry[1];
     const raw = entry[2].trim();
     if (key === "version") {
       if (version !== void 0 || raw === "")
-        throw new ManifestError(`${path7}:${i + 1} skill_action_authority.version \u91CD\u590D\u6216\u4E3A\u7A7A`);
+        throw new ManifestError(`${path8}:${i + 1} skill_action_authority.version \u91CD\u590D\u6216\u4E3A\u7A7A`);
       version = parseScalarValue(raw, "skill_action_authority.version");
     } else {
       if (grants.has(key))
-        throw new ManifestError(`${path7}:${i + 1} skill_action_authority.${key} \u91CD\u590D`);
+        throw new ManifestError(`${path8}:${i + 1} skill_action_authority.${key} \u91CD\u590D`);
       const list = raw.match(/^\[(.*)\]$/);
       if (list && list[1].trim() !== "" && list[1].split(",").some((item2) => item2.trim() === "")) {
-        throw new ManifestError(`${path7}:${i + 1} skill_action_authority.${key} \u542B\u7A7A action`);
+        throw new ManifestError(`${path8}:${i + 1} skill_action_authority.${key} \u542B\u7A7A action`);
       }
       grants.set(key, parseFlowList(raw, `skill_action_authority.${key}`));
     }
     i++;
   }
   if (version === void 0)
-    throw new ManifestError(`${path7} skill_action_authority \u7F3A version`);
+    throw new ManifestError(`${path8} skill_action_authority \u7F3A version`);
   return { value: { version, grants }, next: i };
 }
 function decodeDoubleQuotedYamlKey(token) {
@@ -14277,10 +14277,10 @@ function hasDeprecatedRouterKeyAt(lines, index) {
   }
   return false;
 }
-function throwDeprecatedRouterKey(path7, line) {
-  throw new ManifestError(`${path7}:${line} router_patterns \u5DF2\u8FC1\u79FB\u5230 .pipeline/tracks.yaml \u7684 policy_profile.routing\uFF1B\u8BF7\u5220\u9664\u65E7\u5B57\u6BB5\u5E76\u5728 Track Registry \u4E2D\u58F0\u660E routing policy`);
+function throwDeprecatedRouterKey(path8, line) {
+  throw new ManifestError(`${path8}:${line} router_patterns \u5DF2\u8FC1\u79FB\u5230 .pipeline/tracks.yaml \u7684 policy_profile.routing\uFF1B\u8BF7\u5220\u9664\u65E7\u5B57\u6BB5\u5E76\u5728 Track Registry \u4E2D\u58F0\u660E routing policy`);
 }
-function parseSkillBlock(lines, start, path7, section2) {
+function parseSkillBlock(lines, start, path8, section2) {
   const map = /* @__PURE__ */ new Map();
   let i = start;
   while (i < lines.length) {
@@ -14293,14 +14293,14 @@ function parseSkillBlock(lines, start, path7, section2) {
       break;
     const entry = l.match(/^\s+([A-Za-z_][A-Za-z0-9_.-]*):\s*(\[.*\])\s*$/);
     if (!entry) {
-      throw new ManifestError(`${path7}:${i + 1} ${section2} \u6761\u76EE\u987B\u4E3A 'phase.track: [skill, ...]'\uFF0C\u5F97\u5230 '${lines[i]}'`);
+      throw new ManifestError(`${path8}:${i + 1} ${section2} \u6761\u76EE\u987B\u4E3A 'phase.track: [skill, ...]'\uFF0C\u5F97\u5230 '${lines[i]}'`);
     }
     map.set(entry[1], parseFlowList(entry[2], `${section2}.${entry[1]}`));
     i++;
   }
   return { map, next: i };
 }
-function parseBreadcrumbBlock(lines, start, path7) {
+function parseBreadcrumbBlock(lines, start, path8) {
   const map = /* @__PURE__ */ new Map();
   let i = start;
   while (i < lines.length) {
@@ -14318,7 +14318,7 @@ function parseBreadcrumbBlock(lines, start, path7) {
     }
     const entry = raw.match(/^(\s+)([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
     if (!entry) {
-      throw new ManifestError(`${path7}:${i + 1} breadcrumb \u6761\u76EE\u987B\u4E3A 'phase: |' \u6216 'phase: value'\uFF0C\u5F97\u5230 '${lines[i]}'`);
+      throw new ManifestError(`${path8}:${i + 1} breadcrumb \u6761\u76EE\u987B\u4E3A 'phase: |' \u6216 'phase: value'\uFF0C\u5F97\u5230 '${lines[i]}'`);
     }
     const keyIndent = entry[1].length;
     const key = entry[2];
@@ -14351,13 +14351,13 @@ function parseBreadcrumbBlock(lines, start, path7) {
   }
   return { map, next: i };
 }
-function scanSections(text3, path7) {
-  const lines = text3.split("\n");
+function scanSections(text4, path8) {
+  const lines = text4.split("\n");
   const out = {};
   let i = 0;
   while (i < lines.length) {
     if (hasDeprecatedRouterKeyAt(lines, i))
-      throwDeprecatedRouterKey(path7, i + 1);
+      throwDeprecatedRouterKey(path8, i + 1);
     const line = stripComment(lines[i]);
     if (line.trim() === "") {
       i++;
@@ -14365,7 +14365,7 @@ function scanSections(text3, path7) {
     }
     const top = line.match(/^([A-Za-z_][A-Za-z0-9_-]*):\s*(.*)$/);
     if (!top) {
-      throw new ManifestError(`${path7}:${i + 1} \u65E0\u6CD5\u89E3\u6790\u7684\u9876\u5C42\u884C '${lines[i]}'\uFF08\u7A84\u89E3\u6790\u5B50\u96C6\u5916\uFF09\uFF1B\u82E5\u8BE5\u952E\u662F\u65E7 router_patterns \u7684 YAML \u7B49\u4EF7\u5199\u6CD5\uFF1A\u5B83\u5DF2\u8FC1\u79FB\u5230 .pipeline/tracks.yaml \u7684 policy_profile.routing`);
+      throw new ManifestError(`${path8}:${i + 1} \u65E0\u6CD5\u89E3\u6790\u7684\u9876\u5C42\u884C '${lines[i]}'\uFF08\u7A84\u89E3\u6790\u5B50\u96C6\u5916\uFF09\uFF1B\u82E5\u8BE5\u952E\u662F\u65E7 router_patterns \u7684 YAML \u7B49\u4EF7\u5199\u6CD5\uFF1A\u5B83\u5DF2\u8FC1\u79FB\u5230 .pipeline/tracks.yaml \u7684 policy_profile.routing`);
     }
     const key = top[1];
     const rest = top[2].trim();
@@ -14395,7 +14395,7 @@ function scanSections(text3, path7) {
         out.review_phases = items;
     } else if (key === "transitions") {
       if (rest !== "")
-        throw new ManifestError(`${path7}:${i + 1} transitions \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
+        throw new ManifestError(`${path8}:${i + 1} transitions \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
       const map = /* @__PURE__ */ new Map();
       i++;
       while (i < lines.length) {
@@ -14408,7 +14408,7 @@ function scanSections(text3, path7) {
           break;
         const entry = l.match(/^\s+([A-Za-z_][A-Za-z0-9_-]*):\s*(\[.*\])\s*$/);
         if (!entry) {
-          throw new ManifestError(`${path7}:${i + 1} transitions \u6761\u76EE\u987B\u4E3A 'from: [to, ...]'\uFF0C\u5F97\u5230 '${lines[i]}'`);
+          throw new ManifestError(`${path8}:${i + 1} transitions \u6761\u76EE\u987B\u4E3A 'from: [to, ...]'\uFF0C\u5F97\u5230 '${lines[i]}'`);
         }
         map.set(entry[1], parseFlowList(entry[2], `transitions.${entry[1]}`));
         i++;
@@ -14416,8 +14416,8 @@ function scanSections(text3, path7) {
       out.transitions = map;
     } else if (key === "mandatory_skills" || key === "recommended_skills") {
       if (rest !== "")
-        throw new ManifestError(`${path7}:${i + 1} ${key} \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
-      const r = parseSkillBlock(lines, i + 1, path7, key);
+        throw new ManifestError(`${path8}:${i + 1} ${key} \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
+      const r = parseSkillBlock(lines, i + 1, path8, key);
       if (key === "mandatory_skills")
         out.mandatory_skills = r.map;
       else
@@ -14425,24 +14425,24 @@ function scanSections(text3, path7) {
       i = r.next;
     } else if (key === "skill_action_authority") {
       if (rest !== "")
-        throw new ManifestError(`${path7}:${i + 1} skill_action_authority \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
+        throw new ManifestError(`${path8}:${i + 1} skill_action_authority \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
       if (out.skill_action_authority !== void 0)
-        throw new ManifestError(`${path7}:${i + 1} skill_action_authority \u5C0F\u8282\u91CD\u590D`);
-      const r = parseSkillActionAuthorityBlock(lines, i + 1, path7);
+        throw new ManifestError(`${path8}:${i + 1} skill_action_authority \u5C0F\u8282\u91CD\u590D`);
+      const r = parseSkillActionAuthorityBlock(lines, i + 1, path8);
       out.skill_action_authority = r.value;
       i = r.next;
     } else if (key === "review_skills") {
       if (rest !== "")
-        throw new ManifestError(`${path7}:${i + 1} review_skills \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
+        throw new ManifestError(`${path8}:${i + 1} review_skills \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
       if (out.review_skills !== void 0)
-        throw new ManifestError(`${path7}:${i + 1} review_skills \u5C0F\u8282\u91CD\u590D`);
-      const r = parseReviewSkillsBlock(lines, i + 1, path7);
+        throw new ManifestError(`${path8}:${i + 1} review_skills \u5C0F\u8282\u91CD\u590D`);
+      const r = parseReviewSkillsBlock(lines, i + 1, path8);
       out.review_skills = r.map;
       i = r.next;
     } else if (key === "breadcrumb") {
       if (rest !== "")
-        throw new ManifestError(`${path7}:${i + 1} breadcrumb \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
-      const r = parseBreadcrumbBlock(lines, i + 1, path7);
+        throw new ManifestError(`${path8}:${i + 1} breadcrumb \u5FC5\u987B\u662F\u5757\u5C0F\u8282`);
+      const r = parseBreadcrumbBlock(lines, i + 1, path8);
       out.breadcrumb = r.map;
       i = r.next;
     } else {
@@ -14503,15 +14503,15 @@ function deriveSkillActionAuthority(raw) {
   }
   return { version: "v1", grants };
 }
-function loadManifest(path7) {
-  const text3 = readFileSync8(path7, "utf8");
-  const raw = scanSections(text3, path7);
+function loadManifest(path8) {
+  const text4 = readFileSync8(path8, "utf8");
+  const raw = scanSections(text4, path8);
   if (!raw.phases || raw.phases.length === 0)
-    throw new ManifestError(`${path7} \u7F3A phases \u5C0F\u8282`);
+    throw new ManifestError(`${path8} \u7F3A phases \u5C0F\u8282`);
   if (!raw.transitions)
-    throw new ManifestError(`${path7} \u7F3A transitions \u5C0F\u8282`);
+    throw new ManifestError(`${path8} \u7F3A transitions \u5C0F\u8282`);
   if (!raw.review_phases) {
-    throw new ManifestError(`${path7} \u7F3A review_phases \u952E\uFF08review-gate \u540D\u5355\u4E0D\u8BB8\u9759\u9ED8\u7F3A\u5931\uFF09`);
+    throw new ManifestError(`${path8} \u7F3A review_phases \u952E\uFF08review-gate \u540D\u5355\u4E0D\u8BB8\u9759\u9ED8\u7F3A\u5931\uFF09`);
   }
   const phases = raw.phases.map((p) => assertPhase(p, "phases"));
   const declared = new Set(phases);
@@ -14637,8 +14637,8 @@ function canonicalMachineStateRoot(stateRoot) {
   return resolve7(stateRoot);
 }
 function machineStateScopeId(stateRoot) {
-  const digest6 = createHash13("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
-  return `sha256-v1-${digest6}`;
+  const digest7 = createHash13("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
+  return `sha256-v1-${digest7}`;
 }
 
 // packages/kernel/dist/product-paths.js
@@ -15059,9 +15059,9 @@ var TrackConfigParseError = class extends Error {
 
 // packages/kernel/dist/tracks/parse.js
 var KEY_RE3 = /^([A-Za-z_][\w.-]*):(?:\s+([\s\S]*)|\s*)$/;
-function tokenize2(text3) {
+function tokenize2(text4) {
   const tokens = [];
-  const lines = text3.split("\n");
+  const lines = text4.split("\n");
   for (let n = 0; n < lines.length; n++) {
     const lineNo = n + 1;
     const line = lines[n].replace(/\r$/, "");
@@ -15195,8 +15195,8 @@ function parseNode(tokens, i, indent) {
     return parseMapping2(tokens, i, indent);
   return { node: parseScalarText(t.raw, t.line), next: i + 1 };
 }
-function parseDocumentRoot(text3) {
-  const tokens = tokenize2(text3);
+function parseDocumentRoot(text4) {
+  const tokens = tokenize2(text4);
   if (tokens.length === 0)
     throw new TrackConfigParseError(null, "\u7A7A\u6587\u6863\uFF08\u7F3A\u5C11\u5FC5\u586B\u9876\u5C42\u952E version\uFF09");
   const first = tokens[0];
@@ -15387,8 +15387,8 @@ function walkTrackEntry(n, at) {
     out.policyProfile = walkPolicy(p.node, at);
   return out;
 }
-function parseTrackRegistry(text3) {
-  const root = parseDocumentRoot(text3);
+function parseTrackRegistry(text4) {
+  const root = parseDocumentRoot(text4);
   checkKeys(root, ["version", "builtins", "tracks"], "\u9876\u5C42");
   const versionEntry = getEntry(root, "version");
   if (!versionEntry)
@@ -15678,11 +15678,11 @@ function emitString(s) {
 function emitInteger(n) {
   if (!Number.isInteger(n))
     throw new Error(`serializeTrackRegistry: \u671F\u671B\u6574\u6570\uFF0C\u5F97\u5230 ${n}`);
-  const text3 = String(n);
-  if (!/^-?\d+$/.test(text3) || Number(text3) !== n) {
-    throw new Error(`serializeTrackRegistry: \u6574\u6570 ${n} \u7684\u5199\u51FA\u6587\u672C ${JSON.stringify(text3)} \u4E0D\u662F parse \u53EF\u8BFB\u56DE\u7684\u7EAF\u5341\u8FDB\u5236\uFF0C\u62D2\u5199`);
+  const text4 = String(n);
+  if (!/^-?\d+$/.test(text4) || Number(text4) !== n) {
+    throw new Error(`serializeTrackRegistry: \u6574\u6570 ${n} \u7684\u5199\u51FA\u6587\u672C ${JSON.stringify(text4)} \u4E0D\u662F parse \u53EF\u8BFB\u56DE\u7684\u7EAF\u5341\u8FDB\u5236\uFF0C\u62D2\u5199`);
   }
-  return text3;
+  return text4;
 }
 function emitMapKey(key) {
   if (!/^[A-Za-z_][\w.-]*$/.test(key)) {
@@ -15885,11 +15885,11 @@ function composeRegistry(config, source) {
   }
   return { ordered, byId, revision: registryRevision(config), source };
 }
-function synthesize(text3, context) {
-  if (text3 === null) {
+function synthesize(text4, context) {
+  if (text4 === null) {
     return { config: EMPTY_PROJECT_CONFIG, registry: composeRegistry(EMPTY_PROJECT_CONFIG, "builtin-only") };
   }
-  const config = parseTrackRegistry(text3);
+  const config = parseTrackRegistry(text4);
   const errors = validateTrackRegistry(config, context);
   if (errors.length > 0) {
     throw new Error(`.pipeline/tracks.yaml \u6821\u9A8C\u5931\u8D25\uFF08${errors.length} \u6761\uFF09\uFF1A
@@ -15898,14 +15898,14 @@ function synthesize(text3, context) {
   return { config, registry: composeRegistry(config, "project-file") };
 }
 function loadTrackRegistry(repoRoot, context) {
-  let text3 = null;
+  let text4 = null;
   try {
-    text3 = readFileSync9(trackRegistryPath(repoRoot), "utf8");
+    text4 = readFileSync9(trackRegistryPath(repoRoot), "utf8");
   } catch (e) {
     if (e.code !== "ENOENT")
       throw e;
   }
-  return synthesize(text3, context).registry;
+  return synthesize(text4, context).registry;
 }
 function requireTrack(registry, id2) {
   const def = registry.byId.get(id2);
@@ -15922,14 +15922,14 @@ function assertWorkflowAllowed(track, workflowId) {
   throw new Error(`track '${track.id}' \u4E0D\u5141\u8BB8\u7ED1\u5B9A workflow '${workflowId}'\uFF08\u5141\u8BB8\uFF1A${track.workflow.allowed.join(", ")}\uFF09`);
 }
 async function freshReadUnderLock(file, context) {
-  let text3 = null;
+  let text4 = null;
   try {
-    text3 = await readFile15(file, "utf8");
+    text4 = await readFile15(file, "utf8");
   } catch (e) {
     if (e.code !== "ENOENT")
       throw e;
   }
-  return synthesize(text3, context);
+  return synthesize(text4, context);
 }
 async function withTrackRegistryLock(repoRoot, context, callback) {
   const file = trackRegistryPath(repoRoot);
@@ -15940,14 +15940,14 @@ async function withTrackRegistryLock(repoRoot, context, callback) {
 async function mutateTrackRegistry(repoRoot, context, callback) {
   const file = trackRegistryPath(repoRoot);
   return withTrackRegistryLock(repoRoot, context, async (snapshot) => {
-    const { next, result } = await callback(snapshot);
+    const { next, result: result2 } = await callback(snapshot);
     const errors = validateTrackRegistry(next, context);
     if (errors.length > 0) {
       throw new Error(`mutateTrackRegistry: next \u672A\u8FC7\u5B8C\u6574\u6821\u9A8C\uFF08${errors.length} \u6761\uFF09\uFF0C\u62D2\u5199\uFF1A
   - ${errors.join("\n  - ")}`);
     }
     await atomicWriteFile(file, serializeTrackRegistry(next));
-    return { registry: composeRegistry(next, "project-file"), result };
+    return { registry: composeRegistry(next, "project-file"), result: result2 };
   });
 }
 
@@ -16145,12 +16145,12 @@ async function assertUpdatePreservesReferences(next, id2, scan) {
 import { closeSync as closeSync2, existsSync as existsSync4, fstatSync, openSync as openSync2, opendirSync, readFileSync as readFileSync10, readSync as readSync2, readdirSync as readdirSync2, realpathSync as realpathSync2, statSync } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 var MEM_SESSION_METADATA_BYTES = 8 * 1024;
-function readMemSessionMetadataChecked(fs, path7) {
+function readMemSessionMetadataChecked(fs, path8) {
   if (fs.contentReadBudget && fs.readTextBounded) {
-    const read = fs.readTextBounded(path7, MEM_SESSION_METADATA_BYTES);
+    const read = fs.readTextBounded(path8, MEM_SESSION_METADATA_BYTES);
     return { text: read?.text, truncated: read?.truncated === true };
   }
-  return { text: fs.readText(path7), truncated: false };
+  return { text: fs.readText(path8), truncated: false };
 }
 function nodeMemFs(homeOverride) {
   const home = homeOverride ?? homedir3();
@@ -16272,8 +16272,8 @@ function nodeMemFs(homeOverride) {
     env: (name) => process.env[name]
   };
 }
-function mtimeIso(fs, path7) {
-  const ms = fs.mtimeMs(path7);
+function mtimeIso(fs, path8) {
+  const ms = fs.mtimeMs(path8);
   return ms === void 0 ? void 0 : new Date(ms).toISOString();
 }
 
@@ -16320,16 +16320,16 @@ function isBootstrapTurn(cleaned, originalLength) {
     return true;
   return false;
 }
-function stripInjectionTags(text3) {
-  let out = text3;
+function stripInjectionTags(text4) {
+  let out = text4;
   for (const re of TAG_RES)
     out = out.replace(re, "");
   out = out.replace(AGENTS_RE, "");
   out = out.replace(COLLAPSE_RE, "\n\n");
   return out.trim();
 }
-function hostSummaryTurn(text3) {
-  const turn = { role: "user", text: text3 };
+function hostSummaryTurn(text4) {
+  const turn = { role: "user", text: text4 };
   Object.defineProperty(turn, HOST_SUMMARY_TURN, { value: true });
   return turn;
 }
@@ -16461,8 +16461,8 @@ function searchInDialogue(turns, kw, maxExcerpts = 3, chunkChars = 400, options 
 function compareRankedChunks(a, b) {
   return b.coverage - a.coverage || b.rarity - a.rarity || a.start - b.start;
 }
-function selectExcerptCandidates(text3, hay, tokens, tokenFreq, chunkChars, limit) {
-  const locateChunk = createChunkLocator(text3, chunkChars);
+function selectExcerptCandidates(text4, hay, tokens, tokenFreq, chunkChars, limit) {
+  const locateChunk = createChunkLocator(text4, chunkChars);
   const cursors = Array.from(tokenFreq.keys(), (tok) => ({ tok, idx: hay.indexOf(tok) }));
   const selected = [];
   let lastStart = null;
@@ -16498,11 +16498,11 @@ function selectExcerptCandidates(text3, hay, tokens, tokenFreq, chunkChars, limi
   }
   return selected;
 }
-function createChunkLocator(text3, maxChars) {
+function createChunkLocator(text4, maxChars) {
   const paragraphBreaks = [];
   let from = 0;
   for (; ; ) {
-    const idx = text3.indexOf("\n\n", from);
+    const idx = text4.indexOf("\n\n", from);
     if (idx === -1)
       break;
     paragraphBreaks.push(idx);
@@ -16524,11 +16524,11 @@ function createChunkLocator(text3, maxChars) {
     const nextIdx = lowerBound(hitIdx);
     const previousIdx = lowerBound(hitIdx - 1) - 1;
     let start = previousIdx >= 0 ? (paragraphBreaks[previousIdx] ?? -2) + 2 : 0;
-    let end = nextIdx < paragraphBreaks.length ? paragraphBreaks[nextIdx] ?? text3.length : text3.length;
+    let end = nextIdx < paragraphBreaks.length ? paragraphBreaks[nextIdx] ?? text4.length : text4.length;
     let truncated = false;
     if (end - start > maxChars) {
       start = Math.max(0, hitIdx - Math.floor(maxChars / 2));
-      end = Math.min(text3.length, hitIdx + Math.ceil(maxChars / 2));
+      end = Math.min(text4.length, hitIdx + Math.ceil(maxChars / 2));
       truncated = true;
     }
     return { start, end, truncated };
@@ -17006,10 +17006,10 @@ function withOpenCodeDb(fs, fallback, fn) {
     return fallback;
   }
   let db;
-  let result;
+  let result2;
   try {
     db = new sqlite.DatabaseSync(immutableTarget?.path ?? dbPath, { readOnly: true });
-    result = fn(db);
+    result2 = fn(db);
   } catch {
     fs.contentReadBudget?.noteSourceUnavailable("opencode");
     return fallback;
@@ -17025,7 +17025,7 @@ function withOpenCodeDb(fs, fallback, fn) {
     fs.contentReadBudget?.noteSourceUnavailable("opencode");
     return fallback;
   }
-  return result;
+  return result2;
 }
 function parseJson2(raw) {
   if (typeof raw !== "string")
@@ -17310,11 +17310,11 @@ var OPEN_BRACE = 123;
 function isJsonlLine(line) {
   return line.length > 0 && line.charCodeAt(0) === OPEN_BRACE;
 }
-function parseJsonlLines(text3) {
+function parseJsonlLines(text4) {
   const out = [];
-  if (!text3)
+  if (!text4)
     return out;
-  for (const line of text3.split("\n")) {
+  for (const line of text4.split("\n")) {
     if (!isJsonlLine(line))
       continue;
     try {
@@ -17324,10 +17324,10 @@ function parseJsonlLines(text3) {
   }
   return out;
 }
-function readJsonlFirst(text3) {
-  if (!text3)
+function readJsonlFirst(text4) {
+  if (!text4)
     return void 0;
-  for (const line of text3.split("\n")) {
+  for (const line of text4.split("\n")) {
     if (!isJsonlLine(line))
       continue;
     try {
@@ -17337,11 +17337,11 @@ function readJsonlFirst(text3) {
   }
   return void 0;
 }
-function findInJsonl(text3, predicate, maxLines = 200) {
-  if (!text3)
+function findInJsonl(text4, predicate, maxLines = 200) {
+  if (!text4)
     return void 0;
   let count = 0;
-  for (const line of text3.split("\n")) {
+  for (const line of text4.split("\n")) {
     if (!isJsonlLine(line))
       continue;
     let obj;
@@ -17503,8 +17503,8 @@ function walkDirForRelatedSearch(fs, root, accept, fileLimit, source, shouldDesc
         break;
       }
       budget.consumeDiscoveryEntries(source, 1);
-      const path7 = join24(current.path, entry.name);
-      ranked.push({ entry, path: path7, mtime: entry.isFile ? fs.mtimeMs(path7) ?? 0 : 0 });
+      const path8 = join24(current.path, entry.name);
+      ranked.push({ entry, path: path8, mtime: entry.isFile ? fs.mtimeMs(path8) ?? 0 : 0 });
     }
     ranked.sort((left, right) => {
       if (left.entry.isDirectory !== right.entry.isDirectory) {
@@ -17597,11 +17597,11 @@ function claudeListSessions(fs, f) {
     const title = idx?.title ?? null;
     if (!cwd || !created) {
       const metadata = readMemSessionMetadataChecked(fs, filePath);
-      const text3 = metadata.text;
-      const evt = findInJsonl(text3, (o) => typeof o?.cwd === "string", 100);
+      const text4 = metadata.text;
+      const evt = findInJsonl(text4, (o) => typeof o?.cwd === "string", 100);
       cwd = cwd || (evt?.cwd ?? null);
       if (!created) {
-        const first = readJsonlFirst(text3);
+        const first = readJsonlFirst(text4);
         created = (evt?.timestamp ?? null) || (first?.timestamp ?? null);
       }
       if (f.cwd && !cwd && metadata.truncated)
@@ -17654,9 +17654,9 @@ ${summary}`)] : [];
     const content = msg.content;
     if (t === "user" && msg.role === "user") {
       if (typeof content === "string") {
-        const text3 = stripInjectionTags(content);
-        if (text3 && !isBootstrapTurn(text3, content.length))
-          turns.push({ role: "user", text: text3 });
+        const text4 = stripInjectionTags(content);
+        if (text4 && !isBootstrapTurn(text4, content.length))
+          turns.push({ role: "user", text: text4 });
       }
     } else if (t === "assistant" && msg.role === "assistant" && Array.isArray(content)) {
       const parts = [];
@@ -17711,9 +17711,9 @@ function codexListSessions(fs, f) {
     }
     const metadata = readMemSessionMetadataChecked(fs, file);
     const first = readJsonlFirst(metadata.text);
-    const meta = first?.payload ?? null;
-    const sid = (meta?.id ?? null) || (m ? m[2] : null) || base;
-    const cwd = meta?.cwd ?? null;
+    const meta2 = first?.payload ?? null;
+    const sid = (meta2?.id ?? null) || (m ? m[2] : null) || base;
+    const cwd = meta2?.cwd ?? null;
     const created = (first?.timestamp ?? null) || tsFromName || "";
     if (f.cwd && !sameProjectForMemFs(fs, cwd, f.cwd)) {
       if (!cwd && metadata.truncated)
@@ -17773,9 +17773,9 @@ function compactedReplacementTurns(replacementHistory) {
     const turn = buildTurnFromMessage(role, item2?.content);
     if (!turn)
       continue;
-    const text3 = `[compact]
+    const text4 = `[compact]
 ${turn.text}`;
-    turns.push(index === summaryIndex ? hostSummaryTurn(text3) : { role: turn.role, text: text3 });
+    turns.push(index === summaryIndex ? hostSummaryTurn(text4) : { role: turn.role, text: text4 });
   }
   return turns;
 }
@@ -18012,11 +18012,11 @@ function turnFromEntry(entry) {
 function syntheticTurn(prefix, raw) {
   if (typeof raw !== "string")
     return null;
-  const text3 = stripInjectionTags(raw);
-  if (!text3)
+  const text4 = stripInjectionTags(raw);
+  if (!text4)
     return null;
   return hostSummaryTurn(`${prefix}
-${text3}`);
+${text4}`);
 }
 function buildTurn(role, content) {
   const parts = [];
@@ -18207,13 +18207,13 @@ function buildAbsorbedChildKeys(sessions) {
   for (const startKey of parentByChild.keys()) {
     if (completed.has(startKey))
       continue;
-    const path7 = [];
+    const path8 = [];
     const pathIndex = /* @__PURE__ */ new Map();
     let currentKey = startKey;
     while (currentKey !== void 0 && parentByChild.has(currentKey) && !completed.has(currentKey)) {
       const cycleStart = pathIndex.get(currentKey);
       if (cycleStart !== void 0) {
-        const cycleKeys = path7.slice(cycleStart);
+        const cycleKeys = path8.slice(cycleStart);
         let cycleRoot = cycleKeys[0];
         for (const key of cycleKeys)
           if (key < cycleRoot)
@@ -18221,11 +18221,11 @@ function buildAbsorbedChildKeys(sessions) {
         absorbed.delete(cycleRoot);
         break;
       }
-      pathIndex.set(currentKey, path7.length);
-      path7.push(currentKey);
+      pathIndex.set(currentKey, path8.length);
+      path8.push(currentKey);
       currentKey = parentByChild.get(currentKey);
     }
-    for (const key of path7)
+    for (const key of path8)
       completed.add(key);
   }
   return absorbed;
@@ -18339,12 +18339,12 @@ function budgetedFs(source, state, platform) {
   const discoveryFiles = /* @__PURE__ */ new Map();
   const discoveryTimeLimits = platform === "all" ? /* @__PURE__ */ new Map([["claude", 25], ["codex", 25], ["pi", 25]]) : new Map(platform === "opencode" ? [] : [[platform, RELATED_SESSION_SEARCH_BUDGETS.discoveryMs]]);
   const discoveryDeadlines = /* @__PURE__ */ new Map();
-  const boundedRead = (path7, offset, maxBytes) => {
+  const boundedRead2 = (path8, offset, maxBytes) => {
     if (offset > 0 && source.readTextRangeBounded) {
-      return source.readTextRangeBounded(path7, offset, maxBytes);
+      return source.readTextRangeBounded(path8, offset, maxBytes);
     }
     if (offset === 0 && source.readTextBounded)
-      return source.readTextBounded(path7, maxBytes);
+      return source.readTextBounded(path8, maxBytes);
     if (offset > 0) {
       addWarning(state, {
         code: "bounded-read-unavailable",
@@ -18352,7 +18352,7 @@ function budgetedFs(source, state, platform) {
       });
       return void 0;
     }
-    const raw = source.readText(path7);
+    const raw = source.readText(path8);
     if (raw === void 0)
       return void 0;
     addWarning(state, {
@@ -18367,14 +18367,14 @@ function budgetedFs(source, state, platform) {
       truncated: selected.byteLength < bytes.byteLength
     };
   };
-  const readWithinBudget = (path7, requestedMaxBytes, reportPerFileTruncation) => {
-    const existingBytes = prefixBytes.get(path7) ?? Buffer.alloc(0);
-    const consumed = sourceBytes.get(path7) ?? 0;
-    if (completeSources.has(path7) || consumed >= requestedMaxBytes) {
+  const readWithinBudget = (path8, requestedMaxBytes, reportPerFileTruncation) => {
+    const existingBytes = prefixBytes.get(path8) ?? Buffer.alloc(0);
+    const consumed = sourceBytes.get(path8) ?? 0;
+    if (completeSources.has(path8) || consumed >= requestedMaxBytes) {
       return {
         text: existingBytes.toString("utf8"),
         bytesRead: consumed,
-        truncated: !completeSources.has(path7),
+        truncated: !completeSources.has(path8),
         rawBytes: existingBytes
       };
     }
@@ -18403,9 +18403,9 @@ function budgetedFs(source, state, platform) {
     }
     const requestedRemaining = requestedMaxBytes - consumed;
     const maxBytes = Math.min(requestedRemaining, sourceRemaining, aggregateRemaining);
-    const read = boundedRead(path7, consumed, maxBytes);
+    const read = boundedRead2(path8, consumed, maxBytes);
     if (!read) {
-      if (source.exists(path7)) {
+      if (source.exists(path8)) {
         addWarning(state, {
           code: "file-read-unavailable",
           message: "A session source could not be read."
@@ -18415,15 +18415,15 @@ function budgetedFs(source, state, platform) {
     }
     const bytesRead = Math.min(maxBytes, Math.max(0, Math.trunc(read.bytesRead)));
     state.bytesRead += bytesRead;
-    sourceBytes.set(path7, consumed + bytesRead);
+    sourceBytes.set(path8, consumed + bytesRead);
     const returnedBytes = read.rawBytes === void 0 ? Buffer.from(read.text) : Buffer.from(read.rawBytes);
     const nextBytes = returnedBytes.subarray(0, bytesRead);
     const combinedBytes = Buffer.concat([existingBytes, nextBytes]);
-    const text3 = combinedBytes.toString("utf8");
-    prefixBytes.set(path7, combinedBytes);
+    const text4 = combinedBytes.toString("utf8");
+    prefixBytes.set(path8, combinedBytes);
     const truncated = read.truncated || returnedBytes.byteLength > maxBytes || read.bytesRead > maxBytes;
     if (!truncated)
-      completeSources.add(path7);
+      completeSources.add(path8);
     if (truncated && maxBytes < requestedRemaining && aggregateRemaining <= sourceRemaining) {
       addWarning(state, {
         code: "total-read-budget-exhausted",
@@ -18435,10 +18435,10 @@ function budgetedFs(source, state, platform) {
         message: "At least one session exceeded the per-file read budget."
       });
     }
-    return { text: text3, bytesRead: consumed + bytesRead, truncated, rawBytes: combinedBytes };
+    return { text: text4, bytesRead: consumed + bytesRead, truncated, rawBytes: combinedBytes };
   };
-  const fromCached = (text3, maxBytes) => {
-    const bytes = Buffer.from(text3);
+  const fromCached = (text4, maxBytes) => {
+    const bytes = Buffer.from(text4);
     const selected = bytes.subarray(0, maxBytes);
     return {
       text: selected.toString("utf8"),
@@ -18449,12 +18449,12 @@ function budgetedFs(source, state, platform) {
   };
   return {
     home: source.home,
-    exists: (path7) => source.exists(path7),
-    readDir: (path7) => {
-      const checked = source.readDirChecked?.(path7);
+    exists: (path8) => source.exists(path8),
+    readDir: (path8) => {
+      const checked = source.readDirChecked?.(path8);
       if (!checked)
-        return source.readDir(path7);
-      if (checked.unavailable && source.exists(path7)) {
+        return source.readDir(path8);
+      if (checked.unavailable && source.exists(path8)) {
         addWarning(state, {
           code: "directory-read-unavailable",
           message: "A session directory could not be read."
@@ -18462,9 +18462,9 @@ function budgetedFs(source, state, platform) {
       }
       return checked.entries;
     },
-    readDirBounded: sourceReadDirBounded ? (path7, maxEntries, shouldContinue) => {
-      const checked = sourceReadDirBounded(path7, maxEntries, shouldContinue);
-      if (checked.unavailable && source.exists(path7)) {
+    readDirBounded: sourceReadDirBounded ? (path8, maxEntries, shouldContinue) => {
+      const checked = sourceReadDirBounded(path8, maxEntries, shouldContinue);
+      if (checked.unavailable && source.exists(path8)) {
         addWarning(state, {
           code: "directory-read-unavailable",
           message: "A session directory could not be read."
@@ -18472,25 +18472,25 @@ function budgetedFs(source, state, platform) {
       }
       return checked;
     } : void 0,
-    readText: (path7) => {
-      if (cache.has(path7))
-        return cache.get(path7);
-      const read = readWithinBudget(path7, RELATED_SESSION_SEARCH_BUDGETS.perFileBytes, true);
-      cache.set(path7, read?.text);
+    readText: (path8) => {
+      if (cache.has(path8))
+        return cache.get(path8);
+      const read = readWithinBudget(path8, RELATED_SESSION_SEARCH_BUDGETS.perFileBytes, true);
+      cache.set(path8, read?.text);
       return read?.text;
     },
-    readTextBounded: (path7, maxBytes) => {
+    readTextBounded: (path8, maxBytes) => {
       if (!Number.isSafeInteger(maxBytes) || maxBytes < 0)
         return void 0;
-      if (cache.has(path7)) {
-        const text3 = cache.get(path7);
-        return text3 === void 0 ? void 0 : fromCached(text3, maxBytes);
+      if (cache.has(path8)) {
+        const text4 = cache.get(path8);
+        return text4 === void 0 ? void 0 : fromCached(text4, maxBytes);
       }
-      return readWithinBudget(path7, maxBytes, false);
+      return readWithinBudget(path8, maxBytes, false);
     },
-    realPath: source.realPath ? (path7) => source.realPath?.(path7) : void 0,
+    realPath: source.realPath ? (path8) => source.realPath?.(path8) : void 0,
     enforcePhysicalProjectScope: true,
-    mtimeMs: (path7) => source.mtimeMs(path7),
+    mtimeMs: (path8) => source.mtimeMs(path8),
     env: sourceEnv ? (name) => sourceEnv(name) : void 0,
     contentReadBudget: {
       perSourceBytes: RELATED_SESSION_SEARCH_BUDGETS.perFileBytes,
@@ -18673,11 +18673,11 @@ function extractDocLoopIds(docText) {
   }
   return out;
 }
-function parseRunLog(text3, now) {
+function parseRunLog(text4, now) {
   const map = /* @__PURE__ */ new Map();
-  if (text3 === null)
+  if (text4 === null)
     return map;
-  for (const rawLine of text3.split("\n")) {
+  for (const rawLine of text4.split("\n")) {
     const line = rawLine.trim();
     if (!line.startsWith("|"))
       continue;
@@ -18899,11 +18899,11 @@ function nextDown(level) {
 }
 var HIST_TS_RE = /^(?:\d{4}-)?\d{2}-\d{2}T\d{2}:\d{2}$/;
 var HIST_RESULT_RE = /result=(ok|fail|dry|skip)/;
-function parseRunHistory(text3, loopId) {
-  if (text3 === null)
+function parseRunHistory(text4, loopId) {
+  if (text4 === null)
     return { runs: 0, failStreak: 0, lastResult: null };
   const results = [];
-  for (const rawLine of text3.split("\n")) {
+  for (const rawLine of text4.split("\n")) {
     const line = rawLine.trim();
     if (!line.startsWith("|"))
       continue;
@@ -19019,8 +19019,8 @@ function planLevelChange(current, target, verdict) {
   }
   return { ...base, to, kind: "promote", allowed: true, reason: `\u9010\u7EA7\u6BD5\u4E1A ${current} \u2192 ${to}`, blockers: [] };
 }
-function setAutonomyLevelInYaml(text3, loopId, level) {
-  const lines = text3.split("\n");
+function setAutonomyLevelInYaml(text4, loopId, level) {
+  const lines = text4.split("\n");
   const block = locateLoop(lines, loopId);
   if (block === null)
     return { text: null, error: `loop '${loopId}' \u672A\u5728 loops.yaml \u627E\u5230\uFF08\u65E0\u6CD5\u6539\u6863\uFF09` };
@@ -19104,9 +19104,9 @@ var DRAFT_MARKS_FILE = "loops.drafts.json";
 function draftMarksPath(repoRoot) {
   return join27(repoRoot, ".pipeline", DRAFT_MARKS_FILE);
 }
-function readDraftMarks(path7) {
+function readDraftMarks(path8) {
   try {
-    const data = JSON.parse(readFileSync11(path7, "utf8"));
+    const data = JSON.parse(readFileSync11(path8, "utf8"));
     if (typeof data === "object" && data !== null && !Array.isArray(data) && data.version === 1 && Array.isArray(data.ids) && data.ids.every((x) => typeof x === "string")) {
       return [...data.ids];
     }
@@ -19116,18 +19116,18 @@ function readDraftMarks(path7) {
   }
 }
 var tmpSeq3 = 0;
-async function writeDraftMarks(path7, ids2) {
-  await mkdir12(dirname6(path7), { recursive: true });
-  const tmp = `${path7}.tmp.${process.pid}.${tmpSeq3++}`;
+async function writeDraftMarks(path8, ids2) {
+  await mkdir12(dirname6(path8), { recursive: true });
+  const tmp = `${path8}.tmp.${process.pid}.${tmpSeq3++}`;
   await writeFile7(tmp, `${JSON.stringify({ version: 1, ids: ids2 }, null, 2)}
 `, "utf8");
-  await rename5(tmp, path7);
+  await rename5(tmp, path8);
 }
-async function clearDraftMark(path7, id2) {
-  const existing = readDraftMarks(path7);
+async function clearDraftMark(path8, id2) {
+  const existing = readDraftMarks(path8);
   if (!existing.includes(id2))
     return;
-  await writeDraftMarks(path7, existing.filter((x) => x !== id2));
+  await writeDraftMarks(path8, existing.filter((x) => x !== id2));
 }
 
 // packages/kernel/dist/loops/update.js
@@ -19259,7 +19259,7 @@ function checkedValue(field2, value) {
     throw new PatchError(`\u5B57\u6BB5 '${field2}' \u987B\u4E3A\u5B57\u7B26\u4E32`);
   return value;
 }
-function updateLoopInYaml(text3, loopId, patch) {
+function updateLoopInYaml(text4, loopId, patch) {
   try {
     const fields = Object.keys(patch);
     if (fields.length === 0)
@@ -19272,7 +19272,7 @@ function updateLoopInYaml(text3, loopId, patch) {
         throw new PatchError(`\u5B57\u6BB5 '${field2}' \u4E0D\u53EF patch\uFF08\u53EF\u6539\uFF1A${ALL_PATCHABLE.join(" / ")}\uFF09`);
       }
     }
-    const lines = text3.split("\n");
+    const lines = text4.split("\n");
     for (const field2 of fields) {
       const block = locateLoop(lines, loopId);
       if (block === null)
@@ -19313,27 +19313,27 @@ async function withRegistryGovernanceLock(repoRoot, fn) {
   return withLock(base, fn);
 }
 async function readRegistrySnapshot(repoRoot) {
-  let text3;
+  let text4;
   try {
-    text3 = await readFile16(loopsYamlPath(repoRoot), "utf8");
+    text4 = await readFile16(loopsYamlPath(repoRoot), "utf8");
   } catch (e) {
     if (e.code === "ENOENT") {
       return { text: "", epoch: ABSENT_REGISTRY_EPOCH, registry: null, errors: [] };
     }
     throw new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${e.code ?? "IO"}\uFF09\uFF1A${e instanceof Error ? e.message : String(e)}`);
   }
-  const epoch = createHash16("sha256").update(text3, "utf8").digest("hex");
-  const { data, errors } = loadRegistry(repoRoot, { readText: () => text3 });
-  return { text: text3, epoch, registry: data, errors };
+  const epoch = createHash16("sha256").update(text4, "utf8").digest("hex");
+  const { data, errors } = loadRegistry(repoRoot, { readText: () => text4 });
+  return { text: text4, epoch, registry: data, errors };
 }
-async function writeRegistryTextAtomic(repoRoot, text3) {
+async function writeRegistryTextAtomic(repoRoot, text4) {
   const dir = join28(repoRoot, ".pipeline");
   await mkdir13(dir, { recursive: true });
   const finalPath = loopsYamlPath(repoRoot);
   const tmp = join28(dir, `.loops.yaml.tmp.${process.pid}.${randomBytes(6).toString("hex")}`);
   const fh = await open4(tmp, "w");
   try {
-    await fh.writeFile(text3, "utf8");
+    await fh.writeFile(text4, "utf8");
     await fh.sync();
   } finally {
     await fh.close();
@@ -19355,10 +19355,10 @@ async function writeRegistryWithGovernance(repoRoot, expectedEpoch, produce) {
     if (current.epoch !== expectedEpoch) {
       return { ok: false, error: `CAS \u5931\u8D25\uFF1Aloops.yaml \u5728\u6B64\u671F\u95F4\u88AB\u5E76\u53D1\u4FEE\u6539\uFF08epoch ${expectedEpoch.slice(0, 12)} \u2192 ${current.epoch.slice(0, 12)}\uFF09` };
     }
-    const { text: text3, error: error2 } = await produce(current.text, current);
-    if (error2 !== null || text3 === null)
+    const { text: text4, error: error2 } = await produce(current.text, current);
+    if (error2 !== null || text4 === null)
       return { ok: false, error: error2 ?? "\u751F\u6210\u5199\u56DE\u6587\u672C\u5931\u8D25" };
-    await writeRegistryTextAtomic(repoRoot, text3);
+    await writeRegistryTextAtomic(repoRoot, text4);
     return { ok: true };
   });
 }
@@ -19459,65 +19459,65 @@ var TEMPLATE_ID_SET = new Set(AUTOMATION_POLICY_TEMPLATE_IDS);
 var TRIGGER_KEYS = /* @__PURE__ */ new Set(["kind"]);
 var TRIGGER_KINDS = /* @__PURE__ */ new Set(["schedule", "event", "manual"]);
 var NO_KEYS = /* @__PURE__ */ new Set();
-function asRecord3(input, path7) {
+function asRecord3(input, path8) {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
-    throw new Error(`AutomationPolicyTemplate: ${path7} must be an object`);
+    throw new Error(`AutomationPolicyTemplate: ${path8} must be an object`);
   }
   const prototype = Object.getPrototypeOf(input);
   if (prototype !== Object.prototype && prototype !== null) {
-    throw new Error(`AutomationPolicyTemplate: ${path7} must use Object.prototype or a null prototype`);
+    throw new Error(`AutomationPolicyTemplate: ${path8} must use Object.prototype or a null prototype`);
   }
   return input;
 }
-function ownDataValue(object4, key, path7) {
-  const descriptor = Object.getOwnPropertyDescriptor(object4, key);
+function ownDataValue(object5, key, path8) {
+  const descriptor = Object.getOwnPropertyDescriptor(object5, key);
   if (descriptor === void 0 || !Object.prototype.hasOwnProperty.call(descriptor, "value")) {
-    throw new Error(`AutomationPolicyTemplate: ${path7} must be an own data property`);
+    throw new Error(`AutomationPolicyTemplate: ${path8} must be an own data property`);
   }
   return descriptor.value;
 }
-function snapshotRecord(input, allowed, required2, path7) {
-  const record5 = asRecord3(input, path7);
+function snapshotRecord(input, allowed, required2, path8) {
+  const record5 = asRecord3(input, path8);
   const snapshot = /* @__PURE__ */ new Map();
   for (const key of Reflect.ownKeys(record5)) {
     if (typeof key !== "string" || !allowed.has(key)) {
-      throw new Error(`AutomationPolicyTemplate: ${path7} has unknown key '${String(key)}'`);
+      throw new Error(`AutomationPolicyTemplate: ${path8} has unknown key '${String(key)}'`);
     }
-    snapshot.set(key, ownDataValue(record5, key, `${path7}.${key}`));
+    snapshot.set(key, ownDataValue(record5, key, `${path8}.${key}`));
   }
   for (const key of required2) {
     if (!snapshot.has(key)) {
-      throw new Error(`AutomationPolicyTemplate: ${path7}.${key} must be an own data property`);
+      throw new Error(`AutomationPolicyTemplate: ${path8}.${key} must be an own data property`);
     }
   }
   return snapshot;
 }
-function snapshotArray(input, path7) {
+function snapshotArray(input, path8) {
   if (!Array.isArray(input)) {
-    throw new Error(`AutomationPolicyTemplate: ${path7} must be an array`);
+    throw new Error(`AutomationPolicyTemplate: ${path8} must be an array`);
   }
   if (Object.getPrototypeOf(input) !== Array.prototype) {
-    throw new Error(`AutomationPolicyTemplate: ${path7} must use Array.prototype`);
+    throw new Error(`AutomationPolicyTemplate: ${path8} must use Array.prototype`);
   }
   const keys = Reflect.ownKeys(input);
-  const length = ownDataValue(input, "length", `${path7}.length`);
+  const length = ownDataValue(input, "length", `${path8}.length`);
   if (typeof length !== "number" || !Number.isInteger(length) || length < 0) {
-    throw new Error(`AutomationPolicyTemplate: ${path7}.length must be a non-negative integer`);
+    throw new Error(`AutomationPolicyTemplate: ${path8}.length must be a non-negative integer`);
   }
   for (const key of keys) {
     if (key === "length")
       continue;
     if (typeof key !== "string") {
-      throw new Error(`AutomationPolicyTemplate: ${path7} has unknown key '${String(key)}'`);
+      throw new Error(`AutomationPolicyTemplate: ${path8} has unknown key '${String(key)}'`);
     }
     const index = Number(key);
     if (!Number.isInteger(index) || index < 0 || index >= length || String(index) !== key) {
-      throw new Error(`AutomationPolicyTemplate: ${path7} has unknown key '${key}'`);
+      throw new Error(`AutomationPolicyTemplate: ${path8} has unknown key '${key}'`);
     }
   }
   const snapshot = new Array(length);
   for (let index = 0; index < length; index += 1) {
-    snapshot[index] = ownDataValue(input, String(index), `${path7}[${index}]`);
+    snapshot[index] = ownDataValue(input, String(index), `${path8}[${index}]`);
   }
   return snapshot;
 }
@@ -19532,18 +19532,18 @@ function validateTrigger(input) {
     throw new Error("AutomationPolicyTemplate: trigger must not be empty");
   }
   return items.map((item2, index) => {
-    const path7 = `trigger[${index}]`;
-    const record5 = snapshotRecord(item2, TRIGGER_KEYS, TRIGGER_KEYS, path7);
+    const path8 = `trigger[${index}]`;
+    const record5 = snapshotRecord(item2, TRIGGER_KEYS, TRIGGER_KEYS, path8);
     const kind = record5.get("kind");
     if (typeof kind !== "string" || !TRIGGER_KINDS.has(kind)) {
-      throw new Error(`AutomationPolicyTemplate: ${path7}.kind '${String(kind)}' is not schedule, event, or manual`);
+      throw new Error(`AutomationPolicyTemplate: ${path8}.kind '${String(kind)}' is not schedule, event, or manual`);
     }
     return { kind };
   });
 }
-function nonemptyString2(input, path7) {
+function nonemptyString2(input, path8) {
   if (typeof input !== "string" || input.trim() === "") {
-    throw new Error(`AutomationPolicyTemplate: ${path7} must be a non-empty string`);
+    throw new Error(`AutomationPolicyTemplate: ${path8} must be a non-empty string`);
   }
   return input;
 }
@@ -19726,9 +19726,9 @@ function dedup(items) {
   }
   return out;
 }
-function compressDocument(text3, opts = {}) {
+function compressDocument(text4, opts = {}) {
   const maxDepth = opts.maxHeadingDepth ?? 6;
-  const rawLines = text3.split("\n");
+  const rawLines = text4.split("\n");
   const fm = parseFrontMatter(rawLines);
   let title = null;
   const headings = [];
@@ -19781,7 +19781,7 @@ function compressDocument(text3, opts = {}) {
     keyFields: fm.keyFields,
     stats: emptyStats()
   };
-  doc.stats = statsFor(text3, rawLines.length, renderHandoffSummary(doc, void 0, opts.documentLocale ?? "zh-CN"), doc);
+  doc.stats = statsFor(text4, rawLines.length, renderHandoffSummary(doc, void 0, opts.documentLocale ?? "zh-CN"), doc);
   return doc;
 }
 function emptyStats() {
@@ -19811,7 +19811,7 @@ function statsFor(originalText, originalLines, rendered, doc) {
   };
 }
 function renderHandoffSummary(doc, label, locale = "zh-CN") {
-  const text3 = locale === "zh-CN" ? {
+  const text4 = locale === "zh-CN" ? {
     handoff: "\u4EA4\u63A5\u6458\u8981",
     summary: "\u6458\u8981",
     structure: "\u7ED3\u6784",
@@ -19829,29 +19829,29 @@ function renderHandoffSummary(doc, label, locale = "zh-CN") {
     fields: "Key Fields"
   };
   const out = [];
-  out.push(`# ${text3.handoff}: ${label ?? doc.title ?? text3.summary}`);
+  out.push(`# ${text4.handoff}: ${label ?? doc.title ?? text4.summary}`);
   if (doc.headings.length > 0) {
-    out.push("", `## ${text3.structure}`);
+    out.push("", `## ${text4.structure}`);
     for (const h of doc.headings)
       out.push(`- ${h}`);
   }
   if (doc.decisions.length > 0) {
-    out.push("", `## ${text3.decisions} (${doc.decisions.length})`);
+    out.push("", `## ${text4.decisions} (${doc.decisions.length})`);
     for (const d of doc.decisions)
       out.push(`- ${d}`);
   }
   if (doc.constraints.length > 0) {
-    out.push("", `## ${text3.constraints} (${doc.constraints.length})`);
+    out.push("", `## ${text4.constraints} (${doc.constraints.length})`);
     for (const c of doc.constraints)
       out.push(`- ${c}`);
   }
   if (doc.openTodos.length > 0) {
-    out.push("", `## ${text3.todos} (${doc.openTodos.length})`);
+    out.push("", `## ${text4.todos} (${doc.openTodos.length})`);
     for (const t of doc.openTodos)
       out.push(`- [ ] ${t}`);
   }
   if (doc.keyFields.length > 0) {
-    out.push("", `## ${text3.fields}`);
+    out.push("", `## ${text4.fields}`);
     for (const k of doc.keyFields)
       out.push(`- ${k.key}: ${k.value}`);
   }
@@ -19872,10 +19872,10 @@ var SHA256 = /^sha256:[a-f0-9]{64}$/;
 function contentBytes(input) {
   return input.content === void 0 ? 0 : Buffer.byteLength(input.content, "utf8");
 }
-function validRelativePath(path7) {
-  if (path7 === "" || isAbsolute7(path7) || path7.includes("\\"))
+function validRelativePath(path8) {
+  if (path8 === "" || isAbsolute7(path8) || path8.includes("\\"))
     return false;
-  const parts = path7.split("/");
+  const parts = path8.split("/");
   return !parts.some((part) => part === "" || part === "." || part === "..");
 }
 function unsignedPayload(input) {
@@ -20004,10 +20004,10 @@ var DOCUMENT_REASON_CODES = {
 function materializationMode(kind) {
   return kind === "proposal" || kind === "tasks" || kind === "delta-spec" ? "full" : "summary";
 }
-function validRelativePath2(path7) {
-  if (path7 === "" || path7.startsWith("/") || /^[A-Za-z]:/.test(path7) || path7.includes("\\"))
+function validRelativePath2(path8) {
+  if (path8 === "" || path8.startsWith("/") || /^[A-Za-z]:/.test(path8) || path8.includes("\\"))
     return false;
-  return !path7.split("/").some((part) => part === "" || part === "." || part === "..");
+  return !path8.split("/").some((part) => part === "" || part === "." || part === "..");
 }
 function invalidRequest(message) {
   return new LedgerContextBundleError("CONTEXT_BUNDLE_INVALID_REQUEST", message, { repairAction: "\u4F7F\u7528 registered root\u3001\u5B89\u5168 Change \u540D\u3001canonical target \u548C\u6B63\u5B89\u5168\u6574\u6570\u9884\u7B97\u540E\u91CD\u8BD5" });
@@ -20083,7 +20083,7 @@ async function compileLedgerContextBundleWithPorts(input) {
         if (!validRelativePath2(record5.path)) {
           throw invalidRequest(`Context Bundle ledger path \u975E\u6CD5: ${record5.path}`);
         }
-        let text3;
+        let text4;
         let sourceBytes;
         const remainingTotalBytes = limits ? Math.max(0, limits.maxTotalSourceBytes - totalSourceBytes) : void 0;
         const sourceReadLimit = limits && remainingTotalBytes !== void 0 ? {
@@ -20094,7 +20094,7 @@ async function compileLedgerContextBundleWithPorts(input) {
         } : void 0;
         try {
           const source = await input.sourceReader.read(record5.path, sourceReadLimit);
-          text3 = source.text;
+          text4 = source.text;
           sourceBytes = source.sourceBytes;
         } catch (error2) {
           if (error2 instanceof LedgerContextBundleError) {
@@ -20120,7 +20120,7 @@ async function compileLedgerContextBundleWithPorts(input) {
             repairAction: `\u6062\u590D root \u5185\u7A33\u5B9A\u7684\u975E symlink \u666E\u901A\u6587\u4EF6 ${record5.path}\uFF0C\u5E76\u91CD\u65B0 record/read`
           });
         }
-        if (text3 === void 0) {
+        if (text4 === void 0) {
           throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_MISSING", `Context Bundle missing document '${kind}': ${record5.path}; restore or re-record it`, {
             kind,
             path: record5.path,
@@ -20134,7 +20134,7 @@ async function compileLedgerContextBundleWithPorts(input) {
         if (limits && totalSourceBytes > limits.maxTotalSourceBytes) {
           throw resourceLimitError("totalSourceBytes", limits.maxTotalSourceBytes, totalSourceBytes, { kind, path: record5.path });
         }
-        const actual = input.primitives.sha256(text3);
+        const actual = input.primitives.sha256(text4);
         if (actual !== record5.sha256) {
           throw new LedgerContextBundleError("CONTEXT_BUNDLE_DOCUMENT_STALE", `Context Bundle stale document '${kind}': ${record5.path}; run tenon document record ${input.change} ${kind} ${record5.path} --producer <skill>, then tenon document read ${input.change} all`, {
             kind,
@@ -20146,7 +20146,7 @@ async function compileLedgerContextBundleWithPorts(input) {
         const mode = duplicatePath ? "reference" : materializationMode(kind);
         if (!duplicatePath)
           materializedPaths.add(record5.path);
-        const content = mode === "reference" ? void 0 : mode === "full" ? text3 : renderHandoffSummary(compressDocument(text3), `${input.change}/${kind}`);
+        const content = mode === "reference" ? void 0 : mode === "full" ? text4 : renderHandoffSummary(compressDocument(text4), `${input.change}/${kind}`);
         const digestValue = `sha256:${record5.sha256}`;
         bundleInputs.push({
           kind,
@@ -20195,8 +20195,8 @@ import { isAbsolute as isAbsolute8, join as join29, posix as posix2 } from "node
 var nodeLedgerContextBundlePrimitives = {
   isAbsoluteRoot: isAbsolute8,
   ledgerPath: (change) => posix2.join("openspec", "changes", change, ".pipeline-documents.json"),
-  sha256: (text3) => createHash18("sha256").update(text3, "utf8").digest("hex"),
-  utf8ByteLength: (text3) => Buffer.byteLength(text3, "utf8")
+  sha256: (text4) => createHash18("sha256").update(text4, "utf8").digest("hex"),
+  utf8ByteLength: (text4) => Buffer.byteLength(text4, "utf8")
 };
 
 // packages/kernel/dist/verification/evidence-composer.js
@@ -20214,9 +20214,9 @@ var ENTRY_FIELDS = /* @__PURE__ */ new Set(["kind", "title", "status", "command"
 var KINDS = /* @__PURE__ */ new Set(["command", "browser", "review", "other"]);
 var STATUSES2 = /* @__PURE__ */ new Set(["passed", "failed", "skipped"]);
 var encoder2 = new TextEncoder();
-function addError(collector, code, path7) {
+function addError(collector, code, path8) {
   if (collector.errors.length < VERIFICATION_EVIDENCE_LIMITS.maxErrors) {
-    collector.errors.push(Object.freeze({ code, path: path7 }));
+    collector.errors.push(Object.freeze({ code, path: path8 }));
   } else {
     collector.overflow = true;
   }
@@ -20288,98 +20288,98 @@ function hasInvalidSurrogate2(value) {
 function hasUnsafeControl2(value) {
   return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/u.test(value);
 }
-function normalizeText(value, path7, maxBytes, collector, required2, preserveWhitespace = false) {
+function normalizeText(value, path8, maxBytes, collector, required2, preserveWhitespace = false) {
   if (value === void 0) {
     if (required2)
-      addError(collector, "field_required", path7);
+      addError(collector, "field_required", path8);
     return void 0;
   }
   if (typeof value !== "string") {
-    addError(collector, "field_type", path7);
+    addError(collector, "field_type", path8);
     return void 0;
   }
   if (hasInvalidSurrogate2(value)) {
-    addError(collector, "unicode_invalid", path7);
+    addError(collector, "unicode_invalid", path8);
     return void 0;
   }
   if (hasUnsafeControl2(value)) {
-    addError(collector, "control_character", path7);
+    addError(collector, "control_character", path8);
     return void 0;
   }
   const normalized2 = value.replace(/\r\n?/gu, "\n");
   const canonical = preserveWhitespace ? normalized2 : normalized2.trim();
   if (canonical.trim() === "") {
     if (required2)
-      addError(collector, "field_required", path7);
+      addError(collector, "field_required", path8);
     return void 0;
   }
   if (encoder2.encode(canonical).byteLength > maxBytes) {
-    addError(collector, "field_too_large", path7);
+    addError(collector, "field_too_large", path8);
     return void 0;
   }
   return canonical;
 }
-function enumValue3(value, values, path7, collector) {
+function enumValue3(value, values, path8, collector) {
   if (value === void 0) {
-    addError(collector, "field_required", path7);
+    addError(collector, "field_required", path8);
     return void 0;
   }
   if (typeof value !== "string") {
-    addError(collector, "field_type", path7);
+    addError(collector, "field_type", path8);
     return void 0;
   }
   if (!values.has(value)) {
-    addError(collector, "enum_invalid", path7);
+    addError(collector, "enum_invalid", path8);
     return void 0;
   }
   return value;
 }
 function entryFromUnknown(value, index, collector) {
-  const path7 = `entries[${index}]`;
+  const path8 = `entries[${index}]`;
   const record5 = snapshotRecord2(value);
   if (record5 === null) {
-    addError(collector, "object_invalid", path7);
+    addError(collector, "object_invalid", path8);
     return void 0;
   }
   for (const key of Object.keys(record5)) {
     if (!ENTRY_FIELDS.has(key))
-      addError(collector, "unknown_field", `${path7}.${key}`);
+      addError(collector, "unknown_field", `${path8}.${key}`);
   }
-  const kind = enumValue3(record5.kind, KINDS, `${path7}.kind`, collector);
-  const title = normalizeText(record5.title, `${path7}.title`, VERIFICATION_EVIDENCE_LIMITS.titleBytes, collector, true, true);
-  const status2 = enumValue3(record5.status, STATUSES2, `${path7}.status`, collector);
+  const kind = enumValue3(record5.kind, KINDS, `${path8}.kind`, collector);
+  const title = normalizeText(record5.title, `${path8}.title`, VERIFICATION_EVIDENCE_LIMITS.titleBytes, collector, true, true);
+  const status2 = enumValue3(record5.status, STATUSES2, `${path8}.status`, collector);
   let command;
   if (record5.command !== void 0) {
     if (kind !== void 0 && kind !== "command") {
-      addError(collector, "field_forbidden", `${path7}.command`);
+      addError(collector, "field_forbidden", `${path8}.command`);
     } else {
-      command = normalizeText(record5.command, `${path7}.command`, VERIFICATION_EVIDENCE_LIMITS.commandBytes, collector, false, true);
+      command = normalizeText(record5.command, `${path8}.command`, VERIFICATION_EVIDENCE_LIMITS.commandBytes, collector, false, true);
     }
   }
-  let result;
+  let result2;
   let skipReason;
   if (status2 === "skipped") {
     if (record5.result !== void 0)
-      addError(collector, "field_forbidden", `${path7}.result`);
-    skipReason = normalizeText(record5.skipReason, `${path7}.skipReason`, VERIFICATION_EVIDENCE_LIMITS.skipReasonBytes, collector, true, true);
+      addError(collector, "field_forbidden", `${path8}.result`);
+    skipReason = normalizeText(record5.skipReason, `${path8}.skipReason`, VERIFICATION_EVIDENCE_LIMITS.skipReasonBytes, collector, true, true);
   } else if (status2 === "passed" || status2 === "failed") {
-    result = normalizeText(record5.result, `${path7}.result`, VERIFICATION_EVIDENCE_LIMITS.resultBytes, collector, true, true);
+    result2 = normalizeText(record5.result, `${path8}.result`, VERIFICATION_EVIDENCE_LIMITS.resultBytes, collector, true, true);
     if (record5.skipReason !== void 0) {
-      addError(collector, "field_forbidden", `${path7}.skipReason`);
+      addError(collector, "field_forbidden", `${path8}.skipReason`);
     }
   }
   if (kind === void 0 || title === void 0 || status2 === void 0)
     return void 0;
   if (status2 === "skipped" && skipReason === void 0)
     return void 0;
-  if (status2 !== "skipped" && result === void 0)
+  if (status2 !== "skipped" && result2 === void 0)
     return void 0;
   return Object.freeze({
     kind,
     title,
     status: status2,
     ...command === void 0 ? {} : { command },
-    ...result === void 0 ? {} : { result },
+    ...result2 === void 0 ? {} : { result: result2 },
     ...skipReason === void 0 ? {} : { skipReason }
   });
 }
@@ -20506,6 +20506,1730 @@ var OBSERVE_ACTION_KINDS = ["git-commits", "loop-run-terminals"];
 
 // packages/kernel/dist/triage/validate.js
 var ACTION_KIND_SET = new Set(OBSERVE_ACTION_KINDS);
+
+// packages/kernel/dist/orchestration/v2-types.js
+var V2_SCHEMAS = {
+  request: "development-request/v2",
+  context: "repository-context/v2",
+  assessment: "capability-assessment/v2",
+  graph: "work-graph/v2",
+  resolution: "capability-resolution/v2",
+  workItem: "work-item/v2",
+  run: "skill-run/v2",
+  result: "skill-result/v2",
+  validation: "validation-report/v2",
+  gate: "gate-evaluation/v2",
+  command: "board-command/v2",
+  event: "board-event/v2",
+  snapshot: "board-snapshot/v2"
+};
+
+// packages/kernel/dist/orchestration/v2-codec.js
+var V2_MAX_BYTES = 512e3;
+var V2_MAX_DEPTH = 16;
+var V2_MAX_ITEMS = 2048;
+var ID2 = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
+var DIGEST2 = /^sha256:[0-9a-f]{64}$/;
+var UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+function parse(input, errors) {
+  if (typeof input === "string") {
+    try {
+      return JSON.parse(input);
+    } catch {
+      errors.push({ code: "json-invalid", path: "$" });
+      return void 0;
+    }
+  }
+  return input;
+}
+function walkLimit(value, path8, depth, seen, errors) {
+  if (depth > V2_MAX_DEPTH) {
+    errors.push({ code: "limit-exceeded", path: path8 });
+    return;
+  }
+  if (value === null || typeof value !== "object")
+    return;
+  if (seen.has(value)) {
+    errors.push({ code: "field-invalid", path: path8, message: "cycle" });
+    return;
+  }
+  seen.add(value);
+  if (Array.isArray(value)) {
+    if (value.length > V2_MAX_ITEMS)
+      errors.push({ code: "limit-exceeded", path: path8 });
+    value.forEach((item2, index) => walkLimit(item2, `${path8}[${index}]`, depth + 1, seen, errors));
+  } else {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null)
+      errors.push({ code: "object-invalid", path: path8 });
+    for (const [key, item2] of Object.entries(value))
+      walkLimit(item2, `${path8}.${key}`, depth + 1, seen, errors);
+  }
+  seen.delete(value);
+}
+function object3(value, path8, errors) {
+  if (value === null || typeof value !== "object" || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) {
+    errors.push({ code: "object-invalid", path: path8 });
+    return void 0;
+  }
+  return value;
+}
+function closed4(raw, allowed, path8, errors) {
+  const set = new Set(allowed);
+  for (const key of Object.keys(raw))
+    if (!set.has(key))
+      errors.push({ code: "unknown-field", path: `${path8}.${key}` });
+}
+function text3(value, path8, errors, pattern, max = 8192) {
+  if (typeof value !== "string" || value.length === 0 || value.trim() !== value || value.length > max || pattern !== void 0 && !pattern.test(value)) {
+    errors.push({ code: "field-invalid", path: path8 });
+    return void 0;
+  }
+  return value;
+}
+function optionalText(value, path8, errors, pattern) {
+  return value === void 0 ? void 0 : text3(value, path8, errors, pattern);
+}
+function bool(value, path8, errors) {
+  if (typeof value !== "boolean") {
+    errors.push({ code: "field-invalid", path: path8 });
+    return void 0;
+  }
+  return value;
+}
+function integer2(value, path8, errors) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    errors.push({ code: "field-invalid", path: path8 });
+    return void 0;
+  }
+  return value;
+}
+function array2(value, path8, errors) {
+  if (!Array.isArray(value) || value.length > V2_MAX_ITEMS || Object.getPrototypeOf(value) !== Array.prototype) {
+    errors.push({ code: "field-invalid", path: path8 });
+    return [];
+  }
+  return value;
+}
+function strings(value, path8, errors) {
+  return array2(value, path8, errors).map((entry, index) => text3(entry, `${path8}[${index}]`, errors) ?? "");
+}
+function digest6(value, path8, errors) {
+  return text3(value, path8, errors, DIGEST2);
+}
+function actor(value, path8, errors) {
+  const raw = object3(value, path8, errors);
+  if (raw === void 0)
+    return void 0;
+  closed4(raw, ["kind", "id"], path8, errors);
+  const kind = raw.kind === "user" || raw.kind === "system" || raw.kind === "worker" || raw.kind === "policy" ? raw.kind : void 0;
+  if (kind === void 0)
+    errors.push({ code: "field-invalid", path: `${path8}.kind` });
+  const id2 = text3(raw.id, `${path8}.id`, errors, ID2);
+  return kind === void 0 || id2 === void 0 ? void 0 : { kind, id: id2 };
+}
+function meta(raw, path8, errors) {
+  const record_id = text3(raw.record_id, `${path8}.record_id`, errors, ID2);
+  const project_id = text3(raw.project_id, `${path8}.project_id`, errors, ID2);
+  const change_id = text3(raw.change_id, `${path8}.change_id`, errors, ID2);
+  const revision = integer2(raw.revision, `${path8}.revision`, errors);
+  const correlation_id = text3(raw.correlation_id, `${path8}.correlation_id`, errors, ID2);
+  const causation_id = optionalText(raw.causation_id, `${path8}.causation_id`, errors, ID2);
+  const actorValue = actor(raw.actor, `${path8}.actor`, errors);
+  const created_at = text3(raw.created_at, `${path8}.created_at`, errors, UTC);
+  if (record_id === void 0 || project_id === void 0 || change_id === void 0 || revision === void 0 || correlation_id === void 0 || actorValue === void 0 || created_at === void 0)
+    return void 0;
+  return { schema_version: String(raw.schema_version), record_id, project_id, change_id, revision, correlation_id, ...causation_id === void 0 ? {} : { causation_id }, actor: actorValue, created_at };
+}
+function prepare(input, schema, allowed, errors) {
+  const parsed = parse(input, errors);
+  if (parsed === void 0)
+    return void 0;
+  walkLimit(parsed, "$", 0, /* @__PURE__ */ new Set(), errors);
+  if (typeof input === "string" && new TextEncoder().encode(input).byteLength > V2_MAX_BYTES)
+    errors.push({ code: "limit-exceeded", path: "$" });
+  const raw = object3(parsed, "$", errors);
+  if (raw === void 0)
+    return void 0;
+  closed4(raw, allowed, "$", errors);
+  if (raw.schema_version !== schema)
+    errors.push({ code: "field-invalid", path: "$.schema_version" });
+  return raw;
+}
+var META = ["schema_version", "record_id", "project_id", "change_id", "revision", "correlation_id", "causation_id", "actor", "created_at"];
+function result(value, errors) {
+  return errors.length ? { ok: false, errors } : { ok: true, value };
+}
+function nested(input, decoder2, path8, errors) {
+  if (input === void 0)
+    return void 0;
+  const decoded = decoder2(input);
+  if (!decoded.ok) {
+    errors.push(...decoded.errors.map((error2) => ({ ...error2, path: `${path8}${error2.path.slice(1)}` })));
+    return void 0;
+  }
+  return decoded.value;
+}
+function decodeDevelopmentRequestV2(input) {
+  const errors = [];
+  const raw = prepare(input, V2_SCHEMAS.request, [...META, "request_id", "intent", "interaction_policy", "requested_effects", "constraints", "user_skills", "user_mcps", "auto_select"], errors);
+  if (raw === void 0)
+    return { ok: false, errors };
+  const m = meta(raw, "$", errors);
+  const request_id = text3(raw.request_id, "$.request_id", errors, ID2);
+  const intent = text3(raw.intent, "$.intent", errors);
+  const interaction_policy = raw.interaction_policy === "interactive" || raw.interaction_policy === "recommended-defaults" || raw.interaction_policy === "afk" ? raw.interaction_policy : void 0;
+  if (interaction_policy === void 0)
+    errors.push({ code: "field-invalid", path: "$.interaction_policy" });
+  const requested_effects = array2(raw.requested_effects, "$.requested_effects", errors).map((v, i) => {
+    const x = ["read", "write", "git", "network", "deploy-preview"].includes(String(v)) ? String(v) : void 0;
+    if (!x)
+      errors.push({ code: "field-invalid", path: `$.requested_effects[${i}]` });
+    return x ?? "read";
+  });
+  const constraints = strings(raw.constraints, "$.constraints", errors);
+  const auto_select = bool(raw.auto_select, "$.auto_select", errors);
+  const skills = array2(raw.user_skills, "$.user_skills", errors).map((entry, i) => {
+    const x = object3(entry, `$.user_skills[${i}]`, errors);
+    if (!x)
+      return void 0;
+    closed4(x, ["id", "version", "mode", "depends_on"], `$.user_skills[${i}]`, errors);
+    const id2 = text3(x.id, `$.user_skills[${i}].id`, errors, ID2);
+    const version = optionalText(x.version, `$.user_skills[${i}].version`, errors, ID2);
+    const mode = x.mode === "serial" || x.mode === "parallel" ? x.mode : void 0;
+    if (!mode)
+      errors.push({ code: "field-invalid", path: `$.user_skills[${i}].mode` });
+    return id2 && mode ? { id: id2, ...version ? { version } : {}, mode, depends_on: strings(x.depends_on, `$.user_skills[${i}].depends_on`, errors) } : void 0;
+  }).filter((x) => x !== void 0);
+  const mcps = array2(raw.user_mcps, "$.user_mcps", errors).map((entry, i) => {
+    const x = object3(entry, `$.user_mcps[${i}]`, errors);
+    if (!x)
+      return void 0;
+    closed4(x, ["id", "version", "required"], `$.user_mcps[${i}]`, errors);
+    const id2 = text3(x.id, `$.user_mcps[${i}].id`, errors, ID2);
+    const version = optionalText(x.version, `$.user_mcps[${i}].version`, errors, ID2);
+    const required2 = bool(x.required, `$.user_mcps[${i}].required`, errors);
+    return id2 && required2 !== void 0 ? { id: id2, ...version ? { version } : {}, required: required2 } : void 0;
+  }).filter((x) => x !== void 0);
+  if (!m || !request_id || !intent || auto_select === void 0 || interaction_policy === void 0)
+    return { ok: false, errors };
+  return result({ ...m, schema_version: V2_SCHEMAS.request, request_id, intent, interaction_policy, requested_effects, constraints, user_skills: skills, user_mcps: mcps, auto_select }, errors);
+}
+function decodeRepositoryContextV2(input) {
+  const errors = [];
+  const raw = prepare(input, V2_SCHEMAS.context, [...META, "request_id", "repository", "workspace_fingerprint", "policy_digest", "skill_catalog_digest", "mcp_catalog_digest", "observed_facts"], errors);
+  if (!raw)
+    return { ok: false, errors };
+  const m = meta(raw, "$", errors);
+  const request_id = text3(raw.request_id, "$.request_id", errors, ID2);
+  const repo = object3(raw.repository, "$.repository", errors);
+  if (repo)
+    closed4(repo, ["ref", "branch", "base_branch", "head_sha", "dirty"], "$.repository", errors);
+  const ref = repo && text3(repo.ref, "$.repository.ref", errors);
+  const branch = repo && text3(repo.branch, "$.repository.branch", errors);
+  const base_branch = repo && text3(repo.base_branch, "$.repository.base_branch", errors);
+  const head_sha = repo && text3(repo.head_sha, "$.repository.head_sha", errors);
+  const dirty = repo && bool(repo.dirty, "$.repository.dirty", errors);
+  const workspace_fingerprint = digest6(raw.workspace_fingerprint, "$.workspace_fingerprint", errors);
+  const policy_digest = digest6(raw.policy_digest, "$.policy_digest", errors);
+  const skill_catalog_digest = digest6(raw.skill_catalog_digest, "$.skill_catalog_digest", errors);
+  const mcp_catalog_digest = digest6(raw.mcp_catalog_digest, "$.mcp_catalog_digest", errors);
+  const facts = array2(raw.observed_facts, "$.observed_facts", errors).map((entry, i) => {
+    const x = object3(entry, `$.observed_facts[${i}]`, errors);
+    if (!x)
+      return void 0;
+    closed4(x, ["key", "value_ref", "digest"], `$.observed_facts[${i}]`, errors);
+    const key = text3(x.key, `$.observed_facts[${i}].key`, errors);
+    const value_ref = text3(x.value_ref, `$.observed_facts[${i}].value_ref`, errors);
+    const d = digest6(x.digest, `$.observed_facts[${i}].digest`, errors);
+    return key && value_ref && d ? { key, value_ref, digest: d } : void 0;
+  }).filter((x) => x !== void 0);
+  if (!m || !request_id || !repo || !ref || !branch || !base_branch || !head_sha || dirty === void 0 || !workspace_fingerprint || !policy_digest || !skill_catalog_digest || !mcp_catalog_digest)
+    return { ok: false, errors };
+  return result({ ...m, schema_version: V2_SCHEMAS.context, request_id, repository: { ref, branch, base_branch, head_sha, dirty }, workspace_fingerprint, policy_digest, skill_catalog_digest, mcp_catalog_digest, observed_facts: facts }, errors);
+}
+function decodeAssessment(input, errors) {
+  const raw = prepare(input, V2_SCHEMAS.assessment, [...META, "assessment_id", "request_id", "context_record_id", "normalization", "requirements", "questions", "risks", "proposal_evidence_ref"], errors);
+  if (!raw)
+    return void 0;
+  const m = meta(raw, "$", errors);
+  const assessment_id = text3(raw.assessment_id, "$.assessment_id", errors, ID2);
+  const request_id = text3(raw.request_id, "$.request_id", errors, ID2);
+  const context_record_id = text3(raw.context_record_id, "$.context_record_id", errors, ID2);
+  const normalization = ["complete", "needs-input", "rejected"].includes(String(raw.normalization)) ? raw.normalization : void 0;
+  if (!normalization)
+    errors.push({ code: "field-invalid", path: "$.normalization" });
+  const requirements = array2(raw.requirements, "$.requirements", errors).map((entry, i) => {
+    const x = object3(entry, `$.requirements[${i}]`, errors);
+    if (!x)
+      return void 0;
+    closed4(x, ["id", "capability", "necessity", "acceptance_refs", "evidence_refs", "constraints", "risk"], `$.requirements[${i}]`, errors);
+    const id2 = text3(x.id, `$.requirements[${i}].id`, errors, ID2);
+    const capability = text3(x.capability, `$.requirements[${i}].capability`, errors);
+    const necessity = ["required", "recommended", "optional"].includes(String(x.necessity)) ? x.necessity : void 0;
+    const risk = ["low", "medium", "high"].includes(String(x.risk)) ? x.risk : void 0;
+    if (!necessity)
+      errors.push({ code: "field-invalid", path: `$.requirements[${i}].necessity` });
+    if (!risk)
+      errors.push({ code: "field-invalid", path: `$.requirements[${i}].risk` });
+    return id2 && capability && necessity && risk ? { id: id2, capability, necessity, acceptance_refs: strings(x.acceptance_refs, `$.requirements[${i}].acceptance_refs`, errors), evidence_refs: strings(x.evidence_refs, `$.requirements[${i}].evidence_refs`, errors), constraints: strings(x.constraints, `$.requirements[${i}].constraints`, errors), risk } : void 0;
+  }).filter((x) => x !== void 0);
+  const questions = array2(raw.questions, "$.questions", errors).map((entry, i) => {
+    const x = object3(entry, `$.questions[${i}]`, errors);
+    if (!x)
+      return void 0;
+    closed4(x, ["id", "prompt", "blocking"], `$.questions[${i}]`, errors);
+    const id2 = text3(x.id, `$.questions[${i}].id`, errors, ID2);
+    const prompt = text3(x.prompt, `$.questions[${i}].prompt`, errors);
+    const blocking = bool(x.blocking, `$.questions[${i}].blocking`, errors);
+    return id2 && prompt && blocking !== void 0 ? { id: id2, prompt, blocking } : void 0;
+  }).filter((x) => x !== void 0);
+  const risks = strings(raw.risks, "$.risks", errors);
+  const proposal_evidence_ref = text3(raw.proposal_evidence_ref, "$.proposal_evidence_ref", errors);
+  if (!m || !assessment_id || !request_id || !context_record_id || !normalization || !proposal_evidence_ref)
+    return void 0;
+  return { ...m, schema_version: V2_SCHEMAS.assessment, assessment_id, request_id, context_record_id, normalization, requirements, questions, risks, proposal_evidence_ref };
+}
+function decodeCapabilityAssessmentV2(input) {
+  const errors = [];
+  const value = decodeAssessment(input, errors);
+  return value ? result(value, errors) : { ok: false, errors };
+}
+function genericMetaRecord(input, schema, allowed, parseFields) {
+  const errors = [];
+  const raw = prepare(input, schema, [...META, ...allowed], errors);
+  if (!raw)
+    return { ok: false, errors };
+  const m = meta(raw, "$", errors);
+  const value = m ? parseFields(raw, errors, m) : void 0;
+  return value ? result(value, errors) : { ok: false, errors };
+}
+function decodeWorkGraphV2(input) {
+  return genericMetaRecord(input, V2_SCHEMAS.graph, ["graph_id", "graph_revision", "assessment_id", "task_plan_revision_id", "task_plan_digest", "dependency_edges", "execution_groups", "acceptance_coverage", "status"], (r, e, m) => {
+    const graph_id = text3(r.graph_id, "$.graph_id", e, ID2);
+    const graph_revision = integer2(r.graph_revision, "$.graph_revision", e);
+    const assessment_id = text3(r.assessment_id, "$.assessment_id", e, ID2);
+    const task_plan_revision_id = text3(r.task_plan_revision_id, "$.task_plan_revision_id", e, ID2);
+    const task_plan_digest = digest6(r.task_plan_digest, "$.task_plan_digest", e);
+    const status2 = ["draft", "validated", "frozen", "superseded"].includes(String(r.status)) ? r.status : void 0;
+    if (!status2)
+      e.push({ code: "field-invalid", path: "$.status" });
+    const edges = array2(r.dependency_edges, "$.dependency_edges", e).map((x, i) => {
+      const v = object3(x, `$.dependency_edges[${i}]`, e);
+      if (!v)
+        return void 0;
+      closed4(v, ["from", "to", "reason"], `$.dependency_edges[${i}]`, e);
+      const from = text3(v.from, `$.dependency_edges[${i}].from`, e, ID2);
+      const to = text3(v.to, `$.dependency_edges[${i}].to`, e, ID2);
+      const reason = ["data", "resource", "ordering", "gate"].includes(String(v.reason)) ? v.reason : void 0;
+      if (!reason)
+        e.push({ code: "field-invalid", path: `$.dependency_edges[${i}].reason` });
+      return from && to && reason ? { from, to, reason } : void 0;
+    }).filter((x) => x !== void 0);
+    const groups2 = array2(r.execution_groups, "$.execution_groups", e).map((x, i) => {
+      const v = object3(x, `$.execution_groups[${i}]`, e);
+      if (!v)
+        return void 0;
+      closed4(v, ["id", "mode", "work_item_ids"], `$.execution_groups[${i}]`, e);
+      const id2 = text3(v.id, `$.execution_groups[${i}].id`, e, ID2);
+      const mode = v.mode === "serial" || v.mode === "parallel" ? v.mode : void 0;
+      if (!mode)
+        e.push({ code: "field-invalid", path: `$.execution_groups[${i}].mode` });
+      return id2 && mode ? { id: id2, mode, work_item_ids: strings(v.work_item_ids, `$.execution_groups[${i}].work_item_ids`, e) } : void 0;
+    }).filter((x) => x !== void 0);
+    const coverage = array2(r.acceptance_coverage, "$.acceptance_coverage", e).map((x, i) => {
+      const v = object3(x, `$.acceptance_coverage[${i}]`, e);
+      if (!v)
+        return void 0;
+      closed4(v, ["acceptance_id", "work_item_ids"], `$.acceptance_coverage[${i}]`, e);
+      const acceptance_id = text3(v.acceptance_id, `$.acceptance_coverage[${i}].acceptance_id`, e, ID2);
+      return acceptance_id ? { acceptance_id, work_item_ids: strings(v.work_item_ids, `$.acceptance_coverage[${i}].work_item_ids`, e) } : void 0;
+    }).filter((x) => x !== void 0);
+    if (!graph_id || graph_revision === void 0 || !assessment_id || !task_plan_revision_id || !task_plan_digest || !status2)
+      return void 0;
+    return { ...m, schema_version: V2_SCHEMAS.graph, graph_id, graph_revision, assessment_id, task_plan_revision_id, task_plan_digest, dependency_edges: edges, execution_groups: groups2, acceptance_coverage: coverage, status: status2 };
+  });
+}
+function decodeCapabilityResolutionV2(input) {
+  return genericMetaRecord(input, V2_SCHEMAS.resolution, ["resolution_id", "assessment_id", "graph_id", "policy_digest", "status", "bindings", "candidates", "blockers", "binding_digest"], (r, e, m) => {
+    const resolution_id = text3(r.resolution_id, "$.resolution_id", e, ID2);
+    const assessment_id = text3(r.assessment_id, "$.assessment_id", e, ID2);
+    const graph_id = text3(r.graph_id, "$.graph_id", e, ID2);
+    const policy_digest = digest6(r.policy_digest, "$.policy_digest", e);
+    const status2 = ["resolved", "needs-input", "blocked"].includes(String(r.status)) ? r.status : void 0;
+    if (!status2)
+      e.push({ code: "field-invalid", path: "$.status" });
+    const bindings = array2(r.bindings, "$.bindings", e).map((x, i) => {
+      const v = object3(x, `$.bindings[${i}]`, e);
+      if (!v)
+        return void 0;
+      closed4(v, ["work_item_id", "skill_id", "skill_version", "mcp_ids", "mode", "source", "depends_on"], `$.bindings[${i}]`, e);
+      const work_item_id = text3(v.work_item_id, `$.bindings[${i}].work_item_id`, e, ID2);
+      const skill_id = text3(v.skill_id, `$.bindings[${i}].skill_id`, e, ID2);
+      const skill_version = text3(v.skill_version, `$.bindings[${i}].skill_version`, e, ID2);
+      const mode = v.mode === "serial" || v.mode === "parallel" ? v.mode : void 0;
+      const source = ["user", "automatic", "hybrid"].includes(String(v.source)) ? v.source : void 0;
+      if (!mode)
+        e.push({ code: "field-invalid", path: `$.bindings[${i}].mode` });
+      if (!source)
+        e.push({ code: "field-invalid", path: `$.bindings[${i}].source` });
+      return work_item_id && skill_id && skill_version && mode && source ? { work_item_id, skill_id, skill_version, mcp_ids: strings(v.mcp_ids, `$.bindings[${i}].mcp_ids`, e), mode, source, depends_on: strings(v.depends_on, `$.bindings[${i}].depends_on`, e) } : void 0;
+    }).filter((x) => x !== void 0);
+    const candidates = array2(r.candidates, "$.candidates", e).map((x, i) => {
+      const v = object3(x, `$.candidates[${i}]`, e);
+      if (!v)
+        return void 0;
+      closed4(v, ["capability", "candidate_id", "kind", "selected", "rejected_reasons", "rationale"], `$.candidates[${i}]`, e);
+      const capability = text3(v.capability, `$.candidates[${i}].capability`, e);
+      const candidate_id = text3(v.candidate_id, `$.candidates[${i}].candidate_id`, e, ID2);
+      const kind = v.kind === "skill" || v.kind === "mcp" ? v.kind : void 0;
+      const selected = bool(v.selected, `$.candidates[${i}].selected`, e);
+      const rationale = text3(v.rationale, `$.candidates[${i}].rationale`, e);
+      if (!kind)
+        e.push({ code: "field-invalid", path: `$.candidates[${i}].kind` });
+      return capability && candidate_id && kind && selected !== void 0 && rationale ? { capability, candidate_id, kind, selected, rejected_reasons: strings(v.rejected_reasons, `$.candidates[${i}].rejected_reasons`, e), rationale } : void 0;
+    }).filter((x) => x !== void 0);
+    const blockers = strings(r.blockers, "$.blockers", e);
+    const binding_digest = digest6(r.binding_digest, "$.binding_digest", e);
+    if (!resolution_id || !assessment_id || !graph_id || !policy_digest || !status2 || !binding_digest)
+      return void 0;
+    return { ...m, schema_version: V2_SCHEMAS.resolution, resolution_id, assessment_id, graph_id, policy_digest, status: status2, bindings, candidates, blockers, binding_digest };
+  });
+}
+function decodeWorkItemV2(input) {
+  return genericMetaRecord(input, V2_SCHEMAS.workItem, ["work_item_id", "title", "status", "group_id", "depends_on", "required_artifact_refs", "validation_refs", "selected_skill_id", "selected_skill_version", "mode", "attempt_count", "active_run_id", "blockers"], (r, e, m) => {
+    const work_item_id = text3(r.work_item_id, "$.work_item_id", e, ID2);
+    const title = text3(r.title, "$.title", e);
+    const status2 = ["pending", "ready", "queued", "claimed", "running", "waiting-input", "reviewing", "verifying", "completed", "blocked", "failed", "interrupted", "cancelled"].includes(String(r.status)) ? r.status : void 0;
+    if (!status2)
+      e.push({ code: "field-invalid", path: "$.status" });
+    const mode = r.mode === "serial" || r.mode === "parallel" ? r.mode : void 0;
+    if (!mode)
+      e.push({ code: "field-invalid", path: "$.mode" });
+    const attempt_count = integer2(r.attempt_count, "$.attempt_count", e);
+    if (!work_item_id || !title || !status2 || !mode || attempt_count === void 0)
+      return void 0;
+    return { ...m, schema_version: V2_SCHEMAS.workItem, work_item_id, title, status: status2, ...optionalText(r.group_id, "$.group_id", e, ID2) ? { group_id: optionalText(r.group_id, "$.group_id", e, ID2) } : {}, depends_on: strings(r.depends_on, "$.depends_on", e), required_artifact_refs: strings(r.required_artifact_refs, "$.required_artifact_refs", e), validation_refs: strings(r.validation_refs, "$.validation_refs", e), ...optionalText(r.selected_skill_id, "$.selected_skill_id", e, ID2) ? { selected_skill_id: optionalText(r.selected_skill_id, "$.selected_skill_id", e, ID2) } : {}, ...optionalText(r.selected_skill_version, "$.selected_skill_version", e, ID2) ? { selected_skill_version: optionalText(r.selected_skill_version, "$.selected_skill_version", e, ID2) } : {}, mode, attempt_count, ...optionalText(r.active_run_id, "$.active_run_id", e, ID2) ? { active_run_id: optionalText(r.active_run_id, "$.active_run_id", e, ID2) } : {}, blockers: strings(r.blockers, "$.blockers", e) };
+  });
+}
+function decodeSkillRunV2(input) {
+  return genericMetaRecord(input, V2_SCHEMAS.run, ["run_id", "attempt_id", "attempt", "work_item_id", "skill_id", "skill_version", "mcp_ids", "status", "lease", "input_refs", "result_id", "prior_attempt_id", "failure", "started_at", "finished_at"], (r, e, m) => {
+    const run_id = text3(r.run_id, "$.run_id", e, ID2);
+    const attempt_id = text3(r.attempt_id, "$.attempt_id", e, ID2);
+    const attempt = integer2(r.attempt, "$.attempt", e);
+    const work_item_id = text3(r.work_item_id, "$.work_item_id", e, ID2);
+    const skill_id = text3(r.skill_id, "$.skill_id", e, ID2);
+    const skill_version = text3(r.skill_version, "$.skill_version", e, ID2);
+    const status2 = ["queued", "claimed", "running", "waiting-input", "completed", "failed", "interrupted", "cancelled"].includes(String(r.status)) ? r.status : void 0;
+    if (!status2)
+      e.push({ code: "field-invalid", path: "$.status" });
+    const lease = nested(r.lease, decodeRunLeaseV2, "$.lease", e);
+    const result_id = optionalText(r.result_id, "$.result_id", e, ID2);
+    const prior_attempt_id = optionalText(r.prior_attempt_id, "$.prior_attempt_id", e, ID2);
+    const started_at = optionalText(r.started_at, "$.started_at", e, UTC);
+    const finished_at = optionalText(r.finished_at, "$.finished_at", e, UTC);
+    let failure7;
+    if (r.failure !== void 0) {
+      const rawFailure = object3(r.failure, "$.failure", e);
+      if (rawFailure) {
+        closed4(rawFailure, ["code", "retryable", "detail_ref"], "$.failure", e);
+        const code = text3(rawFailure.code, "$.failure.code", e, ID2);
+        const retryable = bool(rawFailure.retryable, "$.failure.retryable", e);
+        const detail_ref = optionalText(rawFailure.detail_ref, "$.failure.detail_ref", e, ID2);
+        if (code && retryable !== void 0)
+          failure7 = { code, retryable, ...detail_ref === void 0 ? {} : { detail_ref } };
+      }
+    }
+    if (!run_id || !attempt_id || attempt === void 0 || !work_item_id || !skill_id || !skill_version || !status2)
+      return void 0;
+    return { ...m, schema_version: V2_SCHEMAS.run, run_id, attempt_id, attempt, work_item_id, skill_id, skill_version, mcp_ids: strings(r.mcp_ids, "$.mcp_ids", e), status: status2, ...lease === void 0 ? {} : { lease }, input_refs: strings(r.input_refs, "$.input_refs", e), ...result_id === void 0 ? {} : { result_id }, ...prior_attempt_id === void 0 ? {} : { prior_attempt_id }, ...failure7 === void 0 ? {} : { failure: failure7 }, ...started_at === void 0 ? {} : { started_at }, ...finished_at === void 0 ? {} : { finished_at } };
+  });
+}
+function decodeSkillResultV2(input) {
+  return genericMetaRecord(input, V2_SCHEMAS.result, ["result_id", "run_id", "status", "contract_status", "output_schema_id", "summary", "raw_output", "artifacts", "validation_refs", "diagnostics"], (r, e, m) => {
+    const result_id = text3(r.result_id, "$.result_id", e, ID2);
+    const run_id = text3(r.run_id, "$.run_id", e, ID2);
+    const status2 = ["completed", "failed", "blocked", "incomplete", "corrupt"].includes(String(r.status)) ? r.status : void 0;
+    const contract_status = ["validated", "unknown", "invalid"].includes(String(r.contract_status)) ? r.contract_status : void 0;
+    if (!status2)
+      e.push({ code: "field-invalid", path: "$.status" });
+    if (!contract_status)
+      e.push({ code: "field-invalid", path: "$.contract_status" });
+    const output_schema_id = optionalText(r.output_schema_id, "$.output_schema_id", e, ID2);
+    const summary = optionalText(r.summary, "$.summary", e);
+    let raw_output;
+    if (r.raw_output !== void 0) {
+      const v = object3(r.raw_output, "$.raw_output", e);
+      if (v) {
+        closed4(v, ["ref", "digest", "media_type", "byte_length"], "$.raw_output", e);
+        const ref = text3(v.ref, "$.raw_output.ref", e);
+        const d = digest6(v.digest, "$.raw_output.digest", e);
+        const media_type = text3(v.media_type, "$.raw_output.media_type", e);
+        const byte_length = integer2(v.byte_length, "$.raw_output.byte_length", e);
+        if (ref && d && media_type && byte_length !== void 0)
+          raw_output = { ref, digest: d, media_type, byte_length };
+      }
+    }
+    const artifacts = array2(r.artifacts, "$.artifacts", e).map((x, i) => {
+      const v = object3(x, `$.artifacts[${i}]`, e);
+      if (!v)
+        return void 0;
+      closed4(v, ["id", "kind", "ref", "digest", "media_type", "byte_length"], `$.artifacts[${i}]`, e);
+      const id2 = text3(v.id, `$.artifacts[${i}].id`, e, ID2);
+      const kind = ["file", "diff", "document", "json", "text", "url", "report", "value", "unknown"].includes(String(v.kind)) ? v.kind : void 0;
+      const ref = text3(v.ref, `$.artifacts[${i}].ref`, e);
+      const d = digest6(v.digest, `$.artifacts[${i}].digest`, e);
+      const media_type = optionalText(v.media_type, `$.artifacts[${i}].media_type`, e);
+      const byte_length = v.byte_length === void 0 ? void 0 : integer2(v.byte_length, `$.artifacts[${i}].byte_length`, e);
+      if (!kind)
+        e.push({ code: "field-invalid", path: `$.artifacts[${i}].kind` });
+      return id2 && kind && ref && d ? { id: id2, kind, ref, digest: d, ...media_type === void 0 ? {} : { media_type }, ...byte_length === void 0 ? {} : { byte_length } } : void 0;
+    }).filter((x) => x !== void 0);
+    if (!result_id || !run_id || !status2 || !contract_status)
+      return void 0;
+    return { ...m, schema_version: V2_SCHEMAS.result, result_id, run_id, status: status2, contract_status, ...output_schema_id === void 0 ? {} : { output_schema_id }, ...summary === void 0 ? {} : { summary }, ...raw_output === void 0 ? {} : { raw_output }, artifacts, validation_refs: strings(r.validation_refs, "$.validation_refs", e), diagnostics: strings(r.diagnostics, "$.diagnostics", e) };
+  });
+}
+function decodeValidationReportV2(input) {
+  return genericMetaRecord(input, V2_SCHEMAS.validation, ["report_id", "work_item_id", "result_id", "validator_id", "validator_version", "status", "target_digests", "evidence_refs", "checks"], (r, e, m) => {
+    const report_id = text3(r.report_id, "$.report_id", e, ID2);
+    const work_item_id = text3(r.work_item_id, "$.work_item_id", e, ID2);
+    const result_id = text3(r.result_id, "$.result_id", e, ID2);
+    const validator_id = text3(r.validator_id, "$.validator_id", e, ID2);
+    const validator_version = text3(r.validator_version, "$.validator_version", e, ID2);
+    const status2 = ["pass", "fail", "unknown", "incomplete"].includes(String(r.status)) ? r.status : void 0;
+    if (!status2)
+      e.push({ code: "field-invalid", path: "$.status" });
+    if (!report_id || !work_item_id || !result_id || !validator_id || !validator_version || !status2)
+      return void 0;
+    const target_digests = array2(r.target_digests, "$.target_digests", e).map((x, i) => digest6(x, `$.target_digests[${i}]`, e) ?? "sha256:" + "0".repeat(64));
+    const checks = array2(r.checks, "$.checks", e).map((x, i) => {
+      const v = object3(x, `$.checks[${i}]`, e);
+      if (!v)
+        return void 0;
+      closed4(v, ["id", "status", "message"], `$.checks[${i}]`, e);
+      const id2 = text3(v.id, `$.checks[${i}].id`, e, ID2);
+      const s = ["pass", "fail", "unknown"].includes(String(v.status)) ? v.status : void 0;
+      if (!s)
+        e.push({ code: "field-invalid", path: `$.checks[${i}].status` });
+      return id2 && s ? { id: id2, status: s, ...optionalText(v.message, `$.checks[${i}].message`, e) ? { message: optionalText(v.message, `$.checks[${i}].message`, e) } : {} } : void 0;
+    }).filter((x) => x !== void 0);
+    return { ...m, schema_version: V2_SCHEMAS.validation, report_id, work_item_id, result_id, validator_id, validator_version, status: status2, target_digests, evidence_refs: strings(r.evidence_refs, "$.evidence_refs", e), checks };
+  });
+}
+function decodeGateEvaluationV2(input) {
+  return genericMetaRecord(input, V2_SCHEMAS.gate, ["gate_id", "kind", "status", "required_evidence_refs", "decision_revision", "rationale", "waiver_receipt_ref"], (r, e, m) => {
+    const gate_id = text3(r.gate_id, "$.gate_id", e, ID2);
+    const kind = ["input", "review", "verification", "release"].includes(String(r.kind)) ? r.kind : void 0;
+    const status2 = ["pending", "passed", "rejected", "waived"].includes(String(r.status)) ? r.status : void 0;
+    const decision_revision = integer2(r.decision_revision, "$.decision_revision", e);
+    if (!kind)
+      e.push({ code: "field-invalid", path: "$.kind" });
+    if (!status2)
+      e.push({ code: "field-invalid", path: "$.status" });
+    if (!gate_id || !kind || !status2 || decision_revision === void 0)
+      return void 0;
+    return { ...m, schema_version: V2_SCHEMAS.gate, gate_id, kind, status: status2, required_evidence_refs: strings(r.required_evidence_refs, "$.required_evidence_refs", e), decision_revision, ...optionalText(r.rationale, "$.rationale", e) ? { rationale: optionalText(r.rationale, "$.rationale", e) } : {}, ...optionalText(r.waiver_receipt_ref, "$.waiver_receipt_ref", e, ID2) ? { waiver_receipt_ref: optionalText(r.waiver_receipt_ref, "$.waiver_receipt_ref", e, ID2) } : {} };
+  });
+}
+function decodeRunLeaseV2(input) {
+  const errors = [];
+  const raw = input && typeof input === "object" && !Array.isArray(input) ? input : void 0;
+  if (!raw)
+    return { ok: false, errors: [{ code: "object-invalid", path: "$" }] };
+  closed4(raw, ["lease_id", "owner_id", "acquired_at", "heartbeat_at", "expires_at", "generation", "status"], "$", errors);
+  const lease_id = text3(raw.lease_id, "$.lease_id", errors, ID2);
+  const owner_id = text3(raw.owner_id, "$.owner_id", errors, ID2);
+  const acquired_at = text3(raw.acquired_at, "$.acquired_at", errors, UTC);
+  const heartbeat_at = text3(raw.heartbeat_at, "$.heartbeat_at", errors, UTC);
+  const expires_at = text3(raw.expires_at, "$.expires_at", errors, UTC);
+  const generation = integer2(raw.generation, "$.generation", errors);
+  const status2 = ["active", "renewed", "expired", "released", "revoked"].includes(String(raw.status)) ? raw.status : void 0;
+  if (!status2)
+    errors.push({ code: "field-invalid", path: "$.status" });
+  if (!lease_id || !owner_id || !acquired_at || !heartbeat_at || !expires_at || generation === void 0 || !status2)
+    return { ok: false, errors };
+  return result({ lease_id, owner_id, acquired_at, heartbeat_at, expires_at, generation, status: status2 }, errors);
+}
+function decodeEffects(input, path8, errors) {
+  return array2(input, path8, errors).map((entry, index) => {
+    const itemPath = `${path8}[${index}]`;
+    const raw = object3(entry, itemPath, errors);
+    if (!raw)
+      return void 0;
+    const type = raw.type;
+    if (type === "persist-record") {
+      closed4(raw, ["type", "record_schema", "record_id"], itemPath, errors);
+      const schemaValue = text3(raw.record_schema, `${itemPath}.record_schema`, errors, ID2);
+      const record_schema = schemaValue !== void 0 && Object.values(V2_SCHEMAS).includes(schemaValue) ? schemaValue : void 0;
+      if (schemaValue !== void 0 && record_schema === void 0)
+        errors.push({ code: "field-invalid", path: `${itemPath}.record_schema` });
+      const record_id = text3(raw.record_id, `${itemPath}.record_id`, errors, ID2);
+      if (record_schema && record_id)
+        return { type, record_schema, record_id };
+    } else if (type === "request-executor-cancel") {
+      closed4(raw, ["type", "run_id"], itemPath, errors);
+      const run_id = text3(raw.run_id, `${itemPath}.run_id`, errors, ID2);
+      if (run_id)
+        return { type, run_id };
+    } else if (type === "wake-scheduler") {
+      closed4(raw, ["type", "reason"], itemPath, errors);
+      const reason = text3(raw.reason, `${itemPath}.reason`, errors, ID2);
+      if (reason)
+        return { type, reason };
+    } else {
+      errors.push({ code: "field-invalid", path: `${itemPath}.type` });
+    }
+    return void 0;
+  }).filter((value) => value !== void 0);
+}
+function decodeBoardEventV2(input) {
+  const errors = [];
+  const raw = prepare(input, V2_SCHEMAS.event, ["schema_version", "event_id", "event_type", "command_id", "idempotency_key", "project_id", "change_id", "correlation_id", "causation_id", "actor", "revision", "issued_at", "before_digest", "after_digest", "payload", "effects"], errors);
+  if (!raw)
+    return { ok: false, errors };
+  const event_id = text3(raw.event_id, "$.event_id", errors, ID2);
+  const command_id = text3(raw.command_id, "$.command_id", errors, ID2);
+  const idempotency_key = text3(raw.idempotency_key, "$.idempotency_key", errors, ID2);
+  const project_id = text3(raw.project_id, "$.project_id", errors, ID2);
+  const change_id = text3(raw.change_id, "$.change_id", errors, ID2);
+  const correlation_id = text3(raw.correlation_id, "$.correlation_id", errors, ID2);
+  const event_type = text3(raw.event_type, "$.event_type", errors, ID2);
+  const revision = integer2(raw.revision, "$.revision", errors);
+  const issued_at = text3(raw.issued_at, "$.issued_at", errors, UTC);
+  const before_digest = digest6(raw.before_digest, "$.before_digest", errors);
+  const after_digest = digest6(raw.after_digest, "$.after_digest", errors);
+  const actorValue = actor(raw.actor, "$.actor", errors);
+  const payload = decodeBoardCommandV2(raw.payload);
+  if (!payload.ok)
+    errors.push(...payload.errors.map((error2) => ({ ...error2, path: `$.payload${error2.path.slice(1)}` })));
+  const effects = decodeEffects(raw.effects, "$.effects", errors);
+  if (!event_id || !command_id || !idempotency_key || !project_id || !change_id || !correlation_id || !event_type || revision === void 0 || !issued_at || !before_digest || !after_digest || !actorValue || !payload.ok)
+    return { ok: false, errors };
+  return result({ schema_version: V2_SCHEMAS.event, event_id, event_type, command_id, idempotency_key, project_id, change_id, correlation_id, ...optionalText(raw.causation_id, "$.causation_id", errors, ID2) ? { causation_id: optionalText(raw.causation_id, "$.causation_id", errors, ID2) } : {}, actor: actorValue, revision, issued_at, before_digest, after_digest, payload: payload.value, effects }, errors);
+}
+function decodeBoardSnapshotV2(input) {
+  const errors = [];
+  const allowed = ["schema_version", "record_id", "project_id", "change_id", "revision", "correlation_id", "actor", "created_at", "event_head_id", "event_head_digest", "command_head_id", "status", "request", "context", "assessment", "graph", "resolution", "work_items", "runs", "results", "validations", "gates", "leases", "blockers", "next_actions", "resume_status", "updated_at"];
+  const parsed = parse(input, errors);
+  if (parsed === void 0)
+    return { ok: false, errors };
+  walkLimit(parsed, "$", 0, /* @__PURE__ */ new Set(), errors);
+  if (typeof input === "string" && new TextEncoder().encode(input).byteLength > V2_MAX_BYTES)
+    errors.push({ code: "limit-exceeded", path: "$" });
+  const raw = object3(parsed, "$", errors);
+  if (raw === void 0)
+    return { ok: false, errors };
+  closed4(raw, allowed, "$", errors);
+  if (raw.schema_version !== V2_SCHEMAS.snapshot)
+    errors.push({ code: "field-invalid", path: "$.schema_version" });
+  const record_id = text3(raw.record_id, "$.record_id", errors, ID2);
+  const project_id = text3(raw.project_id, "$.project_id", errors, ID2);
+  const change_id = text3(raw.change_id, "$.change_id", errors, ID2);
+  const revision = integer2(raw.revision, "$.revision", errors);
+  const correlation_id = text3(raw.correlation_id, "$.correlation_id", errors, ID2);
+  const actorValue = actor(raw.actor, "$.actor", errors);
+  const created_at = text3(raw.created_at, "$.created_at", errors, UTC);
+  const status2 = ["draft", "contextualizing", "assessing", "planning", "planned", "ready", "executing", "reviewing", "verifying", "completed", "waiting-input", "blocked", "paused", "failed", "cancelled"].includes(String(raw.status)) ? raw.status : void 0;
+  if (!status2)
+    errors.push({ code: "field-invalid", path: "$.status" });
+  const updated_at = text3(raw.updated_at, "$.updated_at", errors, UTC);
+  const event_head_id = raw.event_head_id === void 0 ? void 0 : optionalText(raw.event_head_id, "$.event_head_id", errors, ID2);
+  const event_head_digest = raw.event_head_digest === void 0 ? void 0 : digest6(raw.event_head_digest, "$.event_head_digest", errors);
+  const command_head_id = raw.command_head_id === void 0 ? void 0 : optionalText(raw.command_head_id, "$.command_head_id", errors, ID2);
+  const resume_status = raw.resume_status === void 0 ? void 0 : optionalText(raw.resume_status, "$.resume_status", errors, ID2);
+  const nested2 = (key, decoder2) => {
+    if (raw[key] === void 0)
+      return void 0;
+    const decoded = decoder2(raw[key]);
+    if (!decoded.ok) {
+      errors.push(...decoded.errors.map((error2) => ({ ...error2, path: `$.${key}${error2.path.slice(1)}` })));
+      return void 0;
+    }
+    return decoded.value;
+  };
+  const collection = (key, decoder2) => {
+    const values = array2(raw[key], `$.${key}`, errors);
+    return values.map((value2, index) => {
+      const decoded = decoder2(value2);
+      if (!decoded.ok) {
+        errors.push(...decoded.errors.map((error2) => ({ ...error2, path: `$.${key}[${index}]${error2.path.slice(1)}` })));
+        return void 0;
+      }
+      return decoded.value;
+    }).filter((value2) => value2 !== void 0);
+  };
+  const request = nested2("request", decodeDevelopmentRequestV2);
+  const context = nested2("context", decodeRepositoryContextV2);
+  const assessment = nested2("assessment", decodeCapabilityAssessmentV2);
+  const graph = nested2("graph", decodeWorkGraphV2);
+  const resolution = nested2("resolution", decodeCapabilityResolutionV2);
+  const work_items = collection("work_items", decodeWorkItemV2);
+  const runs = collection("runs", decodeSkillRunV2);
+  const results = collection("results", decodeSkillResultV2);
+  const validations = collection("validations", decodeValidationReportV2);
+  const gates = collection("gates", decodeGateEvaluationV2);
+  const leases = collection("leases", decodeRunLeaseV2);
+  if (record_id === void 0 || project_id === void 0 || change_id === void 0 || revision === void 0 || correlation_id === void 0 || actorValue === void 0 || created_at === void 0 || status2 === void 0 || updated_at === void 0)
+    return { ok: false, errors };
+  const value = {
+    schema_version: V2_SCHEMAS.snapshot,
+    record_id,
+    project_id,
+    change_id,
+    revision,
+    correlation_id,
+    actor: actorValue,
+    created_at,
+    ...event_head_id === void 0 ? {} : { event_head_id },
+    ...event_head_digest === void 0 ? {} : { event_head_digest },
+    ...command_head_id === void 0 ? {} : { command_head_id },
+    status: status2,
+    ...request === void 0 ? {} : { request },
+    ...context === void 0 ? {} : { context },
+    ...assessment === void 0 ? {} : { assessment },
+    ...graph === void 0 ? {} : { graph },
+    ...resolution === void 0 ? {} : { resolution },
+    work_items,
+    runs,
+    results,
+    validations,
+    gates,
+    leases,
+    blockers: strings(raw.blockers, "$.blockers", errors),
+    next_actions: strings(raw.next_actions, "$.next_actions", errors),
+    ...raw.resume_status === void 0 ? {} : { resume_status },
+    updated_at
+  };
+  return result(value, errors);
+}
+function decodeBoardCommandV2(input) {
+  const errors = [];
+  const raw = prepare(input, V2_SCHEMAS.command, [
+    "schema_version",
+    "command_id",
+    "idempotency_key",
+    "expected_revision",
+    "actor",
+    "issued_at",
+    "correlation_id",
+    "causation_id",
+    "change_id",
+    "type",
+    "request",
+    "context",
+    "assessment",
+    "graph",
+    "resolution",
+    "work_item_id",
+    "run",
+    "lease",
+    "run_id",
+    "lease_id",
+    "owner_id",
+    "generation",
+    "heartbeat_at",
+    "expires_at",
+    "result",
+    "report",
+    "gate",
+    "reason",
+    "attempt_id",
+    "artifact_ref",
+    "digest"
+  ], errors);
+  if (!raw)
+    return { ok: false, errors };
+  const command_id = text3(raw.command_id, "$.command_id", errors, ID2);
+  const idempotency_key = text3(raw.idempotency_key, "$.idempotency_key", errors, ID2);
+  const expected_revision = integer2(raw.expected_revision, "$.expected_revision", errors);
+  const actorValue = actor(raw.actor, "$.actor", errors);
+  const issued_at = text3(raw.issued_at, "$.issued_at", errors, UTC);
+  const correlation_id = text3(raw.correlation_id, "$.correlation_id", errors, ID2);
+  const change_id = text3(raw.change_id, "$.change_id", errors, ID2);
+  const type = typeof raw.type === "string" ? raw.type : void 0;
+  const allowedTypes = [
+    "accept-request",
+    "record-context",
+    "record-assessment",
+    "freeze-work-graph",
+    "resolve-capabilities",
+    "start-change",
+    "enqueue-work-item",
+    "claim-run",
+    "heartbeat-run",
+    "begin-run",
+    "complete-run",
+    "record-validation",
+    "evaluate-gate",
+    "pause-change",
+    "resume-change",
+    "retry-work-item",
+    "cancel-change",
+    "replan-change",
+    "bind-artifact"
+  ];
+  if (type === void 0 || !allowedTypes.includes(type))
+    errors.push({ code: "field-invalid", path: "$.type" });
+  const causation_id = optionalText(raw.causation_id, "$.causation_id", errors, ID2);
+  if (!command_id || !idempotency_key || expected_revision === void 0 || !actorValue || !issued_at || !correlation_id || !change_id || type === void 0 || !allowedTypes.includes(type))
+    return { ok: false, errors };
+  const base = { schema_version: V2_SCHEMAS.command, command_id, idempotency_key, expected_revision, actor: actorValue, issued_at, correlation_id, ...causation_id === void 0 ? {} : { causation_id }, change_id };
+  const requireText = (key, pattern = ID2, max = 8192) => text3(raw[key], `$.${key}`, errors, pattern, max);
+  const rejectExtra = (allowed) => {
+    const set = /* @__PURE__ */ new Set(["schema_version", "command_id", "idempotency_key", "expected_revision", "actor", "issued_at", "correlation_id", "causation_id", "change_id", "type", ...allowed]);
+    for (const key of Object.keys(raw))
+      if (!set.has(key))
+        errors.push({ code: "unknown-field", path: `$.${key}` });
+  };
+  let value;
+  switch (type) {
+    case "accept-request": {
+      rejectExtra(["request"]);
+      const request = nested(raw.request, decodeDevelopmentRequestV2, "$.request", errors);
+      if (request)
+        value = { ...base, type, request };
+      break;
+    }
+    case "record-context": {
+      rejectExtra(["context"]);
+      const context = nested(raw.context, decodeRepositoryContextV2, "$.context", errors);
+      if (context)
+        value = { ...base, type, context };
+      break;
+    }
+    case "record-assessment": {
+      rejectExtra(["assessment"]);
+      const assessment = nested(raw.assessment, decodeCapabilityAssessmentV2, "$.assessment", errors);
+      if (assessment)
+        value = { ...base, type, assessment };
+      break;
+    }
+    case "freeze-work-graph": {
+      rejectExtra(["graph"]);
+      const graph = nested(raw.graph, decodeWorkGraphV2, "$.graph", errors);
+      if (graph)
+        value = { ...base, type, graph };
+      break;
+    }
+    case "resolve-capabilities": {
+      rejectExtra(["resolution"]);
+      const resolution = nested(raw.resolution, decodeCapabilityResolutionV2, "$.resolution", errors);
+      if (resolution)
+        value = { ...base, type, resolution };
+      break;
+    }
+    case "start-change":
+    case "resume-change": {
+      rejectExtra([]);
+      value = { ...base, type };
+      break;
+    }
+    case "enqueue-work-item": {
+      rejectExtra(["work_item_id"]);
+      const work_item_id = requireText("work_item_id");
+      if (work_item_id)
+        value = { ...base, type, work_item_id };
+      break;
+    }
+    case "claim-run": {
+      rejectExtra(["run", "lease"]);
+      const run = nested(raw.run, decodeSkillRunV2, "$.run", errors);
+      const lease = nested(raw.lease, decodeRunLeaseV2, "$.lease", errors);
+      if (run && lease)
+        value = { ...base, type, run, lease };
+      break;
+    }
+    case "heartbeat-run": {
+      rejectExtra(["run_id", "lease_id", "owner_id", "generation", "heartbeat_at", "expires_at"]);
+      const run_id = requireText("run_id");
+      const lease_id = requireText("lease_id");
+      const owner_id = requireText("owner_id");
+      const generation = integer2(raw.generation, "$.generation", errors);
+      const heartbeat_at = text3(raw.heartbeat_at, "$.heartbeat_at", errors, UTC);
+      const expires_at = text3(raw.expires_at, "$.expires_at", errors, UTC);
+      if (run_id && lease_id && owner_id && generation !== void 0 && heartbeat_at && expires_at)
+        value = { ...base, type, run_id, lease_id, owner_id, generation, heartbeat_at, expires_at };
+      break;
+    }
+    case "begin-run": {
+      rejectExtra(["run_id", "lease_id", "owner_id", "generation"]);
+      const run_id = requireText("run_id");
+      const lease_id = requireText("lease_id");
+      const owner_id = requireText("owner_id");
+      const generation = integer2(raw.generation, "$.generation", errors);
+      if (run_id && lease_id && owner_id && generation !== void 0)
+        value = { ...base, type, run_id, lease_id, owner_id, generation };
+      break;
+    }
+    case "complete-run": {
+      rejectExtra(["run_id", "result"]);
+      const run_id = requireText("run_id");
+      const resultValue = nested(raw.result, decodeSkillResultV2, "$.result", errors);
+      if (run_id && resultValue)
+        value = { ...base, type, run_id, result: resultValue };
+      break;
+    }
+    case "record-validation": {
+      rejectExtra(["report"]);
+      const report = nested(raw.report, decodeValidationReportV2, "$.report", errors);
+      if (report)
+        value = { ...base, type, report };
+      break;
+    }
+    case "evaluate-gate": {
+      rejectExtra(["gate"]);
+      const gate = nested(raw.gate, decodeGateEvaluationV2, "$.gate", errors);
+      if (gate)
+        value = { ...base, type, gate };
+      break;
+    }
+    case "pause-change":
+    case "cancel-change":
+    case "replan-change": {
+      rejectExtra(["reason"]);
+      const reason = text3(raw.reason, "$.reason", errors, void 0, 8192);
+      if (reason)
+        value = { ...base, type, reason };
+      break;
+    }
+    case "retry-work-item": {
+      rejectExtra(["work_item_id", "attempt_id", "run_id"]);
+      const work_item_id = requireText("work_item_id");
+      const attempt_id = requireText("attempt_id");
+      const run_id = requireText("run_id");
+      if (work_item_id && attempt_id && run_id)
+        value = { ...base, type, work_item_id, attempt_id, run_id };
+      break;
+    }
+    case "bind-artifact": {
+      rejectExtra(["work_item_id", "artifact_ref", "digest"]);
+      const work_item_id = requireText("work_item_id");
+      const artifact_ref = requireText("artifact_ref", /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,511}$/u, 512);
+      const digestValue = digest6(raw.digest, "$.digest", errors);
+      if (work_item_id && artifact_ref && digestValue)
+        value = { ...base, type, work_item_id, artifact_ref, digest: digestValue };
+      break;
+    }
+  }
+  return value === void 0 ? { ok: false, errors } : result(value, errors);
+}
+
+// packages/kernel/dist/orchestration/v2-evolve.js
+function stable(value) {
+  if (value === void 0)
+    return "null";
+  if (value === null || typeof value !== "object")
+    return JSON.stringify(value);
+  if (Array.isArray(value))
+    return `[${value.map(stable).join(",")}]`;
+  return `{${Object.keys(value).filter((key) => value[key] !== void 0).sort().map((key) => `${JSON.stringify(key)}:${stable(value[key])}`).join(",")}}`;
+}
+function digestAggregate(value) {
+  const normalized2 = value !== null && typeof value === "object" && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== "event_head_digest")) : value;
+  return `sha256:${sha256Hex(stable(normalized2))}`;
+}
+function freeze2(value) {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const entry of Object.values(value))
+      freeze2(entry);
+    Object.freeze(value);
+  }
+  return value;
+}
+function createAggregateV2(projectId, changeId, correlationId, updatedAt = "1970-01-01T00:00:00.000Z") {
+  return freeze2({ schema_version: "board-snapshot/v2", record_id: `change:${changeId}`, project_id: projectId, change_id: changeId, revision: 0, correlation_id: correlationId, actor: { kind: "system", id: "kernel" }, created_at: updatedAt, status: "draft", work_items: [], runs: [], results: [], validations: [], gates: [], leases: [], blockers: [], next_actions: ["accept-request", "record-context"], updated_at: updatedAt });
+}
+function find(items, key, id2) {
+  return items.find((entry) => entry[key] === id2);
+}
+function replaceBy(items, key, value) {
+  return items.map((entry) => entry[key] === value[key] ? value : entry);
+}
+function itemStatusForRun(status2) {
+  return status2 === "completed" ? "verifying" : status2 === "failed" ? "failed" : status2 === "cancelled" ? "cancelled" : status2 === "interrupted" ? "interrupted" : status2 === "waiting-input" ? "waiting-input" : status2 === "running" ? "running" : "claimed";
+}
+function initialItems(aggregate, graph) {
+  return graph.execution_groups.flatMap((group) => group.work_item_ids).map((id2) => {
+    const depends_on = graph.dependency_edges.filter((edge2) => edge2.to === id2).map((edge2) => edge2.from);
+    return {
+      schema_version: "work-item/v2",
+      record_id: `work-item:${id2}`,
+      project_id: aggregate.project_id,
+      change_id: aggregate.change_id,
+      revision: aggregate.revision + 1,
+      correlation_id: aggregate.correlation_id,
+      actor: { kind: "system", id: "kernel" },
+      created_at: graph.created_at,
+      work_item_id: id2,
+      title: id2,
+      // Every root item is immediately schedulable.  Index-based readiness made
+      // independent parallel work accidentally serial in the previous version.
+      status: depends_on.length === 0 ? "ready" : "pending",
+      depends_on,
+      required_artifact_refs: [],
+      validation_refs: [],
+      mode: graph.execution_groups.find((group) => group.work_item_ids.includes(id2))?.mode ?? "serial",
+      attempt_count: 0,
+      blockers: []
+    };
+  });
+}
+function promoteReadyDependents(items) {
+  const completed = new Set(items.filter((item2) => item2.status === "completed").map((item2) => item2.work_item_id));
+  return items.map((item2) => item2.status === "pending" && item2.depends_on.every((id2) => completed.has(id2)) ? { ...item2, status: "ready" } : item2);
+}
+function evolveV2(aggregate, event) {
+  if (event.revision !== aggregate.revision + 1)
+    throw new Error("event revision is not monotonic");
+  const command = event.payload;
+  let next = { ...aggregate, revision: event.revision, event_head_id: event.event_id, event_head_digest: event.after_digest, command_head_id: event.command_id, updated_at: event.issued_at };
+  switch (command.type) {
+    case "accept-request":
+      next = { ...next, request: command.request, status: "draft", next_actions: ["record-context"] };
+      break;
+    case "record-context":
+      next = { ...next, context: command.context, status: "assessing", next_actions: ["record-assessment"] };
+      break;
+    case "record-assessment":
+      next = { ...next, assessment: command.assessment, status: command.assessment.normalization === "complete" ? "planning" : command.assessment.normalization === "needs-input" ? "waiting-input" : "blocked", next_actions: command.assessment.normalization === "complete" ? ["freeze-work-graph"] : ["record-assessment"] };
+      break;
+    case "freeze-work-graph":
+      next = { ...next, graph: command.graph, status: "planned", work_items: initialItems(aggregate, command.graph), next_actions: ["resolve-capabilities"] };
+      break;
+    case "resolve-capabilities":
+      next = { ...next, resolution: command.resolution, status: command.resolution.status === "resolved" ? "ready" : command.resolution.status === "needs-input" ? "waiting-input" : "blocked", next_actions: command.resolution.status === "resolved" ? ["start-change"] : ["resolve-capabilities"] };
+      break;
+    case "start-change":
+      next = { ...next, status: "executing", next_actions: ["enqueue-work-item"] };
+      break;
+    case "enqueue-work-item": {
+      const item2 = find(next.work_items, "work_item_id", command.work_item_id);
+      if (item2 !== void 0)
+        next = { ...next, work_items: replaceBy(next.work_items, "work_item_id", { ...item2, status: "queued", revision: event.revision }), next_actions: ["claim-run"] };
+      break;
+    }
+    case "claim-run": {
+      const item2 = find(next.work_items, "work_item_id", command.run.work_item_id);
+      const run = { ...command.run, status: "claimed", lease: command.lease, revision: event.revision };
+      next = { ...next, runs: [...next.runs.filter((entry) => entry.run_id !== run.run_id), run], leases: [...next.leases.filter((entry) => entry.lease_id !== command.lease.lease_id), command.lease], work_items: item2 === void 0 ? next.work_items : replaceBy(next.work_items, "work_item_id", { ...item2, status: "claimed", active_run_id: run.run_id, revision: event.revision }) };
+      break;
+    }
+    case "heartbeat-run": {
+      const run = find(next.runs, "run_id", command.run_id);
+      if (run?.lease !== void 0) {
+        const lease = { ...run.lease, heartbeat_at: command.heartbeat_at, expires_at: command.expires_at, generation: command.generation, status: "renewed" };
+        next = { ...next, runs: replaceBy(next.runs, "run_id", { ...run, lease, revision: event.revision }), leases: replaceBy(next.leases, "lease_id", lease) };
+      }
+      break;
+    }
+    case "begin-run": {
+      const run = find(next.runs, "run_id", command.run_id);
+      const item2 = run === void 0 ? void 0 : find(next.work_items, "work_item_id", run.work_item_id);
+      if (run !== void 0 && item2 !== void 0)
+        next = { ...next, runs: replaceBy(next.runs, "run_id", { ...run, status: "running", started_at: event.issued_at, revision: event.revision }), work_items: replaceBy(next.work_items, "work_item_id", { ...item2, status: "running", revision: event.revision }) };
+      break;
+    }
+    case "complete-run": {
+      const run = find(next.runs, "run_id", command.run_id);
+      if (run !== void 0) {
+        const runStatus = command.result.status === "completed" && command.result.contract_status === "validated" ? "completed" : "failed";
+        const releasedLease = run.lease === void 0 ? void 0 : { ...run.lease, status: "released" };
+        const updated = { ...run, status: runStatus, result_id: command.result.result_id, finished_at: event.issued_at, ...releasedLease === void 0 ? {} : { lease: releasedLease }, revision: event.revision };
+        const item2 = find(next.work_items, "work_item_id", run.work_item_id);
+        next = { ...next, runs: replaceBy(next.runs, "run_id", updated), results: [...next.results.filter((entry) => entry.result_id !== command.result.result_id), { ...command.result, revision: event.revision }], leases: releasedLease === void 0 ? next.leases : replaceBy(next.leases, "lease_id", releasedLease), work_items: item2 === void 0 ? next.work_items : replaceBy(next.work_items, "work_item_id", { ...item2, status: itemStatusForRun(runStatus), active_run_id: void 0, revision: event.revision, blockers: runStatus === "completed" ? [] : ["run-result-invalid"] }), status: runStatus === "completed" ? "verifying" : "failed", next_actions: runStatus === "completed" ? ["record-validation"] : ["retry-work-item"] };
+      }
+      break;
+    }
+    case "record-validation": {
+      const item2 = find(next.work_items, "work_item_id", command.report.work_item_id);
+      const validatedItems = item2 === void 0 ? next.work_items : replaceBy(next.work_items, "work_item_id", {
+        ...item2,
+        status: command.report.status === "pass" ? "completed" : "blocked",
+        validation_refs: [...item2.validation_refs, command.report.report_id],
+        revision: event.revision
+      });
+      const promoted = command.report.status === "pass" ? promoteReadyDependents(validatedItems) : validatedItems;
+      next = {
+        ...next,
+        validations: [...next.validations.filter((entry) => entry.report_id !== command.report.report_id), { ...command.report, revision: event.revision }],
+        work_items: promoted,
+        status: command.report.status === "pass" ? "verifying" : "blocked",
+        next_actions: command.report.status === "pass" ? ["evaluate-gate", "enqueue-work-item"] : ["bind-artifact"]
+      };
+      break;
+    }
+    case "evaluate-gate": {
+      const gates = [...next.gates.filter((entry) => entry.gate_id !== command.gate.gate_id), { ...command.gate, revision: event.revision }];
+      const allDone = next.work_items.length > 0 && next.work_items.every((item2) => item2.status === "completed");
+      const allGates = gates.filter((gate) => gate.status !== "pending").every((gate) => gate.status === "passed" || gate.status === "waived");
+      next = { ...next, gates, status: allDone && allGates ? "completed" : command.gate.status === "rejected" ? "reviewing" : "verifying", next_actions: allDone && allGates ? [] : ["evaluate-gate"] };
+      break;
+    }
+    case "pause-change":
+      next = { ...next, status: "paused", resume_status: aggregate.status === "paused" ? "ready" : aggregate.status, next_actions: ["resume-change"] };
+      break;
+    case "resume-change":
+      next = { ...next, status: aggregate.resume_status ?? "ready", next_actions: ["start-change"] };
+      break;
+    case "retry-work-item": {
+      const item2 = find(next.work_items, "work_item_id", command.work_item_id);
+      const previous = item2?.active_run_id === void 0 ? next.runs.filter((run) => run.work_item_id === command.work_item_id).at(-1) : find(next.runs, "run_id", item2.active_run_id);
+      if (item2 !== void 0) {
+        const nextAttempt = (previous?.attempt ?? item2.attempt_count) + 1;
+        const newRun = previous === void 0 ? void 0 : { ...previous, record_id: `run:${command.run_id}`, run_id: command.run_id, attempt_id: command.attempt_id, attempt: nextAttempt, prior_attempt_id: previous.attempt_id, status: "queued", result_id: void 0, failure: void 0, lease: void 0, started_at: void 0, finished_at: void 0, revision: event.revision };
+        next = { ...next, ...newRun === void 0 ? {} : { runs: [...next.runs, newRun] }, work_items: replaceBy(next.work_items, "work_item_id", { ...item2, status: "queued", attempt_count: nextAttempt, active_run_id: newRun?.run_id, blockers: [], revision: event.revision }), next_actions: ["claim-run"] };
+      }
+      break;
+    }
+    case "cancel-change":
+      next = { ...next, status: "cancelled", leases: next.leases.map((lease) => ({ ...lease, status: "revoked" })), runs: next.runs.map((run) => run.status === "claimed" || run.status === "running" ? { ...run, status: "cancelled", revision: event.revision } : run), work_items: next.work_items.map((item2) => item2.status === "completed" ? item2 : { ...item2, status: "cancelled", revision: event.revision }), next_actions: [] };
+      break;
+    case "replan-change":
+      next = { ...next, status: "planning", graph: next.graph === void 0 ? void 0 : { ...next.graph, status: "superseded", revision: event.revision }, resolution: void 0, next_actions: ["freeze-work-graph"] };
+      break;
+    case "bind-artifact": {
+      const item2 = find(next.work_items, "work_item_id", command.work_item_id);
+      if (item2 !== void 0)
+        next = { ...next, work_items: replaceBy(next.work_items, "work_item_id", { ...item2, required_artifact_refs: [...item2.required_artifact_refs, command.artifact_ref], blockers: item2.blockers.filter((b) => b !== "missing-evidence"), revision: event.revision }), next_actions: ["record-validation"] };
+      break;
+    }
+  }
+  return freeze2(next);
+}
+
+// packages/kernel/dist/orchestration/v2-decide.js
+function reject(code, message, reasonCode = code, nextActions = []) {
+  return { ok: false, rejection: { code, message, reason_code: reasonCode, next_actions: nextActions } };
+}
+function find2(items, key, id2) {
+  return items.find((entry) => entry[key] === id2);
+}
+function isTerminal(status2) {
+  return status2 === "completed" || status2 === "cancelled";
+}
+function activeLease(aggregate, runId) {
+  return find2(aggregate.runs, "run_id", runId)?.lease;
+}
+function leaseMatches(aggregate, runId, leaseId, ownerId, generation) {
+  const lease = activeLease(aggregate, runId);
+  return lease !== void 0 && lease.lease_id === leaseId && lease.owner_id === ownerId && (lease.generation === generation || lease.generation + 1 === generation) && (lease.status === "active" || lease.status === "renewed");
+}
+function stateGuard(aggregate, command) {
+  switch (command.type) {
+    case "accept-request":
+      if (aggregate.status !== "draft" || aggregate.request !== void 0)
+        return reject("invalid-transition", "request can only be accepted once from draft", "request-order");
+      break;
+    case "record-context":
+      if (aggregate.status !== "draft" || aggregate.request === void 0 || aggregate.context !== void 0)
+        return reject("invalid-transition", "context requires an accepted request and an empty context", "context-order", ["accept-request"]);
+      break;
+    case "record-assessment":
+      if (aggregate.status !== "assessing" || aggregate.context === void 0 || aggregate.assessment !== void 0)
+        return reject("invalid-transition", "assessment requires the current repository context", "assessment-order", ["record-context"]);
+      break;
+    case "freeze-work-graph":
+      if (aggregate.status !== "planning" || aggregate.assessment?.normalization !== "complete" || command.graph.status !== "frozen")
+        return reject("invalid-transition", "only a complete assessment can freeze a graph", "graph-order", ["record-assessment"]);
+      break;
+    case "resolve-capabilities":
+      if (aggregate.status !== "planned" || aggregate.graph?.status !== "frozen")
+        return reject("invalid-transition", "capabilities require a frozen graph", "resolution-order", ["freeze-work-graph"]);
+      break;
+    case "start-change":
+      if (aggregate.status !== "ready" || aggregate.work_items.length === 0 || aggregate.work_items.some((item2) => item2.status === "blocked" || item2.status === "cancelled"))
+        return reject("policy-blocked", "change has no runnable work", "scheduler-not-ready", ["resolve-capabilities"]);
+      break;
+    case "enqueue-work-item": {
+      const item2 = find2(aggregate.work_items, "work_item_id", command.work_item_id);
+      if (item2 === void 0)
+        return reject("not-found", "work item not found", "work-item-not-found");
+      if (!["ready", "interrupted", "failed", "blocked"].includes(item2.status))
+        return reject("invalid-transition", "work item cannot be enqueued from its current state", "work-item-state");
+      break;
+    }
+    case "claim-run": {
+      const item2 = find2(aggregate.work_items, "work_item_id", command.run.work_item_id);
+      if (item2 === void 0)
+        return reject("not-found", "work item not found", "work-item-not-found");
+      if (item2.status !== "queued")
+        return reject("invalid-transition", "only queued work items can be claimed", "work-item-not-queued");
+      if (command.run.status !== "queued" || command.run.attempt < 1 || command.lease.generation !== 1)
+        return reject("contract-invalid", "a first claim requires a queued run and generation-one lease", "claim-contract");
+      const active = item2.active_run_id === void 0 ? void 0 : find2(aggregate.runs, "run_id", item2.active_run_id);
+      if (item2.active_run_id !== void 0 && item2.active_run_id !== command.run.run_id)
+        return reject("policy-blocked", "work item is reserved for a different queued run", "lease-conflict");
+      if (active !== void 0 && active.status !== "queued")
+        return reject("policy-blocked", "work item already has an active run", "lease-conflict");
+      if (aggregate.runs.some((run) => run.work_item_id === item2.work_item_id && (run.status === "claimed" || run.status === "running")))
+        return reject("policy-blocked", "work item already has an active run", "lease-conflict");
+      break;
+    }
+    case "heartbeat-run": {
+      const run = find2(aggregate.runs, "run_id", command.run_id);
+      const lease = run?.lease;
+      if (run === void 0 || lease === void 0)
+        return reject("not-found", "run or lease not found", "run-not-found");
+      if (!leaseMatches(aggregate, command.run_id, command.lease_id, command.owner_id, command.generation))
+        return reject("lease-mismatch", "heartbeat lease identity is stale", "lease-generation-mismatch", ["reclaim-run"]);
+      if (command.generation !== lease.generation + 1)
+        return reject("lease-mismatch", "heartbeat generation must increase by exactly one", "lease-generation-not-monotonic", ["reload-snapshot"]);
+      break;
+    }
+    case "begin-run": {
+      const run = find2(aggregate.runs, "run_id", command.run_id);
+      if (run === void 0)
+        return reject("not-found", "run not found", "run-not-found");
+      if (run.status !== "claimed")
+        return reject("invalid-transition", "only claimed runs can begin", "run-order");
+      if (!leaseMatches(aggregate, command.run_id, command.lease_id, command.owner_id, command.generation))
+        return reject("lease-mismatch", "begin lease identity is stale", "lease-generation-mismatch");
+      break;
+    }
+    case "complete-run": {
+      const run = find2(aggregate.runs, "run_id", command.run_id);
+      if (run === void 0)
+        return reject("not-found", "run not found", "run-not-found");
+      if (run.status !== "running")
+        return reject("invalid-transition", "only running runs can complete", "run-order");
+      if (run.lease === void 0 || !leaseMatches(aggregate, command.run_id, run.lease.lease_id, run.lease.owner_id, run.lease.generation))
+        return reject("lease-mismatch", "complete requires the active run lease", "lease-generation-mismatch");
+      if (command.result.run_id !== command.run_id || command.result.contract_status === "invalid")
+        return reject("contract-invalid", "result does not match run or is invalid", "result-contract-invalid");
+      break;
+    }
+    case "record-validation": {
+      const result2 = find2(aggregate.results, "result_id", command.report.result_id);
+      const item2 = find2(aggregate.work_items, "work_item_id", command.report.work_item_id);
+      const run = result2 === void 0 ? void 0 : find2(aggregate.runs, "run_id", result2.run_id);
+      if (result2 === void 0 || item2 === void 0 || run === void 0 || run.status !== "completed")
+        return reject("missing-evidence", "validation requires a completed matching run result", "validation-evidence-missing", ["complete-run"]);
+      break;
+    }
+    case "evaluate-gate":
+      if (command.gate.status === "waived" && (command.gate.actor.kind !== "user" || command.gate.rationale === void 0 || command.gate.waiver_receipt_ref === void 0))
+        return reject("policy-blocked", "gate waiver requires user rationale and receipt", "waiver-policy");
+      if (command.gate.status === "passed" && command.gate.required_evidence_refs.some((ref) => !aggregate.results.some((result2) => result2.artifacts.some((artifact) => artifact.ref === ref)) && !aggregate.validations.some((report) => report.evidence_refs.includes(ref))))
+        return reject("missing-evidence", "gate evidence is not available", "gate-evidence-missing");
+      break;
+    case "pause-change":
+      if (!["ready", "executing", "waiting-input", "blocked"].includes(aggregate.status))
+        return reject("invalid-transition", "change is not pausable from its current state", "pause-state");
+      break;
+    case "resume-change":
+      if (aggregate.status !== "paused")
+        return reject("invalid-transition", "only paused changes can resume", "resume-state");
+      break;
+    case "retry-work-item": {
+      const item2 = find2(aggregate.work_items, "work_item_id", command.work_item_id);
+      if (item2 === void 0 || !["failed", "interrupted", "blocked"].includes(item2.status))
+        return reject("invalid-transition", "only failed, interrupted, or blocked items can retry", "retry-state");
+      if (aggregate.runs.some((run) => run.run_id === command.run_id || run.attempt_id === command.attempt_id))
+        return reject("idempotency-conflict", "retry must create a new run and attempt identity", "retry-lineage-conflict");
+      break;
+    }
+    case "cancel-change":
+      break;
+    case "replan-change":
+      if (isTerminal(aggregate.status))
+        return reject("terminal-state", "terminal change cannot replan", "terminal-state");
+      break;
+    case "bind-artifact":
+      if (find2(aggregate.work_items, "work_item_id", command.work_item_id) === void 0)
+        return reject("not-found", "work item not found", "work-item-not-found");
+      break;
+  }
+  return void 0;
+}
+function decideV2(aggregate, command) {
+  if (isTerminal(aggregate.status))
+    return reject("terminal-state", `terminal change rejects ${command.type}`, "terminal-state");
+  if (command.change_id !== aggregate.change_id)
+    return reject("contract-invalid", "command change does not match aggregate", "identity-mismatch");
+  if (command.correlation_id !== aggregate.correlation_id)
+    return reject("contract-invalid", "correlation chain does not match aggregate", "causal-chain-mismatch");
+  if (command.expected_revision !== aggregate.revision)
+    return reject("revision-conflict", `expected revision ${command.expected_revision}, current ${aggregate.revision}`, "stale-revision", ["reload-snapshot"]);
+  if (aggregate.command_head_id === command.command_id)
+    return reject("idempotency-conflict", "command already applied; repository should replay stored event", "idempotent-replay");
+  if (command.type === "record-context" && aggregate.request?.request_id !== command.context.request_id)
+    return reject("contract-invalid", "context request mismatch", "request-context-mismatch");
+  if (command.type === "record-assessment" && (aggregate.request === void 0 || aggregate.context === void 0 || aggregate.request.request_id !== command.assessment.request_id || command.assessment.context_record_id !== aggregate.context.record_id))
+    return reject("contract-invalid", "assessment must bind request and context", "assessment-binding-mismatch");
+  if (command.type === "freeze-work-graph" && (aggregate.assessment === void 0 || command.graph.assessment_id !== aggregate.assessment.assessment_id))
+    return reject("contract-invalid", "graph must bind assessment", "graph-binding-invalid");
+  if (command.type === "resolve-capabilities" && (aggregate.graph === void 0 || aggregate.assessment === void 0 || command.resolution.graph_id !== aggregate.graph.graph_id || command.resolution.assessment_id !== aggregate.assessment.assessment_id))
+    return reject("contract-invalid", "resolution must bind graph and assessment", "resolution-binding-invalid");
+  const guarded = stateGuard(aggregate, command);
+  if (guarded !== void 0)
+    return guarded;
+  const draft = { schema_version: "board-event/v2", event_id: `event:${command.command_id}`, event_type: command.type, command_id: command.command_id, idempotency_key: command.idempotency_key, project_id: aggregate.project_id, change_id: aggregate.change_id, correlation_id: aggregate.correlation_id, ...command.causation_id === void 0 ? {} : { causation_id: command.causation_id }, actor: command.actor, revision: aggregate.revision + 1, issued_at: command.issued_at, before_digest: digestAggregate(aggregate), after_digest: digestAggregate({ ...aggregate, revision: aggregate.revision + 1 }), payload: command, effects: command.type === "cancel-change" ? aggregate.runs.filter((run) => run.status === "claimed" || run.status === "running").map((run) => ({ type: "request-executor-cancel", run_id: run.run_id })) : [{ type: "wake-scheduler", reason: command.type }] };
+  const after = evolveV2(aggregate, draft);
+  return { ok: true, event: { ...draft, after_digest: digestAggregate(after) } };
+}
+
+// packages/kernel/dist/orchestration/ledger.js
+import { mkdir as mkdir14, lstat as lstat17, readFile as readFile17, readdir as readdir3 } from "node:fs/promises";
+import path7 from "node:path";
+var ORCHESTRATION_LEDGER_DIR = ".orchestration-v2";
+var ORCHESTRATION_CURRENT_FILE = "current.json";
+var ORCHESTRATION_EVENTS_DIR = "events";
+var ORCHESTRATION_SNAPSHOTS_DIR = "snapshots";
+var ORCHESTRATION_IDEMPOTENCY_DIR = "idempotency";
+var ORCHESTRATION_MAX_RECORD_BYTES = Math.min(V2_MAX_BYTES, 512e3);
+var ORCHESTRATION_MAX_EVENTS = 2048;
+var SAFE_ID3 = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
+var UTC2 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u;
+function stable2(value) {
+  if (value === void 0)
+    return "null";
+  if (value === null || typeof value !== "object")
+    return JSON.stringify(value);
+  if (Array.isArray(value))
+    return `[${value.map(stable2).join(",")}]`;
+  return `{${Object.keys(value).filter((key) => value[key] !== void 0).sort().map((key) => `${JSON.stringify(key)}:${stable2(value[key])}`).join(",")}}`;
+}
+function checksum(value) {
+  return `sha256:${sha256Hex(stable2(value))}`;
+}
+function json(value) {
+  return `${stable2(value)}
+`;
+}
+function safeId(value, label) {
+  if (!SAFE_ID3.test(value))
+    throw new LedgerPathError(`${label} contains unsafe path characters`);
+}
+function integer3(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+function rootFor(changeDir2) {
+  return path7.join(path7.resolve(changeDir2), ORCHESTRATION_LEDGER_DIR);
+}
+function dirFor(changeDir2, name) {
+  return path7.join(rootFor(changeDir2), name);
+}
+function currentPath(changeDir2) {
+  return path7.join(rootFor(changeDir2), ORCHESTRATION_CURRENT_FILE);
+}
+function eventPath(changeDir2, revision, eventId) {
+  if (!integer3(revision) || revision < 1)
+    throw new LedgerPathError("event revision must be a positive integer");
+  safeId(eventId, "event id");
+  return path7.join(dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR), `${String(revision).padStart(12, "0")}-${eventId}.json`);
+}
+function snapshotPath(changeDir2, revision, digest7) {
+  if (!integer3(revision))
+    throw new LedgerPathError("snapshot revision must be a non-negative integer");
+  safeId(digest7, "snapshot digest");
+  return path7.join(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), `${String(revision).padStart(12, "0")}-${digest7.slice(7, 23)}.json`);
+}
+function idempotencyPath(changeDir2, commandId) {
+  safeId(commandId, "command id");
+  return path7.join(dirFor(changeDir2, ORCHESTRATION_IDEMPOTENCY_DIR), `${commandId}.json`);
+}
+var LedgerPathError = class extends Error {
+  code = "unsafe-path";
+};
+var LedgerCorruptionError = class extends Error {
+  code = "corrupt-ledger";
+};
+var LedgerInitializationError = class extends Error {
+  code = "invalid-initialization";
+};
+async function ensureDirectory(directory) {
+  await mkdir14(directory, { recursive: true });
+  const item2 = await lstat17(directory);
+  if (!item2.isDirectory() || item2.isSymbolicLink())
+    throw new LedgerPathError(`ledger directory is not a regular directory: ${directory}`);
+}
+async function boundedRead(file) {
+  const item2 = await lstat17(file);
+  if (!item2.isFile() || item2.isSymbolicLink())
+    throw new LedgerCorruptionError(`symlink or non-regular ledger record: ${file}`);
+  if (item2.size > ORCHESTRATION_MAX_RECORD_BYTES)
+    throw new LedgerCorruptionError(`ledger record exceeds ${ORCHESTRATION_MAX_RECORD_BYTES} bytes: ${file}`);
+  const raw = await readFile17(file, "utf8");
+  if (Buffer.byteLength(raw, "utf8") > ORCHESTRATION_MAX_RECORD_BYTES)
+    throw new LedgerCorruptionError(`ledger record exceeds byte limit: ${file}`);
+  return raw;
+}
+function decodeEnvelope(raw, file, kind) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new LedgerCorruptionError(`invalid JSON: ${file}`);
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new LedgerCorruptionError(`invalid envelope: ${file}`);
+  const value = parsed;
+  const keys = Object.keys(value).sort().join(",");
+  if (keys !== "checksum,kind,payload,schema_version" || value.schema_version !== "orchestration-ledger-record/v1" || value.kind !== kind || typeof value.checksum !== "string") {
+    throw new LedgerCorruptionError(`invalid envelope contract: ${file}`);
+  }
+  if (checksum(value.payload) !== value.checksum)
+    throw new LedgerCorruptionError(`checksum mismatch: ${file}`);
+  return value.payload;
+}
+function envelope(kind, payload) {
+  return { schema_version: "orchestration-ledger-record/v1", kind, checksum: checksum(payload), payload };
+}
+async function readEnvelopeFile(file, kind) {
+  return decodeEnvelope(await boundedRead(file), file, kind);
+}
+async function publishImmutable(fileDir, file, kind, payload) {
+  await ensureDirectory(fileDir);
+  const content = json(envelope(kind, payload));
+  try {
+    await atomicLinkPublish(fileDir, ".tmp", file, content);
+  } catch (error2) {
+    if (error2.code !== "EEXIST")
+      throw error2;
+    const prior = await boundedRead(file);
+    if (prior !== content)
+      throw new LedgerCorruptionError(`immutable record collision: ${file}`);
+  }
+}
+function reject2(code, message, reason_code = code, next_actions = []) {
+  return { kind: "rejected", rejection: { code, message, reason_code, next_actions } };
+}
+function parseEvent(value, file) {
+  const decoded = decodeBoardEventV2(value);
+  if (!decoded.ok)
+    throw new LedgerCorruptionError(`event schema invalid at ${file}: ${decoded.errors.map((error2) => error2.path).join(", ")}`);
+  return decoded.value;
+}
+function parseSnapshot(value, file) {
+  const decoded = decodeBoardSnapshotV2(value);
+  if (!decoded.ok)
+    throw new LedgerCorruptionError(`snapshot schema invalid at ${file}: ${decoded.errors.map((error2) => error2.path).join(", ")}`);
+  return decoded.value;
+}
+function parseIdempotency(value, file) {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    throw new LedgerCorruptionError(`idempotency schema invalid at ${file}`);
+  const record5 = value;
+  const expected = ["change_id", "command_digest", "command_id", "committed_revision", "created_at", "event_digest", "event_id", "idempotency_key", "project_id", "record_id", "schema_version", "snapshot_digest"].sort();
+  if (Object.keys(record5).sort().join(",") !== expected.join(",") || record5.schema_version !== "orchestration-idempotency/v1")
+    throw new LedgerCorruptionError(`idempotency schema invalid at ${file}`);
+  for (const key of ["record_id", "project_id", "change_id", "command_id", "idempotency_key", "event_id", "created_at"])
+    if (typeof record5[key] !== "string" || !SAFE_ID3.test(record5[key]))
+      throw new LedgerCorruptionError(`idempotency identity invalid at ${file}`);
+  if (!UTC2.test(record5.created_at) || !integer3(record5.committed_revision))
+    throw new LedgerCorruptionError(`idempotency value invalid at ${file}`);
+  const command_digest = record5.command_digest;
+  const event_digest = record5.event_digest;
+  const snapshot_digest = record5.snapshot_digest;
+  if (typeof command_digest !== "string" || typeof event_digest !== "string" || typeof snapshot_digest !== "string" || !/^sha256:[0-9a-f]{64}$/u.test(command_digest) || !/^sha256:[0-9a-f]{64}$/u.test(event_digest) || !/^sha256:[0-9a-f]{64}$/u.test(snapshot_digest))
+    throw new LedgerCorruptionError(`idempotency digest invalid at ${file}`);
+  return {
+    schema_version: "orchestration-idempotency/v1",
+    record_id: record5.record_id,
+    project_id: record5.project_id,
+    change_id: record5.change_id,
+    command_id: record5.command_id,
+    idempotency_key: record5.idempotency_key,
+    command_digest,
+    committed_revision: record5.committed_revision,
+    event_id: record5.event_id,
+    event_digest,
+    snapshot_digest,
+    created_at: record5.created_at
+  };
+}
+async function listFiles(directory) {
+  try {
+    const entries = await readdir3(directory, { withFileTypes: true });
+    return entries.filter((entry) => entry.isFile() || entry.isSymbolicLink()).map((entry) => entry.name).sort();
+  } catch (error2) {
+    if (error2.code === "ENOENT")
+      return [];
+    throw error2;
+  }
+}
+function parseRevision(name) {
+  const match = /^(\d+)-/.exec(name);
+  if (!match)
+    return void 0;
+  const revision = Number(match[1]);
+  return integer3(revision) ? revision : void 0;
+}
+async function readEventByPath(changeDir2, file) {
+  return parseEvent(await readEnvelopeFile(path7.join(dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR), file), "event"), file);
+}
+async function readEventsSorted(changeDir2) {
+  const names = await listFiles(dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR));
+  const events2 = [];
+  const tempFiles = names.filter((name) => name.includes(".tmp-") || name.startsWith(".tmp"));
+  for (const name of names.filter((entry) => !tempFiles.includes(entry))) {
+    const revision = parseRevision(name);
+    try {
+      if (revision === void 0 || !name.endsWith(".json"))
+        throw new LedgerCorruptionError("event filename is not versioned");
+      const event = await readEventByPath(changeDir2, name);
+      if (event.revision !== revision || event.schema_version !== "board-event/v2")
+        throw new LedgerCorruptionError("event filename/revision mismatch");
+      events2.push(event);
+    } catch (error2) {
+      const reason = error2 instanceof Error ? error2.message : String(error2);
+      return { events: events2, invalid: { path: path7.join(dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR), name), revision, reason }, tempFiles };
+    }
+  }
+  events2.sort((a, b) => a.revision - b.revision);
+  if (events2.length > ORCHESTRATION_MAX_EVENTS)
+    return { events: events2.slice(0, ORCHESTRATION_MAX_EVENTS), invalid: { path: dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR), reason: "event count exceeds bounded reader limit" }, tempFiles };
+  return { events: events2, tempFiles };
+}
+async function readCurrent(changeDir2) {
+  try {
+    return parseSnapshot(await readEnvelopeFile(currentPath(changeDir2), "snapshot"), currentPath(changeDir2));
+  } catch (error2) {
+    if (error2.code === "ENOENT")
+      return void 0;
+    throw error2;
+  }
+}
+async function readSnapshotAtRevision(changeDir2, revision, expectedDigest) {
+  const names = await listFiles(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR));
+  for (const name of names) {
+    if (parseRevision(name) !== revision || !name.endsWith(".json"))
+      continue;
+    try {
+      const snapshot = parseSnapshot(await readEnvelopeFile(path7.join(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), name), "snapshot"), name);
+      if (expectedDigest === void 0 || checksum(snapshot) === expectedDigest)
+        return snapshot;
+    } catch {
+    }
+  }
+  return void 0;
+}
+async function readIdempotencyRecords(changeDir2) {
+  const names = await listFiles(dirFor(changeDir2, ORCHESTRATION_IDEMPOTENCY_DIR));
+  if (names.filter((entry) => entry.endsWith(".json")).length > ORCHESTRATION_MAX_EVENTS)
+    return { records: [], invalid: { path: dirFor(changeDir2, ORCHESTRATION_IDEMPOTENCY_DIR), reason: "idempotency index exceeds bounded reader limit" } };
+  const records = [];
+  for (const name of names.filter((entry) => !entry.includes(".tmp-") && !entry.startsWith(".tmp"))) {
+    try {
+      if (!name.endsWith(".json"))
+        throw new LedgerCorruptionError("idempotency filename is not JSON");
+      const record5 = parseIdempotency(await readEnvelopeFile(path7.join(dirFor(changeDir2, ORCHESTRATION_IDEMPOTENCY_DIR), name), "idempotency"), name);
+      if (`${record5.command_id}.json` !== name)
+        throw new LedgerCorruptionError("idempotency filename/command mismatch");
+      records.push(record5);
+    } catch (error2) {
+      return { records, invalid: { path: path7.join(dirFor(changeDir2, ORCHESTRATION_IDEMPOTENCY_DIR), name), reason: error2 instanceof Error ? error2.message : String(error2) } };
+    }
+  }
+  return { records };
+}
+function leasesFor(snapshot, now) {
+  return snapshot.runs.flatMap((run) => {
+    const lease = run.lease;
+    if (!lease)
+      return [];
+    const decision = ["active", "renewed"].includes(lease.status) ? lease.expires_at <= now ? "expired-awaiting-scheduler" : "active" : lease.status === "released" ? "released" : "revoked";
+    return [{ run_id: run.run_id, lease_id: lease.lease_id, decision, observed_expires_at: lease.expires_at }];
+  });
+}
+function sameJson(a, b) {
+  return stable2(a) === stable2(b);
+}
+var FsOrchestrationLedger = class {
+  async initialize(changeDir2, seed) {
+    safeId(seed.project_id, "project id");
+    safeId(seed.change_id, "change id");
+    safeId(seed.correlation_id, "correlation id");
+    if (seed.updated_at !== void 0 && !UTC2.test(seed.updated_at))
+      throw new LedgerInitializationError("updated_at must be UTC");
+    await ensureDirectory(rootFor(changeDir2));
+    await Promise.all([ORCHESTRATION_EVENTS_DIR, ORCHESTRATION_SNAPSHOTS_DIR, ORCHESTRATION_IDEMPOTENCY_DIR].map((name) => ensureDirectory(dirFor(changeDir2, name))));
+    return withLock(changeDir2, async () => {
+      const existing = await readCurrent(changeDir2);
+      if (existing !== void 0) {
+        if (existing.project_id !== seed.project_id || existing.change_id !== seed.change_id || existing.correlation_id !== seed.correlation_id)
+          throw new LedgerInitializationError("existing ledger identity does not match seed");
+        return existing;
+      }
+      const aggregate = createAggregateV2(seed.project_id, seed.change_id, seed.correlation_id, seed.updated_at);
+      const digest7 = checksum(aggregate);
+      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), snapshotPath(changeDir2, 0, digest7), "snapshot", aggregate);
+      await atomicReplaceFile(currentPath(changeDir2), json(envelope("snapshot", aggregate)));
+      return aggregate;
+    });
+  }
+  async readSnapshot(changeDir2) {
+    return readCurrent(changeDir2);
+  }
+  async readEvent(changeDir2, eventId) {
+    safeId(eventId, "event id");
+    const names = await listFiles(dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR));
+    for (const name of names) {
+      if (!name.endsWith(`-${eventId}.json`))
+        continue;
+      return readEventByPath(changeDir2, name);
+    }
+    return void 0;
+  }
+  async readEvents(changeDir2, options = {}) {
+    if (options.fromRevision !== void 0 && !integer3(options.fromRevision))
+      throw new LedgerPathError("fromRevision must be a non-negative integer");
+    if (options.toRevision !== void 0 && !integer3(options.toRevision))
+      throw new LedgerPathError("toRevision must be a non-negative integer");
+    const result2 = await readEventsSorted(changeDir2);
+    if (result2.invalid)
+      throw new LedgerCorruptionError(result2.invalid.reason);
+    const current = await readCurrent(changeDir2);
+    const upperBound = options.toRevision ?? current?.revision ?? 0;
+    return result2.events.filter((event) => event.revision <= upperBound && (options.fromRevision === void 0 || event.revision >= options.fromRevision));
+  }
+  async append(changeDir2, command) {
+    safeId(command.command_id, "command id");
+    safeId(command.idempotency_key, "idempotency key");
+    return withLock(changeDir2, async () => {
+      const current = await readCurrent(changeDir2);
+      if (current === void 0)
+        return reject2("not-found", "orchestration ledger is not initialized", "ledger-not-initialized");
+      if (command.change_id !== current.change_id)
+        return reject2("contract-invalid", "command change does not match ledger", "identity-mismatch");
+      const indexed = await readIdempotencyRecords(changeDir2);
+      if (indexed.invalid)
+        return reject2("contract-invalid", `idempotency index is corrupt: ${indexed.invalid.reason}`, "idempotency-index-corrupt");
+      const commandDigest = digestAggregate(command);
+      const prior = indexed.records.find((record5) => record5.command_id === command.command_id || record5.idempotency_key === command.idempotency_key);
+      if (prior !== void 0) {
+        if (prior.command_id !== command.command_id || prior.idempotency_key !== command.idempotency_key || prior.command_digest !== commandDigest)
+          return reject2("idempotency-conflict", "command identity was already used with a different payload", "idempotency-conflict");
+        const event2 = await this.readEvent(changeDir2, prior.event_id);
+        const snapshot = await readSnapshotAtRevision(changeDir2, prior.committed_revision, prior.snapshot_digest);
+        if (!event2 || !snapshot)
+          return reject2("contract-invalid", "idempotency record points to a missing event or snapshot", "idempotency-orphan");
+        return { kind: "replayed", event: event2, snapshot, replayed: true };
+      }
+      if (command.expected_revision !== current.revision)
+        return reject2("revision-conflict", `expected revision ${command.expected_revision}, current ${current.revision}`, "stale-revision", ["reload-snapshot"]);
+      const decision = decideV2(current, command);
+      if (!decision.ok)
+        return { kind: "rejected", rejection: decision.rejection };
+      const event = decision.event;
+      const next = evolveV2(current, event);
+      if (event.revision !== next.revision || next.event_head_id !== event.event_id || next.event_head_digest !== event.after_digest)
+        throw new LedgerCorruptionError("aggregate/event digest linkage failed before publication");
+      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR), eventPath(changeDir2, event.revision, event.event_id), "event", event);
+      const nextDigest = checksum(next);
+      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), snapshotPath(changeDir2, next.revision, nextDigest), "snapshot", next);
+      await atomicReplaceFile(currentPath(changeDir2), json(envelope("snapshot", next)));
+      const index = {
+        schema_version: "orchestration-idempotency/v1",
+        record_id: `idempotency:${command.command_id}`,
+        project_id: current.project_id,
+        change_id: current.change_id,
+        command_id: command.command_id,
+        idempotency_key: command.idempotency_key,
+        command_digest: commandDigest,
+        committed_revision: next.revision,
+        event_id: event.event_id,
+        event_digest: checksum(event),
+        snapshot_digest: nextDigest,
+        created_at: command.issued_at
+      };
+      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_IDEMPOTENCY_DIR), idempotencyPath(changeDir2, command.command_id), "idempotency", index);
+      return { kind: "committed", event, snapshot: next, replayed: false };
+    });
+  }
+  async recover(changeDir2, now = (/* @__PURE__ */ new Date()).toISOString()) {
+    if (!UTC2.test(now))
+      throw new LedgerPathError("recovery time must be UTC");
+    const eventRead = await readEventsSorted(changeDir2);
+    const snapshotNames = await listFiles(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR));
+    let current;
+    let currentCorruption;
+    try {
+      current = await readCurrent(changeDir2);
+    } catch (error2) {
+      currentCorruption = { kind: "current-snapshot", path: currentPath(changeDir2), reason: error2 instanceof Error ? error2.message : String(error2) };
+    }
+    const candidates = [];
+    for (const name of snapshotNames.filter((entry) => !entry.includes(".tmp-") && !entry.startsWith(".tmp")).sort().reverse()) {
+      try {
+        if (!name.endsWith(".json"))
+          throw new LedgerCorruptionError("snapshot filename is not JSON");
+        const snapshot = parseSnapshot(await readEnvelopeFile(path7.join(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), name), "snapshot"), name);
+        candidates.push(snapshot);
+      } catch {
+      }
+    }
+    if (current !== void 0)
+      candidates.unshift(current);
+    let recovered;
+    let recoveredFrom = "none";
+    let validEvents = [];
+    const genesisUpdatedAt = candidates.find((candidate) => candidate.revision === 0)?.updated_at ?? "1970-01-01T00:00:00.000Z";
+    for (const candidate of candidates.sort((a, b) => b.revision - a.revision)) {
+      const chain = eventRead.events.filter((event) => event.revision <= candidate.revision);
+      if (candidate.revision === 0 && chain.length !== 0)
+        continue;
+      if (chain.length !== candidate.revision)
+        continue;
+      let aggregate = createAggregateV2(candidate.project_id, candidate.change_id, candidate.correlation_id, genesisUpdatedAt);
+      let valid = true;
+      for (const event of chain) {
+        if (event.revision !== aggregate.revision + 1 || event.project_id !== candidate.project_id || event.change_id !== candidate.change_id || event.correlation_id !== candidate.correlation_id || event.before_digest !== digestAggregate(aggregate)) {
+          valid = false;
+          break;
+        }
+        aggregate = evolveV2(aggregate, event);
+        if (aggregate.event_head_id !== event.event_id || aggregate.event_head_digest !== event.after_digest) {
+          valid = false;
+          break;
+        }
+      }
+      if (valid && sameJson(aggregate, candidate)) {
+        recovered = candidate;
+        validEvents = chain;
+        recoveredFrom = candidate === current ? "current" : "immutable";
+        break;
+      }
+    }
+    if (recovered === void 0 && snapshotNames.length === 0 && eventRead.events.length === 0)
+      recoveredFrom = "genesis";
+    const orphan = [
+      ...eventRead.events.filter((event) => recovered === void 0 || event.revision > recovered.revision).map((event) => event.revision),
+      ...eventRead.invalid?.revision === void 0 ? [] : [eventRead.invalid.revision]
+    ];
+    const project_id = recovered?.project_id ?? current?.project_id ?? "unknown";
+    const change_id = recovered?.change_id ?? current?.change_id ?? "unknown";
+    const orphan_event_revisions = [...new Set(orphan)].sort((a, b) => a - b);
+    const corrupt_boundary = currentCorruption ?? (eventRead.invalid ? { kind: "event", path: eventRead.invalid.path, ...eventRead.invalid.revision === void 0 ? {} : { revision: eventRead.invalid.revision }, reason: eventRead.invalid.reason } : void 0);
+    const lease_decisions = recovered ? leasesFor(recovered, now) : [];
+    const reportIdentity = { project_id, change_id, last_valid_revision: recovered?.revision ?? 0, orphan_event_revisions, corrupt_boundary, recovered_from: recoveredFrom, snapshot_digest: recovered ? checksum(recovered) : void 0, recovered_at: now };
+    const report = {
+      schema_version: "orchestration-recovery-report/v1",
+      report_id: `recovery:${checksum(reportIdentity).slice(7, 39)}`,
+      project_id,
+      change_id,
+      last_valid_revision: recovered?.revision ?? 0,
+      ignored_temp_files: eventRead.tempFiles,
+      orphan_event_revisions,
+      ...corrupt_boundary ? { corrupt_boundary } : {},
+      lease_decisions,
+      recovered_from: recoveredFrom,
+      ...recovered ? { snapshot_digest: checksum(recovered) } : {},
+      recovered_at: now
+    };
+    if (recovered !== void 0 && (current === void 0 || !sameJson(current, recovered))) {
+      const live = await readCurrent(changeDir2).catch(() => void 0);
+      if (live === void 0 || live.revision <= recovered.revision) {
+        await atomicReplaceFile(currentPath(changeDir2), json(envelope("snapshot", recovered)));
+      }
+    }
+    return { ...recovered ? { snapshot: recovered } : {}, events: validEvents, report };
+  }
+};
+function createOrchestrationLedger() {
+  return new FsOrchestrationLedger();
+}
 
 // packages/kernel/dist/skills/source-registry.js
 var TOOL_SET = /* @__PURE__ */ new Set([
@@ -20654,8 +22378,8 @@ function parseEntry(line, lineNo) {
     entry.note = note;
   return entry;
 }
-function parseSkillSources(text3) {
-  const lines = text3.split("\n");
+function parseSkillSources(text4) {
+  const lines = text4.split("\n");
   const out = [];
   const seen = /* @__PURE__ */ new Set();
   let inSkills = false;
@@ -20924,12 +22648,12 @@ function serializeWorkflow(wf) {
 // packages/kernel/dist/workflow/track-reference-validation.js
 function validateWorkflowTrackReferences(wf, registry) {
   const errors = [];
-  const check = (predicate, path7) => {
+  const check = (predicate, path8) => {
     if (predicate === void 0)
       return;
     predicate.values.forEach((track, index) => {
       if (!registry.byId.has(track))
-        errors.push(`${path7}.values[${index}]: \u672A\u77E5 track '${track}'`);
+        errors.push(`${path8}.values[${index}]: \u672A\u77E5 track '${track}'`);
     });
   };
   wf.steps.forEach((step, stepIndex) => {
@@ -21333,21 +23057,21 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
       return { kind: "precondition-violated", lines: [tasks.failure ?? `${edge2.from} \u51FA\u53E3\uFF1Atasks.md \u672A\u901A\u8FC7`] };
     }
   }
-  let result;
+  let result2;
   try {
-    result = flow.transition(state, edge2.to, clock);
+    result2 = flow.transition(state, edge2.to, clock);
   } catch (e) {
     if (e instanceof IllegalTransitionError)
       return { kind: "illegal-transition", from: e.from, to: e.to };
     throw e;
   }
   const warnings = [];
-  let nextFields = result.state.fields;
+  let nextFields = result2.state.fields;
   if (policy2.actions.length > 0) {
     let outcome;
     try {
       outcome = await applyActions(policy2.actions, {
-        fields: result.state.fields,
+        fields: result2.state.fields,
         clock,
         gitHeadSha: command.context.gitHeadSha,
         workspaceFingerprint: command.context.workspaceFingerprint,
@@ -21367,16 +23091,16 @@ async function planDefaultTransition(state, command, flow, clock, effectivePlan)
       }
       throw error2;
     }
-    nextFields = { ...result.state.fields, ...outcome.patch };
+    nextFields = { ...result2.state.fields, ...outcome.patch };
     for (const signal of outcome.signals)
       warnings.push({ kind: signal.kind });
   }
   return {
     governedDocumentContract: effectivePlan.capabilities.documents.governed,
     ...effectivePlan.capabilities.documents.policy === void 0 ? {} : { documentPolicy: effectivePlan.capabilities.documents.policy },
-    requiresReviewApproval: effectivePlan.capabilities.review.steps.includes(result.from),
-    from: result.from,
-    to: result.to,
+    requiresReviewApproval: effectivePlan.capabilities.review.steps.includes(result2.from),
+    from: result2.from,
+    to: result2.to,
     nextFields,
     warnings
   };
@@ -21626,7 +23350,7 @@ function createTransitionApplication(deps) {
 
 // packages/server/src/server.ts
 import { createServer } from "node:http";
-import { join as join67 } from "node:path";
+import { join as join68 } from "node:path";
 
 // packages/automation/dist/types.js
 var AUTOMATION_STATES = [
@@ -21745,7 +23469,7 @@ var ACTIONS2 = new Set(WORKFLOW_ACTIONS);
 // packages/automation/dist/skills/snapshot-manifest.js
 import { createHash as createHash19 } from "node:crypto";
 import { constants as constants3 } from "node:fs";
-import { chmod, lstat as lstat17, mkdir as mkdir14, open as open5, readdir as readdir3, realpath as realpath7, stat as stat2, writeFile as writeFile8 } from "node:fs/promises";
+import { chmod, lstat as lstat18, mkdir as mkdir15, open as open5, readdir as readdir4, realpath as realpath7, stat as stat2, writeFile as writeFile8 } from "node:fs/promises";
 import { dirname as dirname7, join as join30, relative as relative6, sep as sep8 } from "node:path";
 
 // packages/automation/dist/skills/types.js
@@ -21779,7 +23503,7 @@ async function assertDirectoryIdentities(identities, onFailure) {
   for (const expected of identities) {
     let current;
     try {
-      current = await lstat17(expected.absPath);
+      current = await lstat18(expected.absPath);
     } catch (e) {
       throw onFailure(`\u7956\u5148\u76EE\u5F55\u4E0D\u53EF\u8BBF\u95EE\uFF1A${expected.absPath}\uFF08${e.message}\uFF09`);
     }
@@ -21809,7 +23533,7 @@ async function captureDirectoryIdentities(realRoot, absFile, rootIdentity, onFai
   for (const absPath of paths) {
     let current;
     try {
-      current = await lstat17(absPath);
+      current = await lstat18(absPath);
     } catch (e) {
       throw onFailure(`\u7956\u5148\u76EE\u5F55\u4E0D\u53EF\u8BBF\u95EE\uFF1A${absPath}\uFF08${e.message}\uFF09`);
     }
@@ -21884,7 +23608,7 @@ async function buildCanonicalManifest(skillId, sourceDir, hooks = {}) {
   const visit = async (realDir, relDir) => {
     let dirents;
     try {
-      dirents = await readdir3(realDir, { withFileTypes: true });
+      dirents = await readdir4(realDir, { withFileTypes: true });
     } catch (e) {
       throw new SkillContentInvalidError(`skill '${skillId}' \u76EE\u5F55\u4E0D\u53EF\u8BFB\uFF1A${relDir || "."}\uFF08${e.message}\uFF09`);
     }
@@ -21967,7 +23691,7 @@ var AFK_RUN_SCRIPT_SHA256 = "993067db8ccb4c3b48c54ff2410907fd4dc72a5df3d0dc8946f
 var AFK_RUN_DRIFT_EXIT_CODE = 95;
 var IMAGE_AFK_RUN_PATH = "/usr/local/bin/tenon-afk-run";
 var IMAGE_ATTESTATION_PATH = "/opt/pipeline/image-attestation.env";
-var checksumGuard = (path7, digest6, attestationKey, label) => `actual_sha="$(sha256sum ${path7} 2>/dev/null | awk '{print $1}')"; [ "$actual_sha" = "${digest6}" ] && grep -qx "${attestationKey}=${digest6}" ${IMAGE_ATTESTATION_PATH} 2>/dev/null || { echo "sandcastle \u955C\u50CF\u5185 ${label} \u4E0E host \u671F\u671B\u6216\u955C\u50CF attestation \u4E0D\u4E00\u81F4\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
+var checksumGuard = (path8, digest7, attestationKey, label) => `actual_sha="$(sha256sum ${path8} 2>/dev/null | awk '{print $1}')"; [ "$actual_sha" = "${digest7}" ] && grep -qx "${attestationKey}=${digest7}" ${IMAGE_ATTESTATION_PATH} 2>/dev/null || { echo "sandcastle \u955C\u50CF\u5185 ${label} \u4E0E host \u671F\u671B\u6216\u955C\u50CF attestation \u4E0D\u4E00\u81F4\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
 var AFK_RUN_DRIFT_GUARD = checksumGuard(IMAGE_AFK_RUN_PATH, AFK_RUN_SCRIPT_SHA256, "pipeline_afk_run_sha256", "tenon-afk-run");
 
 // packages/automation/dist/lifecycle/worktree.js
@@ -22002,7 +23726,7 @@ var globToRegExp = (glob) => {
   }
   return new RegExp(`^${re}$`);
 };
-var matchesPathGlob = (path7, glob) => globToRegExp(glob).test(path7);
+var matchesPathGlob = (path8, glob) => globToRegExp(glob).test(path8);
 
 // packages/automation/dist/verifier/git-revision-verifier.js
 var GIT_REVISION_VERIFIER_ISSUER_IDENTITY = Object.freeze({
@@ -22071,9 +23795,9 @@ async function enqueueAfterSpecComplete(deps, transition) {
     return { kind: "not-applicable" };
   }
   const config = resolveAutomationConfig(deps);
-  const changeDir = join32(deps.repoRoot, "openspec", "changes", transition.changeName);
-  return deps.store.withLock(changeDir, async () => {
-    const state = await deps.store.read(changeDir);
+  const changeDir2 = join32(deps.repoRoot, "openspec", "changes", transition.changeName);
+  return deps.store.withLock(changeDir2, async () => {
+    const state = await deps.store.read(changeDir2);
     if (scalar3(state.fields.phase) !== "build")
       return { kind: "phase-changed" };
     const policy2 = deps.resolveTrackPolicy(scalar3(state.fields.track));
@@ -22093,7 +23817,7 @@ async function enqueueAfterSpecComplete(deps, transition) {
       return { kind: "not-opted-in" };
     state.fields.automation = "queued";
     state.fields.automation_queued_at = deps.clock();
-    await deps.store.writeUnderLock(changeDir, state, { kind: "automation" });
+    await deps.store.writeUnderLock(changeDir2, state, { kind: "automation" });
     return { kind: "queued" };
   });
 }
@@ -22103,7 +23827,7 @@ var DEFAULT_IDLE_TIMEOUT_MS = 20 * 60 * 1e3;
 var DEFAULT_COMPLETION_TIMEOUT_MS = 60 * 1e3;
 
 // packages/automation/dist/skills/content-locator.js
-import { lstat as lstat18, realpath as realpath8, stat as stat3 } from "node:fs/promises";
+import { lstat as lstat19, realpath as realpath8, stat as stat3 } from "node:fs/promises";
 import { join as join33 } from "node:path";
 var SkillContentNotFoundError = class extends Error {
   name = "SkillContentNotFoundError";
@@ -22133,7 +23857,7 @@ function createFsSkillContentLocator(roots) {
       for (const root of roots) {
         const candidate = join33(root, skillId);
         try {
-          await lstat18(candidate);
+          await lstat19(candidate);
         } catch (err) {
           if (errnoCode3(err) === "ENOENT")
             continue;
@@ -22189,26 +23913,26 @@ var SkillRootRegistryError = class extends Error {
 function nodeCode(error2) {
   return typeof error2 === "object" && error2 !== null && "code" in error2 ? String(error2.code) : "unknown";
 }
-function realDirNames(path7) {
+function realDirNames(path8) {
   try {
-    return readdirSync3(path7, { withFileTypes: true }).filter((entry) => entry.isDirectory() || entry.isSymbolicLink()).map((entry) => entry.name);
+    return readdirSync3(path8, { withFileTypes: true }).filter((entry) => entry.isDirectory() || entry.isSymbolicLink()).map((entry) => entry.name);
   } catch (error2) {
     if (nodeCode(error2) === "ENOENT")
       return [];
-    throw new SkillRootRegistryError(`\u8BFB\u53D6 skill root registry \u5931\u8D25\uFF08${path7}\uFF0C${nodeCode(error2)}\uFF09\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`);
+    throw new SkillRootRegistryError(`\u8BFB\u53D6 skill root registry \u5931\u8D25\uFF08${path8}\uFF0C${nodeCode(error2)}\uFF09\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`);
   }
 }
-function checkedNames(read, path7) {
-  const names = read(path7);
+function checkedNames(read, path8) {
+  const names = read(path8);
   if (!Array.isArray(names))
-    throw new SkillRootRegistryError(`${path7} \u7684\u76EE\u5F55\u679A\u4E3E\u7ED3\u679C\u5FC5\u987B\u662F\u6570\u7EC4`);
+    throw new SkillRootRegistryError(`${path8} \u7684\u76EE\u5F55\u679A\u4E3E\u7ED3\u679C\u5FC5\u987B\u662F\u6570\u7EC4`);
   const seen = /* @__PURE__ */ new Set();
   for (const name of names) {
     if (typeof name !== "string" || name === "" || name === "." || name === ".." || name.includes("/") || name.includes("\\") || name.includes("\0")) {
-      throw new SkillRootRegistryError(`${path7} \u542B\u975E\u6CD5\u76EE\u5F55\u6BB5 ${JSON.stringify(name)}`);
+      throw new SkillRootRegistryError(`${path8} \u542B\u975E\u6CD5\u76EE\u5F55\u6BB5 ${JSON.stringify(name)}`);
     }
     if (seen.has(name))
-      throw new SkillRootRegistryError(`${path7} \u91CD\u590D\u76EE\u5F55\u6BB5 ${JSON.stringify(name)}`);
+      throw new SkillRootRegistryError(`${path8} \u91CD\u590D\u76EE\u5F55\u6BB5 ${JSON.stringify(name)}`);
     seen.add(name);
   }
   return [...seen];
@@ -22221,32 +23945,32 @@ function append(map, key, value) {
     existing.push(value);
 }
 function codexPluginRoots(home, read) {
-  const result = /* @__PURE__ */ new Map();
+  const result2 = /* @__PURE__ */ new Map();
   const cache = join34(home, ".codex", "plugins", "cache");
   for (const authority of checkedNames(read, cache)) {
     const authorityDir = join34(cache, authority);
     for (const plugin of checkedNames(read, authorityDir)) {
       const pluginDir = join34(authorityDir, plugin);
       for (const version of checkedNames(read, pluginDir)) {
-        append(result, plugin, join34(pluginDir, version, "skills"));
+        append(result2, plugin, join34(pluginDir, version, "skills"));
       }
     }
   }
-  return result;
+  return result2;
 }
-function realInstalledJson(path7) {
+function realInstalledJson(path8) {
   try {
-    return readFileSync13(path7, "utf8");
+    return readFileSync13(path8, "utf8");
   } catch (error2) {
     if (nodeCode(error2) === "ENOENT")
       return null;
-    throw new SkillRootRegistryError(`\u8BFB\u53D6 Claude installed_plugins.json \u5931\u8D25\uFF08${path7}\uFF0C${nodeCode(error2)}\uFF09\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`);
+    throw new SkillRootRegistryError(`\u8BFB\u53D6 Claude installed_plugins.json \u5931\u8D25\uFF08${path8}\uFF0C${nodeCode(error2)}\uFF09\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`);
   }
 }
 function claudeInstalledRoots(raw) {
-  const result = /* @__PURE__ */ new Map();
+  const result2 = /* @__PURE__ */ new Map();
   if (raw === null)
-    return result;
+    return result2;
   let parsed;
   try {
     parsed = JSON.parse(raw);
@@ -22274,10 +23998,10 @@ function claudeInstalledRoots(raw) {
       if (typeof installPath !== "string" || installPath.trim() === "" || !isAbsolute9(installPath)) {
         throw new SkillRootRegistryError(`Claude plugins.${key}[${index}].installPath \u5FC5\u987B\u662F\u7EDD\u5BF9\u8DEF\u5F84`);
       }
-      append(result, plugin, join34(installPath, "skills"));
+      append(result2, plugin, join34(installPath, "skills"));
     }
   }
-  return result;
+  return result2;
 }
 function flatten(map) {
   return [...map.values()].flatMap((roots) => [...roots]);
@@ -22729,7 +24453,7 @@ async function evaluateLoopExecutionWiring(loop, loops, deps) {
 
 // packages/automation/dist/task-plan-run/journal.js
 import { constants as constants4 } from "node:fs";
-import { lstat as lstat19, mkdir as mkdir15, open as open6 } from "node:fs/promises";
+import { lstat as lstat20, mkdir as mkdir16, open as open6 } from "node:fs/promises";
 import { join as join35 } from "node:path";
 var JOURNAL_SCHEMA_VERSION = "task-run-event/v1";
 var MAX_JOURNAL_BYTES = 8 * 1024 * 1024;
@@ -22739,7 +24463,7 @@ var TaskRunRevisionConflictError = class extends Error {
 var TaskRunJournalCorruptError = class extends Error {
   name = "TaskRunJournalCorruptError";
 };
-function safeId(value) {
+function safeId2(value) {
   return /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/.test(value);
 }
 function isRecord6(value) {
@@ -22748,19 +24472,19 @@ function isRecord6(value) {
 function validAttempt(value) {
   if (!isRecord6(value))
     return false;
-  return typeof value.attempt_id === "string" && safeId(value.attempt_id) && typeof value.work_item_id === "string" && safeId(value.work_item_id) && Number.isSafeInteger(value.attempt_number) && Number(value.attempt_number) > 0 && ["pending", "running", "succeeded", "failed", "cancelled"].includes(String(value.status)) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at)) && isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest6]) => safeId(key) && typeof digest6 === "string") && (value.output_digest === void 0 || typeof value.output_digest === "string") && (value.error_code === void 0 || typeof value.error_code === "string");
+  return typeof value.attempt_id === "string" && safeId2(value.attempt_id) && typeof value.work_item_id === "string" && safeId2(value.work_item_id) && Number.isSafeInteger(value.attempt_number) && Number(value.attempt_number) > 0 && ["pending", "running", "succeeded", "failed", "cancelled"].includes(String(value.status)) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at)) && isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest7]) => safeId2(key) && typeof digest7 === "string") && (value.output_digest === void 0 || typeof value.output_digest === "string") && (value.error_code === void 0 || typeof value.error_code === "string");
 }
 function validOperation(value) {
   if (!isRecord6(value))
     return false;
-  return typeof value.operation_id === "string" && safeId(value.operation_id) && ["retry", "cancel", "resume"].includes(String(value.operation)) && (value.work_item_id === void 0 || typeof value.work_item_id === "string" && safeId(value.work_item_id)) && Number.isSafeInteger(value.expected_run_revision) && Number(value.expected_run_revision) >= 0 && typeof value.expected_state === "string" && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at));
+  return typeof value.operation_id === "string" && safeId2(value.operation_id) && ["retry", "cancel", "resume"].includes(String(value.operation)) && (value.work_item_id === void 0 || typeof value.work_item_id === "string" && safeId2(value.work_item_id)) && Number.isSafeInteger(value.expected_run_revision) && Number(value.expected_run_revision) >= 0 && typeof value.expected_state === "string" && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at));
 }
 function validValidator(value) {
   if (!isRecord6(value))
     return false;
   const scope = String(value.scope);
-  const targetValid = scope === "run" ? value.target_id === void 0 : typeof value.target_id === "string" && safeId(value.target_id);
-  return typeof value.validator_id === "string" && safeId(value.validator_id) && ["work-item", "group", "run"].includes(scope) && targetValid && ["pending", "passed", "failed", "invalidated"].includes(String(value.status)) && (value.code === void 0 || typeof value.code === "string" && safeId(value.code)) && (value.input_digests === void 0 || isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest6]) => safeId(key) && typeof digest6 === "string")) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at));
+  const targetValid = scope === "run" ? value.target_id === void 0 : typeof value.target_id === "string" && safeId2(value.target_id);
+  return typeof value.validator_id === "string" && safeId2(value.validator_id) && ["work-item", "group", "run"].includes(scope) && targetValid && ["pending", "passed", "failed", "invalidated"].includes(String(value.status)) && (value.code === void 0 || typeof value.code === "string" && safeId2(value.code)) && (value.input_digests === void 0 || isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest7]) => safeId2(key) && typeof digest7 === "string")) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at));
 }
 function sameInputDigests(left, right) {
   const leftEntries = Object.entries(left).sort(([a], [b]) => a.localeCompare(b));
@@ -22779,7 +24503,7 @@ function assertAttemptTransition(previous, candidate) {
     throw new TaskRunJournalCorruptError("Task run attempt transition is invalid");
   }
 }
-function parseEvent(value, expectedSequence) {
+function parseEvent2(value, expectedSequence) {
   if (!isRecord6(value) || value.schema_version !== JOURNAL_SCHEMA_VERSION || value.sequence !== expectedSequence) {
     throw new TaskRunJournalCorruptError("Task run journal sequence or schema is invalid");
   }
@@ -22808,7 +24532,7 @@ function parseEvents(raw) {
     } catch {
       throw new TaskRunJournalCorruptError("Task run journal contains malformed JSON");
     }
-    parsed.push(parseEvent(value, parsed.length + 1));
+    parsed.push(parseEvent2(value, parsed.length + 1));
   }
   return parsed;
 }
@@ -22824,10 +24548,10 @@ function assertRegularJournalFile(stat4) {
   }
   return fileIdentity(stat4);
 }
-async function assertJournalPathIdentity(path7, expected) {
+async function assertJournalPathIdentity(path8, expected) {
   let current;
   try {
-    current = await lstat19(path7);
+    current = await lstat20(path8);
   } catch {
     throw new TaskRunJournalCorruptError("Task run journal leaf changed during access");
   }
@@ -22838,9 +24562,9 @@ async function assertJournalPathIdentity(path7, expected) {
 function journalLeafError(error2) {
   return isRecord6(error2) && ["ELOOP", "EISDIR", "ENODEV", "ENXIO", "ENOTDIR"].includes(String(error2.code));
 }
-async function openJournalFile(path7, flags, mode) {
+async function openJournalFile(path8, flags, mode) {
   try {
-    return await open6(path7, flags, mode);
+    return await open6(path8, flags, mode);
   } catch (error2) {
     if (isRecord6(error2) && error2.code === "ENOENT")
       return null;
@@ -22850,12 +24574,12 @@ async function openJournalFile(path7, flags, mode) {
     throw error2;
   }
 }
-async function readEventsFromHandle(path7, handle) {
+async function readEventsFromHandle(path8, handle) {
   const opened = assertRegularJournalFile(await handle.stat());
   if (opened.size > MAX_JOURNAL_BYTES) {
     throw new TaskRunJournalCorruptError("Task run journal exceeds its byte budget");
   }
-  await assertJournalPathIdentity(path7, opened);
+  await assertJournalPathIdentity(path8, opened);
   const bytes = Buffer.allocUnsafe(Math.min(opened.size, MAX_JOURNAL_BYTES) + 1);
   let total = 0;
   while (total < bytes.byteLength) {
@@ -22871,38 +24595,38 @@ async function readEventsFromHandle(path7, handle) {
   if (!sameFileIdentity2(opened, afterRead)) {
     throw new TaskRunJournalCorruptError("Task run journal changed during read");
   }
-  await assertJournalPathIdentity(path7, afterRead);
+  await assertJournalPathIdentity(path8, afterRead);
   return {
     events: parseEvents(bytes.subarray(0, total).toString("utf8")),
     identity: afterRead
   };
 }
-async function ordinaryDirectory2(path7) {
+async function ordinaryDirectory2(path8) {
   try {
-    const openedDirectoryPath = process.platform === "linux" && /^\/(?:dev\/fd|proc\/self\/fd)\/\d+$/.test(path7) ? `${path7}/.` : path7;
-    const info = await lstat19(openedDirectoryPath);
+    const openedDirectoryPath = process.platform === "linux" && /^\/(?:dev\/fd|proc\/self\/fd)\/\d+$/.test(path8) ? `${path8}/.` : path8;
+    const info = await lstat20(openedDirectoryPath);
     return info.isDirectory() && !info.isSymbolicLink();
   } catch {
     return false;
   }
 }
-async function journalDirectory(changeDir, revisionId, create) {
-  if (!safeId(revisionId) || !await ordinaryDirectory2(changeDir)) {
+async function journalDirectory(changeDir2, revisionId, create) {
+  if (!safeId2(revisionId) || !await ordinaryDirectory2(changeDir2)) {
     throw new TypeError("Task run journal identity is invalid");
   }
-  let current = changeDir;
+  let current = changeDir2;
   for (const segment of [".pipeline", "task-runs", revisionId]) {
     current = join35(current, segment);
     if (create) {
       try {
-        await mkdir15(current);
+        await mkdir16(current);
       } catch (error2) {
         if (!isRecord6(error2) || error2.code !== "EEXIST")
           throw error2;
       }
     } else {
       try {
-        await lstat19(current);
+        await lstat20(current);
       } catch (error2) {
         if (isRecord6(error2) && error2.code === "ENOENT")
           return null;
@@ -22915,22 +24639,22 @@ async function journalDirectory(changeDir, revisionId, create) {
   }
   return current;
 }
-async function events(changeDir, revisionId) {
-  const directory = await journalDirectory(changeDir, revisionId, false);
+async function events(changeDir2, revisionId) {
+  const directory = await journalDirectory(changeDir2, revisionId, false);
   if (directory === null)
     return [];
-  const path7 = join35(directory, "events.jsonl");
-  const handle = await openJournalFile(path7, constants4.O_RDONLY | constants4.O_NONBLOCK | constants4.O_NOFOLLOW);
+  const path8 = join35(directory, "events.jsonl");
+  const handle = await openJournalFile(path8, constants4.O_RDONLY | constants4.O_NONBLOCK | constants4.O_NOFOLLOW);
   if (handle === null)
     return [];
   try {
-    return (await readEventsFromHandle(path7, handle)).events;
+    return (await readEventsFromHandle(path8, handle)).events;
   } finally {
     await handle.close();
   }
 }
-async function readTaskRunJournal(changeDir, revisionId) {
-  const history = await events(changeDir, revisionId);
+async function readTaskRunJournal(changeDir2, revisionId) {
+  const history = await events(changeDir2, revisionId);
   const attempts = [];
   const operations = [];
   const validatorVerdicts = /* @__PURE__ */ new Map();
@@ -22966,20 +24690,20 @@ async function readTaskRunJournal(changeDir, revisionId) {
     validator_verdicts: [...validatorVerdicts.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([, verdict]) => verdict)
   };
 }
-async function appendEvent(changeDir, revisionId, expectedRunRevision, event) {
+async function appendEvent(changeDir2, revisionId, expectedRunRevision, event) {
   if (!Number.isSafeInteger(expectedRunRevision) || expectedRunRevision < 0) {
     throw new TypeError("Task run expected revision is invalid");
   }
-  return withLock(changeDir, async () => {
-    const directory = await journalDirectory(changeDir, revisionId, true);
+  return withLock(changeDir2, async () => {
+    const directory = await journalDirectory(changeDir2, revisionId, true);
     if (directory === null)
       throw new TaskRunJournalCorruptError("Task run journal directory is missing");
-    const path7 = join35(directory, "events.jsonl");
-    const handle = await openJournalFile(path7, constants4.O_RDWR | constants4.O_APPEND | constants4.O_CREAT | constants4.O_NONBLOCK | constants4.O_NOFOLLOW, 384);
+    const path8 = join35(directory, "events.jsonl");
+    const handle = await openJournalFile(path8, constants4.O_RDWR | constants4.O_APPEND | constants4.O_CREAT | constants4.O_NONBLOCK | constants4.O_NOFOLLOW, 384);
     if (handle === null)
       throw new TaskRunJournalCorruptError("Task run journal leaf disappeared");
     try {
-      const snapshot = await readEventsFromHandle(path7, handle);
+      const snapshot = await readEventsFromHandle(path8, handle);
       const current = snapshot.events;
       if (current.length !== expectedRunRevision) {
         throw new TaskRunRevisionConflictError("Task run expected revision is stale");
@@ -23001,7 +24725,7 @@ async function appendEvent(changeDir, revisionId, expectedRunRevision, event) {
       if (!sameFileIdentity2(beforeWrite, snapshot.identity)) {
         throw new TaskRunJournalCorruptError("Task run journal changed before append");
       }
-      await assertJournalPathIdentity(path7, beforeWrite);
+      await assertJournalPathIdentity(path8, beforeWrite);
       const encodedLine = Buffer.from(line, "utf8");
       if (beforeWrite.size + encodedLine.byteLength > MAX_JOURNAL_BYTES) {
         throw new TaskRunJournalCorruptError("Task run journal would exceed its byte budget");
@@ -23019,17 +24743,17 @@ async function appendEvent(changeDir, revisionId, expectedRunRevision, event) {
       })) {
         throw new TaskRunJournalCorruptError("Task run journal changed during append");
       }
-      await assertJournalPathIdentity(path7, afterWrite);
+      await assertJournalPathIdentity(path8, afterWrite);
       return sequence;
     } finally {
       await handle.close();
     }
   });
 }
-async function appendTaskRunOperation(changeDir, revisionId, operation) {
+async function appendTaskRunOperation(changeDir2, revisionId, operation) {
   if (!validOperation(operation))
     throw new TypeError("Task run operation is invalid");
-  return appendEvent(changeDir, revisionId, operation.expected_run_revision, {
+  return appendEvent(changeDir2, revisionId, operation.expected_run_revision, {
     schema_version: JOURNAL_SCHEMA_VERSION,
     type: "operation",
     operation
@@ -23047,6 +24771,13 @@ var DEFAULT_SKILL_OUTPUT_MAX_BYTES = 256 * 1024;
 
 // packages/automation/dist/orchestration/execution-boundary.js
 var DECISION_MAX_BYTES = 64 * 1024;
+
+// packages/automation/dist/orchestration/planner-v2.js
+var MAX_CATALOG_BYTES = 512 * 1024;
+var MAX_INTENT_BYTES = 8 * 1024;
+
+// packages/automation/dist/orchestration/runtime-v2-boundary.js
+var DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024;
 
 // packages/server/src/workflows.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
@@ -23094,9 +24825,9 @@ function safeClose(fd) {
   } catch {
   }
 }
-function lstatIfExists(path7) {
+function lstatIfExists(path8) {
   try {
-    return lstatSync3(path7);
+    return lstatSync3(path8);
   } catch (error2) {
     if (error2.code === "ENOENT") return void 0;
     throw error2;
@@ -23117,24 +24848,24 @@ function traversableDirectoryFdPathFromCandidates(expected, candidates) {
   return void 0;
 }
 function captureWorkflowRootAnchor(root) {
-  const path7 = resolvePath2(root);
-  const lexical = lstatSync3(path7);
+  const path8 = resolvePath2(root);
+  const lexical = lstatSync3(path8);
   if (lexical.isSymbolicLink() || !lexical.isDirectory()) {
-    throw new Error(`registered root \u5FC5\u987B\u662F\u975E symlink \u7684\u771F\u5B9E\u76EE\u5F55: ${path7}`);
+    throw new Error(`registered root \u5FC5\u987B\u662F\u975E symlink \u7684\u771F\u5B9E\u76EE\u5F55: ${path8}`);
   }
-  const fd = openSync3(path7, constants5.O_RDONLY | constants5.O_DIRECTORY | constants5.O_NOFOLLOW);
+  const fd = openSync3(path8, constants5.O_RDONLY | constants5.O_DIRECTORY | constants5.O_NOFOLLOW);
   try {
     const opened = fstatSync2(fd);
     if (!opened.isDirectory() || !sameIdentity(opened, lexical)) {
-      throw new Error(`registered root \u5728\u6355\u83B7\u671F\u95F4\u88AB\u66FF\u6362: ${path7}`);
+      throw new Error(`registered root \u5728\u6355\u83B7\u671F\u95F4\u88AB\u66FF\u6362: ${path8}`);
     }
-    const realPath = realpathSync3(path7);
-    const fresh = lstatSync3(path7);
+    const realPath = realpathSync3(path8);
+    const fresh = lstatSync3(path8);
     if (fresh.isSymbolicLink() || !fresh.isDirectory() || !sameIdentity(fresh, opened)) {
-      throw new Error(`registered root \u5728\u6355\u83B7\u671F\u95F4\u88AB\u66FF\u6362: ${path7}`);
+      throw new Error(`registered root \u5728\u6355\u83B7\u671F\u95F4\u88AB\u66FF\u6362: ${path8}`);
     }
     const fdPath = traversableDirectoryFdPath(fd, opened);
-    return fdPath ? { path: path7, realPath, dev: opened.dev, ino: opened.ino, fd, fdPath } : { path: path7, realPath, dev: opened.dev, ino: opened.ino, fd };
+    return fdPath ? { path: path8, realPath, dev: opened.dev, ino: opened.ino, fd, fdPath } : { path: path8, realPath, dev: opened.dev, ino: opened.ino, fd };
   } catch (error2) {
     safeClose(fd);
     throw error2;
@@ -23494,11 +25225,11 @@ function collectPolicyTemplateReferences(workflow) {
     source: `template:${template.id}`
   }));
 }
-function validateStateWorkflowText(text3, change) {
-  if (text3.includes("\0")) throw new Error("state \u542B NUL \u5B57\u8282");
+function validateStateWorkflowText(text4, change) {
+  if (text4.includes("\0")) throw new Error("state \u542B NUL \u5B57\u8282");
   const counts = /* @__PURE__ */ new Map();
   const workflowValues = [];
-  for (const line of text3.split(/\r?\n/)) {
+  for (const line of text4.split(/\r?\n/)) {
     const match = /^([A-Za-z0-9_]+):(.*)$/.exec(line);
     if (!match) continue;
     const field2 = match[1];
@@ -23514,7 +25245,7 @@ function validateStateWorkflowText(text3, change) {
   }
   const workflowCount = counts.get("workflow") ?? 0;
   if (workflowCount > 1) throw new Error(`state.workflow \u91CD\u590D\uFF08${workflowCount} \u6B21\uFF09`);
-  const state = parsePipeline(text3);
+  const state = parsePipeline(text4);
   const knownFields = new Set(FIELD_ORDER);
   const hiddenKnownFields = state.opaqueTail.split(/\r?\n/).map((line) => /^([A-Za-z0-9_]+):/.exec(line)?.[1]).filter((field2) => field2 !== void 0 && knownFields.has(field2));
   if (hiddenKnownFields.length > 0) {
@@ -23531,13 +25262,13 @@ function validateStateWorkflowText(text3, change) {
   }
   return workflow;
 }
-function readTrustedChangeRelativeText(changeDir, root, relativePath) {
+function readTrustedChangeRelativeText(changeDir2, root, relativePath) {
   const parts = relativePath.split(/[\\/]/).filter((part) => part !== "");
   if (parts.length === 0 || parts.some((part) => part === "." || part === "..")) {
     throw new Error(`canonical state reader \u6536\u5230\u975E\u6CD5\u76F8\u5BF9\u8DEF\u5F84: ${relativePath}`);
   }
   const opened = [];
-  let parent = changeDir;
+  let parent = changeDir2;
   try {
     for (const part of parts.slice(0, -1)) {
       const next = openTrustedChildDirectory(root, parent, part, false);
@@ -23582,11 +25313,11 @@ function scanActiveChangeReferences(root, workflow) {
           blockers.push({ source, detail: "\u6D3B\u8DC3 changes \u679A\u4E3E\u9879\u5FC5\u987B\u662F\u5B89\u5168\u547D\u540D\u7684\u975E symlink \u76EE\u5F55" });
           continue;
         }
-        let changeDir;
+        let changeDir2;
         try {
-          changeDir = openTrustedChildDirectory(root, changes, entry.name, false);
-          if (!changeDir) throw new Error("change \u5728\u679A\u4E3E\u540E\u6D88\u5931");
-          const capturedChangeDir = changeDir;
+          changeDir2 = openTrustedChildDirectory(root, changes, entry.name, false);
+          if (!changeDir2) throw new Error("change \u5728\u679A\u4E3E\u540E\u6D88\u5931");
+          const capturedChangeDir = changeDir2;
           const canonical = readCurrentRunRevisionFromSync(
             (relativePath) => readTrustedChangeRelativeText(capturedChangeDir, root, relativePath),
             capturedChangeDir.lexicalPath
@@ -23598,7 +25329,7 @@ function scanActiveChangeReferences(root, workflow) {
               throw new Error(`canonical state.workflow \u975E\u6CD5: change '${entry.name}' = '${observed}'`);
             }
           } else {
-            const bytes = readTrustedRegularFile(changeDir, root, ".pipeline.yaml", "legacy change state", "error");
+            const bytes = readTrustedRegularFile(changeDir2, root, ".pipeline.yaml", "legacy change state", "error");
             if (!bytes) throw new Error("change state \u7F3A\u5931");
             observed = validateStateWorkflowText(decodeUtf8Strict(bytes, "legacy change state"), entry.name);
           }
@@ -23606,7 +25337,7 @@ function scanActiveChangeReferences(root, workflow) {
         } catch (error2) {
           blockers.push({ source, detail: errText3(error2) });
         } finally {
-          if (changeDir) safeClose(changeDir.fd);
+          if (changeDir2) safeClose(changeDir2.fd);
         }
       }
       assertDirectoryStillTrusted(changes, root);
@@ -23624,8 +25355,8 @@ function scanLoopReferences(root, workflow) {
     return withTrustedDirectoryChain(root, [".pipeline"], false, () => ({ references, blockers }), (pipeline) => {
       const bytes = readTrustedRegularFile(pipeline, root, "loops.yaml", "loops registry", "null");
       if (!bytes) return { references, blockers };
-      const text3 = decodeUtf8Strict(bytes, "loops registry");
-      const loaded = loadRegistry(root.path, { readText: () => text3 });
+      const text4 = decodeUtf8Strict(bytes, "loops registry");
+      const loaded = loadRegistry(root.path, { readText: () => text4 });
       if (loaded.errors.length > 0 || !loaded.data) {
         blockers.push({
           source: "loops-registry",
@@ -23772,14 +25503,14 @@ function readWorkflowForApi(root, name, readSource = readBoundedWorkflowSource) 
           assertEntryMatches(paths, opened, "workflow \u8BFB\u53D6\u76EE\u6807");
           assertWorkflowDirectoriesStillTrusted(directories);
           try {
-            const result = readSource(fd, MAX_WORKFLOW_DEFINITION_BYTES);
+            const result2 = readSource(fd, MAX_WORKFLOW_DEFINITION_BYTES);
             const after = fstatSync5(fd);
             if (!after.isFile() || after.dev !== opened.dev || after.ino !== opened.ino || after.size !== opened.size) {
               throw new WorkflowReadError(`workflow '${name}' \u5728\u8BFB\u53D6\u671F\u95F4\u53D8\u5316`);
             }
             assertEntryMatches(paths, opened, "workflow \u8BFB\u53D6\u76EE\u6807");
             assertWorkflowDirectoriesStillTrusted(directories);
-            return result;
+            return result2;
           } catch (error2) {
             if (error2 instanceof WorkflowReadError) throw error2;
             throw new WorkflowReadError(`workflow '${name}' \u8BFB\u53D6\u5931\u8D25`, error2);
@@ -23897,7 +25628,7 @@ function deleteWorkflowForApi(root, name, permit) {
 
 // packages/server/src/snapshot.ts
 import { closeSync as closeSync5, constants as constants11, fstatSync as fstatSync8, lstatSync as lstatSync7, openSync as openSync9 } from "node:fs";
-import { readdir as readdir5 } from "node:fs/promises";
+import { readdir as readdir6 } from "node:fs/promises";
 import { join as join42 } from "node:path";
 
 // packages/server/src/reviewHandshake.ts
@@ -23941,12 +25672,12 @@ function projectLayer(snapshot, name) {
   const layer = snapshot.layers.find((candidate) => candidate.layer === name);
   return layer === void 0 ? void 0 : { status: layer.status, grants: [...layer.grants] };
 }
-async function readWorkflowSnapshotAuthority(changeDir, state, plan) {
+async function readWorkflowSnapshotAuthority(changeDir2, state, plan) {
   const iterationId = state.runMetadata?.iterationId;
   if (iterationId === void 0) return void 0;
   let snapshot;
   try {
-    snapshot = await readWorkflowActionAuthorityRecord(changeDir, iterationId);
+    snapshot = await readWorkflowActionAuthorityRecord(changeDir2, iterationId);
   } catch {
     return void 0;
   }
@@ -24130,7 +25861,7 @@ function legacySnapshotWorkflowRules(plan) {
     ]))
   };
 }
-async function snapshotWorkflowExecution(plan, state, root, changeDir, changeName, deps) {
+async function snapshotWorkflowExecution(plan, state, root, changeDir2, changeName, deps) {
   const fileExists = deps.fileExists ?? projectFileExists;
   const gitHeadSha2 = deps.gitHeadSha;
   const workspaceFingerprint = deps.workspaceFingerprint;
@@ -24143,7 +25874,7 @@ async function snapshotWorkflowExecution(plan, state, root, changeDir, changeNam
       return { kind, revision, identity };
     };
     const provenance = async () => {
-      const validated = await readValidatedTransitionHead(changeDir);
+      const validated = await readValidatedTransitionHead(changeDir2);
       if (!validated) return void 0;
       const { current, record: record5 } = validated;
       const stateBuildSha = current.state.fields.build_sha;
@@ -24159,12 +25890,12 @@ async function snapshotWorkflowExecution(plan, state, root, changeDir, changeNam
   });
   return {
     readinessByTransition: await readinessByTransition(plan, state, {
-      changeDirAbs: changeDir,
-      fileExists: (path7) => fileExists(root, path7),
+      changeDirAbs: changeDir2,
+      fileExists: (path8) => fileExists(root, path8),
       gitHeadSha: gitHeadSha2 === void 0 ? void 0 : () => gitHeadSha2(root),
       workspaceFingerprint: workspaceFingerprint === void 0 ? void 0 : () => workspaceFingerprint(root, changeName),
       assessBuildRevision,
-      specMigrationStatus: () => evaluateSpecMigrationEvidence(root, changeDir, changeName)
+      specMigrationStatus: () => evaluateSpecMigrationEvidence(root, changeDir2, changeName)
     })
   };
 }
@@ -24172,9 +25903,9 @@ async function snapshotWorkflowExecution(plan, state, root, changeDir, changeNam
 // packages/server/src/contextBundleTrustedReader.ts
 import { constants as constants9, fstatSync as fstatSync6, openSync as openSync7, readSync as readSync4 } from "node:fs";
 import { dirname as dirname8, posix as posix3 } from "node:path";
-function safeParts(path7) {
-  if (path7 === "" || path7.startsWith("/") || path7.includes("\\")) throw new Error("unsafe relative path");
-  const parts = path7.split("/");
+function safeParts(path8) {
+  if (path8 === "" || path8.startsWith("/") || path8.includes("\\")) throw new Error("unsafe relative path");
+  const parts = path8.split("/");
   if (parts.some((part) => part === "" || part === "." || part === "..")) {
     throw new Error("unsafe relative path");
   }
@@ -24399,9 +26130,9 @@ function trustedContextBundleInputs(root, change, changeIdentity, limits) {
   return {
     ledger,
     sourceReader: {
-      read: async (path7, readLimit) => readTrustedFile(
+      read: async (path8, readLimit) => readTrustedFile(
         root,
-        path7,
+        path8,
         readLimit?.maxBytes ?? limits.maxSourceBytesPerDocument,
         readLimit,
         changeIdentity
@@ -24453,17 +26184,17 @@ function matchesStableFileVersion(stat4, expected) {
 // packages/server/src/snapshotTasks.ts
 var MAX_LEGACY_TASKS_MARKDOWN_BYTES = TASK_PLAN_LIMITS.maxLegacyProjectionBytes;
 var MAX_TASKS_MARKDOWN_BYTES = TASK_PLAN_LIMITS.maxRevisionBytes;
-async function hasCurrentCanonicalTaskPlanProjection(changeDir, source) {
+async function hasCurrentCanonicalTaskPlanProjection(changeDir2, source) {
   try {
-    return await isCurrentTaskPlanProjectionForChange(changeDir, source);
+    return await isCurrentTaskPlanProjectionForChange(changeDir2, source);
   } catch {
     return false;
   }
 }
-function captureDirectoryMutationVersion(path7) {
-  const stat4 = lstatSync6(path7, { bigint: true });
+function captureDirectoryMutationVersion(path8) {
+  const stat4 = lstatSync6(path8, { bigint: true });
   if (!stat4.isDirectory() || stat4.isSymbolicLink()) throw new Error("tasks ancestor is not a directory");
-  return { path: path7, dev: stat4.dev, ino: stat4.ino, mtimeNs: stat4.mtimeNs, ctimeNs: stat4.ctimeNs };
+  return { path: path8, dev: stat4.dev, ino: stat4.ino, mtimeNs: stat4.mtimeNs, ctimeNs: stat4.ctimeNs };
 }
 function matchesDirectoryMutationVersion(expected) {
   const stat4 = lstatSync6(expected.path, { bigint: true });
@@ -24480,8 +26211,8 @@ function readBoundedTasksSource(fd, maxBytes) {
   }
   return decodeUtf8Text(bytes, "tasks.md snapshot");
 }
-async function readTasksProjection(changeDir, hooks = {}, rootAnchor) {
-  const lexicalTarget = join38(changeDir, "tasks.md");
+async function readTasksProjection(changeDir2, hooks = {}, rootAnchor) {
+  const lexicalTarget = join38(changeDir2, "tasks.md");
   let changeFd;
   let fd;
   let rootVersion2;
@@ -24494,19 +26225,19 @@ async function readTasksProjection(changeDir, hooks = {}, rootAnchor) {
   try {
     if (rootAnchor !== void 0) rootVersion2 = captureWorkflowRootMutationVersion(rootAnchor);
     assertTrustContext();
-    const openedDir = lstatSync6(changeDir);
+    const openedDir = lstatSync6(changeDir2);
     if (!openedDir.isDirectory() || openedDir.isSymbolicLink()) return void 0;
-    const openedDirVersion = lstatSync6(changeDir, { bigint: true });
-    const realChangeDir = realpathSync5(changeDir);
+    const openedDirVersion = lstatSync6(changeDir2, { bigint: true });
+    const realChangeDir = realpathSync5(changeDir2);
     const changesDir = dirname9(realChangeDir);
     const openspecDir = dirname9(changesDir);
     const ancestorVersions = [dirname9(openspecDir), openspecDir, changesDir].map(captureDirectoryMutationVersion);
     changeFd = openSync8(
-      changeDir,
+      changeDir2,
       constants10.O_RDONLY | constants10.O_DIRECTORY | constants10.O_NOFOLLOW
     );
     const openedChangeDir = fstatSync7(changeFd);
-    const anchoredChangeDir = traversableDirectoryFdPath(changeFd, openedDir) ?? changeDir;
+    const anchoredChangeDir = traversableDirectoryFdPath(changeFd, openedDir) ?? changeDir2;
     if (!openedChangeDir.isDirectory() || !sameIdentity(openedChangeDir, openedDir)) return void 0;
     assertTrustContext();
     const target = join38(anchoredChangeDir, "tasks.md");
@@ -24515,23 +26246,23 @@ async function readTasksProjection(changeDir, hooks = {}, rootAnchor) {
     const opened = fstatSync7(fd, { bigint: true });
     if (!opened.isFile() || opened.size > BigInt(MAX_TASKS_MARKDOWN_BYTES)) return void 0;
     const openedVersion = captureStableFileVersion(opened);
-    const stable = () => {
-      const currentDir = lstatSync6(changeDir);
-      const currentDirVersion = lstatSync6(changeDir, { bigint: true });
+    const stable3 = () => {
+      const currentDir = lstatSync6(changeDir2);
+      const currentDirVersion = lstatSync6(changeDir2, { bigint: true });
       const current = lstatSync6(lexicalTarget, { bigint: true });
-      return currentDir.isDirectory() && !currentDir.isSymbolicLink() && currentDir.dev === openedDir.dev && currentDir.ino === openedDir.ino && currentDirVersion.mtimeNs === openedDirVersion.mtimeNs && currentDirVersion.ctimeNs === openedDirVersion.ctimeNs && ancestorVersions.every(matchesDirectoryMutationVersion) && realpathSync5(changeDir) === realChangeDir && current.isFile() && !current.isSymbolicLink() && matchesStableFileVersion(current, openedVersion) && isInside(realChangeDir, realpathSync5(lexicalTarget));
+      return currentDir.isDirectory() && !currentDir.isSymbolicLink() && currentDir.dev === openedDir.dev && currentDir.ino === openedDir.ino && currentDirVersion.mtimeNs === openedDirVersion.mtimeNs && currentDirVersion.ctimeNs === openedDirVersion.ctimeNs && ancestorVersions.every(matchesDirectoryMutationVersion) && realpathSync5(changeDir2) === realChangeDir && current.isFile() && !current.isSymbolicLink() && matchesStableFileVersion(current, openedVersion) && isInside(realChangeDir, realpathSync5(lexicalTarget));
     };
     const fdStable = () => matchesStableFileVersion(
       fstatSync7(fd, { bigint: true }),
       openedVersion
     );
-    if (!stable() || !fdStable()) return void 0;
+    if (!stable3() || !fdStable()) return void 0;
     const source = (hooks.readSource ?? readBoundedTasksSource)(fd, MAX_TASKS_MARKDOWN_BYTES);
     assertTrustContext();
     const trustedCanonicalProjection = isCanonicalTaskPlanTasksMarkdown(source) && (hooks.authorizeCanonicalProjection === void 0 ? await hasCurrentCanonicalTaskPlanProjection(anchoredChangeDir, source) : await hooks.authorizeCanonicalProjection(source, anchoredChangeDir));
     assertTrustContext();
     if (opened.size > BigInt(MAX_LEGACY_TASKS_MARKDOWN_BYTES) && !trustedCanonicalProjection) return void 0;
-    if (!fdStable() || !stable()) return void 0;
+    if (!fdStable() || !stable3()) return void 0;
     assertTrustContext();
     return { source, trustedCanonicalProjection };
   } catch {
@@ -24573,7 +26304,7 @@ var REPOSITORY_IDENTITY_ARGS = [
   "--git-dir"
 ];
 function runGitRepositoryIdentity(root, args, timeoutMs) {
-  return new Promise((resolveOutput, reject) => {
+  return new Promise((resolveOutput, reject3) => {
     execFile2("git", [...args], {
       cwd: root,
       timeout: timeoutMs,
@@ -24582,7 +26313,7 @@ function runGitRepositoryIdentity(root, args, timeoutMs) {
       windowsHide: true
     }, (error2, stdout) => {
       if (error2) {
-        reject(error2);
+        reject3(error2);
         return;
       }
       resolveOutput(stdout);
@@ -24648,19 +26379,19 @@ async function probeRepositoryIdentity(root, deps = {}) {
 }
 
 // packages/server/src/snapshotFingerprint.ts
-import { lstat as lstat21, readdir as readdir4 } from "node:fs/promises";
+import { lstat as lstat22, readdir as readdir5 } from "node:fs/promises";
 import { join as join41 } from "node:path";
 
 // packages/server/src/repositoryFingerprint.ts
-import { lstat as lstat20 } from "node:fs/promises";
+import { lstat as lstat21 } from "node:fs/promises";
 import { join as join40, sep as sep12 } from "node:path";
-async function metadataPart(path7, mode = "volatile", lookupPath = path7) {
+async function metadataPart(path8, mode = "volatile", lookupPath = path8) {
   try {
-    const metadata = await lstat20(lookupPath, { bigint: true });
+    const metadata = await lstat21(lookupPath, { bigint: true });
     const kind = metadata.isDirectory() ? "directory" : metadata.isFile() ? "file" : "other";
     const stableIdentity = mode === "stable" || mode === "stable-directory" && metadata.isDirectory();
     return {
-      value: stableIdentity ? `${path7}:${kind}:${metadata.dev}:${metadata.ino}` : `${path7}:${kind}:${metadata.size}:${metadata.mtimeNs}`,
+      value: stableIdentity ? `${path8}:${kind}:${metadata.dev}:${metadata.ino}` : `${path8}:${kind}:${metadata.size}:${metadata.mtimeNs}`,
       directory: metadata.isDirectory()
     };
   } catch {
@@ -24701,7 +26432,7 @@ async function computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminal
       const changesRoot = join41(readRoot, "openspec", "changes");
       let entries;
       try {
-        entries = readChangesDirectory === void 0 ? await readdir4(changesRoot, { withFileTypes: true }) : await readChangesDirectory(changesRoot);
+        entries = readChangesDirectory === void 0 ? await readdir5(changesRoot, { withFileTypes: true }) : await readChangesDirectory(changesRoot);
       } catch (error2) {
         assertWorkflowRootAnchor(anchor);
         if (typeof error2 !== "object" || error2 === null || Reflect.get(error2, "code") !== "ENOENT") throw error2;
@@ -24710,26 +26441,26 @@ async function computeSnapshotFingerprint(roots, nowMs, rootAnchor, readTerminal
       assertWorkflowRootAnchor(anchor);
       for (const entry of entries) {
         if (!entry.isDirectory() || entry.name === "archive") continue;
-        const changeDir = join41(changesRoot, entry.name);
-        const source = stateStorageSourcePathSync(changeDir);
+        const changeDir2 = join41(changesRoot, entry.name);
+        const source = stateStorageSourcePathSync(changeDir2);
         if (source === void 0) continue;
         try {
-          const stat4 = await lstat21(source, { bigint: true });
+          const stat4 = await lstat22(source, { bigint: true });
           parts.push(`${source}:${stat4.size}:${stat4.mtimeNs}`);
         } catch {
         }
         for (const name of ["tasks.md", ".pipeline-documents.json"]) {
-          const target = join41(changeDir, name);
+          const target = join41(changeDir2, name);
           try {
-            const stat4 = await lstat21(target, { bigint: true });
+            const stat4 = await lstat22(target, { bigint: true });
             parts.push(`${target}:${stat4.size}:${stat4.mtimeNs}`);
           } catch {
           }
         }
-        const activity = join41(changeDir, TERMINAL_ACTIVITY_FILE);
+        const activity = join41(changeDir2, TERMINAL_ACTIVITY_FILE);
         try {
-          const stat4 = await lstat21(activity, { bigint: true });
-          const live = await readTerminalActivity2(changeDir, entry.name, nowMs);
+          const stat4 = await lstat22(activity, { bigint: true });
+          const live = await readTerminalActivity2(changeDir2, entry.name, nowMs);
           parts.push(`${activity}:${stat4.size}:${stat4.mtimeNs}:${live === void 0 ? "stale" : "live"}`);
         } catch {
         }
@@ -24753,8 +26484,8 @@ function snapshotDepsFactory(base) {
 function str(v) {
   return Array.isArray(v) ? v.join(",") : v ?? "";
 }
-async function readTerminalActivity(changeDir, changeName, nowMs) {
-  const target = join42(changeDir, TERMINAL_ACTIVITY_FILE);
+async function readTerminalActivity(changeDir2, changeName, nowMs) {
+  const target = join42(changeDir2, TERMINAL_ACTIVITY_FILE);
   let fd;
   try {
     fd = openSync9(target, constants11.O_RDONLY | constants11.O_NOFOLLOW | constants11.O_NONBLOCK);
@@ -24783,7 +26514,7 @@ async function readTerminalActivity(changeDir, changeName, nowMs) {
     if (fd !== void 0) closeSync5(fd);
   }
 }
-async function documentEvidence(root, changeDir, plan, phase) {
+async function documentEvidence(root, changeDir2, plan, phase) {
   const policy2 = plan?.capabilities.documents.policy;
   if (!policy2) return { governed: false, blockers: [], items: [] };
   if (!isDocumentPolicyStep(policy2, phase)) {
@@ -24796,7 +26527,7 @@ async function documentEvidence(root, changeDir, plan, phase) {
       items: []
     };
   }
-  const report = await evaluateDocumentEvidence(root, changeDir, phase, {}, policy2);
+  const report = await evaluateDocumentEvidence(root, changeDir2, phase, {}, policy2);
   return {
     governed: true,
     phase,
@@ -24833,7 +26564,7 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
   const displayChangesRoot = join42(root, "openspec", "changes");
   let entries;
   try {
-    entries = deps.readChangesDirectory === void 0 ? await readdir5(changesRoot, { withFileTypes: true }) : await deps.readChangesDirectory(changesRoot);
+    entries = deps.readChangesDirectory === void 0 ? await readdir6(changesRoot, { withFileTypes: true }) : await deps.readChangesDirectory(changesRoot);
   } catch (error2) {
     assertWorkflowRootAnchor(anchor);
     if (typeof error2 !== "object" || error2 === null || Reflect.get(error2, "code") !== "ENOENT") throw error2;
@@ -24872,23 +26603,23 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
   for (const e of [...entries].sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0)) {
     if (!e.isDirectory() || e.name === "archive") continue;
     assertWorkflowRootAnchor(anchor);
-    const changeDir = join42(changesRoot, e.name);
+    const changeDir2 = join42(changesRoot, e.name);
     let source;
     try {
-      source = stateStorageSourcePathSync(changeDir);
+      source = stateStorageSourcePathSync(changeDir2);
     } catch (error2) {
       errors.push(`${e.name}: \u72B6\u6001\u6765\u6E90\u68C0\u67E5\u5931\u8D25\uFF08${error2 instanceof Error ? error2.message : String(error2)}\uFF09`);
       continue;
     }
     if (source === void 0) continue;
     try {
-      const projection = await store.inspectProjection(changeDir);
+      const projection = await store.inspectProjection(changeDir2);
       if (projection.status === "missing" || projection.status === "stale" || projection.status === "legacy-compatible") {
-        await store.repairProjection(changeDir);
+        await store.repairProjection(changeDir2);
       } else if (projection.status === "drift") {
         errors.push(`${e.name}: YAML projection drift\uFF08${projection.reason}\uFF09`);
       }
-      const state = await store.read(changeDir);
+      const state = await store.read(changeDir2);
       const f = state.fields;
       const phase = str(f.phase);
       const workflowName = str(f.workflow) || "default";
@@ -24901,11 +26632,11 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
       });
       legacyWorkflowRules[workflowName] ??= legacySnapshotWorkflowRules(plan);
       const [documents, terminalActivity, authority] = await Promise.all([
-        documentEvidence(readRoot, changeDir, plan, phase),
-        readTerminalActivity(changeDir, e.name, nowMs),
-        readWorkflowSnapshotAuthority(changeDir, state, plan)
+        documentEvidence(readRoot, changeDir2, plan, phase),
+        readTerminalActivity(changeDir2, e.name, nowMs),
+        readWorkflowSnapshotAuthority(changeDir2, state, plan)
       ]);
-      const tasksProjection = await readTasksProjection(changeDir, {}, anchor);
+      const tasksProjection = await readTasksProjection(changeDir2, {}, anchor);
       const todo = projectPipelineTodo({
         phase,
         tasksMarkdown: tasksProjection?.source,
@@ -24929,7 +26660,7 @@ async function scanAnchoredProject(deps, root, readRoot, anchor, nowMs) {
           plan,
           state,
           readRoot,
-          changeDir,
+          changeDir2,
           e.name,
           capabilityDeps
         ),
@@ -25018,8 +26749,8 @@ import { writeFile as writeFile9 } from "node:fs/promises";
 function generateToken() {
   return randomBytes2(32).toString("hex");
 }
-async function writeTokenHandshake(tokenPath, token, meta) {
-  const payload = JSON.stringify({ token, ...meta });
+async function writeTokenHandshake(tokenPath, token, meta2) {
+  const payload = JSON.stringify({ token, ...meta2 });
   await writeFile9(tokenPath, payload, { encoding: "utf8", mode: 384 });
 }
 function tokenFromHeaders(headers) {
@@ -25052,8 +26783,8 @@ function isObject2(value) {
 }
 function objectField(value, key) {
   if (!isObject2(value)) return null;
-  const nested = value[key];
-  return isObject2(nested) ? nested : null;
+  const nested2 = value[key];
+  return isObject2(nested2) ? nested2 : null;
 }
 function boundedString(value, maxLength) {
   return typeof value === "string" && value.length > 0 && value.length <= maxLength ? value : null;
@@ -25094,16 +26825,16 @@ function usageFromResponse(response) {
 }
 function metadataPath(value) {
   if (typeof value !== "string" || value.length === 0) return null;
-  let path7 = value.split(/[?#]/, 1)[0] ?? "";
+  let path8 = value.split(/[?#]/, 1)[0] ?? "";
   const absoluteForm = /^[A-Za-z][A-Za-z\d+.-]*:/.test(value) || value.startsWith("//");
   if (absoluteForm) {
     try {
-      path7 = new URL(value.startsWith("//") ? `http:${value}` : value).pathname;
+      path8 = new URL(value.startsWith("//") ? `http:${value}` : value).pathname;
     } catch {
       return null;
     }
   }
-  return path7.length > 0 && path7.length <= 2048 ? path7 : null;
+  return path8.length > 0 && path8.length <= 2048 ? path8 : null;
 }
 function projectEntry(record5, sequence) {
   const source = isObject2(record5) ? record5 : {};
@@ -25205,10 +26936,10 @@ function pipelineCliBundlePath() {
 function pipelineCliAvailable() {
   return existsSync5(pipelineCliBundlePath());
 }
-var runPipelineCli = (repoRoot, args, options) => new Promise((resolve16, reject) => {
+var runPipelineCli = (repoRoot, args, options) => new Promise((resolve16, reject3) => {
   const bundle = pipelineCliBundlePath();
   if (!existsSync5(bundle)) {
-    reject(new Error(`Tenon CLI bundle \u4E0D\u5B58\u5728\uFF1A${bundle}\uFF1B\u8BF7\u5148\u6267\u884C npm run bundle`));
+    reject3(new Error(`Tenon CLI bundle \u4E0D\u5B58\u5728\uFF1A${bundle}\uFF1B\u8BF7\u5148\u6267\u884C npm run bundle`));
     return;
   }
   execFile3(
@@ -25232,7 +26963,7 @@ var runPipelineCli = (repoRoot, args, options) => new Promise((resolve16, reject
         resolve16({ exitCode: code, stdout, stderr });
         return;
       }
-      reject(error2);
+      reject3(error2);
     }
   );
 });
@@ -25262,15 +26993,15 @@ function cliExitHttpStatus(exitCode) {
 
 // packages/server/src/routerPreview.ts
 import { spawn } from "node:child_process";
-function object3(value) {
+function object4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value) ? value : null;
 }
 function parseRouterDraft(value) {
-  const row = object3(value);
-  const workflow = object3(row?.workflow);
-  const policy2 = object3(row?.policyProfile);
-  const routing = object3(policy2?.routing);
-  const skills = object3(policy2?.skills);
+  const row = object4(value);
+  const workflow = object4(row?.workflow);
+  const policy2 = object4(row?.policyProfile);
+  const routing = object4(policy2?.routing);
+  const skills = object4(policy2?.skills);
   const id2 = row?.id;
   const label = row?.label;
   const allowed = workflow?.allowed;
@@ -25358,7 +27089,7 @@ function routerSuppressionReason(prompt) {
   return null;
 }
 function scoreRouterPatternWithGrep(pattern, prompt) {
-  return new Promise((resolve16, reject) => {
+  return new Promise((resolve16, reject3) => {
     const child = spawn("grep", ["-ciE", "--", pattern], {
       env: { ...process.env, LC_ALL: "C" },
       stdio: ["pipe", "pipe", "pipe"]
@@ -25375,7 +27106,7 @@ function scoreRouterPatternWithGrep(pattern, prompt) {
     };
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
-      finish(() => reject(new Error("router grep \u8D85\u65F6\uFF082000ms\uFF09")));
+      finish(() => reject3(new Error("router grep \u8D85\u65F6\uFF082000ms\uFF09")));
     }, 2e3);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -25385,16 +27116,16 @@ function scoreRouterPatternWithGrep(pattern, prompt) {
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
     });
-    child.on("error", (error2) => finish(() => reject(new Error(`router grep \u542F\u52A8\u5931\u8D25\uFF1A${error2.message}`))));
+    child.on("error", (error2) => finish(() => reject3(new Error(`router grep \u542F\u52A8\u5931\u8D25\uFF1A${error2.message}`))));
     child.on("close", (code, signal) => {
       finish(() => {
-        if (signal !== null) return reject(new Error(`router grep \u88AB\u4FE1\u53F7 ${signal} \u7EC8\u6B62`));
-        if (code !== 0 && code !== 1) return reject(new Error(`router grep exit ${String(code)}\uFF1A${stderr.trim() || "unknown error"}`));
-        if (stdinError !== null) return reject(new Error(`router grep stdin \u5931\u8D25\uFF1A${stdinError.message}`));
+        if (signal !== null) return reject3(new Error(`router grep \u88AB\u4FE1\u53F7 ${signal} \u7EC8\u6B62`));
+        if (code !== 0 && code !== 1) return reject3(new Error(`router grep exit ${String(code)}\uFF1A${stderr.trim() || "unknown error"}`));
+        if (stdinError !== null) return reject3(new Error(`router grep stdin \u5931\u8D25\uFF1A${stdinError.message}`));
         if (code === 1) return resolve16(0);
         const score = Number(stdout.trim());
         if (!Number.isSafeInteger(score) || score < 0) {
-          return reject(new Error(`router grep \u8FD4\u56DE\u975E\u6CD5\u8BA1\u5206\uFF1A${JSON.stringify(stdout.trim())}`));
+          return reject3(new Error(`router grep \u8FD4\u56DE\u975E\u6CD5\u8BA1\u5206\uFF1A${JSON.stringify(stdout.trim())}`));
         }
         return resolve16(score);
       });
@@ -25446,8 +27177,8 @@ function asMillis(iso, label) {
 function errorMessage3(error2) {
   return error2 instanceof Error ? error2.message : String(error2);
 }
-function resultError(result) {
-  return result.stderr.trim() || result.stdout.trim() || `Tenon CLI exit ${result.exitCode}`;
+function resultError(result2) {
+  return result2.stderr.trim() || result2.stdout.trim() || `Tenon CLI exit ${result2.exitCode}`;
 }
 function keyOf(root, loopId) {
   return `${root}\0${loopId}`;
@@ -25555,14 +27286,14 @@ function createCadenceScheduler(options) {
     await Promise.all(due.map(async (item2) => {
       const current = rows[item2.rowIndex];
       if (current === void 0) return;
-      let result;
+      let result2;
       try {
-        result = await options.runPipelineCli(item2.root, ["loops", "run", item2.loopId, "--json"]);
+        result2 = await options.runPipelineCli(item2.root, ["loops", "run", item2.loopId, "--json"]);
       } catch (error2) {
         rows[item2.rowIndex] = { ...current, state: "failed", error: errorMessage3(error2) };
         return;
       }
-      rows[item2.rowIndex] = result.exitCode === 0 ? { ...current, state: "succeeded", exit_code: 0 } : { ...current, state: "failed", exit_code: result.exitCode, error: resultError(result) };
+      rows[item2.rowIndex] = result2.exitCode === 0 ? { ...current, state: "succeeded", exit_code: 0 } : { ...current, state: "failed", exit_code: result2.exitCode, error: resultError(result2) };
     }));
     latest = { ...latest, running: false, loops: rows };
   }
@@ -25599,7 +27330,7 @@ function createCadenceScheduler(options) {
 
 // packages/server/src/serverGetRoutes.ts
 import { lstatSync as lstatSync11 } from "node:fs";
-import { dirname as dirname14, join as join57 } from "node:path";
+import { dirname as dirname14, join as join58 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // packages/server/src/afkReadiness.ts
@@ -25623,21 +27354,21 @@ async function execDocker(args, opts) {
     const timeout = new Promise((resolve16) => {
       timer = setTimeout(() => resolve16(null), timeoutMs);
     });
-    const result = await Promise.race([exec(args).catch(() => null), timeout]);
-    return result;
+    const result2 = await Promise.race([exec(args).catch(() => null), timeout]);
+    return result2;
   } finally {
     if (timer !== void 0) clearTimeout(timer);
   }
 }
 async function listDockerImages(exec, opts) {
-  const result = await execDocker(["images", "--format", "{{.Repository}}:{{.Tag}}"], {
+  const result2 = await execDocker(["images", "--format", "{{.Repository}}:{{.Tag}}"], {
     timeoutMs: opts?.timeoutMs,
     exec
   });
-  if (result === null || result.exitCode !== 0) return { available: false, images: [] };
+  if (result2 === null || result2.exitCode !== 0) return { available: false, images: [] };
   const images = [
     ...new Set(
-      result.stdout.split("\n").map((l) => l.trim()).filter((l) => l !== "" && !l.includes("<none>"))
+      result2.stdout.split("\n").map((l) => l.trim()).filter((l) => l !== "" && !l.includes("<none>"))
     )
   ].sort();
   return { available: true, images };
@@ -25650,10 +27381,10 @@ function credLight(key, hostEnv, fileKeys) {
   if (fileKeys[key] !== void 0 && fileKeys[key] !== "") return { set: true, source: "secrets-file" };
   return { set: false };
 }
-function canReadFile(path7) {
+function canReadFile(path8) {
   try {
-    if (!statSync4(path7).isFile()) return false;
-    accessSync(path7, fsConstants.R_OK);
+    if (!statSync4(path8).isFile()) return false;
+    accessSync(path8, fsConstants.R_OK);
     return true;
   } catch {
     return false;
@@ -25761,7 +27492,7 @@ function writeAutomationSettings(root, settings) {
 
 // packages/server/src/config.ts
 import { readFileSync as readFileSync17 } from "node:fs";
-import { readFile as readFile17, rename as rename7, rm as rm3, writeFile as writeFile10 } from "node:fs/promises";
+import { readFile as readFile18, rename as rename7, rm as rm3, writeFile as writeFile10 } from "node:fs/promises";
 import { dirname as dirname12 } from "node:path";
 var ConfigError = class extends Error {
   constructor(message) {
@@ -25894,7 +27625,7 @@ async function writeMandatorySkills(manifestPath2, phase, track, skills) {
   }
   const key = `${phase}.${track}`;
   await withLock(dirname12(manifestPath2), async () => {
-    const original = await readFile17(manifestPath2, "utf8");
+    const original = await readFile18(manifestPath2, "utf8");
     const lines = original.split("\n");
     let sectionStart = -1;
     for (let i = 0; i < lines.length; i++) {
@@ -26016,8 +27747,8 @@ function readBoundedHooksConfig(root, pipeline) {
     if (fd !== void 0) safeClose(fd);
   }
 }
-function readPromptSkipKeywordHeader(text3) {
-  const lines = text3.replace(/\r\n?/g, "\n").split("\n").map((line2) => line2.trim());
+function readPromptSkipKeywordHeader(text4) {
+  const lines = text4.replace(/\r\n?/g, "\n").split("\n").map((line2) => line2.trim());
   if (lines[0] !== "{" || lines[1] !== '"version": 1,') return DEFAULT_PROMPT_SKIP_KEYWORD;
   const prefix = '"prompt_skip_keyword": ';
   const line = lines[2];
@@ -26038,14 +27769,14 @@ function readPromptSkipKeywordHeader(text3) {
   }
   return keyword;
 }
-function hasDuplicateMatrixKey(text3, key) {
+function hasDuplicateMatrixKey(text4, key) {
   const encoded = JSON.stringify(key);
   let count = 0;
   let from = 0;
   for (; ; ) {
-    const index = text3.indexOf(encoded, from);
+    const index = text4.indexOf(encoded, from);
     if (index < 0) return count > 1;
-    const remainder = text3.slice(index + encoded.length);
+    const remainder = text4.slice(index + encoded.length);
     if (/^\s*:/.test(remainder)) count += 1;
     from = index + encoded.length;
   }
@@ -26066,19 +27797,19 @@ function withHooksPipeline(rootInput, create, onMissing, use) {
   }
 }
 function readHooksConfig(root) {
-  const text3 = withHooksPipeline(
+  const text4 = withHooksPipeline(
     root,
     false,
     () => null,
     (anchor, pipeline) => readBoundedHooksConfig(anchor, pipeline)
   );
-  if (text3 === null) {
+  if (text4 === null) {
     return { promptSkipKeyword: DEFAULT_PROMPT_SKIP_KEYWORD, matrix: {} };
   }
-  const promptSkipKeyword = readPromptSkipKeywordHeader(text3);
+  const promptSkipKeyword = readPromptSkipKeywordHeader(text4);
   let parsed;
   try {
-    parsed = JSON.parse(text3);
+    parsed = JSON.parse(text4);
   } catch {
     return { promptSkipKeyword, matrix: {} };
   }
@@ -26091,7 +27822,7 @@ function readHooksConfig(root) {
   if (typeof rawMatrix === "object" && rawMatrix !== null && !Array.isArray(rawMatrix)) {
     for (const [key, value] of Object.entries(rawMatrix)) {
       if (value !== false) continue;
-      if (hasDuplicateMatrixKey(text3, key)) return { promptSkipKeyword, matrix: {} };
+      if (hasDuplicateMatrixKey(text4, key)) return { promptSkipKeyword, matrix: {} };
       const dot = key.indexOf(".");
       if (dot <= 0) continue;
       const hook = key.slice(0, dot);
@@ -26251,8 +27982,8 @@ var STARTER_EXECUTION_FIELDS = /* @__PURE__ */ new Set([
   "workflow_id",
   "skill_bundle_id"
 ]);
-function registryFromText(text3) {
-  return loadRegistry("", { readText: () => text3 });
+function registryFromText(text4) {
+  return loadRegistry("", { readText: () => text4 });
 }
 function isStarter(loop) {
   return typeof loop?.template_id === "string" && loop.template_id.length > 0;
@@ -26267,11 +27998,11 @@ async function applyLoopsUpdate(root, id2, patch, deps = {}) {
   if (snap0.epoch === ABSENT_REGISTRY_EPOCH) {
     return { ok: false, error: `loops.yaml \u672A\u627E\u5230\u4E8E ${loopsYamlPath(root)}` };
   }
-  const { text: text3, error: error2 } = updateLoopInYaml(snap0.text, id2, patch);
-  if (error2 !== null || text3 === null) {
+  const { text: text4, error: error2 } = updateLoopInYaml(snap0.text, id2, patch);
+  if (error2 !== null || text4 === null) {
     return { ok: false, error: error2 ?? "loops.yaml \u6587\u672C\u624B\u672F\u5931\u8D25" };
   }
-  const parsed = parseLoopsYaml(text3);
+  const parsed = parseLoopsYaml(text4);
   if (parsed.error !== null || parsed.data === null || typeof parsed.data !== "object" || Array.isArray(parsed.data)) {
     return { ok: false, error: `\u5199\u56DE\u6587\u672C\u89E3\u6790\u5931\u8D25\uFF1A${parsed.error ?? "\u9876\u5C42\u975E mapping"}` };
   }
@@ -26280,7 +28011,7 @@ async function applyLoopsUpdate(root, id2, patch, deps = {}) {
     return { ok: false, error: "patch \u540E schema \u6821\u9A8C\u5931\u8D25\uFF0C\u672A\u843D\u76D8", errors: schemaErrors };
   }
   const previousRegistry = registryFromText(snap0.text);
-  const candidateRegistry = registryFromText(text3);
+  const candidateRegistry = registryFromText(text4);
   if (previousRegistry.data === null || candidateRegistry.data === null) {
     return {
       ok: false,
@@ -26315,7 +28046,7 @@ async function applyLoopsUpdate(root, id2, patch, deps = {}) {
   }
   const res = await writeRegistryWithGovernance(root, snap0.epoch, async () => {
     const commitValidationError = await validateCandidate("commit-point");
-    return commitValidationError === null ? { text: text3, error: null } : { text: null, error: `${commitValidationError}\uFF0C\u672A\u843D\u76D8` };
+    return commitValidationError === null ? { text: text4, error: null } : { text: null, error: `${commitValidationError}\uFF0C\u672A\u843D\u76D8` };
   });
   if (!res.ok) {
     return { ok: false, error: `loops.yaml \u6CBB\u7406\u5199\u5165\u62D2\u7EDD\uFF08${res.error}\uFF09` };
@@ -26418,8 +28149,8 @@ function maskSecret(value) {
   if (value.length > 10) return `${value.slice(0, 3)}\u2026${value.slice(-4)}`;
   return "***";
 }
-function buildSecretsResponse(path7) {
-  const store = readSecrets(path7);
+function buildSecretsResponse(path8) {
+  const store = readSecrets(path8);
   const keys = {};
   for (const key of SECRET_KEYS) {
     const value = store.keys[key];
@@ -26443,28 +28174,28 @@ function validateSecretWriteBody(body) {
   }
   return { ok: true, value: { key, value } };
 }
-async function writeSecret(path7, key, value) {
-  await writeSecretKey(path7, key, value);
+async function writeSecret(path8, key, value) {
+  await writeSecretKey(path8, key, value);
   return { set: true, masked: maskSecret(value) };
 }
-async function removeSecret(path7, key) {
-  await deleteSecretKey(path7, key);
+async function removeSecret(path8, key) {
+  await deleteSecretKey(path8, key);
 }
 
 // packages/server/src/skillsRegistry.ts
 import { accessSync as accessSync2, constants as constants13, existsSync as existsSync7, readdirSync as readdirSync8, readFileSync as readFileSync19, statSync as statSync5 } from "node:fs";
 import { delimiter, dirname as dirname13, join as join48 } from "node:path";
 var BUILTIN_SKILLS = /* @__PURE__ */ new Set(["verify", "run", "code-review", "security-review"]);
-function skillDescriptionFrom(path7) {
+function skillDescriptionFrom(path8) {
   try {
-    const text3 = readFileSync19(path7, "utf8");
-    const frontmatter = /^---\s*\n([\s\S]*?)\n---/.exec(text3)?.[1];
+    const text4 = readFileSync19(path8, "utf8");
+    const frontmatter = /^---\s*\n([\s\S]*?)\n---/.exec(text4)?.[1];
     if (frontmatter) {
       const line = frontmatter.split("\n").find((candidate) => /^description\s*:/.test(candidate.trim()));
       const value = line?.replace(/^\s*description\s*:\s*/, "").trim().replace(/^['"]|['"]$/g, "");
       if (value) return value.replace(/\s+/g, " ").slice(0, 240);
     }
-    const body = text3.replace(/^---\s*\n[\s\S]*?\n---\s*/, "");
+    const body = text4.replace(/^---\s*\n[\s\S]*?\n---\s*/, "");
     const paragraph = body.split(/\n\s*\n/).map((candidate) => candidate.replace(/^#+\s+.*$/gm, "").replace(/\s+/g, " ").trim()).find(Boolean);
     return paragraph ? paragraph.slice(0, 240) : void 0;
   } catch {
@@ -26476,16 +28207,16 @@ function installedPluginRoots(claudeDir) {
     const parsed = JSON.parse(readFileSync19(join48(claudeDir, "plugins", "installed_plugins.json"), "utf8"));
     const plugins = typeof parsed === "object" && parsed !== null ? Reflect.get(parsed, "plugins") : void 0;
     if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) return [];
-    return Object.values(plugins).flat().map((entry) => typeof entry === "object" && entry !== null ? Reflect.get(entry, "installPath") : void 0).filter((path7) => typeof path7 === "string" && path7.trim() !== "");
+    return Object.values(plugins).flat().map((entry) => typeof entry === "object" && entry !== null ? Reflect.get(entry, "installPath") : void 0).filter((path8) => typeof path8 === "string" && path8.trim() !== "");
   } catch {
     return [];
   }
 }
-function descriptionForSkill(name, repoRoot, claudeDir, meta) {
+function descriptionForSkill(name, repoRoot, claudeDir, meta2) {
   const home = dirname13(claudeDir);
   const candidates = [...new Set([
-    meta?.contentSkill,
-    meta?.skill,
+    meta2?.contentSkill,
+    meta2?.skill,
     name,
     name.includes(":") ? name.split(":").at(-1) : void 0
   ].filter((candidate) => typeof candidate === "string" && candidate !== ""))];
@@ -26501,8 +28232,8 @@ function descriptionForSkill(name, repoRoot, claudeDir, meta) {
       if (description) return description;
     }
   }
-  if (meta?.tool === "claude-plugin") {
-    const plugin = meta.skill ?? name.split(":")[0] ?? name;
+  if (meta2?.tool === "claude-plugin") {
+    const plugin = meta2.skill ?? name.split(":")[0] ?? name;
     const cache = join48(home, ".codex", "plugins", "cache");
     for (const marketplace of childDirsIn(cache)) {
       const pluginRoot2 = join48(cache, marketplace, plugin);
@@ -26629,15 +28360,15 @@ function executableOnPath(bin) {
   }
   return false;
 }
-function installCmdFor(source, name, repoRoot, meta) {
-  if (meta?.unavailable) return void 0;
-  if (meta?.tool === "skills-cli") {
-    const select = meta.skill ? ` --skill ${meta.skill}` : "";
-    return `npx skills add ${meta.source} -g -y${select}`;
+function installCmdFor(source, name, repoRoot, meta2) {
+  if (meta2?.unavailable) return void 0;
+  if (meta2?.tool === "skills-cli") {
+    const select = meta2.skill ? ` --skill ${meta2.skill}` : "";
+    return `npx skills add ${meta2.source} -g -y${select}`;
   }
-  if (meta?.tool === "npm") return `npm install -g ${meta.source}`;
-  if (meta?.tool === "claude-plugin") return `claude plugin install ${meta.skill ?? meta.source}`;
-  if (meta?.tool === "builtin" || meta?.tool === "bundled") return void 0;
+  if (meta2?.tool === "npm") return `npm install -g ${meta2.source}`;
+  if (meta2?.tool === "claude-plugin") return `claude plugin install ${meta2.skill ?? meta2.source}`;
+  if (meta2?.tool === "builtin" || meta2?.tool === "bundled") return void 0;
   if (source === "local-plugin") return `claude --plugin-dir ${repoRoot}`;
   if (source === "external-marketplace") return `claude plugin install ${name.split(":")[0]}`;
   return void 0;
@@ -26650,7 +28381,7 @@ function listAllSkillsDetailed(repoRoot, claudeDir) {
   const names = /* @__PURE__ */ new Set([...locals, ...external.keys(), ...registry.keys()]);
   const entries = [];
   for (const name of [...names].sort()) {
-    const meta = metadataFor2(registry, name);
+    const meta2 = metadataFor2(registry, name);
     let source;
     if (locals.has(name)) {
       source = "local-plugin";
@@ -26660,32 +28391,32 @@ function listAllSkillsDetailed(repoRoot, claudeDir) {
       const section2 = external.get(name) ?? "";
       source = /superpowers 系|commit-commands 系/.test(section2) ? "external-marketplace" : "user";
     }
-    const available = meta?.unavailable !== true;
+    const available = meta2?.unavailable !== true;
     let installed;
     if (!available) {
       installed = false;
-    } else if (source === "builtin" || meta?.tool === "builtin" || meta?.tool === "bundled" || locals.has(name)) {
+    } else if (source === "builtin" || meta2?.tool === "builtin" || meta2?.tool === "bundled" || locals.has(name)) {
       installed = true;
-    } else if (meta?.tool === "npm") {
-      installed = meta.bin !== void 0 && executableOnPath(meta.bin);
-    } else if (meta?.tool === "claude-plugin") {
-      const plugin = meta.skill ?? name.split(":")[0] ?? name;
+    } else if (meta2?.tool === "npm") {
+      installed = meta2.bin !== void 0 && executableOnPath(meta2.bin);
+    } else if (meta2?.tool === "claude-plugin") {
+      const plugin = meta2.skill ?? name.split(":")[0] ?? name;
       installed = detected.codexPluginBases.has(plugin) || detected.skills.has(plugin) || detected.skills.has(name);
     } else if (name.includes(":")) {
       const plugin = name.split(":")[0] ?? name;
-      installed = detected.codexPluginBases.has(plugin) || detected.skills.has(meta?.skill ?? name);
+      installed = detected.codexPluginBases.has(plugin) || detected.skills.has(meta2?.skill ?? name);
     } else {
-      installed = detected.skills.has(meta?.skill ?? name);
+      installed = detected.skills.has(meta2?.skill ?? name);
     }
-    const description = descriptionForSkill(name, repoRoot, claudeDir, meta);
+    const description = descriptionForSkill(name, repoRoot, claudeDir, meta2);
     entries.push({
       name,
       installed,
       source,
       ...description ? { description } : {},
-      tier: meta?.tier ?? "optional",
+      tier: meta2?.tier ?? "optional",
       available,
-      ...installed ? {} : { installCmd: installCmdFor(source, name, repoRoot, meta) }
+      ...installed ? {} : { installCmd: installCmdFor(source, name, repoRoot, meta2) }
     });
   }
   return entries;
@@ -26696,7 +28427,7 @@ import { join as join53, resolve as resolvePath4 } from "node:path";
 
 // packages/server/src/afk.ts
 import { execFile as execFile5 } from "node:child_process";
-import { readFile as readFile18, writeFile as writeFile11 } from "node:fs/promises";
+import { readFile as readFile19, writeFile as writeFile11 } from "node:fs/promises";
 import { join as join49 } from "node:path";
 var AFK_LANES = ["queued", "running", "merged", "failed", "conflict", "paused"];
 function isAutomationState(value) {
@@ -26804,16 +28535,16 @@ function buildAfkLog(snapshot, clock) {
   entries.sort((a, b) => a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0);
   return { generated_at: now, entries };
 }
-async function cancelAfkRun(store, changeDir) {
-  if (!stateStorageExistsSync(changeDir)) {
+async function cancelAfkRun(store, changeDir2) {
+  if (!stateStorageExistsSync(changeDir2)) {
     return { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09\uFF0C\u627E\u4E0D\u5230\u8FD0\u884C\u4E2D\u7684 job" };
   }
-  const automation = str2(await store.get(changeDir, "automation"));
+  const automation = str2(await store.get(changeDir2, "automation"));
   if (automation !== "running") {
     return { ok: false, error: `automation \u72B6\u6001\u662F '${automation || "(\u7A7A)"}'\uFF0C\u4E0D\u662F running\uFF0C\u627E\u4E0D\u5230\u8FD0\u884C\u4E2D\u7684 job` };
   }
-  const worktree = str2(await store.get(changeDir, "automation_worktree"));
-  const sandbox = str2(await store.get(changeDir, "automation_sandbox"));
+  const worktree = str2(await store.get(changeDir2, "automation_worktree"));
+  const sandbox = str2(await store.get(changeDir2, "automation_sandbox"));
   if (!worktree || !sandbox) {
     return { ok: false, error: "\u7F3A automation_worktree/automation_sandbox\uFF0C\u65E0\u6CD5\u5B9A\u4F4D\u5BB9\u5668" };
   }
@@ -26832,49 +28563,49 @@ async function cancelAfkRun(store, changeDir) {
   return { ok: true };
 }
 var RETRYABLE_FROM = ["failed", "conflict", "paused"];
-async function retryAfkRun(store, changeDir) {
-  if (!stateStorageExistsSync(changeDir)) {
+async function retryAfkRun(store, changeDir2) {
+  if (!stateStorageExistsSync(changeDir2)) {
     return { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09\uFF0C\u627E\u4E0D\u5230\u53EF\u91CD\u8BD5\u7684\u4EFB\u52A1" };
   }
-  const current = str2(await store.get(changeDir, "automation"));
+  const current = str2(await store.get(changeDir2, "automation"));
   if (!RETRYABLE_FROM.includes(current)) {
     return { ok: false, error: `automation \u72B6\u6001\u662F '${current || "(\u7A7A)"}'\uFF0C\u4E0D\u53EF\u91CD\u8BD5\uFF08\u4EC5 failed/conflict/paused \u53EF\u91CD\u8BD5\uFF0Crunning \u8BF7\u5148 cancel\uFF09` };
   }
-  const ok = await store.cas(changeDir, "automation", current, "queued");
+  const ok = await store.cas(changeDir2, "automation", current, "queued");
   if (!ok) return { ok: false, error: "CAS \u5931\u8D25\uFF0C\u72B6\u6001\u5728\u6B64\u671F\u95F4\u88AB\u5E76\u53D1\u4FEE\u6539" };
-  await store.set(changeDir, "automation_attempts", "0");
+  await store.set(changeDir2, "automation_attempts", "0");
   return { ok: true };
 }
 var DISMISSABLE_FROM = ["failed", "conflict"];
-async function dismissAfkRun(store, changeDir) {
-  if (!stateStorageExistsSync(changeDir)) {
+async function dismissAfkRun(store, changeDir2) {
+  if (!stateStorageExistsSync(changeDir2)) {
     return { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09\uFF0C\u627E\u4E0D\u5230\u53EF\u653E\u5F03\u7684\u4EFB\u52A1" };
   }
-  const current = str2(await store.get(changeDir, "automation"));
+  const current = str2(await store.get(changeDir2, "automation"));
   if (!DISMISSABLE_FROM.includes(current)) {
     return { ok: false, error: `automation \u72B6\u6001\u662F '${current || "(\u7A7A)"}'\uFF0C\u4E0D\u53EF\u653E\u5F03\uFF08\u4EC5 failed/conflict \u53EF\u653E\u5F03\uFF1Brunning \u8BF7\u5148 cancel\uFF0Cpaused \u8D70\u653E\u884C/\u6253\u56DE\uFF09` };
   }
-  const ok = await store.cas(changeDir, "automation", current, "off");
+  const ok = await store.cas(changeDir2, "automation", current, "off");
   if (!ok) return { ok: false, error: "CAS \u5931\u8D25\uFF0C\u72B6\u6001\u5728\u6B64\u671F\u95F4\u88AB\u5E76\u53D1\u4FEE\u6539" };
   return { ok: true };
 }
-async function enqueueAfkRun(store, changeDir, clock, eligibility) {
-  if (!stateStorageExistsSync(changeDir)) {
+async function enqueueAfkRun(store, changeDir2, clock, eligibility) {
+  if (!stateStorageExistsSync(changeDir2)) {
     return { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" };
   }
   if (!eligibility.automationEligible) {
     return { ok: false, error: `${eligibility.trackLabel} track \u4E0D\u652F\u6301 AFK \u81EA\u52A8\u5316\u6302\u961F` };
   }
-  const current = str2(await store.get(changeDir, "automation"));
+  const current = str2(await store.get(changeDir2, "automation"));
   if (current && current !== "off") {
     return { ok: false, error: `automation \u72B6\u6001\u5DF2\u662F '${current}'\uFF0C\u65E0\u9700\u91CD\u590D\u6302\u961F` };
   }
-  await store.setMany(changeDir, { automation: "queued", automation_queued_at: clock() });
+  await store.setMany(changeDir2, { automation: "queued", automation_queued_at: clock() });
   return { ok: true };
 }
-async function readAfkRunLog(changeDir) {
+async function readAfkRunLog(changeDir2) {
   try {
-    return await readFile18(join49(changeDir, ".sandcastle-run.log"), "utf8");
+    return await readFile19(join49(changeDir2, ".sandcastle-run.log"), "utf8");
   } catch {
     return null;
   }
@@ -26900,13 +28631,13 @@ function inside2(base, candidate) {
   const fromBase = relative9(base, candidate);
   return fromBase !== "" && fromBase !== ".." && !fromBase.startsWith(`..${sep13}`) && !isAbsolute13(fromBase);
 }
-function captureDirectoryIdentity(path7) {
-  const info = lstatSync8(path7, { bigint: true });
+function captureDirectoryIdentity(path8) {
+  const info = lstatSync8(path8, { bigint: true });
   if (info.isSymbolicLink() || !info.isDirectory()) {
-    throw new ContextBundlePathError(403, `Context Bundle \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09: ${path7}`);
+    throw new ContextBundlePathError(403, `Context Bundle \u8DEF\u5F84\u4E0D\u5B89\u5168\uFF08\u987B\u4E3A\u771F\u5B9E\u76EE\u5F55\uFF09: ${path8}`);
   }
   return {
-    path: path7,
+    path: path8,
     dev: Number(info.dev),
     ino: Number(info.ino),
     mtimeNs: info.mtimeNs,
@@ -26915,11 +28646,11 @@ function captureDirectoryIdentity(path7) {
 }
 function captureChangeParentPathAnchor(root) {
   const chain = [];
-  for (const path7 of [join50(root.path, "openspec"), join50(root.path, "openspec", "changes")]) {
+  for (const path8 of [join50(root.path, "openspec"), join50(root.path, "openspec", "changes")]) {
     try {
-      chain.push(captureDirectoryIdentity(path7));
+      chain.push(captureDirectoryIdentity(path8));
     } catch (error2) {
-      if (missingCode(error2)) return { chain, missingPath: path7 };
+      if (missingCode(error2)) return { chain, missingPath: path8 };
       throw error2;
     }
   }
@@ -26932,9 +28663,9 @@ function captureChangePathAnchor(root, change) {
     join50(root.path, "openspec", "changes", change)
   ];
   const chain = [];
-  for (const path7 of chainPaths) {
+  for (const path8 of chainPaths) {
     try {
-      chain.push(captureDirectoryIdentity(path7));
+      chain.push(captureDirectoryIdentity(path8));
     } catch (error2) {
       if (missingCode(error2)) {
         throw new ContextBundlePathError(400, "\u627E\u4E0D\u5230\u8BE5 Change \u7684 canonical workflow state");
@@ -26942,24 +28673,24 @@ function captureChangePathAnchor(root, change) {
       throw error2;
     }
   }
-  const changeDir = chainPaths.at(2);
-  if (changeDir === void 0) {
+  const changeDir2 = chainPaths.at(2);
+  if (changeDir2 === void 0) {
     throw new ContextBundlePathError(403, "Context Bundle Change path capture failed");
   }
   let realPath;
   try {
-    realPath = realpathSync6(changeDir);
+    realPath = realpathSync6(changeDir2);
   } catch (cause) {
     throw new ContextBundlePathError(
       403,
-      `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u524D\u88AB\u66FF\u6362: ${changeDir}`,
+      `Context Bundle Change \u8DEF\u5F84\u5728\u8BFB\u53D6\u524D\u88AB\u66FF\u6362: ${changeDir2}`,
       cause
     );
   }
   if (!inside2(root.realPath, realPath)) {
     throw new ContextBundlePathError(403, `Context Bundle Change \u8DEF\u5F84\u9003\u9038 registered root: ${realPath}`);
   }
-  return { changeDir, realPath, chain };
+  return { changeDir: changeDir2, realPath, chain };
 }
 function assertPathIdentityChain(chain) {
   for (const expected of chain) {
@@ -27116,14 +28847,14 @@ async function handleContextBundlePreview(req, res, deps) {
   if (!Number.isSafeInteger(budgetBytes)) {
     return invalidRequest2(res, deps.sendJson, "budgetBytes \u5FC5\u987B\u662F\u6B63\u5B89\u5168\u6574\u6570");
   }
-  const rootCheck = deps.workflowRootForRequest(root);
-  if (!rootCheck.ok) {
-    return deps.sendJson(res, rootCheck.code, {
+  const rootCheck2 = deps.workflowRootForRequest(root);
+  if (!rootCheck2.ok) {
+    return deps.sendJson(res, rootCheck2.code, {
       ok: false,
-      error: rootCheck.code === 403 ? "Context Bundle root trust check failed" : "Context Bundle registered root is unavailable"
+      error: rootCheck2.code === 403 ? "Context Bundle root trust check failed" : "Context Bundle registered root is unavailable"
     });
   }
-  const anchor = rootCheck.anchor;
+  const anchor = rootCheck2.anchor;
   if (anchor.fdPath === void 0) {
     return deps.sendJson(res, 501, {
       ok: false,
@@ -27163,7 +28894,7 @@ async function handleContextBundlePreview(req, res, deps) {
       changeIdentity,
       DEFAULT_LEDGER_CONTEXT_BUNDLE_RESOURCE_LIMITS
     );
-    const result = await compileLedgerContextBundleWithPorts({
+    const result2 = await compileLedgerContextBundleWithPorts({
       root: anchor.path,
       change,
       from,
@@ -27189,7 +28920,7 @@ async function handleContextBundlePreview(req, res, deps) {
     }
     return deps.sendJson(res, 200, {
       ok: true,
-      preview: safeContextBundlePreview(result.preview, true, result.bundle.aggregateDigest)
+      preview: safeContextBundlePreview(result2.preview, true, result2.bundle.aggregateDigest)
     });
   } catch (error2) {
     try {
@@ -27265,10 +28996,10 @@ async function handleContextBundlePreview(req, res, deps) {
 function scalar4(value) {
   return Array.isArray(value) ? value.join(",") : value ?? "";
 }
-async function revisionChain(changeDir, current) {
+async function revisionChain(changeDir2, current) {
   if (!current) return [];
-  await validateCanonicalRevisionHistory(changeDir);
-  const result = [current];
+  await validateCanonicalRevisionHistory(changeDir2);
+  const result2 = [current];
   let cursor = current;
   while (cursor.revision > 0) {
     const previousRevisionId = cursor.previousRevisionId;
@@ -27276,15 +29007,15 @@ async function revisionChain(changeDir, current) {
       throw new Error(`canonical history revision ${cursor.revision} \u7F3A previousRevisionId`);
     }
     const previous = await readImmutableRunRevision(
-      changeDir,
+      changeDir2,
       cursor.revision - 1,
       previousRevisionId
     );
     if (!previous) throw new Error(`canonical history revision ${cursor.revision - 1} \u7F3A\u5931`);
-    result.unshift(previous);
+    result2.unshift(previous);
     cursor = previous;
   }
-  return result;
+  return result2;
 }
 function stringProp(record5, key) {
   const value = Reflect.get(record5, key);
@@ -27354,23 +29085,23 @@ function attemptContexts(records) {
     }];
   });
 }
-async function buildRunDetail(repoRoot, changeDir, changeName, deps) {
-  const current = await readCurrentRunRevision(changeDir);
-  const revisions = await revisionChain(changeDir, current);
-  const state = current?.state ?? await deps.store.read(changeDir);
+async function buildRunDetail(repoRoot, changeDir2, changeName, deps) {
+  const current = await readCurrentRunRevision(changeDir2);
+  const revisions = await revisionChain(changeDir2, current);
+  const state = current?.state ?? await deps.store.read(changeDir2);
   const metadata = state.runMetadata;
   let transitions = [];
   if (metadata?.transitionHead) {
     transitions = await deps.recordStore.readChain(
-      changeDir,
+      changeDir2,
       metadata.transitionSequence,
       metadata.transitionHead,
       metadata.runId
     );
-    if (current) await validateCanonicalRevisionHistory(changeDir);
+    if (current) await validateCanonicalRevisionHistory(changeDir2);
   }
   const ledgerRead = await deps.ledger.read(repoRoot);
-  const projection = await deps.store.inspectProjection(changeDir);
+  const projection = await deps.store.inspectProjection(changeDir2);
   const related = relatedLedgerRecords(ledgerRead.records, changeName, metadata?.runId);
   const fields = state.fields;
   const automationPolicy = metadata?.automationPolicy;
@@ -27409,11 +29140,11 @@ async function buildRunDetail(repoRoot, changeDir, changeName, deps) {
 }
 
 // packages/server/src/transition.ts
-import { readFile as readFile20 } from "node:fs/promises";
+import { readFile as readFile21 } from "node:fs/promises";
 import { join as join52 } from "node:path";
 
 // packages/server/src/transitionHistory.ts
-import { readFile as readFile19 } from "node:fs/promises";
+import { readFile as readFile20 } from "node:fs/promises";
 import { join as join51 } from "node:path";
 function decodeHistoryEntry(value) {
   if (typeof value !== "object" || value === null) return null;
@@ -27440,16 +29171,16 @@ function decodeHistoryEntry(value) {
     ...typeof record5.transitionRecordId === "string" ? { transitionRecordId: record5.transitionRecordId } : {}
   };
 }
-async function readJsonlHistory(changeDir) {
-  let text3;
+async function readJsonlHistory(changeDir2) {
+  let text4;
   try {
-    text3 = await readFile19(join51(changeDir, HISTORY_FILE), "utf8");
+    text4 = await readFile20(join51(changeDir2, HISTORY_FILE), "utf8");
   } catch (error2) {
     if (error2.code === "ENOENT") return [];
     throw error2;
   }
   const entries = [];
-  for (const line of text3.split("\n")) {
+  for (const line of text4.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     try {
@@ -27460,18 +29191,18 @@ async function readJsonlHistory(changeDir) {
   }
   return entries;
 }
-async function readChangeHistory(changeDir, deps) {
-  const jsonlEntries = await readJsonlHistory(changeDir);
-  const state = await deps.store.read(changeDir);
+async function readChangeHistory(changeDir2, deps) {
+  const jsonlEntries = await readJsonlHistory(changeDir2);
+  const state = await deps.store.read(changeDir2);
   const metadata = state.runMetadata;
   if (!metadata?.transitionHead) return sortByTs(jsonlEntries);
   const chain = await deps.recordStore.readChain(
-    changeDir,
+    changeDir2,
     metadata.transitionSequence,
     metadata.transitionHead,
     metadata.runId
   );
-  await validateCanonicalRevisionHistory(changeDir);
+  await validateCanonicalRevisionHistory(changeDir2);
   const canonicalEntries = chain.map(transitionRecordToHistoryEntry);
   const legacyOrNonTransition = jsonlEntries.filter(
     (entry) => entry.kind !== "transition" || entry.transitionRecordId === void 0
@@ -27509,10 +29240,10 @@ function errText4(e) {
 }
 var NotFoundError = class extends Error {
 };
-function mapTransitionResult(name, event, result) {
-  switch (result.kind) {
+function mapTransitionResult(name, event, result2) {
+  switch (result2.kind) {
     case "applied": {
-      for (const warning of result.warnings) {
+      for (const warning of result2.warnings) {
         if (warning.kind === "build-sha-missing") continue;
         switch (warning.projection) {
           case "state-yaml":
@@ -27529,33 +29260,33 @@ function mapTransitionResult(name, event, result) {
             break;
         }
       }
-      return { code: 200, body: { ok: true, name, event, from: result.from, to: result.to } };
+      return { code: 200, body: { ok: true, name, event, from: result2.from, to: result2.to } };
     }
     case "unknown-event":
-      return { code: 400, body: { ok: false, error: `\u672A\u77E5 event: ${result.event}` } };
+      return { code: 400, body: { ok: false, error: `\u672A\u77E5 event: ${result2.event}` } };
     case "event-source-mismatch":
       return {
         code: 409,
         body: {
           ok: false,
-          error: `event '${result.event}' \u4E0E\u5F53\u524D phase '${result.current}' \u4E0D\u5339\u914D\uFF08\u671F\u671B\u6765\u81EA '${result.expected}'\uFF09`
+          error: `event '${result2.event}' \u4E0E\u5F53\u524D phase '${result2.current}' \u4E0D\u5339\u914D\uFF08\u671F\u671B\u6765\u81EA '${result2.expected}'\uFF09`
         }
       };
     case "illegal-transition":
-      return { code: 409, body: { ok: false, error: `illegal transition: ${result.from} -> ${result.to}` } };
+      return { code: 409, body: { ok: false, error: `illegal transition: ${result2.from} -> ${result2.to}` } };
     case "precondition-violated":
-      return { code: 409, body: { ok: false, error: result.lines[0], detail: result.lines } };
+      return { code: 409, body: { ok: false, error: result2.lines[0], detail: result2.lines } };
     case "revision-untrusted":
       return {
         code: 409,
         body: {
           ok: false,
           error: "Verify build revision is not trustworthy",
-          code: result.blocker.code,
-          reason: result.blocker.reason,
-          remediation: result.blocker.remediation,
-          ...result.blocker.stateHash === void 0 ? {} : { stateHash: result.blocker.stateHash },
-          ...result.blocker.revisionHash === void 0 ? {} : { revisionHash: result.blocker.revisionHash }
+          code: result2.blocker.code,
+          reason: result2.blocker.reason,
+          remediation: result2.blocker.remediation,
+          ...result2.blocker.stateHash === void 0 ? {} : { stateHash: result2.blocker.stateHash },
+          ...result2.blocker.revisionHash === void 0 ? {} : { revisionHash: result2.blocker.revisionHash }
         }
       };
     case "workflow-not-found":
@@ -27563,37 +29294,37 @@ function mapTransitionResult(name, event, result) {
         code: 409,
         body: {
           ok: false,
-          error: `workflow '${result.workflowName}' \u672A\u627E\u5230\uFF08\u671F\u671B .pipeline/workflows/${result.workflowName}.yaml\uFF09`
+          error: `workflow '${result2.workflowName}' \u672A\u627E\u5230\uFF08\u671F\u671B .pipeline/workflows/${result2.workflowName}.yaml\uFF09`
         }
       };
     case "document-governance-invalid":
       return {
         code: 409,
-        body: { ok: false, error: result.reason, code: "document-governance-invalid" }
+        body: { ok: false, error: result2.reason, code: "document-governance-invalid" }
       };
     case "step-not-in-graph":
-      return { code: 409, body: { ok: false, error: `step '${result.stepId}' \u4E0D\u5728 workflow '${result.workflowName}' \u91CC` } };
+      return { code: 409, body: { ok: false, error: `step '${result2.stepId}' \u4E0D\u5728 workflow '${result2.workflowName}' \u91CC` } };
     case "event-unsupported":
       return {
         code: 409,
         body: {
           ok: false,
-          error: `step '${result.stepId}' \u4E0D\u652F\u6301 event '${result.event}'\uFF1B\u8BE5 step \u652F\u6301\uFF1A${result.available.join(", ") || "(\u65E0)"}`
+          error: `step '${result2.stepId}' \u4E0D\u652F\u6301 event '${result2.event}'\uFF1B\u8BE5 step \u652F\u6301\uFF1A${result2.available.join(", ") || "(\u65E0)"}`
         }
       };
     case "step-guard-failed": {
-      const lines = [`step '${result.stepId}' guard \u672A\u901A\u8FC7`, ...result.failures];
+      const lines = [`step '${result2.stepId}' guard \u672A\u901A\u8FC7`, ...result2.failures];
       return { code: 409, body: { ok: false, error: lines[0], detail: lines } };
     }
     case "step-skills-incomplete": {
-      const lines = [`step '${result.stepId}' \u5C1A\u672A\u5B8C\u6210\u58F0\u660E\u7684 skill`, ...result.missing];
+      const lines = [`step '${result2.stepId}' \u5C1A\u672A\u5B8C\u6210\u58F0\u660E\u7684 skill`, ...result2.missing];
       return {
         code: 409,
         body: { ok: false, error: lines[0], detail: lines, code: "step-skills-incomplete" }
       };
     }
     case "document-evidence-failed": {
-      const lines = [`OpenSpec \u6587\u6863\u8BC1\u636E\u672A\u901A\u8FC7\uFF08phase=${result.phase}\uFF09`, ...result.blockers];
+      const lines = [`OpenSpec \u6587\u6863\u8BC1\u636E\u672A\u901A\u8FC7\uFF08phase=${result2.phase}\uFF09`, ...result2.blockers];
       return { code: 409, body: { ok: false, error: lines[0], detail: lines, code: "document-evidence-failed" } };
     }
     case "review-approval-required":
@@ -27601,12 +29332,12 @@ function mapTransitionResult(name, event, result) {
         code: 409,
         body: {
           ok: false,
-          error: `phase '${result.phase}' \u7684\u4EA7\u7269\u5C1A\u672A\u53D6\u5F97\u4EBA\u5DE5\u786E\u8BA4`,
+          error: `phase '${result2.phase}' \u7684\u4EA7\u7269\u5C1A\u672A\u53D6\u5F97\u4EBA\u5DE5\u786E\u8BA4`,
           code: "review-approval-required"
         }
       };
     case "constraint-denied":
-      return { code: 409, body: { ok: false, error: `automation constraint denied transition: ${result.reason}` } };
+      return { code: 409, body: { ok: false, error: `automation constraint denied transition: ${result2.reason}` } };
   }
 }
 async function performTransition(deps, root, name, event) {
@@ -27670,7 +29401,7 @@ async function performTransition(deps, root, name, event) {
       const slots = resolveRequiredSkillSlots(deps.skillResolver, capability, stepId);
       let historyRaw = "";
       try {
-        historyRaw = await readFile20(join52(targetDir, HISTORY_FILE), "utf8");
+        historyRaw = await readFile21(join52(targetDir, HISTORY_FILE), "utf8");
       } catch (error2) {
         if (error2.code !== "ENOENT") throw error2;
       }
@@ -27685,7 +29416,7 @@ async function performTransition(deps, root, name, event) {
     }
   });
   try {
-    const result = await app.execute({
+    const result2 = await app.execute({
       root,
       changeDir: dir,
       changeName: name,
@@ -27702,7 +29433,7 @@ async function performTransition(deps, root, name, event) {
       }
     });
     let autoEnqueue;
-    if (result.kind === "applied" && deps.resolveTrackPolicy !== void 0) {
+    if (result2.kind === "applied" && deps.resolveTrackPolicy !== void 0) {
       try {
         const auto = await enqueueAfterSpecComplete({
           repoRoot: root,
@@ -27712,8 +29443,8 @@ async function performTransition(deps, root, name, event) {
         }, {
           changeName: name,
           event,
-          from: result.from,
-          to: result.to
+          from: result2.from,
+          to: result2.to
         });
         autoEnqueue = auto.kind;
       } catch (autoError) {
@@ -27721,7 +29452,7 @@ async function performTransition(deps, root, name, event) {
 `);
       }
     }
-    const outcome = mapTransitionResult(name, event, result);
+    const outcome = mapTransitionResult(name, event, result2);
     if (autoEnqueue === void 0) return outcome;
     return { ...outcome, body: { ...outcome.body, auto_enqueue: autoEnqueue } };
   } catch (e) {
@@ -27731,7 +29462,7 @@ async function performTransition(deps, root, name, event) {
 }
 
 // packages/server/src/serverGetActivityRoutes.ts
-async function handleGetActivityRoutes(req, res, path7, deps) {
+async function handleGetActivityRoutes(req, res, path8, deps) {
   const {
     cadenceScheduler,
     sendJson,
@@ -27746,7 +29477,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     stateScopeId,
     isLocalHost: isLocalHost2,
     snapshotDeps,
-    handleStream,
+    handleStream: handleStream2,
     isRegisteredRoot,
     clock,
     store,
@@ -27755,8 +29486,8 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     errMsg: errMsg2
   } = deps;
   const boundPort = deps.boundPort();
-  if (serveAsset(req, res, path7)) return;
-  if (path7 === "/api/health") {
+  if (serveAsset(req, res, path8)) return;
+  if (path8 === "/api/health") {
     return sendJson(res, 200, {
       ok: true,
       scope: "global",
@@ -27770,7 +29501,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
   if (!isLocalHost2(req.headers.host, boundPort)) {
     return sendJson(res, 403, { ok: false, error: "Host header \u4E0D\u5408\u6CD5\uFF08\u7591\u4F3C DNS \u91CD\u7ED1\u5B9A\u653B\u51FB\uFF09" });
   }
-  if (path7 === "/api/cadence/status") {
+  if (path8 === "/api/cadence/status") {
     if (cadenceScheduler === null) {
       return sendJson(res, 404, { ok: false, error: "cadence scheduler \u672A\u542F\u7528\uFF08capabilities.cadence=false\uFF09" });
     }
@@ -27781,22 +29512,22 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
       loops: status2.loops.filter((row) => row.root === resolvePath4(root))
     });
   }
-  if (path7 === "/" || path7 === "/index.html") {
+  if (path8 === "/" || path8 === "/index.html") {
     if (serveIndexWithToken(res)) return;
     return sendHtml(res, 200, indexHtml2(token));
   }
-  if (path7 === "/api/context-bundle/preview") {
+  if (path8 === "/api/context-bundle/preview") {
     return handleContextBundlePreview(req, res, deps);
   }
-  if (path7 === "/api/snapshot") {
+  if (path8 === "/api/snapshot") {
     try {
       return sendJson(res, 200, await buildSnapshot(snapshotDeps()));
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/stream") return handleStream(req, res);
-  if (path7 === "/api/operations/starters") {
+  if (path8 === "/api/stream") return handleStream2(req, res);
+  if (path8 === "/api/operations/starters") {
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
@@ -27807,21 +29538,21 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
       defaults: { runner: "codex", workflow: "default" }
     });
   }
-  if (path7 === "/api/afk/snapshot") {
+  if (path8 === "/api/afk/snapshot") {
     try {
       return sendJson(res, 200, buildAfkSnapshot(await buildSnapshot(snapshotDeps()), clock));
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/afk/log") {
+  if (path8 === "/api/afk/log") {
     try {
       return sendJson(res, 200, buildAfkLog(await buildSnapshot(snapshotDeps()), clock));
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  const logMatch = /^\/api\/afk\/([^/]+)\/log$/.exec(path7);
+  const logMatch = /^\/api\/afk\/([^/]+)\/log$/.exec(path8);
   if (logMatch) {
     const segment = logMatch[1];
     if (segment === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 change \u8DEF\u5F84" });
@@ -27839,7 +29570,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     }
     return sendJson(res, 200, { log: await readAfkRunLog(dir) });
   }
-  const mHistory = /^\/api\/change\/([^/]+)\/history$/.exec(path7);
+  const mHistory = /^\/api\/change\/([^/]+)\/history$/.exec(path8);
   if (mHistory) {
     const segment = mHistory[1];
     if (segment === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 change \u8DEF\u5F84" });
@@ -27857,7 +29588,7 @@ async function handleGetActivityRoutes(req, res, path7, deps) {
     }
     return sendJson(res, 200, { entries: await readChangeHistory(dir, { store, recordStore }) });
   }
-  const mRunDetail = /^\/api\/change\/([^/]+)\/run-detail$/.exec(path7);
+  const mRunDetail = /^\/api\/change\/([^/]+)\/run-detail$/.exec(path8);
   if (mRunDetail) {
     const segment = mRunDetail[1];
     if (segment === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 change \u8DEF\u5F84" });
@@ -27927,12 +29658,12 @@ async function handleSessionLinks(req, res, deps) {
   );
   return deps.sendJson(res, 200, { links });
 }
-async function handleGetSessionRoutes(req, res, path7, deps) {
-  if (path7 === "/api/mem/session-link") {
+async function handleGetSessionRoutes(req, res, path8, deps) {
+  if (path8 === "/api/mem/session-link") {
     await handleSessionLink(req, res, deps);
     return true;
   }
-  if (path7 === "/api/mem/session-links") {
+  if (path8 === "/api/mem/session-links") {
     await handleSessionLinks(req, res, deps);
     return true;
   }
@@ -27940,9 +29671,9 @@ async function handleGetSessionRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverGetTraceRoutes.ts
-function handleGetTraceRoutes(req, res, path7, deps) {
+function handleGetTraceRoutes(req, res, path8, deps) {
   const { clock, sendJson, traceStore } = deps;
-  if (path7 === "/api/traces/sessions") {
+  if (path8 === "/api/traces/sessions") {
     if (!traceStore) {
       sendJson(res, 404, { ok: false, error: "traces \u6570\u636E\u7AEF\u672A\u88C5\uFF08capabilities.traffic=false\uFF09" });
       return true;
@@ -27954,7 +29685,7 @@ function handleGetTraceRoutes(req, res, path7, deps) {
     }
     return true;
   }
-  if (path7 === "/api/traces/records") {
+  if (path8 === "/api/traces/records") {
     if (!traceStore) {
       sendJson(res, 404, { ok: false, error: "traces \u6570\u636E\u7AEF\u672A\u88C5\uFF08capabilities.traffic=false\uFF09" });
       return true;
@@ -27971,7 +29702,7 @@ function handleGetTraceRoutes(req, res, path7, deps) {
     }
     return true;
   }
-  if (path7 !== "/api/traces/timeline") return false;
+  if (path8 !== "/api/traces/timeline") return false;
   if (!traceStore) {
     sendJson(res, 404, { ok: false, error: "traces \u6570\u636E\u7AEF\u672A\u88C5\uFF08capabilities.traffic=false\uFF09" });
     return true;
@@ -28059,8 +29790,8 @@ function hasInstalledPlugin(hostHome, namespaceSegments, markerSegments, options
   if (namespace === null) return false;
   try {
     try {
-      const path7 = join55(hostHome, ...namespaceSegments);
-      const versions = options.readPluginCacheEntries?.(path7) ?? readdirSync9(path7, { withFileTypes: true });
+      const path8 = join55(hostHome, ...namespaceSegments);
+      const versions = options.readPluginCacheEntries?.(path8) ?? readdirSync9(path8, { withFileTypes: true });
       if (versions.length > 128 || !directoryChainIsStable(namespace)) return false;
       return versions.some((version) => {
         if (!version.isDirectory() || version.isSymbolicLink()) return false;
@@ -28096,18 +29827,18 @@ function readBoundedHostFile(hostHome, segments) {
   if (segments.length === 0) return null;
   const directories = captureDirectoryChain(hostHome, segments.slice(0, -1));
   if (directories === null) return null;
-  const path7 = join55(hostHome, ...segments);
+  const path8 = join55(hostHome, ...segments);
   let descriptor;
   try {
     descriptor = openSync11(
-      path7,
+      path8,
       constants14.O_RDONLY | constants14.O_NOFOLLOW | constants14.O_NONBLOCK
     );
     const metadata = fstatSync10(descriptor);
     if (!metadata.isFile() || metadata.size > MAX_HOST_INVENTORY_BYTES) return null;
     const fileIsStable = () => {
       try {
-        const current = lstatSync9(path7);
+        const current = lstatSync9(path8);
         return current.isFile() && !current.isSymbolicLink() && current.dev === metadata.dev && current.ino === metadata.ino && current.size === metadata.size && directoryChainIsStable(directories);
       } catch {
         return false;
@@ -28531,7 +30262,7 @@ function createHostTargetPlanRuntime(options = {}) {
       timer.unref?.();
       try {
         void queued.load(controller.signal).then(
-          (result) => finish(() => queued.resolve(result)),
+          (result2) => finish(() => queued.resolve(result2)),
           (error2) => finish(() => queued.reject(error2))
         );
       } catch (error2) {
@@ -28540,11 +30271,11 @@ function createHostTargetPlanRuntime(options = {}) {
     }
   };
   const schedule = (load) => {
-    const scheduled = new Promise((resolve16, reject) => {
+    const scheduled = new Promise((resolve16, reject3) => {
       queue.push({
         load,
         resolve: resolve16,
-        reject,
+        reject: reject3,
         deadline: now() + timeoutMs
       });
     });
@@ -28558,17 +30289,17 @@ function createHostTargetPlanRuntime(options = {}) {
       const existing = inFlight.get(key);
       if (existing !== void 0) return existing;
       const queued = schedule(load);
-      const shared = queued.then((result) => {
-        if (result.status === 200) {
+      const shared = queued.then((result2) => {
+        if (result2.status === 200) {
           cache.delete(key);
-          cache.set(key, result);
+          cache.set(key, result2);
           while (cache.size > MAX_HOST_PLAN_KEYS) {
             const oldest = cache.keys().next().value;
             if (oldest === void 0) break;
             cache.delete(oldest);
           }
         }
-        return result;
+        return result2;
       });
       inFlight.set(key, shared);
       const cleanup = () => {
@@ -28597,22 +30328,22 @@ function parsePlanQuery(searchParams) {
 }
 async function runAndDecode(args, deps, decode, signal) {
   try {
-    const result = await deps.operationRunner(deps.hostHome, args, { signal });
-    if (result.exitCode !== 0) return PLAN_INVALID;
-    const decoded = decode(parseHostTargetPlanJson(result.stdout));
+    const result2 = await deps.operationRunner(deps.hostHome, args, { signal });
+    if (result2.exitCode !== 0) return PLAN_INVALID;
+    const decoded = decode(parseHostTargetPlanJson(result2.stdout));
     return decoded === null ? PLAN_INVALID : { status: 200, body: decoded };
   } catch {
     return PLAN_INVALID;
   }
 }
-async function resolveHostTargetPlanRoute(requestUrl, path7, deps) {
-  if (path7 !== "/api/host-targets" && path7 !== "/api/host-target-plan" && path7 !== "/api/host-target-detection") return null;
+async function resolveHostTargetPlanRoute(requestUrl, path8, deps) {
+  if (path8 !== "/api/host-targets" && path8 !== "/api/host-target-plan" && path8 !== "/api/host-target-detection") return null;
   const searchParams = new URL(requestUrl, "http://localhost").searchParams;
-  if (path7 === "/api/host-target-detection") {
+  if (path8 === "/api/host-target-detection") {
     if ([...searchParams].length !== 0) return QUERY_INVALID;
     return detectNativeHostTargets(deps.hostHome);
   }
-  if (path7 === "/api/host-targets") {
+  if (path8 === "/api/host-targets") {
     if ([...searchParams].length !== 0) return QUERY_INVALID;
     if (!deps.operationsAvailable) return PLAN_UNAVAILABLE;
     return deps.runtime.resolve(
@@ -28835,7 +30566,7 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
   try {
     const anchored = await readAnchoredChangeState(anchor, changeName);
     if (anchored === null) return null;
-    const { changeDir, state } = anchored;
+    const { changeDir: changeDir2, state } = anchored;
     const rootPath = anchor.path;
     const fields = state.fields;
     const phase = stringField3(fields.phase);
@@ -28880,8 +30611,8 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
       ...deps.assessBuildRevision === void 0 ? {} : { assessBuildRevision: deps.assessBuildRevision }
     };
     const [documents, terminalActivity, tasksProjection, workflowExecution, authority] = await Promise.all([
-      documentEvidence(rootPath, changeDir, plan, phase),
-      readTerminalActivity(changeDir, changeName, nowMs),
+      documentEvidence(rootPath, changeDir2, plan, phase),
+      readTerminalActivity(changeDir2, changeName, nowMs),
       readAnchoredTasksProjection(
         anchored.changeAnchor,
         void 0,
@@ -28891,8 +30622,8 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
         ),
         anchor
       ),
-      snapshotWorkflowExecution(plan, state, rootPath, changeDir, changeName, capabilityDeps),
-      readWorkflowSnapshotAuthority(changeDir, state, plan)
+      snapshotWorkflowExecution(plan, state, rootPath, changeDir2, changeName, capabilityDeps),
+      readWorkflowSnapshotAuthority(changeDir2, state, plan)
     ]);
     assertWorkflowRootAnchor(anchor);
     assertChangePathAnchor(anchored.changeAnchor);
@@ -28905,7 +30636,7 @@ async function readChangeSnapshot(deps, root, changeName, nowMs = deps.now?.() ?
     });
     return {
       name: changeName,
-      path: changeDir,
+      path: changeDir2,
       phase,
       phase_status: stringField3(fields.phase_status),
       track: stringField3(fields.track),
@@ -28956,8 +30687,8 @@ function readCurrentWorkflowDefinition(anchor, workflow) {
 function isChangeName2(name) {
   return name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..");
 }
-async function resolveWorkflowDefinitionStatusRoute(rawUrl, path7, deps) {
-  if (path7 !== "/api/workflow-definition-status") return null;
+async function resolveWorkflowDefinitionStatusRoute(rawUrl, path8, deps) {
+  if (path8 !== "/api/workflow-definition-status") return null;
   const params = new URL(rawUrl, "http://localhost").searchParams;
   const name = params.get("change") ?? "";
   if (!isChangeName2(name)) {
@@ -28967,16 +30698,16 @@ async function resolveWorkflowDefinitionStatusRoute(rawUrl, path7, deps) {
   if (!requestedRoot) {
     return { status: 400, body: { ok: false, error: "\u7F3A\u5C11 root" } };
   }
-  const rootCheck = deps.workflowRootForRequest(requestedRoot);
-  if (!rootCheck.ok) {
+  const rootCheck2 = deps.workflowRootForRequest(requestedRoot);
+  if (!rootCheck2.ok) {
     return {
-      status: rootCheck.code,
-      body: { ok: false, error: rootCheck.code === 404 ? "root \u672A\u6CE8\u518C" : "root \u4E0D\u53EF\u4FE1" }
+      status: rootCheck2.code,
+      body: { ok: false, error: rootCheck2.code === 404 ? "root \u672A\u6CE8\u518C" : "root \u4E0D\u53EF\u4FE1" }
     };
   }
   let state;
   try {
-    state = await deps.readChangeState(rootCheck.anchor, name);
+    state = await deps.readChangeState(rootCheck2.anchor, name);
   } catch (error2) {
     if (error2 instanceof WorkflowPathError) {
       return { status: 403, body: { ok: false, error: "workflow \u5B9A\u4E49\u8DEF\u5F84\u4E0D\u53EF\u4FE1" } };
@@ -28995,7 +30726,7 @@ async function resolveWorkflowDefinitionStatusRoute(rawUrl, path7, deps) {
   const frozenFingerprint = snapshot?.workflowFingerprint ?? null;
   let current;
   try {
-    current = frozenFingerprint === null ? { kind: "invalid" } : deps.readCurrent(rootCheck.anchor, workflow);
+    current = frozenFingerprint === null ? { kind: "invalid" } : deps.readCurrent(rootCheck2.anchor, workflow);
   } catch (error2) {
     if (error2 instanceof WorkflowPathError) {
       return { status: 403, body: { ok: false, error: "workflow \u5B9A\u4E49\u8DEF\u5F84\u4E0D\u53EF\u4FE1" } };
@@ -29218,8 +30949,8 @@ function failure(status2, code, error2) {
 function isChangeName3(name) {
   return name !== "" && /^[a-zA-Z0-9_-]+$/.test(name) && !name.includes("..");
 }
-async function resolveOrchestrationGraphRoute(rawUrl, path7, deps) {
-  if (path7 !== "/api/orchestration-graph") return null;
+async function resolveOrchestrationGraphRoute(rawUrl, path8, deps) {
+  if (path8 !== "/api/orchestration-graph") return null;
   const params = new URL(rawUrl, "http://localhost").searchParams;
   const name = params.get("change") ?? "";
   if (!isChangeName3(name)) {
@@ -29227,17 +30958,17 @@ async function resolveOrchestrationGraphRoute(rawUrl, path7, deps) {
   }
   const root = params.get("root") ?? "";
   if (root === "") return failure(400, "ORCHESTRATION_ROOT_REQUIRED", "\u7F3A\u5C11 root \u53C2\u6570");
-  const rootCheck = deps.workflowRootForRequest(root);
-  if (!rootCheck.ok) {
+  const rootCheck2 = deps.workflowRootForRequest(root);
+  if (!rootCheck2.ok) {
     return failure(
-      rootCheck.code,
-      rootCheck.code === 404 ? "ORCHESTRATION_ROOT_NOT_REGISTERED" : "ORCHESTRATION_ROOT_FORBIDDEN",
-      rootCheck.code === 404 ? "root \u672A\u6CE8\u518C" : "root \u4E0D\u53EF\u4FE1"
+      rootCheck2.code,
+      rootCheck2.code === 404 ? "ORCHESTRATION_ROOT_NOT_REGISTERED" : "ORCHESTRATION_ROOT_FORBIDDEN",
+      rootCheck2.code === 404 ? "root \u672A\u6CE8\u518C" : "root \u4E0D\u53EF\u4FE1"
     );
   }
   let change;
   try {
-    change = await deps.readChange(rootCheck.anchor, name);
+    change = await deps.readChange(rootCheck2.anchor, name);
   } catch (error2) {
     if (error2 instanceof WorkflowPathError) {
       return failure(403, "ORCHESTRATION_DEFINITION_FORBIDDEN", "Workflow \u5B9A\u4E49\u8DEF\u5F84\u4E0D\u53EF\u4FE1");
@@ -29260,7 +30991,7 @@ async function resolveOrchestrationGraphRoute(rawUrl, path7, deps) {
     return {
       status: 200,
       body: buildOrchestrationGraph({
-        root: rootCheck.anchor.path,
+        root: rootCheck2.anchor.path,
         change,
         definition: change.workflowDefinition
       })
@@ -29274,17 +31005,316 @@ async function resolveOrchestrationGraphRoute(rawUrl, path7, deps) {
 }
 
 // packages/server/src/serverOrchestrationRoutes.ts
-async function resolveOrchestrationRoutes(rawUrl, path7, deps) {
-  const graph = await resolveOrchestrationGraphRoute(rawUrl, path7, {
+async function resolveOrchestrationRoutes(rawUrl, path8, deps) {
+  const graph = await resolveOrchestrationGraphRoute(rawUrl, path8, {
     workflowRootForRequest: deps.workflowRootForRequest,
     readChange: async (root, name) => readChangeSnapshot(deps.snapshotDeps(), root, name)
   });
   if (graph !== null) return graph;
-  return resolveWorkflowDefinitionStatusRoute(rawUrl, path7, {
+  return resolveWorkflowDefinitionStatusRoute(rawUrl, path8, {
     workflowRootForRequest: deps.workflowRootForRequest,
     readChangeState: async (anchor, change) => (await readAnchoredChangeState(anchor, change))?.state ?? null,
     readCurrent: readCurrentWorkflowDefinition
   });
+}
+
+// packages/server/src/serverOrchestrationV2Routes.ts
+import { join as join57 } from "node:path";
+var CHANGE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+var PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u;
+var CURSOR = /^(?:0|[1-9][0-9]{0,9})$/u;
+var MAX_CURSOR = 2048;
+var MAX_LIMIT = 200;
+var UTC3 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u;
+function failure2(status2, code, error2, extra = {}) {
+  return { status: status2, body: { ok: false, code, error: error2, ...extra } };
+}
+function validChangeId(value) {
+  return value !== "." && value !== ".." && CHANGE_ID.test(value) && !value.includes("/") && !value.includes("\\");
+}
+function changeDir(anchor, changeId) {
+  return join57(anchor.path, "openspec", "changes", changeId);
+}
+function rootCheck(deps, root) {
+  if (root === "") return failure2(400, "ORCHESTRATION_V2_ROOT_REQUIRED", "\u7F3A\u5C11 root \u53C2\u6570");
+  let checked;
+  try {
+    checked = deps.workflowRootForRequest(root);
+  } catch {
+    return failure2(403, "ORCHESTRATION_V2_ROOT_FORBIDDEN", "root \u4E0D\u53EF\u4FE1");
+  }
+  if (!checked.ok) {
+    return failure2(checked.code, checked.code === 404 ? "ORCHESTRATION_V2_ROOT_NOT_REGISTERED" : "ORCHESTRATION_V2_ROOT_FORBIDDEN", checked.code === 404 ? "root \u672A\u6CE8\u518C" : "root \u4E0D\u53EF\u4FE1");
+  }
+  return checked;
+}
+function parseChange(path8) {
+  const match = /^\/api\/orchestration\/changes\/([^/]+)(?:\/(events|stream|commands|metrics))?$/.exec(path8);
+  if (!match) return null;
+  const encoded = match[1];
+  if (encoded === void 0) return failure2(400, "ORCHESTRATION_V2_CHANGE_INVALID", "\u975E\u6CD5 change \u8DEF\u5F84");
+  let changeId;
+  try {
+    changeId = decodeURIComponent(encoded);
+  } catch {
+    return failure2(400, "ORCHESTRATION_V2_CHANGE_INVALID", "\u975E\u6CD5 change \u8DEF\u5F84");
+  }
+  if (!validChangeId(changeId)) return failure2(400, "ORCHESTRATION_V2_CHANGE_INVALID", "\u975E\u6CD5 change \u540D");
+  const suffix = match[2];
+  return { kind: suffix === "events" ? "events" : suffix === "stream" ? "stream" : suffix === "commands" ? "commands" : suffix === "metrics" ? "metrics" : "change", changeId };
+}
+function parseCursor(value, label) {
+  if (value === null || value === "") return 0;
+  if (!CURSOR.test(value)) return failure2(400, "ORCHESTRATION_V2_CURSOR_INVALID", `${label} \u5FC5\u987B\u662F\u975E\u8D1F\u6574\u6570`);
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number > MAX_CURSOR) return failure2(413, "ORCHESTRATION_V2_CURSOR_LIMIT_EXCEEDED", `${label} \u8D85\u51FA\u5B89\u5168\u4E0A\u9650`);
+  return number;
+}
+function parseLimit(value) {
+  if (value === null || value === "") return MAX_LIMIT;
+  const parsed = parseCursor(value, "limit");
+  if (typeof parsed !== "number") return parsed;
+  if (parsed === 0) return failure2(400, "ORCHESTRATION_V2_LIMIT_INVALID", "limit \u5FC5\u987B\u5927\u4E8E 0");
+  return Math.min(parsed, MAX_LIMIT);
+}
+function isRecord8(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+function readRootFromBody(body) {
+  if (!isRecord8(body) || typeof body.root !== "string") return failure2(400, "ORCHESTRATION_V2_BODY_INVALID", "\u8BF7\u6C42\u5FC5\u987B\u5305\u542B root");
+  if (body.root.length > 4096) return failure2(413, "ORCHESTRATION_V2_BODY_LIMIT_EXCEEDED", "root \u8D85\u51FA\u5B89\u5168\u4E0A\u9650");
+  return body.root;
+}
+function commandFromBody(body, changeId) {
+  if (!isRecord8(body)) return failure2(400, "ORCHESTRATION_V2_COMMAND_INVALID", "command body \u5FC5\u987B\u662F\u5BF9\u8C61");
+  const keys = Object.keys(body).sort();
+  if (keys.join(",") !== "command,root") return failure2(400, "ORCHESTRATION_V2_COMMAND_INVALID", "command body \u5B57\u6BB5\u4E0D\u7B26\u5408\u5951\u7EA6");
+  const root = readRootFromBody(body);
+  if (typeof root !== "string") return root;
+  const decoded = decodeBoardCommandV2(body.command);
+  if (!decoded.ok) return failure2(400, "ORCHESTRATION_V2_COMMAND_INVALID", "command schema \u65E0\u6548", { errors: decoded.errors.map((error2) => ({ path: error2.path, code: error2.code })) });
+  if (decoded.value.change_id !== changeId) return failure2(422, "ORCHESTRATION_V2_CHANGE_MISMATCH", "command change \u4E0E\u8DEF\u5F84\u4E0D\u4E00\u81F4");
+  return { root, command: decoded.value };
+}
+function mapAppendFailure(result2, snapshot) {
+  const rejection = result2.rejection;
+  const status2 = rejection.code === "revision-conflict" || rejection.code === "idempotency-conflict" || rejection.code === "terminal-state" || rejection.code === "lease-mismatch" ? 409 : rejection.code === "not-found" ? 404 : rejection.code === "missing-evidence" || rejection.code === "policy-blocked" ? 422 : 400;
+  const code = rejection.code === "revision-conflict" ? "ORCHESTRATION_V2_REVISION_CONFLICT" : rejection.code === "idempotency-conflict" ? "ORCHESTRATION_V2_IDEMPOTENCY_CONFLICT" : `ORCHESTRATION_V2_${rejection.code.replaceAll("-", "_").toUpperCase()}`;
+  return failure2(status2, code, rejection.code === "revision-conflict" ? "revision conflict" : rejection.code === "idempotency-conflict" ? "idempotency conflict" : "orchestration command rejected", {
+    reason_code: rejection.reason_code,
+    next_actions: rejection.next_actions,
+    ...snapshot ? { current_revision: snapshot.revision, snapshot } : {}
+  });
+}
+async function resolveOrchestrationV2GetRoute(rawUrl, path8, deps) {
+  const parsed = parseChange(path8);
+  if (parsed === null) return null;
+  if (typeof parsed !== "object" || "status" in parsed) return parsed;
+  const params = new URL(rawUrl, "http://localhost").searchParams;
+  const root = rootCheck(deps, params.get("root") ?? "");
+  if ("status" in root) return root;
+  const dir = changeDir(root.anchor, parsed.changeId);
+  try {
+    if (parsed.kind === "change" || parsed.kind === "stream") {
+      const snapshot = await deps.ledger.readSnapshot(dir);
+      if (!snapshot) return failure2(404, "ORCHESTRATION_V2_CHANGE_NOT_FOUND", "\u627E\u4E0D\u5230\u8BE5 orchestration change");
+      return { status: 200, body: { ok: true, snapshot } };
+    }
+    if (parsed.kind === "events") {
+      const after = parseCursor(params.get("after_revision"), "after_revision");
+      if (typeof after !== "number") return after;
+      const limit = parseLimit(params.get("limit"));
+      if (typeof limit !== "number") return limit;
+      const snapshot = await deps.ledger.readSnapshot(dir);
+      if (!snapshot) return failure2(404, "ORCHESTRATION_V2_CHANGE_NOT_FOUND", "\u627E\u4E0D\u5230\u8BE5 orchestration change");
+      const events2 = (await deps.ledger.readEvents(dir, { fromRevision: after + 1, toRevision: snapshot.revision })).slice(0, limit);
+      return {
+        status: 200,
+        body: {
+          ok: true,
+          events: events2,
+          from_revision: events2[0]?.revision ?? after + 1,
+          to_revision: events2.at(-1)?.revision ?? after,
+          current_revision: snapshot.revision
+        }
+      };
+    }
+    if (parsed.kind === "metrics") {
+      const snapshot = await deps.ledger.readSnapshot(dir);
+      if (!snapshot) return failure2(404, "ORCHESTRATION_V2_CHANGE_NOT_FOUND", "\u627E\u4E0D\u5230\u8BE5 orchestration change");
+      return { status: 200, body: {
+        ok: true,
+        schema_version: "orchestration-metrics/v1",
+        project_id: snapshot.project_id,
+        change_id: snapshot.change_id,
+        revision: snapshot.revision,
+        status: snapshot.status,
+        work_items: { total: snapshot.work_items.length, completed: snapshot.work_items.filter((item2) => item2.status === "completed").length, blocked: snapshot.work_items.filter((item2) => item2.status === "blocked").length, failed: snapshot.work_items.filter((item2) => item2.status === "failed").length },
+        runs: { total: snapshot.runs.length, active: snapshot.runs.filter((run) => run.status === "claimed" || run.status === "running").length, retries: snapshot.runs.filter((run) => run.attempt > 1).length },
+        results: { total: snapshot.results.length, validated: snapshot.results.filter((result2) => result2.contract_status === "validated").length },
+        validations: { total: snapshot.validations.length, passed: snapshot.validations.filter((report) => report.status === "pass").length, failed: snapshot.validations.filter((report) => report.status === "fail").length },
+        gates: { total: snapshot.gates.length, passed: snapshot.gates.filter((gate) => gate.status === "passed" || gate.status === "waived").length, pending: snapshot.gates.filter((gate) => gate.status === "pending").length },
+        leases: { total: snapshot.leases.length, active: snapshot.leases.filter((lease) => lease.status === "active" || lease.status === "renewed").length, expired: snapshot.leases.filter((lease) => lease.status === "expired").length },
+        blockers: snapshot.blockers.length
+      } };
+    }
+    return failure2(405, "ORCHESTRATION_V2_METHOD_NOT_ALLOWED", "commands \u4EC5\u652F\u6301 POST");
+  } catch {
+    return failure2(500, "ORCHESTRATION_V2_READ_FAILED", "orchestration \u6570\u636E\u8BFB\u53D6\u5931\u8D25");
+  }
+}
+async function resolveOrchestrationV2PostRoute(path8, body, deps) {
+  if (path8 === "/api/orchestration/changes") {
+    if (!isRecord8(body)) return failure2(400, "ORCHESTRATION_V2_BODY_INVALID", "\u8BF7\u6C42 body \u5FC5\u987B\u662F\u5BF9\u8C61");
+    const keys = Object.keys(body).sort();
+    if (!["change_id", "correlation_id", "project_id", "root"].every((key) => keys.includes(key)) || keys.some((key) => !["change_id", "correlation_id", "project_id", "root", "updated_at"].includes(key))) {
+      return failure2(400, "ORCHESTRATION_V2_BODY_INVALID", "\u521B\u5EFA\u8BF7\u6C42\u5B57\u6BB5\u4E0D\u7B26\u5408\u5951\u7EA6");
+    }
+    if (typeof body.root !== "string" || typeof body.project_id !== "string" || typeof body.change_id !== "string" || typeof body.correlation_id !== "string") return failure2(400, "ORCHESTRATION_V2_BODY_INVALID", "\u521B\u5EFA\u8BF7\u6C42\u8EAB\u4EFD\u5B57\u6BB5\u65E0\u6548");
+    if (!validChangeId(body.change_id) || !PROJECT_ID.test(body.project_id) || !PROJECT_ID.test(body.correlation_id)) return failure2(400, "ORCHESTRATION_V2_IDENTITY_INVALID", "\u521B\u5EFA\u8BF7\u6C42\u8EAB\u4EFD\u4E0D\u5B89\u5168");
+    if (body.updated_at !== void 0 && (typeof body.updated_at !== "string" || !UTC3.test(body.updated_at))) return failure2(400, "ORCHESTRATION_V2_TIME_INVALID", "updated_at \u5FC5\u987B\u4E3A UTC");
+    const root2 = rootCheck(deps, body.root);
+    if ("status" in root2) return root2;
+    try {
+      const snapshot = await deps.ledger.initialize(changeDir(root2.anchor, body.change_id), {
+        project_id: body.project_id,
+        change_id: body.change_id,
+        correlation_id: body.correlation_id,
+        ...body.updated_at === void 0 ? {} : { updated_at: body.updated_at }
+      });
+      return { status: 201, body: { ok: true, created: snapshot.revision === 0, snapshot } };
+    } catch {
+      return failure2(500, "ORCHESTRATION_V2_INITIALIZE_FAILED", "orchestration change \u521D\u59CB\u5316\u5931\u8D25");
+    }
+  }
+  const parsed = parseChange(path8);
+  if (parsed === null) return null;
+  if (typeof parsed !== "object" || "status" in parsed) return parsed;
+  if (parsed.kind !== "commands") return failure2(405, "ORCHESTRATION_V2_METHOD_NOT_ALLOWED", "\u8BE5 orchestration \u8DEF\u5F84\u4EC5\u652F\u6301 GET");
+  const parsedBody = commandFromBody(body, parsed.changeId);
+  if ("status" in parsedBody) return parsedBody;
+  const root = rootCheck(deps, parsedBody.root);
+  if ("status" in root) return root;
+  try {
+    const result2 = await deps.ledger.append(changeDir(root.anchor, parsed.changeId), parsedBody.command);
+    if (result2.kind === "committed" || result2.kind === "replayed") return { status: 200, body: { ok: true, replayed: result2.replayed, event: result2.event, snapshot: result2.snapshot } };
+    const current = await deps.ledger.readSnapshot(changeDir(root.anchor, parsed.changeId));
+    return mapAppendFailure(result2, current);
+  } catch {
+    return failure2(500, "ORCHESTRATION_V2_WRITE_FAILED", "orchestration command \u5199\u5165\u5931\u8D25");
+  }
+}
+function authorized(req, deps, requireToken = false) {
+  if (deps.isLocalHost && !deps.isLocalHost(req.headers.host, deps.boundPort?.() ?? 0)) return failure2(403, "ORCHESTRATION_V2_HOST_FORBIDDEN", "Host header \u4E0D\u5408\u6CD5");
+  if (requireToken && deps.token !== void 0) {
+    const provided = tokenFromHeaders(req.headers) ?? new URL(req.url ?? "/", "http://localhost").searchParams.get("token") ?? void 0;
+    if (!provided || !tokensMatch(provided, deps.token)) return failure2(401, "ORCHESTRATION_V2_UNAUTHORIZED", "\u7F3A\u5C11\u6216\u65E0\u6548 token");
+  }
+  return null;
+}
+function writeSse(res, event, data, id2) {
+  const payload = JSON.stringify(data).replaceAll("\n", "\ndata: ");
+  res.write(`${id2 === void 0 ? "" : `id: ${id2}
+`}event: ${event}
+data: ${payload}
+
+`);
+}
+async function handleStream(req, res, parsed, rawUrl, deps) {
+  const params = new URL(rawUrl, "http://localhost").searchParams;
+  const cursorRaw = params.get("after_revision") ?? (typeof req.headers["last-event-id"] === "string" ? req.headers["last-event-id"] : null);
+  const cursor = parseCursor(cursorRaw, "after_revision");
+  if (typeof cursor !== "number") {
+    deps.sendJson(res, cursor.status, cursor.body);
+    return;
+  }
+  const root = rootCheck(deps, params.get("root") ?? "");
+  if ("status" in root) {
+    deps.sendJson(res, root.status, root.body);
+    return;
+  }
+  const dir = changeDir(root.anchor, parsed.changeId);
+  let snapshot;
+  try {
+    snapshot = await deps.ledger.readSnapshot(dir);
+  } catch {
+    deps.sendJson(res, 500, failure2(500, "ORCHESTRATION_V2_READ_FAILED", "orchestration \u6570\u636E\u8BFB\u53D6\u5931\u8D25").body);
+    return;
+  }
+  if (!snapshot) {
+    deps.sendJson(res, 404, failure2(404, "ORCHESTRATION_V2_CHANGE_NOT_FOUND", "\u627E\u4E0D\u5230\u8BE5 orchestration change").body);
+    return;
+  }
+  res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-store", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+  let revision = snapshot.revision;
+  writeSse(res, "snapshot", { ok: true, snapshot }, snapshot.revision);
+  let replay = [];
+  try {
+    replay = await deps.ledger.readEvents(dir, { fromRevision: cursor + 1, toRevision: snapshot.revision });
+  } catch {
+    res.write(": orchestration replay unavailable\n\n");
+  }
+  for (const event of replay.slice(0, ORCHESTRATION_MAX_EVENTS)) {
+    writeSse(res, "event", event, event.revision);
+    revision = event.revision;
+  }
+  const interval = Math.max(100, Math.min(deps.streamPollIntervalMs ?? 1e3, 3e4));
+  const heartbeat = Math.max(interval, Math.min(deps.streamHeartbeatMs ?? 15e3, 12e4));
+  let lastBeat = Date.now();
+  const timer = setInterval(() => {
+    void (async () => {
+      try {
+        const current = await deps.ledger.readSnapshot(dir);
+        if (!current) return;
+        if (current.revision > revision) {
+          const events2 = await deps.ledger.readEvents(dir, { fromRevision: revision + 1, toRevision: current.revision });
+          for (const event of events2.slice(0, ORCHESTRATION_MAX_EVENTS)) {
+            writeSse(res, "event", event, event.revision);
+            revision = event.revision;
+          }
+          lastBeat = Date.now();
+        } else if (Date.now() - lastBeat >= heartbeat) {
+          res.write(": ping\n\n");
+          lastBeat = Date.now();
+        }
+      } catch {
+      }
+    })();
+  }, interval);
+  timer.unref?.();
+  req.on("close", () => clearInterval(timer));
+}
+async function handleOrchestrationV2GetRoute(req, res, path8, deps) {
+  const parsed = parseChange(path8);
+  if (parsed === null) return false;
+  const authError = authorized(req, deps);
+  if (authError) {
+    deps.sendJson(res, authError.status, authError.body);
+    return true;
+  }
+  if (typeof parsed !== "object" || "status" in parsed) {
+    const result3 = parsed;
+    deps.sendJson(res, result3.status, result3.body);
+    return true;
+  }
+  if (parsed.kind === "stream") {
+    await handleStream(req, res, parsed, req.url ?? "/", deps);
+    return true;
+  }
+  const result2 = await resolveOrchestrationV2GetRoute(req.url ?? "/", path8, deps);
+  if (result2) deps.sendJson(res, result2.status, result2.body);
+  return true;
+}
+async function handleOrchestrationV2PostRoute(req, res, path8, deps) {
+  if (path8 !== "/api/orchestration/changes" && !/^\/api\/orchestration\/changes\/[^/]+\/commands$/.test(path8)) return false;
+  if (deps.readJsonBody === void 0) {
+    deps.sendJson(res, 500, failure2(500, "ORCHESTRATION_V2_BODY_READER_UNAVAILABLE", "orchestration body reader unavailable").body);
+    return true;
+  }
+  const body = await deps.readJsonBody(req);
+  const result2 = await resolveOrchestrationV2PostRoute(path8, body, deps);
+  if (result2) deps.sendJson(res, result2.status, result2.body);
+  return true;
 }
 
 // packages/server/src/serverTaskPlanRoutes.ts
@@ -29365,11 +31395,11 @@ async function readAnchoredChangeWithDeps(anchor, change, reader, overrides = {}
     closeSync8(changeFd);
     throw new ContextBundlePathError(403, "TaskPlan Change directory identity changed while anchoring");
   }
-  let result = null;
+  let result2 = null;
   let readFailed = false;
   let readError;
   try {
-    result = await deps.readPlan(anchoredChangeDir);
+    result2 = await deps.readPlan(anchoredChangeDir);
   } catch (error2) {
     readFailed = true;
     readError = error2;
@@ -29379,7 +31409,7 @@ async function readAnchoredChangeWithDeps(anchor, change, reader, overrides = {}
     assertTrustedRoot(anchor, deps.assertRoot);
     assertRootMutationVersion(anchor, rootVersion2);
     if (readFailed) throw readError;
-    return result;
+    return result2;
   } finally {
     closeSync8(changeFd);
   }
@@ -29398,39 +31428,39 @@ function errorStatus(error2) {
   const status2 = Reflect.get(error2, "status");
   return typeof status2 === "number" ? status2 : void 0;
 }
-function failure2(status2, code, error2) {
+function failure3(status2, code, error2) {
   return { status: status2, body: { ok: false, code, error: error2 } };
 }
-async function resolveTaskPlanRoute(rawUrl, path7, deps) {
-  const match = /^\/api\/task-plans\/([^/]+)$/.exec(path7);
+async function resolveTaskPlanRoute(rawUrl, path8, deps) {
+  const match = /^\/api\/task-plans\/([^/]+)$/.exec(path8);
   if (match === null) return null;
   const segment = match[1];
   if (segment === void 0) {
-    return failure2(400, "TASK_PLAN_CHANGE_INVALID", "\u975E\u6CD5 TaskPlan \u8DEF\u5F84");
+    return failure3(400, "TASK_PLAN_CHANGE_INVALID", "\u975E\u6CD5 TaskPlan \u8DEF\u5F84");
   }
   let change;
   try {
     change = decodeURIComponent(segment);
   } catch {
-    return failure2(400, "TASK_PLAN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
+    return failure3(400, "TASK_PLAN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
   }
   if (!isChangeName4(change)) {
-    return failure2(400, "TASK_PLAN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
+    return failure3(400, "TASK_PLAN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
   }
   const root = new URL(rawUrl, "http://localhost").searchParams.get("root") ?? "";
-  if (root === "") return failure2(400, "TASK_PLAN_ROOT_REQUIRED", "\u7F3A\u5C11 root");
-  const rootCheck = deps.workflowRootForRequest(root);
-  if (!rootCheck.ok) {
-    return rootCheck.code === 404 ? failure2(404, "TASK_PLAN_ROOT_NOT_REGISTERED", "root \u672A\u6CE8\u518C") : failure2(403, "TASK_PLAN_ROOT_FORBIDDEN", "root \u4E0D\u53EF\u4FE1");
+  if (root === "") return failure3(400, "TASK_PLAN_ROOT_REQUIRED", "\u7F3A\u5C11 root");
+  const rootCheck2 = deps.workflowRootForRequest(root);
+  if (!rootCheck2.ok) {
+    return rootCheck2.code === 404 ? failure3(404, "TASK_PLAN_ROOT_NOT_REGISTERED", "root \u672A\u6CE8\u518C") : failure3(403, "TASK_PLAN_ROOT_FORBIDDEN", "root \u4E0D\u53EF\u4FE1");
   }
   try {
-    const plan = await deps.readPlan(rootCheck.anchor, change);
-    return plan === null ? failure2(404, "TASK_PLAN_NOT_FOUND", "TaskPlan \u4E0D\u5B58\u5728") : { status: 200, body: plan };
+    const plan = await deps.readPlan(rootCheck2.anchor, change);
+    return plan === null ? failure3(404, "TASK_PLAN_NOT_FOUND", "TaskPlan \u4E0D\u5B58\u5728") : { status: 200, body: plan };
   } catch (error2) {
     if (errorStatus(error2) === 403) {
-      return failure2(403, "TASK_PLAN_PATH_FORBIDDEN", "canonical TaskPlan \u8DEF\u5F84\u4E0D\u53EF\u4FE1");
+      return failure3(403, "TASK_PLAN_PATH_FORBIDDEN", "canonical TaskPlan \u8DEF\u5F84\u4E0D\u53EF\u4FE1");
     }
-    return failure2(409, "TASK_PLAN_CORRUPT", "canonical TaskPlan \u635F\u574F");
+    return failure3(409, "TASK_PLAN_CORRUPT", "canonical TaskPlan \u635F\u574F");
   }
 }
 
@@ -29443,39 +31473,39 @@ function errorStatus2(error2) {
   const status2 = Reflect.get(error2, "status");
   return typeof status2 === "number" ? status2 : void 0;
 }
-function failure3(status2, code, error2) {
+function failure4(status2, code, error2) {
   return { status: status2, body: { ok: false, code, error: error2 } };
 }
-async function resolveTaskRunRoute(rawUrl, path7, deps) {
-  const match = /^\/api\/task-runs\/([^/]+)$/.exec(path7);
+async function resolveTaskRunRoute(rawUrl, path8, deps) {
+  const match = /^\/api\/task-runs\/([^/]+)$/.exec(path8);
   if (match === null) return null;
   const segment = match[1];
   if (segment === void 0) {
-    return failure3(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 Task Run \u8DEF\u5F84");
+    return failure4(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 Task Run \u8DEF\u5F84");
   }
   let change;
   try {
     change = decodeURIComponent(segment);
   } catch {
-    return failure3(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
+    return failure4(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
   }
   if (!isChangeName5(change)) {
-    return failure3(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
+    return failure4(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09");
   }
   const root = new URL(rawUrl, "http://localhost").searchParams.get("root") ?? "";
-  if (root === "") return failure3(400, "TASK_RUN_ROOT_REQUIRED", "\u7F3A\u5C11 root");
-  const rootCheck = deps.workflowRootForRequest(root);
-  if (!rootCheck.ok) {
-    return rootCheck.code === 404 ? failure3(404, "TASK_RUN_ROOT_NOT_REGISTERED", "root \u672A\u6CE8\u518C") : failure3(403, "TASK_RUN_ROOT_FORBIDDEN", "root \u4E0D\u53EF\u4FE1");
+  if (root === "") return failure4(400, "TASK_RUN_ROOT_REQUIRED", "\u7F3A\u5C11 root");
+  const rootCheck2 = deps.workflowRootForRequest(root);
+  if (!rootCheck2.ok) {
+    return rootCheck2.code === 404 ? failure4(404, "TASK_RUN_ROOT_NOT_REGISTERED", "root \u672A\u6CE8\u518C") : failure4(403, "TASK_RUN_ROOT_FORBIDDEN", "root \u4E0D\u53EF\u4FE1");
   }
   try {
-    const run = await deps.readRun(rootCheck.anchor, change);
-    return run === null ? failure3(404, "TASK_RUN_NOT_FOUND", "Task Run \u4E0D\u5B58\u5728") : { status: 200, body: run };
+    const run = await deps.readRun(rootCheck2.anchor, change);
+    return run === null ? failure4(404, "TASK_RUN_NOT_FOUND", "Task Run \u4E0D\u5B58\u5728") : { status: 200, body: run };
   } catch (error2) {
     if (errorStatus2(error2) === 403) {
-      return failure3(403, "TASK_RUN_PATH_FORBIDDEN", "Task Run \u8DEF\u5F84\u4E0D\u53EF\u4FE1");
+      return failure4(403, "TASK_RUN_PATH_FORBIDDEN", "Task Run \u8DEF\u5F84\u4E0D\u53EF\u4FE1");
     }
-    return failure3(409, "TASK_RUN_CORRUPT", "Task Run \u635F\u574F");
+    return failure4(409, "TASK_RUN_CORRUPT", "Task Run \u635F\u574F");
   }
 }
 var missingAdmission = {
@@ -29486,8 +31516,8 @@ var missingAdmission = {
     remediation: "RECHECK_PRE_CLAIM_ADMISSION"
   }]
 };
-async function readTaskRunForChange(changeDir, admission = missingAdmission) {
-  const readModel = await readTaskPlanForChange(changeDir);
+async function readTaskRunForChange(changeDir2, admission = missingAdmission) {
+  const readModel = await readTaskPlanForChange(changeDir2);
   if (readModel === null || readModel.source !== "canonical") return null;
   const plan = {
     plan_id: readModel.plan_id,
@@ -29498,7 +31528,7 @@ async function readTaskRunForChange(changeDir, admission = missingAdmission) {
     groups: readModel.groups,
     work_items: readModel.items
   };
-  const journal = await readTaskRunJournal(changeDir, readModel.revision_id);
+  const journal = await readTaskRunJournal(changeDir2, readModel.revision_id);
   return deriveTaskRunReadModel({
     plan,
     schedule: compileTaskSchedule(plan),
@@ -29518,8 +31548,8 @@ var anchoredDeps = {
   assertChangeParent: assertChangeParentPathAnchor,
   captureChange: captureChangePathAnchor,
   assertChange: assertChangePathAnchor,
-  readEvidence: (changeDir, anchoredDirectoryIdentity) => readSkillInvocationEvidence(
-    changeDir,
+  readEvidence: (changeDir2, anchoredDirectoryIdentity) => readSkillInvocationEvidence(
+    changeDir2,
     anchoredDirectoryIdentity === void 0 ? {} : { anchoredDirectoryIdentity }
   )
 };
@@ -29578,14 +31608,14 @@ async function readAnchoredSkillInvocationEvidence(anchor, change, overrides = {
       throw new ContextBundlePathError(403, "Skill invocation Change identity changed while anchoring");
     }
     const fdChangeDir = traversableDirectoryFdPath(fd, identity);
-    const result = await deps.readEvidence(
+    const result2 = await deps.readEvidence(
       fdChangeDir ?? changeAnchor.changeDir,
       fdChangeDir === void 0 ? void 0 : identity
     );
     deps.assertChange(changeAnchor);
     assertRoot(anchor, deps.assertRoot);
     assertVersion2(anchor, version);
-    return result;
+    return result2;
   } finally {
     closeSync9(fd);
   }
@@ -29598,7 +31628,7 @@ function status(error2) {
   const value = Reflect.get(error2, "status");
   return typeof value === "number" ? value : void 0;
 }
-function failure4(statusCode, code, error2) {
+function failure5(statusCode, code, error2) {
   return { status: statusCode, body: { ok: false, code, error: error2 } };
 }
 function filtered(evidence, runId, workItemId) {
@@ -29606,47 +31636,47 @@ function filtered(evidence, runId, workItemId) {
   const items = evidence.items.filter((item2) => (runId === null || item2.subject.workflow_run_id === runId) && (workItemId === null || item2.subject.work_item_id === workItemId));
   return { ...evidence, state: items.length === 0 ? "empty" : evidence.state, items };
 }
-async function resolveSkillInvocationRoute(rawUrl, path7, deps) {
-  const match = /^\/api\/skill-invocations\/([^/]+)$/u.exec(path7);
+async function resolveSkillInvocationRoute(rawUrl, path8, deps) {
+  const match = /^\/api\/skill-invocations\/([^/]+)$/u.exec(path8);
   if (match === null) return null;
   let change;
   try {
     change = decodeURIComponent(match[1] ?? "");
   } catch {
-    return failure4(400, "SKILL_INVOCATION_CHANGE_INVALID", "Invalid Skill invocation Change");
+    return failure5(400, "SKILL_INVOCATION_CHANGE_INVALID", "Invalid Skill invocation Change");
   }
   if (!validName(change) || change.includes("/")) {
-    return failure4(400, "SKILL_INVOCATION_CHANGE_INVALID", "Invalid Skill invocation Change");
+    return failure5(400, "SKILL_INVOCATION_CHANGE_INVALID", "Invalid Skill invocation Change");
   }
   const url = new URL(rawUrl, "http://localhost");
   const runId = url.searchParams.get("run_id");
   const workItemId = url.searchParams.get("work_item_id");
   if (runId !== null && !validName(runId) || workItemId !== null && !validName(workItemId)) {
-    return failure4(400, "SKILL_INVOCATION_FILTER_INVALID", "Invalid Skill invocation filter");
+    return failure5(400, "SKILL_INVOCATION_FILTER_INVALID", "Invalid Skill invocation filter");
   }
   const root = url.searchParams.get("root") ?? "";
-  if (root === "") return failure4(400, "SKILL_INVOCATION_ROOT_REQUIRED", "Missing root");
-  const rootCheck = deps.workflowRootForRequest(root);
-  if (!rootCheck.ok) {
-    return rootCheck.code === 404 ? failure4(404, "SKILL_INVOCATION_ROOT_NOT_REGISTERED", "Root is not registered") : failure4(403, "SKILL_INVOCATION_ROOT_FORBIDDEN", "Root is not trusted");
+  if (root === "") return failure5(400, "SKILL_INVOCATION_ROOT_REQUIRED", "Missing root");
+  const rootCheck2 = deps.workflowRootForRequest(root);
+  if (!rootCheck2.ok) {
+    return rootCheck2.code === 404 ? failure5(404, "SKILL_INVOCATION_ROOT_NOT_REGISTERED", "Root is not registered") : failure5(403, "SKILL_INVOCATION_ROOT_FORBIDDEN", "Root is not trusted");
   }
   try {
-    return { status: 200, body: filtered(await deps.readEvidence(rootCheck.anchor, change), runId, workItemId) };
+    return { status: 200, body: filtered(await deps.readEvidence(rootCheck2.anchor, change), runId, workItemId) };
   } catch (cause) {
-    if (status(cause) === 404) return failure4(404, "SKILL_INVOCATION_NOT_FOUND", "Change does not exist");
-    if (status(cause) === 403) return failure4(403, "SKILL_INVOCATION_PATH_FORBIDDEN", "Skill invocation path is not trusted");
-    return failure4(409, "SKILL_INVOCATION_CORRUPT", "Skill invocation evidence is corrupt");
+    if (status(cause) === 404) return failure5(404, "SKILL_INVOCATION_NOT_FOUND", "Change does not exist");
+    if (status(cause) === 403) return failure5(403, "SKILL_INVOCATION_PATH_FORBIDDEN", "Skill invocation path is not trusted");
+    return failure5(409, "SKILL_INVOCATION_CORRUPT", "Skill invocation evidence is corrupt");
   }
 }
 
 // packages/server/src/serverGetRoutes.ts
 function repoRootForSkills() {
-  return join57(dirname14(fileURLToPath2(import.meta.url)), "..", "..", "..");
+  return join58(dirname14(fileURLToPath2(import.meta.url)), "..", "..", "..");
 }
 function isWorkflowName2(name) {
   return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
 }
-async function handleGet(req, res, path7, deps) {
+async function handleGet(req, res, path8, deps) {
   const {
     cadenceScheduler,
     sendJson,
@@ -29661,7 +31691,7 @@ async function handleGet(req, res, path7, deps) {
     stateScopeId,
     isLocalHost: isLocalHost2,
     snapshotDeps,
-    handleStream,
+    handleStream: handleStream2,
     isRegisteredRoot,
     clock,
     store,
@@ -29680,36 +31710,47 @@ async function handleGet(req, res, path7, deps) {
     options,
     operationRunner,
     resolveSessionLink,
-    errMsg: errMsg2
+    errMsg: errMsg2,
+    orchestrationV2
   } = deps;
   const boundPort = deps.boundPort();
-  await handleGetActivityRoutes(req, res, path7, deps);
+  if (orchestrationV2) {
+    const handled = await handleOrchestrationV2GetRoute(req, res, path8, {
+      ...orchestrationV2,
+      sendJson,
+      token,
+      isLocalHost: isLocalHost2,
+      boundPort: () => boundPort
+    });
+    if (handled) return;
+  }
+  await handleGetActivityRoutes(req, res, path8, deps);
   if (res.headersSent) return;
-  if (handleGetTraceRoutes(req, res, path7, { clock, sendJson, traceStore })) return;
-  const hostPlan = await resolveHostTargetPlanRoute(req.url ?? "/", path7, { hostHome, operationsAvailable, operationRunner, runtime: hostTargetPlanRuntime });
+  if (handleGetTraceRoutes(req, res, path8, { clock, sendJson, traceStore })) return;
+  const hostPlan = await resolveHostTargetPlanRoute(req.url ?? "/", path8, { hostHome, operationsAvailable, operationRunner, runtime: hostTargetPlanRuntime });
   if (hostPlan !== null) return sendJson(res, hostPlan.status, hostPlan.body);
-  const orchestration = await resolveOrchestrationRoutes(req.url ?? "/", path7, {
+  const orchestration = await resolveOrchestrationRoutes(req.url ?? "/", path8, {
     workflowRootForRequest,
     snapshotDeps,
     store
   });
   if (orchestration !== null) return sendJson(res, orchestration.status, orchestration.body);
-  const taskPlan = await resolveTaskPlanRoute(req.url ?? "/", path7, {
+  const taskPlan = await resolveTaskPlanRoute(req.url ?? "/", path8, {
     workflowRootForRequest,
     readPlan: readAnchoredTaskPlan
   });
   if (taskPlan !== null) return sendJson(res, taskPlan.status, taskPlan.body);
-  const taskRun = await resolveTaskRunRoute(req.url ?? "/", path7, {
+  const taskRun = await resolveTaskRunRoute(req.url ?? "/", path8, {
     workflowRootForRequest,
     readRun: (anchor, change) => readAnchoredChange(anchor, change, readTaskRunForChange)
   });
   if (taskRun !== null) return sendJson(res, taskRun.status, taskRun.body);
-  const skillInvocations = await resolveSkillInvocationRoute(req.url ?? "/", path7, {
+  const skillInvocations = await resolveSkillInvocationRoute(req.url ?? "/", path8, {
     workflowRootForRequest,
     readEvidence: readAnchoredSkillInvocationEvidence
   });
   if (skillInvocations !== null) return sendJson(res, skillInvocations.status, skillInvocations.body);
-  if (path7 === "/api/loops/snapshot") {
+  if (path8 === "/api/loops/snapshot") {
     try {
       const snap = await buildLoopsSnapshot({ registry: () => dedupeRoots(registry()), now: () => new Date(clock()) });
       return sendJson(res, 200, snap);
@@ -29717,74 +31758,74 @@ async function handleGet(req, res, path7, deps) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/tracks") {
+  if (path8 === "/api/tracks") {
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     try {
-      assertWorkflowRootAnchor(rootCheck.anchor);
+      assertWorkflowRootAnchor(rootCheck2.anchor);
       let pipelineExists = true;
       try {
-        lstatSync11(join57(rootCheck.anchor.path, ".pipeline"));
+        lstatSync11(join58(rootCheck2.anchor.path, ".pipeline"));
       } catch (error2) {
         if (error2.code === "ENOENT") pipelineExists = false;
         else throw error2;
       }
-      if (pipelineExists) ensureWorkflowProjectCoordinationPath(rootCheck.anchor);
-      const trackRegistry = loadTrackRegistry(rootCheck.anchor.path, trackValidationContextFor(rootCheck.anchor));
-      assertWorkflowRootAnchor(rootCheck.anchor);
+      if (pipelineExists) ensureWorkflowProjectCoordinationPath(rootCheck2.anchor);
+      const trackRegistry = loadTrackRegistry(rootCheck2.anchor.path, trackValidationContextFor(rootCheck2.anchor));
+      assertWorkflowRootAnchor(rootCheck2.anchor);
       return sendJson(res, 200, trackRegistryBody(trackRegistry));
     } catch (error2) {
       return sendJson(res, 500, { ok: false, error: errMsg2(error2) });
     }
   }
-  if (path7 === "/api/config") {
+  if (path8 === "/api/config") {
     if (!manifestPath2) return sendJson(res, 404, { ok: false, error: "config \u6570\u636E\u7AEF\u672A\u88C5\uFF08capabilities.config=false\uFF09" });
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
     if (root === "") return sendJson(res, 400, { ok: false, error: "\u7F3A\u5C11 root \u53C2\u6570" });
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     try {
-      assertWorkflowRootAnchor(rootCheck.anchor);
+      assertWorkflowRootAnchor(rootCheck2.anchor);
       let pipelineExists = true;
       try {
-        lstatSync11(join57(rootCheck.anchor.path, ".pipeline"));
+        lstatSync11(join58(rootCheck2.anchor.path, ".pipeline"));
       } catch (e) {
         if (e.code === "ENOENT") pipelineExists = false;
         else throw e;
       }
-      if (pipelineExists) ensureWorkflowProjectCoordinationPath(rootCheck.anchor);
+      if (pipelineExists) ensureWorkflowProjectCoordinationPath(rootCheck2.anchor);
       const snapshot = readConfigSnapshot({
         manifestPath: manifestPath2,
-        repoRoot: rootCheck.anchor.path,
-        trackValidationContext: trackValidationContextFor(rootCheck.anchor),
+        repoRoot: rootCheck2.anchor.path,
+        trackValidationContext: trackValidationContextFor(rootCheck2.anchor),
         generatedAt: clock()
       });
-      assertWorkflowRootAnchor(rootCheck.anchor);
+      assertWorkflowRootAnchor(rootCheck2.anchor);
       return sendJson(res, 200, snapshot);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/skills/registry") {
+  if (path8 === "/api/skills/registry") {
     try {
-      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join57(hostHome, ".claude")) });
+      return sendJson(res, 200, { skills: listAllSkillsDetailed(repoRootForSkills(), join58(hostHome, ".claude")) });
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/hooks") {
+  if (path8 === "/api/hooks") {
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     try {
-      const { matrix, promptSkipKeyword } = readHooksConfig(rootCheck.anchor);
+      const { matrix, promptSkipKeyword } = readHooksConfig(rootCheck2.anchor);
       return sendJson(res, 200, { ok: true, hooks: HOOK_METAS, matrix, prompt_skip_keyword: promptSkipKeyword });
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/automation") {
+  if (path8 === "/api/automation") {
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
@@ -29795,17 +31836,17 @@ async function handleGet(req, res, path7, deps) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/workflows") {
+  if (path8 === "/api/workflows") {
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     try {
-      return sendJson(res, 200, { names: listWorkflowNames(rootCheck.anchor) });
+      return sendJson(res, 200, { names: listWorkflowNames(rootCheck2.anchor) });
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  const mWfGet = /^\/api\/workflows\/([^/]+)$/.exec(path7);
+  const mWfGet = /^\/api\/workflows\/([^/]+)$/.exec(path8);
   if (mWfGet) {
     const segment = mWfGet[1];
     if (segment === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 workflow \u8DEF\u5F84" });
@@ -29814,25 +31855,25 @@ async function handleGet(req, res, path7, deps) {
       return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 workflow \u540D\uFF08\u5141\u8BB8\u4E2D\u6587\u3001\u5B57\u6BCD\u3001\u6570\u5B57\u3001- \u4E0E _\uFF1B\u4E0D\u5141\u8BB8\u7A7A\u683C\u3001\u70B9\u6216\u8DEF\u5F84\u7B26\u53F7\uFF09" });
     }
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     const builtin = builtinWorkflow(wfName);
     if (builtin !== null) {
       return sendJson(res, 200, builtin);
     }
     try {
-      readWorkflowForApi(rootCheck.anchor, wfName);
-      ensureWorkflowProjectCoordinationPath(rootCheck.anchor);
+      readWorkflowForApi(rootCheck2.anchor, wfName);
+      ensureWorkflowProjectCoordinationPath(rootCheck2.anchor);
     } catch (e) {
       return sendJson(res, e instanceof WorkflowNotFoundError ? 404 : 500, { ok: false, error: errMsg2(e) });
     }
     try {
       const checked = await withTrackRegistryLock(
-        rootCheck.anchor.path,
-        trackValidationContextFor(rootCheck.anchor),
+        rootCheck2.anchor.path,
+        trackValidationContextFor(rootCheck2.anchor),
         async ({ registry: registry2 }) => {
-          assertWorkflowRootAnchor(rootCheck.anchor);
-          const workflow = readWorkflowForApi(rootCheck.anchor, wfName);
+          assertWorkflowRootAnchor(rootCheck2.anchor);
+          const workflow = readWorkflowForApi(rootCheck2.anchor, wfName);
           return { workflow, errors: validateWorkflowTrackReferences(workflow, registry2) };
         }
       );
@@ -29855,18 +31896,18 @@ async function handleGet(req, res, path7, deps) {
       });
     }
   }
-  if (path7 === "/api/secrets") {
+  if (path8 === "/api/secrets") {
     try {
       return sendJson(res, 200, buildSecretsResponse(paths.secretsPath));
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/docker/images") {
+  if (path8 === "/api/docker/images") {
     const r = await listDockerImages(options.execDocker);
     return sendJson(res, 200, { ok: true, ...r });
   }
-  if (path7 === "/api/afk/readiness") {
+  if (path8 === "/api/afk/readiness") {
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
     if (root === "") return sendJson(res, 400, { ok: false, error: "\u7F3A\u5C11 root \u53C2\u6570" });
     if (!isRegisteredRoot(root)) {
@@ -29877,11 +31918,11 @@ async function handleGet(req, res, path7, deps) {
       image,
       secretsPath: paths.secretsPath,
       exec: options.execDocker,
-      defaultCodexHome: join57(hostHome, ".codex")
+      defaultCodexHome: join58(hostHome, ".codex")
     });
     return sendJson(res, 200, r);
   }
-  if (await handleGetSessionRoutes(req, res, path7, {
+  if (await handleGetSessionRoutes(req, res, path8, {
     sendJson,
     isRegisteredRoot,
     resolveSessionLink
@@ -29929,7 +31970,7 @@ async function removeProjectFromRegistry(registryPath, rawRoot) {
 function isWorkflowName3(name) {
   return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
 }
-async function handlePatchRoute(req, res, path7, deps) {
+async function handlePatchRoute(req, res, path8, deps) {
   const {
     isLocalHost: isLocalHost2,
     sendJson,
@@ -29953,7 +31994,7 @@ async function handlePatchRoute(req, res, path7, deps) {
   if (ctype !== "application/json") {
     return sendJson(res, 400, { ok: false, error: "\u5199\u56DE\u7AEF\u70B9\u8981\u6C42 Content-Type: application/json" });
   }
-  const match = /^\/api\/tracks\/([^/]+)$/.exec(path7);
+  const match = /^\/api\/tracks\/([^/]+)$/.exec(path8);
   if (!match) return sendJson(res, 404, { ok: false, error: "\u672A\u77E5\u5199\u56DE\u7AEF\u70B9" });
   const segment = match[1];
   if (segment === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 track \u8DEF\u5F84" });
@@ -29969,12 +32010,12 @@ async function handlePatchRoute(req, res, path7, deps) {
   if (revision === "" || typeof patch !== "object" || patch === null || Array.isArray(patch) || Object.keys(patch).length === 0) {
     return sendJson(res, 400, { ok: false, error: "revision \u4E0E\u975E\u7A7A patch \u5BF9\u8C61\u4E3A\u5FC5\u586B" });
   }
-  const rootCheck = workflowRootForRequest(root);
-  if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+  const rootCheck2 = workflowRootForRequest(root);
+  if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
   try {
-    const mutation = await mutateTrackForApi(rootCheck.anchor, revision, async ({ config }) => {
+    const mutation = await mutateTrackForApi(rootCheck2.anchor, revision, async ({ config }) => {
       const next = updateTrack(config, id2, patch);
-      await assertUpdatePreservesReferences(next, id2, () => scanActiveTrackChanges(rootCheck.anchor.path));
+      await assertUpdatePreservesReferences(next, id2, () => scanActiveTrackChanges(rootCheck2.anchor.path));
       return { next, result: void 0 };
     });
     return sendJson(res, 200, trackRegistryBody(mutation.registry));
@@ -29982,7 +32023,7 @@ async function handlePatchRoute(req, res, path7, deps) {
     return sendTrackError(res, error2);
   }
 }
-async function handleDeleteRoute(req, res, path7, deps) {
+async function handleDeleteRoute(req, res, path8, deps) {
   const {
     isLocalHost: isLocalHost2,
     sendJson,
@@ -30005,10 +32046,10 @@ async function handleDeleteRoute(req, res, path7, deps) {
   if (!provided || !tokensMatch(provided, token)) {
     return sendJson(res, 401, { ok: false, error: "\u7F3A\u5C11\u6216\u65E0\u6548 token\uFF08\u5199\u7AEF\u70B9\u9700\u9274\u6743\uFF09" });
   }
-  if (path7 === "/api/projects") {
+  if (path8 === "/api/projects") {
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root");
-    const result = await removeProjectFromRegistry(paths.registryPath, root);
-    if (!result.ok) return sendJson(res, result.code, { ok: false, error: result.error });
+    const result2 = await removeProjectFromRegistry(paths.registryPath, root);
+    if (!result2.ok) return sendJson(res, result2.code, { ok: false, error: result2.error });
     if (root === null) return sendJson(res, 400, { ok: false, error: "\u7F3A\u5C11 root \u53C2\u6570" });
     const normalized2 = resolvePath7(root);
     const anchor = workflowRootAnchors.get(normalized2);
@@ -30018,7 +32059,7 @@ async function handleDeleteRoute(req, res, path7, deps) {
     }
     return sendJson(res, 200, { ok: true });
   }
-  const trackDelete = /^\/api\/tracks\/([^/]+)$/.exec(path7);
+  const trackDelete = /^\/api\/tracks\/([^/]+)$/.exec(path8);
   if (trackDelete) {
     const segment = trackDelete[1];
     if (segment === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 track \u8DEF\u5F84" });
@@ -30027,12 +32068,12 @@ async function handleDeleteRoute(req, res, path7, deps) {
     const root = query.get("root") ?? "";
     const revision = query.get("revision") ?? "";
     if (revision === "") return sendJson(res, 400, { ok: false, error: "\u7F3A\u5C11 revision \u53C2\u6570" });
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     try {
-      const mutation = await mutateTrackForApi(rootCheck.anchor, revision, async ({ config }) => {
+      const mutation = await mutateTrackForApi(rootCheck2.anchor, revision, async ({ config }) => {
         const next = deleteTrack(config, id2);
-        await assertTrackDeletable(id2, () => scanActiveTrackChanges(rootCheck.anchor.path));
+        await assertTrackDeletable(id2, () => scanActiveTrackChanges(rootCheck2.anchor.path));
         return { next, result: void 0 };
       });
       return sendJson(res, 200, trackRegistryBody(mutation.registry));
@@ -30040,7 +32081,7 @@ async function handleDeleteRoute(req, res, path7, deps) {
       return sendTrackError(res, error2);
     }
   }
-  const mWfDelete = /^\/api\/workflows\/([^/]+)$/.exec(path7);
+  const mWfDelete = /^\/api\/workflows\/([^/]+)$/.exec(path8);
   if (mWfDelete) {
     const segment = mWfDelete[1];
     if (segment === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 workflow \u8DEF\u5F84" });
@@ -30052,35 +32093,35 @@ async function handleDeleteRoute(req, res, path7, deps) {
       return sendJson(res, 400, { ok: false, error: "default workflow \u4E0D\u53EF\u901A\u8FC7\u7F16\u8F91\u5668\u5220\u9664" });
     }
     const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     let permit;
     try {
-      permit = captureWorkflowDeletePermit(rootCheck.anchor, wfName);
+      permit = captureWorkflowDeletePermit(rootCheck2.anchor, wfName);
       if (!permit) return sendJson(res, 404, { ok: false, error: `workflow '${wfName}' \u4E0D\u5B58\u5728` });
-      ensureWorkflowGovernanceCoordinationPath(rootCheck.anchor);
+      ensureWorkflowGovernanceCoordinationPath(rootCheck2.anchor);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
     let enteredGovernance = false;
     let enteredTrackSnapshot = false;
     try {
-      const outcome = await withRegistryGovernanceLock(rootCheck.anchor.path, async () => {
+      const outcome = await withRegistryGovernanceLock(rootCheck2.anchor.path, async () => {
         enteredGovernance = true;
-        assertWorkflowRootAnchor(rootCheck.anchor);
+        assertWorkflowRootAnchor(rootCheck2.anchor);
         return withTrackRegistryLock(
-          rootCheck.anchor.path,
-          trackValidationContextFor(rootCheck.anchor),
+          rootCheck2.anchor.path,
+          trackValidationContextFor(rootCheck2.anchor),
           async ({ registry }) => {
             enteredTrackSnapshot = true;
-            assertWorkflowRootAnchor(rootCheck.anchor);
-            const scan = scanWorkflowReferencesForApi(rootCheck.anchor, wfName, registry);
+            assertWorkflowRootAnchor(rootCheck2.anchor);
+            const scan = scanWorkflowReferencesForApi(rootCheck2.anchor, wfName, registry);
             if (scan.blockers.length > 0) {
               return { kind: "scan-failed", references: scan.references, blockers: scan.blockers };
             }
             if (scan.references.length > 0) return { kind: "referenced", references: scan.references };
             if (permit === null) throw new WorkflowDeleteConflictError(`workflow '${wfName}' \u5220\u9664\u8BB8\u53EF\u7F3A\u5931`);
-            deleteWorkflowForApi(rootCheck.anchor, wfName, permit);
+            deleteWorkflowForApi(rootCheck2.anchor, wfName, permit);
             return { kind: "deleted" };
           }
         );
@@ -30124,7 +32165,7 @@ async function handleDeleteRoute(req, res, path7, deps) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/secrets") {
+  if (path8 === "/api/secrets") {
     const key = new URL(req.url ?? "/", "http://localhost").searchParams.get("key") ?? "";
     if (!isValidSecretKey(key)) {
       return sendJson(res, 400, { ok: false, error: `\u975E\u6CD5 key\uFF08\u4EC5\u5141\u8BB8 ${SECRET_KEY_LIST}\uFF09` });
@@ -30145,8 +32186,8 @@ import { resolve as resolvePath8 } from "node:path";
 
 // packages/server/src/changeLaunch.ts
 import { randomUUID as randomUUID9 } from "node:crypto";
-import { lstat as lstat22, readFile as readFile21, rename as rename8, unlink as unlink4, writeFile as writeFile12 } from "node:fs/promises";
-import { join as join58 } from "node:path";
+import { lstat as lstat23, readFile as readFile22, rename as rename8, unlink as unlink4, writeFile as writeFile12 } from "node:fs/promises";
+import { join as join59 } from "node:path";
 var CHANGE_TASK_FILE = "REAL_AGENT_TASK.md";
 var MAX_TASK_PROMPT_CHARS = 24e3;
 function errorCode7(error2) {
@@ -30172,21 +32213,21 @@ function parseChangeSessionActivation(value, hasTaskPrompt) {
   if (typeof value !== "boolean") return { ok: false, error: "activate_session \u5FC5\u987B\u662F\u5E03\u5C14\u503C" };
   return { ok: true, value };
 }
-async function writeChangeTaskPrompt(changeDir, prompt) {
-  const dirStat = await lstat22(changeDir);
+async function writeChangeTaskPrompt(changeDir2, prompt) {
+  const dirStat = await lstat23(changeDir2);
   if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) {
     throw new Error("Change \u76EE\u5F55\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u76EE\u5F55\uFF0C\u62D2\u7EDD\u4FDD\u5B58\u4EFB\u52A1\u63D0\u793A\u8BCD");
   }
-  const target = join58(changeDir, CHANGE_TASK_FILE);
+  const target = join59(changeDir2, CHANGE_TASK_FILE);
   let targetExists = false;
   try {
-    await lstat22(target);
+    await lstat23(target);
     targetExists = true;
   } catch (error2) {
     if (errorCode7(error2) !== "ENOENT") throw error2;
   }
   if (targetExists) throw new Error("\u4EFB\u52A1\u63D0\u793A\u8BCD\u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6");
-  const temporary = join58(changeDir, `.${CHANGE_TASK_FILE}.${randomUUID9()}.tmp`);
+  const temporary = join59(changeDir2, `.${CHANGE_TASK_FILE}.${randomUUID9()}.tmp`);
   try {
     await writeFile12(temporary, `${prompt}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
@@ -30209,30 +32250,30 @@ async function activateChangeSession(input) {
   if (!input.available) {
     return { requested: true, active: false, status: "unavailable", exit_code: null };
   }
-  let result;
+  let result2;
   try {
-    result = await input.runner(input.repoRoot, ["session", "activate", input.changeName]);
+    result2 = await input.runner(input.repoRoot, ["session", "activate", input.changeName]);
   } catch {
     return { requested: true, active: false, status: "failed", exit_code: null };
   }
-  if (result.exitCode !== 0) {
-    return { requested: true, active: false, status: "failed", exit_code: result.exitCode };
+  if (result2.exitCode !== 0) {
+    return { requested: true, active: false, status: "failed", exit_code: result2.exitCode };
   }
-  const pointer = join58(input.repoRoot, ".pipeline-active");
+  const pointer = join59(input.repoRoot, ".pipeline-active");
   try {
-    const pointerStat = await lstat22(pointer);
+    const pointerStat = await lstat23(pointer);
     if (!pointerStat.isFile() || pointerStat.isSymbolicLink()) {
-      return { requested: true, active: false, status: "degraded", exit_code: result.exitCode };
+      return { requested: true, active: false, status: "degraded", exit_code: result2.exitCode };
     }
-    const activeName = (await readFile21(pointer, "utf8")).trim();
-    return activeName === input.changeName ? { requested: true, active: true, status: "active", exit_code: result.exitCode } : { requested: true, active: false, status: "degraded", exit_code: result.exitCode };
+    const activeName = (await readFile22(pointer, "utf8")).trim();
+    return activeName === input.changeName ? { requested: true, active: true, status: "active", exit_code: result2.exitCode } : { requested: true, active: false, status: "degraded", exit_code: result2.exitCode };
   } catch {
-    return { requested: true, active: false, status: "degraded", exit_code: result.exitCode };
+    return { requested: true, active: false, status: "degraded", exit_code: result2.exitCode };
   }
 }
 
 // packages/server/src/serverPostChangesRoutes.ts
-async function handlePostChangesRoutes(req, res, path7, deps) {
+async function handlePostChangesRoutes(req, res, path8, deps) {
   const {
     sendJson,
     readJsonBody,
@@ -30267,7 +32308,7 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
   function isWorkflowName4(name) {
     return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
   }
-  if (path7 === "/api/projects") {
+  if (path8 === "/api/projects") {
     const body = await readJsonBody(req);
     const rawRoot = typeof body === "object" && body !== null ? body.root : void 0;
     let pendingAnchor;
@@ -30283,37 +32324,37 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
         }
       }
     }
-    const result = await addProjectToRegistry(paths.registryPath, rawRoot);
-    if (!result.ok) {
+    const result2 = await addProjectToRegistry(paths.registryPath, rawRoot);
+    if (!result2.ok) {
       if (pendingAnchor) closeWorkflowRootAnchor(pendingAnchor);
-      return sendJson(res, result.code, { ok: false, error: result.error });
+      return sendJson(res, result2.code, { ok: false, error: result2.error });
     }
-    if (!pendingAnchor || pendingAnchor.path !== result.root) {
+    if (!pendingAnchor || pendingAnchor.path !== result2.root) {
       if (pendingAnchor) closeWorkflowRootAnchor(pendingAnchor);
-      await removeProjectFromRegistry(paths.registryPath, result.root).catch(() => void 0);
+      await removeProjectFromRegistry(paths.registryPath, result2.root).catch(() => void 0);
       return sendJson(res, 400, { ok: false, error: "registered root \u5728\u6CE8\u518C\u671F\u95F4\u672A\u80FD\u5EFA\u7ACB\u7A33\u5B9A inode \u951A" });
     }
     try {
       assertWorkflowRootAnchor(pendingAnchor);
     } catch (e) {
       closeWorkflowRootAnchor(pendingAnchor);
-      await removeProjectFromRegistry(paths.registryPath, result.root).catch(() => void 0);
+      await removeProjectFromRegistry(paths.registryPath, result2.root).catch(() => void 0);
       return sendJson(res, 400, { ok: false, error: errMsg2(e) });
     }
-    const previous = workflowRootAnchors.get(result.root);
+    const previous = workflowRootAnchors.get(result2.root);
     if (previous) closeWorkflowRootAnchor(previous);
-    workflowRootAnchors.set(result.root, pendingAnchor);
-    return sendJson(res, 200, { ok: true, root: result.root });
+    workflowRootAnchors.set(result2.root, pendingAnchor);
+    return sendJson(res, 200, { ok: true, root: result2.root });
   }
-  if (path7 === "/api/changes") {
+  if (path8 === "/api/changes") {
     const rawBody = await readJsonBody(req);
     if (typeof rawBody !== "object" || rawBody === null) {
       return sendJson(res, 400, { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" });
     }
     const b = rawBody;
     const root = typeof b.root === "string" ? b.root : "";
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     const name = typeof b.name === "string" ? b.name : "";
     if (!name || !/^[a-zA-Z0-9_-]+$/.test(name)) {
       return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 change \u540D\uFF08\u4EC5\u5141\u8BB8 a-z A-Z 0-9 - _\uFF09" });
@@ -30325,17 +32366,17 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
     const trackId = typeof b.track === "string" && b.track ? b.track : "chat";
     const workflowRaw = typeof b.workflow === "string" && b.workflow ? b.workflow : "";
     try {
-      ensureWorkflowProjectCoordinationPath(rootCheck.anchor);
+      ensureWorkflowProjectCoordinationPath(rootCheck2.anchor);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
     let outcome;
     try {
       outcome = await withTrackRegistryLock(
-        rootCheck.anchor.path,
-        trackValidationContextFor(rootCheck.anchor),
+        rootCheck2.anchor.path,
+        trackValidationContextFor(rootCheck2.anchor),
         async ({ registry }) => {
-          assertWorkflowRootAnchor(rootCheck.anchor);
+          assertWorkflowRootAnchor(rootCheck2.anchor);
           let track;
           let workflowId;
           try {
@@ -30348,14 +32389,14 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
           let initialWorkflow;
           let plan;
           try {
-            plan = loadEffectiveWorkflowPlan(rootCheck.anchor.path, workflowId, track);
+            plan = loadEffectiveWorkflowPlan(rootCheck2.anchor.path, workflowId, track);
           } catch (e) {
             return { ok: false, code: 404, error: errMsg2(e) };
           }
           if (plan.capabilities.execution.model === "step-graph") {
             let workflow;
             try {
-              workflow = builtinWorkflow(workflowId) ?? readWorkflowForApi(rootCheck.anchor, workflowId);
+              workflow = builtinWorkflow(workflowId) ?? readWorkflowForApi(rootCheck2.anchor, workflowId);
             } catch (e) {
               return e instanceof WorkflowNotFoundError ? { ok: false, code: 404, error: `workflow '${workflowId}' \u672A\u627E\u5230\uFF08\u671F\u671B .pipeline/workflows/${workflowId}.yaml\uFF09` } : { ok: false, code: 400, error: errMsg2(e) };
             }
@@ -30417,7 +32458,7 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
     const session = activation.value ? await activateChangeSession({
       available: operationsAvailable,
       runner: operationRunner,
-      repoRoot: rootCheck.anchor.path,
+      repoRoot: rootCheck2.anchor.path,
       changeName: name
     }) : notRequestedSessionActivation();
     return sendJson(res, 200, {
@@ -30432,17 +32473,17 @@ async function handlePostChangesRoutes(req, res, path7, deps) {
 
 // packages/server/src/serverPostExecutionRoutes.ts
 import { randomUUID as randomUUID10 } from "node:crypto";
-import { join as join60 } from "node:path";
+import { join as join61 } from "node:path";
 
 // packages/server/src/serverTaskRunOperations.ts
 var TaskRunOperationConflictError = class extends Error {
   name = "TaskRunOperationConflictError";
   code = "TASK_RUN_OPERATION_CONFLICT";
 };
-function failure5(status2, code, error2) {
+function failure6(status2, code, error2) {
   return { status: status2, body: { ok: false, code, error: error2 } };
 }
-function isRecord8(value) {
+function isRecord9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function safeIdentity(value) {
@@ -30452,7 +32493,7 @@ function safeChange(value) {
   return /^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(value);
 }
 function parseBody(value) {
-  if (!isRecord8(value)) return null;
+  if (!isRecord9(value)) return null;
   const keys = Object.keys(value).sort();
   const allowed = ["expected_run_revision", "expected_state", "operation", "root", "work_item_id"];
   if (keys.some((key) => !allowed.includes(key))) return null;
@@ -30485,56 +32526,56 @@ function parseBody(value) {
 function errorField(error2, field2) {
   return typeof error2 === "object" && error2 !== null ? Reflect.get(error2, field2) : void 0;
 }
-async function resolveTaskRunOperation(path7, body, deps) {
-  const match = /^\/api\/task-runs\/([^/]+)\/operations$/.exec(path7);
+async function resolveTaskRunOperation(path8, body, deps) {
+  const match = /^\/api\/task-runs\/([^/]+)\/operations$/.exec(path8);
   if (match === null) return null;
   const segment = match[1];
   let change;
   try {
     change = decodeURIComponent(segment ?? "");
   } catch {
-    return failure5(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D");
+    return failure6(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D");
   }
-  if (!safeChange(change)) return failure5(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D");
+  if (!safeChange(change)) return failure6(400, "TASK_RUN_CHANGE_INVALID", "\u975E\u6CD5 change \u540D");
   const parsed = parseBody(body);
-  if (parsed === null) return failure5(400, "TASK_RUN_OPERATION_INVALID", "Task Run \u64CD\u4F5C\u8BF7\u6C42\u65E0\u6548");
-  const rootCheck = deps.workflowRootForRequest(parsed.root);
-  if (!rootCheck.ok) {
-    return rootCheck.code === 404 ? failure5(404, "TASK_RUN_ROOT_NOT_REGISTERED", "root \u672A\u6CE8\u518C") : failure5(403, "TASK_RUN_ROOT_FORBIDDEN", "root \u4E0D\u53EF\u4FE1");
+  if (parsed === null) return failure6(400, "TASK_RUN_OPERATION_INVALID", "Task Run \u64CD\u4F5C\u8BF7\u6C42\u65E0\u6548");
+  const rootCheck2 = deps.workflowRootForRequest(parsed.root);
+  if (!rootCheck2.ok) {
+    return rootCheck2.code === 404 ? failure6(404, "TASK_RUN_ROOT_NOT_REGISTERED", "root \u672A\u6CE8\u518C") : failure6(403, "TASK_RUN_ROOT_FORBIDDEN", "root \u4E0D\u53EF\u4FE1");
   }
   try {
-    const result = await deps.mutateRun(rootCheck.anchor, change, {
+    const result2 = await deps.mutateRun(rootCheck2.anchor, change, {
       operation_id: deps.operationId(),
       ...parsed.operation,
       recorded_at: deps.clock()
     });
-    return { status: 200, body: result };
+    return { status: 200, body: result2 };
   } catch (error2) {
     if (errorField(error2, "status") === 403) {
-      return failure5(403, "TASK_RUN_PATH_FORBIDDEN", "Task Run \u8DEF\u5F84\u4E0D\u53EF\u4FE1");
+      return failure6(403, "TASK_RUN_PATH_FORBIDDEN", "Task Run \u8DEF\u5F84\u4E0D\u53EF\u4FE1");
     }
     if (errorField(error2, "code") === "TASK_RUN_OPERATION_CONFLICT" || errorField(error2, "name") === "TaskRunRevisionConflictError") {
-      return failure5(409, "TASK_RUN_OPERATION_CONFLICT", "Task Run \u5DF2\u53D8\u5316\uFF0C\u8BF7\u5237\u65B0\u540E\u91CD\u8BD5");
+      return failure6(409, "TASK_RUN_OPERATION_CONFLICT", "Task Run \u5DF2\u53D8\u5316\uFF0C\u8BF7\u5237\u65B0\u540E\u91CD\u8BD5");
     }
-    return failure5(409, "TASK_RUN_CORRUPT", "Task Run \u635F\u574F");
+    return failure6(409, "TASK_RUN_CORRUPT", "Task Run \u635F\u574F");
   }
 }
-async function applyTaskRunOperationForChange(changeDir, operation) {
-  const current = await readTaskRunForChange(changeDir);
+async function applyTaskRunOperationForChange(changeDir2, operation) {
+  const current = await readTaskRunForChange(changeDir2);
   if (current === null) throw new TaskRunOperationConflictError("Task Run is missing");
   if (current.admission.status !== "admitted") {
     throw new TaskRunOperationConflictError("Task Run admission is not authoritative");
   }
   const allowed = current.allowed_operations.some((candidate) => candidate.operation === operation.operation && candidate.work_item_id === operation.work_item_id && candidate.expected_run_revision === operation.expected_run_revision && candidate.expected_state === operation.expected_state);
   if (!allowed) throw new TaskRunOperationConflictError("Task Run operation is no longer allowed");
-  await appendTaskRunOperation(changeDir, current.plan.revision_id, operation);
-  const updated = await readTaskRunForChange(changeDir);
+  await appendTaskRunOperation(changeDir2, current.plan.revision_id, operation);
+  const updated = await readTaskRunForChange(changeDir2);
   if (updated === null) throw new TaskRunOperationConflictError("Task Run disappeared");
   return updated;
 }
 
 // packages/server/src/serverPostExecutionRoutes.ts
-async function handlePostExecutionRoutes(req, res, path7, deps) {
+async function handlePostExecutionRoutes(req, res, path8, deps) {
   const {
     sendJson,
     readJsonBody,
@@ -30569,9 +32610,9 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
   function isWorkflowName4(name2) {
     return name2 !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name2);
   }
-  if (/^\/api\/task-runs\/[^/]+\/operations$/.test(path7)) {
+  if (/^\/api\/task-runs\/[^/]+\/operations$/.test(path8)) {
     const rawBody = await readJsonBody(req);
-    const result = await resolveTaskRunOperation(path7, rawBody, {
+    const result2 = await resolveTaskRunOperation(path8, rawBody, {
       workflowRootForRequest,
       clock,
       operationId: randomUUID10,
@@ -30579,15 +32620,15 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
         const updated = await readAnchoredChange(
           anchor,
           change,
-          async (changeDir) => applyTaskRunOperationForChange(changeDir, operation)
+          async (changeDir2) => applyTaskRunOperationForChange(changeDir2, operation)
         );
         if (updated === null) throw new TaskRunOperationConflictError("Task Run is missing");
         return updated;
       }
     });
-    if (result !== null) return sendJson(res, result.status, result.body);
+    if (result2 !== null) return sendJson(res, result2.status, result2.body);
   }
-  const cancelMatch = /^\/api\/afk\/([^/]+)\/cancel$/.exec(path7);
+  const cancelMatch = /^\/api\/afk\/([^/]+)\/cancel$/.exec(path8);
   if (cancelMatch) {
     const segment2 = cancelMatch[1];
     if (segment2 === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 change \u8DEF\u5F84" });
@@ -30603,11 +32644,11 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join60(root2, "openspec", "changes", name2);
-    const result = await cancelAfkRun(store, dir);
-    return sendJson(res, result.ok ? 200 : 400, result);
+    const dir = join61(root2, "openspec", "changes", name2);
+    const result2 = await cancelAfkRun(store, dir);
+    return sendJson(res, result2.ok ? 200 : 400, result2);
   }
-  const retryMatch = /^\/api\/afk\/([^/]+)\/retry$/.exec(path7);
+  const retryMatch = /^\/api\/afk\/([^/]+)\/retry$/.exec(path8);
   if (retryMatch) {
     const segment2 = retryMatch[1];
     if (segment2 === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 change \u8DEF\u5F84" });
@@ -30623,11 +32664,11 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join60(root2, "openspec", "changes", name2);
-    const result = await retryAfkRun(store, dir);
-    return sendJson(res, result.ok ? 200 : 400, result);
+    const dir = join61(root2, "openspec", "changes", name2);
+    const result2 = await retryAfkRun(store, dir);
+    return sendJson(res, result2.ok ? 200 : 400, result2);
   }
-  const dismissMatch = /^\/api\/afk\/([^/]+)\/dismiss$/.exec(path7);
+  const dismissMatch = /^\/api\/afk\/([^/]+)\/dismiss$/.exec(path8);
   if (dismissMatch) {
     const segment2 = dismissMatch[1];
     if (segment2 === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 change \u8DEF\u5F84" });
@@ -30643,11 +32684,11 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join60(root2, "openspec", "changes", name2);
-    const result = await dismissAfkRun(store, dir);
-    return sendJson(res, result.ok ? 200 : 400, result);
+    const dir = join61(root2, "openspec", "changes", name2);
+    const result2 = await dismissAfkRun(store, dir);
+    return sendJson(res, result2.ok ? 200 : 400, result2);
   }
-  const enqueueMatch = /^\/api\/afk\/([^/]+)\/enqueue$/.exec(path7);
+  const enqueueMatch = /^\/api\/afk\/([^/]+)\/enqueue$/.exec(path8);
   if (enqueueMatch) {
     const segment2 = enqueueMatch[1];
     if (segment2 === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 change \u8DEF\u5F84" });
@@ -30663,7 +32704,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root2)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join60(root2, "openspec", "changes", name2);
+    const dir = join61(root2, "openspec", "changes", name2);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -30686,13 +32727,13 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     } catch (e) {
       return sendJson(res, 400, { ok: false, error: errMsg2(e) });
     }
-    const result = await enqueueAfkRun(store, dir, clock, {
+    const result2 = await enqueueAfkRun(store, dir, clock, {
       automationEligible: track.policyProfile.automationEligible,
       trackLabel: track.label
     });
-    return sendJson(res, result.ok ? 200 : 400, result);
+    return sendJson(res, result2.ok ? 200 : 400, result2);
   }
-  if (path7 === "/api/secrets") {
+  if (path8 === "/api/secrets") {
     const rawBody = await readJsonBody(req);
     const validated = validateSecretWriteBody(rawBody);
     if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error });
@@ -30703,7 +32744,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
   }
-  if (path7 === "/api/tracks") {
+  if (path8 === "/api/tracks") {
     const rawBody = await readJsonBody(req);
     if (typeof rawBody !== "object" || rawBody === null || Array.isArray(rawBody)) {
       return sendJson(res, 400, { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" });
@@ -30715,10 +32756,10 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
     if (revision === "" || typeof track !== "object" || track === null || Array.isArray(track)) {
       return sendJson(res, 400, { ok: false, error: "revision \u4E0E track \u5BF9\u8C61\u4E3A\u5FC5\u586B" });
     }
-    const rootCheck = workflowRootForRequest(root2);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root2);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     try {
-      const mutation = await mutateTrackForApi(rootCheck.anchor, revision, async ({ config }) => ({
+      const mutation = await mutateTrackForApi(rootCheck2.anchor, revision, async ({ config }) => ({
         next: createTrack(config, track),
         result: void 0
       }));
@@ -30727,7 +32768,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
       return sendTrackError(res, error2);
     }
   }
-  const mTr = /^\/api\/change\/([^/]+)\/transition$/.exec(path7);
+  const mTr = /^\/api\/change\/([^/]+)\/transition$/.exec(path8);
   if (!mTr) return sendJson(res, 404, { ok: false, error: "\u672A\u77E5\u5199\u56DE\u7AEF\u70B9" });
   const body = await readJsonBody(req);
   if (typeof body !== "object" || body === null) {
@@ -30784,7 +32825,7 @@ async function handlePostExecutionRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostGovernanceRoutes.ts
-async function handlePostGovernanceRoutes(req, res, path7, deps) {
+async function handlePostGovernanceRoutes(req, res, path8, deps) {
   const {
     sendJson,
     readJsonBody,
@@ -30819,7 +32860,7 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
   function isWorkflowName4(name) {
     return name !== "" && /^[\p{L}\p{N}\p{M}_-]+$/u.test(name);
   }
-  if (path7 === "/api/config/mandatory-skills") {
+  if (path8 === "/api/config/mandatory-skills") {
     if (!manifestPath2) return sendJson(res, 404, { ok: false, error: "config \u6570\u636E\u7AEF\u672A\u88C5\uFF08capabilities.config=false\uFF09" });
     const body = await readJsonBody(req);
     const validated = validateMandatorySkillsBody(body);
@@ -30832,7 +32873,7 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
     }
     return sendJson(res, 200, { ok: true, phase, track, skills });
   }
-  if (path7 === "/api/loops/level") {
+  if (path8 === "/api/loops/level") {
     const body = await readJsonBody(req);
     const root = typeof body === "object" && body !== null ? body.root : void 0;
     const id2 = typeof body === "object" && body !== null ? body.id : void 0;
@@ -30843,10 +32884,10 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const result = await applyLevelChange(root, id2, target, { now: new Date(clock()), confirm: true }, REAL_GRADUATION_FS2);
-    return sendJson(res, result.exitCode === 0 ? 200 : 400, result);
+    const result2 = await applyLevelChange(root, id2, target, { now: new Date(clock()), confirm: true }, REAL_GRADUATION_FS2);
+    return sendJson(res, result2.exitCode === 0 ? 200 : 400, result2);
   }
-  if (path7 === "/api/loops/update") {
+  if (path8 === "/api/loops/update") {
     const rawBody = await readJsonBody(req);
     if (typeof rawBody !== "object" || rawBody === null) {
       return sendJson(res, 400, { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" });
@@ -30864,12 +32905,12 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const result = await applyLoopsUpdate(root, id2, patch, {
+    const result2 = await applyLoopsUpdate(root, id2, patch, {
       validateActivation: validateLoopActivation
     });
-    return sendJson(res, result.ok ? 200 : 400, result);
+    return sendJson(res, result2.ok ? 200 : 400, result2);
   }
-  if (path7 === "/api/hooks") {
+  if (path8 === "/api/hooks") {
     const rawBody = await readJsonBody(req);
     const validated = validateHookToggleBody(rawBody);
     if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error });
@@ -30877,25 +32918,25 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
     if (!root) {
       return sendJson(res, 400, { ok: false, error: "root \u5FC5\u586B" });
     }
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     try {
-      await writeHookToggle(rootCheck.anchor, validated.value);
+      await writeHookToggle(rootCheck2.anchor, validated.value);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
     return sendJson(res, 200, { ok: true, ...validated.value });
   }
-  if (path7 === "/api/hooks/prompt-routing-bypass") {
+  if (path8 === "/api/hooks/prompt-routing-bypass") {
     const rawBody = await readJsonBody(req);
     const validated = validatePromptRoutingBypassBody(rawBody);
     if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error });
     const root = typeof rawBody.root === "string" ? rawBody.root : "";
     if (!root) return sendJson(res, 400, { ok: false, error: "root \u5FC5\u586B" });
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     try {
-      await writePromptRoutingBypass(rootCheck.anchor, validated.value);
+      await writePromptRoutingBypass(rootCheck2.anchor, validated.value);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
@@ -30904,7 +32945,7 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
       prompt_skip_keyword: validated.value.promptSkipKeyword
     });
   }
-  if (path7 === "/api/automation") {
+  if (path8 === "/api/automation") {
     const rawBody = await readJsonBody(req);
     const validated = validateAutomationSettingsBody(rawBody);
     if (!validated.ok) return sendJson(res, 400, { ok: false, error: validated.error });
@@ -30922,7 +32963,7 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
     }
     return sendJson(res, 200, { ok: true, settings: validated.value });
   }
-  const mWfPost = /^\/api\/workflows\/([^/]+)$/.exec(path7);
+  const mWfPost = /^\/api\/workflows\/([^/]+)$/.exec(path8);
   if (mWfPost) {
     const segment = mWfPost[1];
     if (segment === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 workflow \u8DEF\u5F84" });
@@ -30942,8 +32983,8 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
       return sendJson(res, 400, { ok: false, error: "URL workflow name \u5FC5\u987B\u4E0E body.name \u5B8C\u5168\u4E00\u81F4" });
     }
     const root = typeof body.root === "string" ? body.root : "";
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     let workflow;
     try {
       const workflowInput = Object.fromEntries(
@@ -30956,24 +32997,24 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
     const shapeErrors = validateWorkflow(workflow);
     if (shapeErrors.length > 0) return sendJson(res, 400, { ok: false, errors: shapeErrors });
     try {
-      ensureWorkflowProjectCoordinationPath(rootCheck.anchor);
+      ensureWorkflowProjectCoordinationPath(rootCheck2.anchor);
     } catch (e) {
       return sendJson(res, 500, { ok: false, error: errMsg2(e) });
     }
     let enteredRegistrySnapshot = false;
     try {
-      const result = await withTrackRegistryLock(
-        rootCheck.anchor.path,
-        trackValidationContextFor(rootCheck.anchor),
+      const result2 = await withTrackRegistryLock(
+        rootCheck2.anchor.path,
+        trackValidationContextFor(rootCheck2.anchor),
         async ({ registry }) => {
           enteredRegistrySnapshot = true;
-          assertWorkflowRootAnchor(rootCheck.anchor);
+          assertWorkflowRootAnchor(rootCheck2.anchor);
           const referenceErrors = validateWorkflowTrackReferences(workflow, registry);
           if (referenceErrors.length > 0) return { ok: false, errors: referenceErrors };
-          return writeWorkflowForApi(rootCheck.anchor, wfName, workflow);
+          return writeWorkflowForApi(rootCheck2.anchor, wfName, workflow);
         }
       );
-      return sendJson(res, result.ok ? 200 : 400, result);
+      return sendJson(res, result2.ok ? 200 : 400, result2);
     } catch (e) {
       return enteredRegistrySnapshot ? sendJson(res, 500, { ok: false, error: errMsg2(e) }) : sendJson(res, 400, { ok: false, errors: [errMsg2(e)] });
     }
@@ -30982,7 +33023,7 @@ async function handlePostGovernanceRoutes(req, res, path7, deps) {
 
 // packages/server/src/serverPostOperationsRoutes.ts
 import { lstatSync as lstatSync13 } from "node:fs";
-import { join as join61 } from "node:path";
+import { join as join62 } from "node:path";
 
 // packages/server/src/loopScopePreview.ts
 import {
@@ -31014,7 +33055,7 @@ function registryReadError(error2) {
   const detail = error2 instanceof Error ? error2.message : String(error2);
   return new RegistryReadError(`loops.yaml \u8BFB\u5931\u8D25\uFF08${code}\uFF09\uFF1A${detail}`);
 }
-function readTrustedLoopRegistry(anchor, readFile22 = (fd) => readFileSync20(fd, "utf8")) {
+function readTrustedLoopRegistry(anchor, readFile23 = (fd) => readFileSync20(fd, "utf8")) {
   return readWithLoopScopeRootTrust(
     () => assertWorkflowRootAnchor(anchor),
     () => {
@@ -31060,15 +33101,15 @@ function readTrustedLoopRegistry(anchor, readFile22 = (fd) => readFileSync20(fd,
               const identity = { dev: opened.dev, ino: opened.ino };
               assertEntryMatches(paths, identity, "loops registry");
               assertDirectoryStillTrusted(pipeline, anchor);
-              let text3;
+              let text4;
               try {
-                text3 = readFile22(fd);
+                text4 = readFile23(fd);
               } catch (error2) {
                 throw registryReadError(error2);
               }
               assertEntryMatches(paths, identity, "loops registry");
               assertDirectoryStillTrusted(pipeline, anchor);
-              return loadRegistry(anchor.path, { readText: () => text3 });
+              return loadRegistry(anchor.path, { readText: () => text4 });
             } finally {
               safeClose(fd);
             }
@@ -31103,19 +33144,19 @@ function readWithLoopScopeRootTrust(assertTrusted, read) {
   } catch (error2) {
     throw new LoopScopePreviewRootUntrustedError("before-read", error2);
   }
-  const result = read();
+  const result2 = read();
   try {
     assertTrusted();
   } catch (error2) {
     throw new LoopScopePreviewRootUntrustedError("after-read", error2);
   }
-  return result;
+  return result2;
 }
-function isCanonicalRelativePath(path7) {
-  if (path7 === "" || /[\u0000-\u001f]/.test(path7) || hasLoneSurrogate(path7) || path7.includes('"') || path7.includes("\\") || path7.startsWith("/") || path7.endsWith("/") || /^[A-Za-z]:\//.test(path7)) return false;
-  const segments = path7.split("/");
+function isCanonicalRelativePath(path8) {
+  if (path8 === "" || /[\u0000-\u001f]/.test(path8) || hasLoneSurrogate(path8) || path8.includes('"') || path8.includes("\\") || path8.startsWith("/") || path8.endsWith("/") || /^[A-Za-z]:\//.test(path8)) return false;
+  const segments = path8.split("/");
   if (segments.some((segment) => segment === "" || segment === "." || segment === "..")) return false;
-  return posix5.normalize(path7) === path7;
+  return posix5.normalize(path8) === path8;
 }
 function parseLoopScopePreviewRequest(input) {
   if (typeof input !== "object" || input === null || Array.isArray(input)) invalid2("\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61");
@@ -31168,7 +33209,7 @@ function buildLoopScopePreviewResponse(loop, paths, matches) {
 }
 
 // packages/server/src/serverPostOperationsRoutes.ts
-async function handlePostOperationsRoutes(req, res, path7, deps) {
+async function handlePostOperationsRoutes(req, res, path8, deps) {
   const {
     sendJson,
     readJsonBody,
@@ -31210,7 +33251,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
       error: "root \u4FE1\u4EFB\u951A\u5DF2\u5931\u6548"
     });
   }
-  if (path7 === "/api/loops/scope-preview") {
+  if (path8 === "/api/loops/scope-preview") {
     const raw = await readJsonBody(req);
     let input;
     try {
@@ -31219,17 +33260,17 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
       if (!(error2 instanceof LoopScopePreviewInputError)) throw error2;
       return sendJson(res, 400, { ok: false, code: "LOOP_SCOPE_REQUEST_INVALID", error: error2.message });
     }
-    const rootCheck = workflowRootForRequest(input.root);
-    if (!rootCheck.ok) {
-      return sendJson(res, rootCheck.code, {
+    const rootCheck2 = workflowRootForRequest(input.root);
+    if (!rootCheck2.ok) {
+      return sendJson(res, rootCheck2.code, {
         ok: false,
-        code: rootCheck.code === 404 ? "LOOP_SCOPE_ROOT_NOT_FOUND" : "LOOP_SCOPE_ROOT_UNTRUSTED",
-        error: rootCheck.error
+        code: rootCheck2.code === 404 ? "LOOP_SCOPE_ROOT_NOT_FOUND" : "LOOP_SCOPE_ROOT_UNTRUSTED",
+        error: rootCheck2.error
       });
     }
     let loaded;
     try {
-      loaded = readTrustedLoopRegistry(rootCheck.anchor);
+      loaded = readTrustedLoopRegistry(rootCheck2.anchor);
     } catch (error2) {
       if (error2 instanceof LoopScopePreviewRootUntrustedError) return sendLoopScopeUntrustedRoot();
       if (!(error2 instanceof RegistryReadError)) throw error2;
@@ -31256,7 +33297,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     }
     return sendJson(res, 200, buildLoopScopePreviewResponse(loop, input.paths, matchesPathGlob));
   }
-  if (path7 === "/api/router/preview") {
+  if (path8 === "/api/router/preview") {
     const raw = await readJsonBody(req);
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return sendJson(res, 400, { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" });
@@ -31265,29 +33306,29 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     const root = typeof body.root === "string" ? body.root : "";
     const prompt = typeof body.prompt === "string" ? body.prompt : "";
     if (prompt.trim() === "") return sendJson(res, 400, { ok: false, error: "prompt \u4E0D\u5F97\u4E3A\u7A7A" });
-    const rootCheck = workflowRootForRequest(root);
-    if (!rootCheck.ok) return sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+    const rootCheck2 = workflowRootForRequest(root);
+    if (!rootCheck2.ok) return sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
     try {
-      assertWorkflowRootAnchor(rootCheck.anchor);
+      assertWorkflowRootAnchor(rootCheck2.anchor);
       let pipelineExists = true;
       try {
-        lstatSync13(join61(rootCheck.anchor.path, ".pipeline"));
+        lstatSync13(join62(rootCheck2.anchor.path, ".pipeline"));
       } catch (error2) {
         if (error2.code === "ENOENT") pipelineExists = false;
         else throw error2;
       }
-      if (pipelineExists) ensureWorkflowProjectCoordinationPath(rootCheck.anchor);
-      const registry = loadTrackRegistry(rootCheck.anchor.path, trackValidationContextFor(rootCheck.anchor));
+      if (pipelineExists) ensureWorkflowProjectCoordinationPath(rootCheck2.anchor);
+      const registry = loadTrackRegistry(rootCheck2.anchor.path, trackValidationContextFor(rootCheck2.anchor));
       const draft = body.draft_track === void 0 ? null : parseRouterDraft(body.draft_track);
       const candidates = draft === null ? registry.ordered : applyRouterDraft(registry.ordered, draft);
       const preview = await previewTrackRouting(prompt, candidates, routerPatternScorer);
-      assertWorkflowRootAnchor(rootCheck.anchor);
+      assertWorkflowRootAnchor(rootCheck2.anchor);
       return sendJson(res, 200, { ok: true, revision: registry.revision, source: registry.source, ...preview });
     } catch (error2) {
       return sendJson(res, 400, { ok: false, error: errMsg2(error2) });
     }
   }
-  if (path7 === "/api/operations/loops/init") {
+  if (path8 === "/api/operations/loops/init") {
     const raw = await readJsonBody(req);
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return sendJson(res, 400, { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" });
@@ -31327,7 +33368,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     ];
     return executeOperation(res, root, args);
   }
-  if (path7 === "/api/operations/loops/run") {
+  if (path8 === "/api/operations/loops/run") {
     const raw = await readJsonBody(req);
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return sendJson(res, 400, { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" });
@@ -31359,7 +33400,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     ];
     return executeOperation(res, root, args);
   }
-  if (path7 === "/api/operations/loops/sync") {
+  if (path8 === "/api/operations/loops/sync") {
     const raw = await readJsonBody(req);
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return sendJson(res, 400, { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" });
@@ -31387,7 +33428,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     ];
     return executeOperation(res, root, args);
   }
-  if (path7 === "/api/operations/triage") {
+  if (path8 === "/api/operations/triage") {
     const raw = await readJsonBody(req);
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return sendJson(res, 400, { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" });
@@ -31417,7 +33458,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     ];
     return executeOperation(res, root, args);
   }
-  if (path7 === "/api/operations/artifact/register") {
+  if (path8 === "/api/operations/artifact/register") {
     const raw = await readJsonBody(req);
     if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
       return sendJson(res, 400, { ok: false, error: "\u8BF7\u6C42\u4F53\u987B\u4E3A JSON \u5BF9\u8C61" });
@@ -31441,7 +33482,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
       producer
     ]);
   }
-  const projectionMatch = /^\/api\/change\/([^/]+)\/projection$/.exec(path7);
+  const projectionMatch = /^\/api\/change\/([^/]+)\/projection$/.exec(path8);
   if (projectionMatch) {
     const segment = projectionMatch[1];
     if (segment === void 0) return sendJson(res, 400, { ok: false, error: "\u975E\u6CD5 change \u8DEF\u5F84" });
@@ -31458,7 +33499,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
     if (!isRegisteredRoot(root)) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
-    const dir = join61(root, "openspec", "changes", name);
+    const dir = join62(root, "openspec", "changes", name);
     if (!stateStorageExistsSync(dir)) {
       return sendJson(res, 400, { ok: false, error: "\u627E\u4E0D\u5230\u8BE5 change\uFF08\u65E0 canonical/legacy \u72B6\u6001\uFF09" });
     }
@@ -31482,7 +33523,7 @@ async function handlePostOperationsRoutes(req, res, path7, deps) {
 }
 
 // packages/server/src/serverPostMemoryRoutes.ts
-import { join as join62 } from "node:path";
+import { join as join63 } from "node:path";
 var RELATED_SEARCH_PATH = "/api/mem/related-sessions/search";
 var PLATFORM_VALUES = /* @__PURE__ */ new Set(["all", "claude", "codex", "opencode", "pi"]);
 var CHANGE_NAME_RE3 = /^[a-zA-Z0-9_-]+$/;
@@ -31500,8 +33541,8 @@ function missingTarget(deps, res) {
     error: "Project or Change is unavailable"
   });
 }
-async function handlePostMemoryRoutes(req, res, path7, deps) {
-  if (path7 !== RELATED_SEARCH_PATH) return;
+async function handlePostMemoryRoutes(req, res, path8, deps) {
+  if (path8 !== RELATED_SEARCH_PATH) return;
   const raw = await deps.readJsonBody(req);
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return invalidRequest3(deps, res);
@@ -31516,25 +33557,25 @@ async function handlePostMemoryRoutes(req, res, path7, deps) {
   if (root === "" || !CHANGE_NAME_RE3.test(name) || name.includes("..") || queryLength < 2 || queryLength > 128 || tokenCount > 8 || typeof platform !== "string" || !PLATFORM_VALUES.has(platform)) {
     return invalidRequest3(deps, res);
   }
-  const rootCheck = deps.workflowRootForRequest(root);
-  if (!rootCheck.ok) return missingTarget(deps, res);
-  const anchoredRoot = rootCheck.anchor.path;
+  const rootCheck2 = deps.workflowRootForRequest(root);
+  if (!rootCheck2.ok) return missingTarget(deps, res);
+  const anchoredRoot = rootCheck2.anchor.path;
   let changeExists = false;
   try {
-    changeExists = stateStorageExistsSync(join62(anchoredRoot, "openspec", "changes", name));
+    changeExists = stateStorageExistsSync(join63(anchoredRoot, "openspec", "changes", name));
   } catch {
     return missingTarget(deps, res);
   }
   if (!changeExists) {
     return missingTarget(deps, res);
   }
-  const result = await deps.relatedSessionSearch({
-    root: rootCheck.anchor.realPath,
+  const result2 = await deps.relatedSessionSearch({
+    root: rootCheck2.anchor.realPath,
     query,
     platform
   });
-  if (!result.ok) {
-    if (result.reason === "busy") {
+  if (!result2.ok) {
+    if (result2.reason === "busy") {
       return deps.sendJson(res, 429, {
         ok: false,
         code: "memory-search-busy",
@@ -31547,13 +33588,13 @@ async function handlePostMemoryRoutes(req, res, path7, deps) {
       error: "Related session search is unavailable"
     });
   }
-  return deps.sendJson(res, 200, result.response);
+  return deps.sendJson(res, 200, result2.response);
 }
 
 // packages/server/src/serverPostVerificationRoutes.ts
 var ROUTE = "/api/verification-evidence/compose";
-async function handlePostVerificationRoutes(req, res, path7, deps) {
-  if (path7 !== ROUTE) return;
+async function handlePostVerificationRoutes(req, res, path8, deps) {
+  if (path8 !== ROUTE) return;
   const raw = await deps.readJsonBody(req);
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return deps.sendJson(res, 400, {
@@ -31578,12 +33619,12 @@ async function handlePostVerificationRoutes(req, res, path7, deps) {
     });
   }
   const root = body.root;
-  const rootCheck = deps.workflowRootForRequest(root);
-  if (!rootCheck.ok) {
-    return deps.sendJson(res, rootCheck.code, { ok: false, error: rootCheck.error });
+  const rootCheck2 = deps.workflowRootForRequest(root);
+  if (!rootCheck2.ok) {
+    return deps.sendJson(res, rootCheck2.code, { ok: false, error: rootCheck2.error });
   }
   try {
-    assertWorkflowRootAnchor(rootCheck.anchor);
+    assertWorkflowRootAnchor(rootCheck2.anchor);
   } catch (error2) {
     return deps.sendJson(res, 403, { ok: false, error: deps.errMsg(error2) });
   }
@@ -31591,26 +33632,26 @@ async function handlePostVerificationRoutes(req, res, path7, deps) {
   for (const [key, value] of Object.entries(body)) {
     if (key !== "root") composerInput[key] = value;
   }
-  const result = composeVerificationEvidence(composerInput);
+  const result2 = composeVerificationEvidence(composerInput);
   try {
-    assertWorkflowRootAnchor(rootCheck.anchor);
+    assertWorkflowRootAnchor(rootCheck2.anchor);
   } catch (error2) {
     return deps.sendJson(res, 403, { ok: false, error: deps.errMsg(error2) });
   }
-  if (!result.ok) {
+  if (!result2.ok) {
     return deps.sendJson(res, 400, {
       ok: false,
       code: "verification_evidence_invalid",
       error: "Verification evidence is invalid",
-      details: result.errors,
-      overflow: result.overflow
+      details: result2.errors,
+      overflow: result2.overflow
     });
   }
-  return deps.sendJson(res, 200, result);
+  return deps.sendJson(res, 200, result2);
 }
 
 // packages/server/src/serverPostRoutes.ts
-async function handlePostRoute(req, res, path7, deps) {
+async function handlePostRoute(req, res, path8, deps) {
   const {
     isLocalHost: isLocalHost2,
     sendJson,
@@ -31659,37 +33700,48 @@ async function handlePostRoute(req, res, path7, deps) {
   if (ctype !== "application/json") {
     return sendJson(res, 400, { ok: false, error: "\u5199\u56DE\u7AEF\u70B9\u8981\u6C42 Content-Type: application/json" });
   }
-  await handlePostOperationsRoutes(req, res, path7, deps);
+  if (deps.orchestrationV2) {
+    const handled = await handleOrchestrationV2PostRoute(req, res, path8, {
+      ...deps.orchestrationV2,
+      sendJson,
+      readJsonBody,
+      token,
+      isLocalHost: isLocalHost2,
+      boundPort: () => boundPort
+    });
+    if (handled) return;
+  }
+  await handlePostOperationsRoutes(req, res, path8, deps);
   if (res.writableEnded) return;
-  await handlePostVerificationRoutes(req, res, path7, deps);
+  await handlePostVerificationRoutes(req, res, path8, deps);
   if (res.writableEnded) return;
-  await handlePostChangesRoutes(req, res, path7, deps);
+  await handlePostChangesRoutes(req, res, path8, deps);
   if (res.writableEnded) return;
-  await handlePostGovernanceRoutes(req, res, path7, deps);
+  await handlePostGovernanceRoutes(req, res, path8, deps);
   if (res.writableEnded) return;
-  await handlePostMemoryRoutes(req, res, path7, deps);
+  await handlePostMemoryRoutes(req, res, path8, deps);
   if (res.writableEnded) return;
-  await handlePostExecutionRoutes(req, res, path7, deps);
+  await handlePostExecutionRoutes(req, res, path8, deps);
   if (res.writableEnded) return;
   return sendJson(res, 404, { ok: false, error: "\u672A\u77E5\u7AEF\u70B9" });
 }
 
 // packages/server/src/serverSupport.ts
 import { readFileSync as readFileSync21 } from "node:fs";
-import { dirname as dirname15, join as join63 } from "node:path";
+import { dirname as dirname15, join as join64 } from "node:path";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 var REAL_GRADUATION_FS = {
   loadRegistry: (repoRoot) => loadRegistry(repoRoot),
   readRunLog: (repoRoot) => {
     try {
-      return readFileSync21(join63(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
+      return readFileSync21(join64(repoRoot, ".superpowers", "loops", "progress.md"), "utf8");
     } catch {
       return null;
     }
   },
   readLoopDoc: (repoRoot) => {
     try {
-      return readFileSync21(join63(repoRoot, "LOOP.md"), "utf8");
+      return readFileSync21(join64(repoRoot, "LOOP.md"), "utf8");
     } catch {
       return null;
     }
@@ -31699,12 +33751,12 @@ var REAL_GRADUATION_FS = {
     return snapshot.epoch === ABSENT_REGISTRY_EPOCH ? null : { text: snapshot.text, epoch: snapshot.epoch };
   },
   writeRegistryGoverned: async (repoRoot, expectedEpoch, produce) => {
-    const result = await writeRegistryWithGovernance(repoRoot, expectedEpoch, (current) => produce(current));
-    return { ok: result.ok, error: result.ok ? null : result.error };
+    const result2 = await writeRegistryWithGovernance(repoRoot, expectedEpoch, (current) => produce(current));
+    return { ok: result2.ok, error: result2.ok ? null : result2.error };
   }
 };
 function repoRootForSkills2() {
-  return join63(dirname15(fileURLToPath3(import.meta.url)), "..", "..", "..");
+  return join64(dirname15(fileURLToPath3(import.meta.url)), "..", "..", "..");
 }
 function isoNow() {
   return (/* @__PURE__ */ new Date()).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -31744,7 +33796,7 @@ function indexHtml(token) {
 
 // packages/server/src/serverTransport.ts
 import { readFileSync as readFileSync22 } from "node:fs";
-import { join as join64 } from "node:path";
+import { join as join65 } from "node:path";
 import { gzipSync } from "node:zlib";
 
 // packages/server/src/singleFlight.ts
@@ -31875,7 +33927,7 @@ data: ${data}
       req.on("error", () => finish(void 0));
     });
   }
-  async function handleStream(req, res) {
+  async function handleStream2(req, res) {
     res.writeHead(200, {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-store",
@@ -31928,7 +33980,7 @@ data: ${JSON.stringify(await buildSnapshot(deps))}
   function serveIndexWithToken(res) {
     if (!webRoot) return false;
     try {
-      let html = readFileSync22(join64(webRoot, "index.html"), "utf8");
+      let html = readFileSync22(join65(webRoot, "index.html"), "utf8");
       const jsToken = JSON.stringify(token).replace(/</g, "\\u003c");
       const inject = `<script>window.__TENON_DASHBOARD_TOKEN__ = ${jsToken};</script>`;
       html = html.includes("</head>") ? html.replace("</head>", `${inject}</head>`) : `${inject}${html}`;
@@ -31938,12 +33990,12 @@ data: ${JSON.stringify(await buildSnapshot(deps))}
       return false;
     }
   }
-  function serveAsset(req, res, path7) {
-    if (!webRoot || !path7.startsWith("/assets/")) return false;
-    const rel = path7.slice(1);
+  function serveAsset(req, res, path8) {
+    if (!webRoot || !path8.startsWith("/assets/")) return false;
+    const rel = path8.slice(1);
     if (rel.includes("..")) return false;
-    const abs = join64(webRoot, rel);
-    if (!abs.startsWith(join64(webRoot, "assets"))) return false;
+    const abs = join65(webRoot, rel);
+    if (!abs.startsWith(join65(webRoot, "assets"))) return false;
     try {
       const source = readFileSync22(abs);
       const ext = abs.slice(abs.lastIndexOf("."));
@@ -31974,15 +34026,15 @@ data: ${JSON.stringify(await buildSnapshot(deps))}
     sendJson,
     sendHtml,
     readJsonBody,
-    handleStream,
+    handleStream: handleStream2,
     serveIndexWithToken,
     serveAsset
   };
 }
 
 // packages/server/src/serverGovernance.ts
-import { readdir as readdir6 } from "node:fs/promises";
-import { join as join65, resolve as resolvePath11 } from "node:path";
+import { readdir as readdir7 } from "node:fs/promises";
+import { join as join66, resolve as resolvePath11 } from "node:path";
 function createServerGovernance(options) {
   const { registry, store, sendJson, trackSkillProfiles, operationsAvailable, operationRunner } = options;
   function trackRegistryBody(trackRegistry) {
@@ -31994,10 +34046,10 @@ function createServerGovernance(options) {
     };
   }
   async function scanActiveTrackChanges(root) {
-    const changesRoot = join65(root, "openspec", "changes");
+    const changesRoot = join66(root, "openspec", "changes");
     let entries;
     try {
-      entries = await readdir6(changesRoot, { withFileTypes: true });
+      entries = await readdir7(changesRoot, { withFileTypes: true });
     } catch (error2) {
       if (error2.code === "ENOENT") return { refs: [], unreadable: [] };
       return { refs: [], unreadable: [`<changes-root>: ${errMsg(error2)}`] };
@@ -32007,7 +34059,7 @@ function createServerGovernance(options) {
     const unreadable = [];
     for (const name of names) {
       try {
-        const state = await store.read(join65(changesRoot, name));
+        const state = await store.read(join66(changesRoot, name));
         const track = state.fields.track;
         const workflow = state.fields.workflow;
         refs.push({
@@ -32075,14 +34127,14 @@ function createServerGovernance(options) {
       return sendJson(res, 404, { ok: false, error: "root \u672A\u5728\u673A\u5668\u7EA7\u9879\u76EE\u6CE8\u518C\u8868\u4E2D" });
     }
     try {
-      const result = await operationRunner(resolvePath11(root), args);
-      return sendJson(res, cliExitHttpStatus(result.exitCode), {
-        ok: result.exitCode === 0,
-        exit_code: result.exitCode,
+      const result2 = await operationRunner(resolvePath11(root), args);
+      return sendJson(res, cliExitHttpStatus(result2.exitCode), {
+        ok: result2.exitCode === 0,
+        exit_code: result2.exitCode,
         command: ["pipeline", ...args],
-        result: parsePipelineCliJson(result.stdout),
-        stdout: result.stdout.trimEnd(),
-        stderr: result.stderr.trimEnd()
+        result: parsePipelineCliJson(result2.stdout),
+        stdout: result2.stdout.trimEnd(),
+        stderr: result2.stderr.trimEnd()
       });
     } catch (error2) {
       return sendJson(res, 500, { ok: false, error: errMsg(error2) });
@@ -32155,17 +34207,17 @@ function createServerGovernance(options) {
 // packages/server/src/relatedSessionMemory.ts
 function createKernelRelatedSessionSearchRunner(memFs) {
   return (request) => {
-    const result = searchRelatedSessions(memFs, request);
+    const result2 = searchRelatedSessions(memFs, request);
     return {
       protocol: "tenon-related-session-memory/v1",
-      query: result.query,
-      platform: result.platform,
-      partial: result.partial,
-      warnings: result.warnings.map((warning) => ({
+      query: result2.query,
+      platform: result2.platform,
+      partial: result2.partial,
+      warnings: result2.warnings.map((warning) => ({
         code: warning.code,
         message: warning.message
       })),
-      matches: result.matches.map((match) => ({
+      matches: result2.matches.map((match) => ({
         platform: match.platform,
         session_id: match.sessionId,
         ...match.title == null ? {} : { title: match.title },
@@ -32202,7 +34254,7 @@ function createRelatedSessionSearchExecutor(runner) {
 
 // packages/server/src/version.ts
 import { readFileSync as readFileSync23 } from "node:fs";
-import { basename as basename6, dirname as dirname16, join as join66 } from "node:path";
+import { basename as basename6, dirname as dirname16, join as join67 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
 function isPluginManifestVersion(value) {
@@ -32211,7 +34263,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative11 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync23(join66(pluginRoot2, relative11), "utf8"));
+      const parsed = JSON.parse(readFileSync23(join67(pluginRoot2, relative11), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -32241,6 +34293,7 @@ function createDashboardServer(options) {
   const registry = options.registry ?? (() => readProjectRegistry(paths.registryPath));
   const store = options.store ?? createStateStore();
   const recordStore = createTransitionRecordStore();
+  const orchestrationLedger = options.orchestrationLedger ?? createOrchestrationLedger();
   const loopLedger = createLoopLedgerStore();
   const runRepo = createWorkflowRunRepository({ store, recordStore, clock });
   const history = createHistoryWriter();
@@ -32268,9 +34321,9 @@ function createDashboardServer(options) {
     if (loop === void 0) return { ok: false, error: `\u5019\u9009 registry \u4E2D\u627E\u4E0D\u5230 loop "${loopId}"` };
     const resolver = createEffectiveSkillResolver({
       registry: () => {
-        const rootCheck = workflowRootForRequest(root);
-        if (!rootCheck.ok) throw new Error(rootCheck.error);
-        return loadTrackRegistry(root, trackValidationContextFor(rootCheck.anchor));
+        const rootCheck2 = workflowRootForRequest(root);
+        if (!rootCheck2.ok) throw new Error(rootCheck2.error);
+        return loadTrackRegistry(root, trackValidationContextFor(rootCheck2.anchor));
       },
       manifest: loadedManifest
     });
@@ -32279,7 +34332,7 @@ function createDashboardServer(options) {
       locator: createRunnerSkillContentLocator({
         runner,
         home: hostHome,
-        bundledRoot: join67(repoRootForSkills2(), "skills")
+        bundledRoot: join68(repoRootForSkills2(), "skills")
       }),
       isSkillProfileKnown: (profileId) => profileId === "_all" || trackSkillProfiles.has(profileId)
     });
@@ -32314,7 +34367,8 @@ function createDashboardServer(options) {
     config: Boolean(manifestPath2),
     traffic: traceStore !== void 0 && hasTraceTimelineReader(traceStore),
     router_preview: true,
-    cadence: cadenceScheduler !== null
+    cadence: cadenceScheduler !== null,
+    orchestration_v2: true
   };
   let snapshotRootAnchor;
   const snapshotDeps = snapshotDepsFactory({
@@ -32333,7 +34387,7 @@ function createDashboardServer(options) {
     sendJson,
     sendHtml,
     readJsonBody,
-    handleStream,
+    handleStream: handleStream2,
     serveIndexWithToken,
     serveAsset
   } = createServerTransport({
@@ -32369,9 +34423,9 @@ function createDashboardServer(options) {
   };
   let boundPort = 0;
   async function resolveSessionLink(root, name) {
-    const changeDir = join67(root, "openspec", "changes", name);
+    const changeDir2 = join68(root, "openspec", "changes", name);
     try {
-      const wtRaw = await store.get(changeDir, "automation_worktree");
+      const wtRaw = await store.get(changeDir2, "automation_worktree");
       const wt = Array.isArray(wtRaw) ? wtRaw.join(",") : wtRaw ?? "";
       const lookupDir = wt !== "" && wt !== "null" ? wt : root;
       const claudeTop = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: "claude", limit: 1 } })[0];
@@ -32393,7 +34447,7 @@ function createDashboardServer(options) {
     }
   }
   const mutateTrackForRoutes = async (anchor, revision, mutate) => mutateTrackForApi(anchor, revision, async ({ config }) => mutate({ config }));
-  const handleGet2 = (req, res, path7) => handleGet(req, res, path7, {
+  const handleGet2 = (req, res, path8) => handleGet(req, res, path8, {
     cadenceScheduler,
     sendJson,
     sendHtml,
@@ -32408,7 +34462,7 @@ function createDashboardServer(options) {
     isLocalHost,
     boundPort: () => boundPort,
     snapshotDeps,
-    handleStream,
+    handleStream: handleStream2,
     isRegisteredRoot,
     clock,
     store,
@@ -32427,9 +34481,10 @@ function createDashboardServer(options) {
     options,
     operationRunner,
     resolveSessionLink,
-    errMsg
+    errMsg,
+    orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest }
   });
-  const handlePost = (req, res, path7) => handlePostRoute(req, res, path7, {
+  const handlePost = (req, res, path8) => handlePostRoute(req, res, path8, {
     isLocalHost,
     boundPort: () => boundPort,
     sendJson,
@@ -32462,7 +34517,8 @@ function createDashboardServer(options) {
     sendTrackError,
     errMsg,
     realGraduationFs: REAL_GRADUATION_FS,
-    relatedSessionSearch
+    relatedSessionSearch,
+    orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest }
   });
   const mutationRouteDeps = {
     isLocalHost,
@@ -32480,12 +34536,12 @@ function createDashboardServer(options) {
     trackValidationContextFor,
     errMsg
   };
-  const handlePatch = (req, res, path7) => handlePatchRoute(req, res, path7, mutationRouteDeps);
-  const handleDelete = (req, res, path7) => handleDeleteRoute(req, res, path7, mutationRouteDeps);
+  const handlePatch = (req, res, path8) => handlePatchRoute(req, res, path8, mutationRouteDeps);
+  const handleDelete = (req, res, path8) => handleDeleteRoute(req, res, path8, mutationRouteDeps);
   const httpServer = createServer((req, res) => {
-    const path7 = (req.url ?? "/").split("?", 1)[0] ?? "/";
+    const path8 = (req.url ?? "/").split("?", 1)[0] ?? "/";
     const method = req.method ?? "GET";
-    const handler = method === "GET" ? handleGet2(req, res, path7) : method === "POST" ? handlePost(req, res, path7) : method === "PATCH" ? handlePatch(req, res, path7) : method === "DELETE" ? handleDelete(req, res, path7) : Promise.resolve(sendJson(res, 405, { ok: false, error: "method not allowed" }));
+    const handler = method === "GET" ? handleGet2(req, res, path8) : method === "POST" ? handlePost(req, res, path8) : method === "PATCH" ? handlePatch(req, res, path8) : method === "DELETE" ? handleDelete(req, res, path8) : Promise.resolve(sendJson(res, 405, { ok: false, error: "method not allowed" }));
     handler.catch((e) => {
       try {
         sendJson(res, 500, { ok: false, error: errMsg(e) });
@@ -32498,14 +34554,14 @@ function createDashboardServer(options) {
     version,
     httpServer,
     listen(port = 0, host = "127.0.0.1") {
-      return new Promise((resolve16, reject) => {
-        const onError = (e) => reject(e);
+      return new Promise((resolve16, reject3) => {
+        const onError = (e) => reject3(e);
         httpServer.once("error", onError);
         httpServer.listen(port, host, () => {
           httpServer.removeListener("error", onError);
           const address = httpServer.address();
           if (address === null || typeof address === "string") {
-            reject(new Error("dashboard server \u672A\u8FD4\u56DE TCP address"));
+            reject3(new Error("dashboard server \u672A\u8FD4\u56DE TCP address"));
             return;
           }
           boundPort = address.port;
@@ -32769,10 +34825,10 @@ function managedTransactionId() {
   return value;
 }
 function pluginRoot() {
-  return join68(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "..");
+  return join69(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join68(pluginRoot(), "templates", "manifest.yaml");
+  return join69(pluginRoot(), "templates", "manifest.yaml");
 }
 function gitHeadSha(cwd) {
   return new Promise((resolve16) => {
@@ -32835,12 +34891,13 @@ async function main() {
     gitHeadSha,
     workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
-    webRoot: join68(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
+    webRoot: join69(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
     // tap 流量查看器数据源：只读 sessions/records/timeline；完整 reader 才声明 traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),
     // H15：生产 server 显式启用真实 cadence；执行复用已构建 CLI，不在 server 复制 runner。
-    cadence: { pollIntervalMs: cadencePollInterval() }
+    cadence: { pollIntervalMs: cadencePollInterval() },
+    orchestrationLedger: createOrchestrationLedger()
   });
   try {
     await srv.listen(port, host);

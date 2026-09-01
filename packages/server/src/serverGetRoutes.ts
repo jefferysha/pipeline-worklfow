@@ -41,6 +41,7 @@ import { handleGetTraceRoutes } from './serverGetTraceRoutes.js'
 import type { TraceStoreReader } from './traces.js'
 import { resolveHostTargetPlanRoute } from './serverGetHostTargetPlanRoutes.js'
 import { resolveOrchestrationRoutes } from './serverOrchestrationRoutes.js'
+import { handleOrchestrationV2GetRoute, type OrchestrationV2RouteDeps } from './serverOrchestrationV2Routes.js'
 import { readAnchoredChange, readAnchoredTaskPlan, resolveTaskPlanRoute } from './serverTaskPlanRoutes.js'
 import { readTaskRunForChange, resolveTaskRunRoute } from './serverTaskRunRoutes.js'
 import {
@@ -84,6 +85,8 @@ export interface GetRouteDeps {
   options: DashboardServerOptions; operationRunner: import('./operations.js').PipelineCliRunner
   resolveSessionLink: (root: string, name: string) => Promise<Record<string, unknown>>
   errMsg: (error: unknown) => string
+  /** Canonical v2 orchestration ledger; omitted by legacy embedders. */
+  orchestrationV2?: OrchestrationV2RouteDeps
 }
 
 function repoRootForSkills(): string {
@@ -104,9 +107,19 @@ export async function handleGet(
     version, releaseId, transactionId, stateScopeId, isLocalHost, snapshotDeps, handleStream, isRegisteredRoot,
     clock, store, recordStore, loopLedger, registry, traceStore, workflowRootForRequest,
     trackValidationContextFor, trackRegistryBody, manifestPath, paths, hostHome, operationsAvailable,
-    hostTargetPlanRuntime, options, operationRunner, resolveSessionLink, errMsg,
+    hostTargetPlanRuntime, options, operationRunner, resolveSessionLink, errMsg, orchestrationV2,
   } = deps
   const boundPort = deps.boundPort()
+  if (orchestrationV2) {
+    const handled = await handleOrchestrationV2GetRoute(req, res, path, {
+      ...orchestrationV2,
+      sendJson,
+      token,
+      isLocalHost,
+      boundPort: () => boundPort,
+    })
+    if (handled) return
+  }
   await handleGetActivityRoutes(req, res, path, deps)
   if (res.headersSent) return
   if (handleGetTraceRoutes(req, res, path, { clock, sendJson, traceStore })) return

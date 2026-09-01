@@ -26,6 +26,23 @@ export type {
   TraceTimelineWarning,
 } from './traces.js'
 export { generateToken, writeTokenHandshake, tokenFromHeaders, tokensMatch } from './token.js'
+export {
+  resolveOrchestrationV2GetRoute,
+  resolveOrchestrationV2PostRoute,
+  handleOrchestrationV2GetRoute,
+  handleOrchestrationV2PostRoute,
+} from './serverOrchestrationV2Routes.js'
+export type {
+  OrchestrationV2RouteDeps,
+  OrchestrationV2HttpRouteDeps,
+  OrchestrationV2RouteResult,
+} from './serverOrchestrationV2Routes.js'
+export {
+  OrchestrationV2Control,
+  OrchestrationV2ControlError,
+  createOrchestrationV2Control,
+} from './orchestrationV2Control.js'
+export type { OrchestrationControlRootCheck, OrchestrationV2ControlDeps } from './orchestrationV2Control.js'
 export { TRANSITION_EVENTS, eventEdge, performTransition } from './transition.js'
 export {
   compareVersions, readPidfile, probeHealth, decidePreemption, preemptOldServer,

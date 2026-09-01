@@ -27,7 +27,6 @@ import {
   decodeBoardEventV2,
   decodeBoardSnapshotV2,
 } from './v2-codec.js'
-
 export const ORCHESTRATION_LEDGER_DIR = '.orchestration-v2'
 export const ORCHESTRATION_CURRENT_FILE = 'current.json'
 export const ORCHESTRATION_EVENTS_DIR = 'events'
@@ -35,16 +34,13 @@ export const ORCHESTRATION_SNAPSHOTS_DIR = 'snapshots'
 export const ORCHESTRATION_IDEMPOTENCY_DIR = 'idempotency'
 export const ORCHESTRATION_MAX_RECORD_BYTES = Math.min(V2_MAX_BYTES, 512_000)
 export const ORCHESTRATION_MAX_EVENTS = 2_048
-
 type LedgerRecordKind = 'event' | 'snapshot' | 'idempotency'
-
 export interface OrchestrationSeed {
   readonly project_id: string
   readonly change_id: string
   readonly correlation_id: string
   readonly updated_at?: string
 }
-
 export interface OrchestrationIdempotencyRecordV1 {
   readonly schema_version: 'orchestration-idempotency/v1'
   readonly record_id: string
@@ -59,14 +55,12 @@ export interface OrchestrationIdempotencyRecordV1 {
   readonly snapshot_digest: `sha256:${string}`
   readonly created_at: string
 }
-
 export interface LeaseRecoveryDecisionV1 {
   readonly run_id: string
   readonly lease_id: string
   readonly decision: 'active' | 'expired-awaiting-scheduler' | 'released' | 'revoked'
   readonly observed_expires_at: string
 }
-
 export interface OrchestrationRecoveryReportV1 {
   readonly schema_version: 'orchestration-recovery-report/v1'
   readonly report_id: string
@@ -86,18 +80,15 @@ export interface OrchestrationRecoveryReportV1 {
   readonly snapshot_digest?: `sha256:${string}`
   readonly recovered_at: string
 }
-
 export type LedgerAppendResult =
   | { readonly kind: 'committed'; readonly event: BoardEventV2; readonly snapshot: BoardSnapshotV2; readonly replayed: false }
   | { readonly kind: 'replayed'; readonly event: BoardEventV2; readonly snapshot: BoardSnapshotV2; readonly replayed: true }
   | { readonly kind: 'rejected'; readonly rejection: V2Rejection }
-
 export interface LedgerRecoveryResult {
   readonly snapshot?: BoardSnapshotV2
   readonly events: readonly BoardEventV2[]
   readonly report: OrchestrationRecoveryReportV1
 }
-
 export interface OrchestrationLedger {
   initialize(changeDir: string, seed: OrchestrationSeed): Promise<BoardSnapshotV2>
   readSnapshot(changeDir: string): Promise<BoardSnapshotV2 | undefined>
@@ -106,70 +97,57 @@ export interface OrchestrationLedger {
   append(changeDir: string, command: BoardCommandV2): Promise<LedgerAppendResult>
   recover(changeDir: string, now?: string): Promise<LedgerRecoveryResult>
 }
-
 interface Envelope<T> {
   readonly schema_version: 'orchestration-ledger-record/v1'
   readonly kind: LedgerRecordKind
   readonly checksum: `sha256:${string}`
   readonly payload: T
 }
-
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u
 const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u
-
 function stable(value: unknown): string {
+  if (value === undefined) return 'null'
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
-  return `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`
+  return `{${Object.keys(value as Record<string, unknown>).filter((key) => (value as Record<string, unknown>)[key] !== undefined).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`
 }
-
 function checksum(value: unknown): `sha256:${string}` {
   return `sha256:${sha256Hex(stable(value))}`
 }
-
 function json(value: unknown): string {
   return `${stable(value)}\n`
 }
-
 function safeId(value: string, label: string): void {
   if (!SAFE_ID.test(value)) throw new LedgerPathError(`${label} contains unsafe path characters`)
 }
-
 function integer(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
-
 function rootFor(changeDir: string): string { return path.join(path.resolve(changeDir), ORCHESTRATION_LEDGER_DIR) }
 function dirFor(changeDir: string, name: string): string { return path.join(rootFor(changeDir), name) }
 function currentPath(changeDir: string): string { return path.join(rootFor(changeDir), ORCHESTRATION_CURRENT_FILE) }
-
 function eventPath(changeDir: string, revision: number, eventId: string): string {
   if (!integer(revision) || revision < 1) throw new LedgerPathError('event revision must be a positive integer')
   safeId(eventId, 'event id')
   return path.join(dirFor(changeDir, ORCHESTRATION_EVENTS_DIR), `${String(revision).padStart(12, '0')}-${eventId}.json`)
 }
-
 function snapshotPath(changeDir: string, revision: number, digest: string): string {
   if (!integer(revision)) throw new LedgerPathError('snapshot revision must be a non-negative integer')
   safeId(digest, 'snapshot digest')
   return path.join(dirFor(changeDir, ORCHESTRATION_SNAPSHOTS_DIR), `${String(revision).padStart(12, '0')}-${digest.slice(7, 23)}.json`)
 }
-
 function idempotencyPath(changeDir: string, commandId: string): string {
   safeId(commandId, 'command id')
   return path.join(dirFor(changeDir, ORCHESTRATION_IDEMPOTENCY_DIR), `${commandId}.json`)
 }
-
 export class LedgerPathError extends Error { readonly code = 'unsafe-path' }
 export class LedgerCorruptionError extends Error { readonly code = 'corrupt-ledger' }
 export class LedgerInitializationError extends Error { readonly code = 'invalid-initialization' }
-
 async function ensureDirectory(directory: string): Promise<void> {
   await mkdir(directory, { recursive: true })
   const item = await lstat(directory)
   if (!item.isDirectory() || item.isSymbolicLink()) throw new LedgerPathError(`ledger directory is not a regular directory: ${directory}`)
 }
-
 async function boundedRead(file: string): Promise<string> {
   const item = await lstat(file)
   if (!item.isFile() || item.isSymbolicLink()) throw new LedgerCorruptionError(`symlink or non-regular ledger record: ${file}`)
@@ -178,7 +156,6 @@ async function boundedRead(file: string): Promise<string> {
   if (Buffer.byteLength(raw, 'utf8') > ORCHESTRATION_MAX_RECORD_BYTES) throw new LedgerCorruptionError(`ledger record exceeds byte limit: ${file}`)
   return raw
 }
-
 function decodeEnvelope<T>(raw: string, file: string, kind: LedgerRecordKind): T {
   let parsed: unknown
   try { parsed = JSON.parse(raw) } catch { throw new LedgerCorruptionError(`invalid JSON: ${file}`) }
@@ -191,15 +168,12 @@ function decodeEnvelope<T>(raw: string, file: string, kind: LedgerRecordKind): T
   if (checksum(value.payload) !== value.checksum) throw new LedgerCorruptionError(`checksum mismatch: ${file}`)
   return value.payload as T
 }
-
 function envelope<T>(kind: LedgerRecordKind, payload: T): Envelope<T> {
   return { schema_version: 'orchestration-ledger-record/v1', kind, checksum: checksum(payload), payload }
 }
-
 async function readEnvelopeFile<T>(file: string, kind: LedgerRecordKind): Promise<T> {
   return decodeEnvelope(await boundedRead(file), file, kind)
 }
-
 async function publishImmutable<T>(fileDir: string, file: string, kind: LedgerRecordKind, payload: T): Promise<void> {
   await ensureDirectory(fileDir)
   const content = json(envelope(kind, payload))
@@ -211,33 +185,36 @@ async function publishImmutable<T>(fileDir: string, file: string, kind: LedgerRe
     if (prior !== content) throw new LedgerCorruptionError(`immutable record collision: ${file}`)
   }
 }
-
 function reject(code: V2Rejection['code'], message: string, reason_code: string = code, next_actions: readonly string[] = []): LedgerAppendResult {
   return { kind: 'rejected', rejection: { code, message, reason_code, next_actions } }
 }
-
 function parseEvent(value: unknown, file: string): BoardEventV2 {
   const decoded = decodeBoardEventV2(value)
   if (!decoded.ok) throw new LedgerCorruptionError(`event schema invalid at ${file}: ${decoded.errors.map((error) => error.path).join(', ')}`)
   return decoded.value
 }
-
 function parseSnapshot(value: unknown, file: string): BoardSnapshotV2 {
   const decoded = decodeBoardSnapshotV2(value)
   if (!decoded.ok) throw new LedgerCorruptionError(`snapshot schema invalid at ${file}: ${decoded.errors.map((error) => error.path).join(', ')}`)
   return decoded.value
 }
-
 function parseIdempotency(value: unknown, file: string): OrchestrationIdempotencyRecordV1 {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new LedgerCorruptionError(`idempotency schema invalid at ${file}`)
   const record = value as Record<string, unknown>
   const expected = ['change_id', 'command_digest', 'command_id', 'committed_revision', 'created_at', 'event_digest', 'event_id', 'idempotency_key', 'project_id', 'record_id', 'schema_version', 'snapshot_digest'].sort()
   if (Object.keys(record).sort().join(',') !== expected.join(',') || record.schema_version !== 'orchestration-idempotency/v1') throw new LedgerCorruptionError(`idempotency schema invalid at ${file}`)
   for (const key of ['record_id', 'project_id', 'change_id', 'command_id', 'idempotency_key', 'event_id', 'created_at']) if (typeof record[key] !== 'string' || !SAFE_ID.test(record[key] as string)) throw new LedgerCorruptionError(`idempotency identity invalid at ${file}`)
-  if (!integer(record.committed_revision) || typeof record.command_digest !== 'string' || typeof record.event_digest !== 'string' || typeof record.snapshot_digest !== 'string') throw new LedgerCorruptionError(`idempotency value invalid at ${file}`)
-  return record as unknown as OrchestrationIdempotencyRecordV1
+  if (!UTC.test(record.created_at as string) || !integer(record.committed_revision)) throw new LedgerCorruptionError(`idempotency value invalid at ${file}`)
+  const command_digest = record.command_digest; const event_digest = record.event_digest; const snapshot_digest = record.snapshot_digest
+  if (typeof command_digest !== 'string' || typeof event_digest !== 'string' || typeof snapshot_digest !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(command_digest) || !/^sha256:[0-9a-f]{64}$/u.test(event_digest) || !/^sha256:[0-9a-f]{64}$/u.test(snapshot_digest)) throw new LedgerCorruptionError(`idempotency digest invalid at ${file}`)
+  return {
+    schema_version: 'orchestration-idempotency/v1', record_id: record.record_id as string, project_id: record.project_id as string,
+    change_id: record.change_id as string, command_id: record.command_id as string, idempotency_key: record.idempotency_key as string,
+    command_digest: command_digest as `sha256:${string}`, committed_revision: record.committed_revision as number,
+    event_id: record.event_id as string, event_digest: event_digest as `sha256:${string}`, snapshot_digest: snapshot_digest as `sha256:${string}`,
+    created_at: record.created_at as string,
+  }
 }
-
 async function listFiles(directory: string): Promise<string[]> {
   try {
     const entries = await readdir(directory, { withFileTypes: true })
@@ -247,18 +224,15 @@ async function listFiles(directory: string): Promise<string[]> {
     throw error
   }
 }
-
 function parseRevision(name: string): number | undefined {
   const match = /^(\d+)-/.exec(name)
   if (!match) return undefined
   const revision = Number(match[1])
   return integer(revision) ? revision : undefined
 }
-
 async function readEventByPath(changeDir: string, file: string): Promise<BoardEventV2> {
   return parseEvent(await readEnvelopeFile(path.join(dirFor(changeDir, ORCHESTRATION_EVENTS_DIR), file), 'event'), file)
 }
-
 async function readEventsSorted(changeDir: string): Promise<{ events: BoardEventV2[]; invalid?: { path: string; revision?: number; reason: string }; tempFiles: string[] }> {
   const names = await listFiles(dirFor(changeDir, ORCHESTRATION_EVENTS_DIR))
   const events: BoardEventV2[] = []
@@ -279,7 +253,6 @@ async function readEventsSorted(changeDir: string): Promise<{ events: BoardEvent
   if (events.length > ORCHESTRATION_MAX_EVENTS) return { events: events.slice(0, ORCHESTRATION_MAX_EVENTS), invalid: { path: dirFor(changeDir, ORCHESTRATION_EVENTS_DIR), reason: 'event count exceeds bounded reader limit' }, tempFiles }
   return { events, tempFiles }
 }
-
 async function readCurrent(changeDir: string): Promise<BoardSnapshotV2 | undefined> {
   try {
     return parseSnapshot(await readEnvelopeFile(currentPath(changeDir), 'snapshot'), currentPath(changeDir))
@@ -288,7 +261,6 @@ async function readCurrent(changeDir: string): Promise<BoardSnapshotV2 | undefin
     throw error
   }
 }
-
 async function readSnapshotAtRevision(changeDir: string, revision: number, expectedDigest?: string): Promise<BoardSnapshotV2 | undefined> {
   const names = await listFiles(dirFor(changeDir, ORCHESTRATION_SNAPSHOTS_DIR))
   for (const name of names) {
@@ -304,7 +276,6 @@ async function readSnapshotAtRevision(changeDir: string, revision: number, expec
   }
   return undefined
 }
-
 async function readIdempotencyRecords(changeDir: string): Promise<{ records: OrchestrationIdempotencyRecordV1[]; invalid?: { path: string; reason: string } }> {
   const names = await listFiles(dirFor(changeDir, ORCHESTRATION_IDEMPOTENCY_DIR))
   if (names.filter((entry) => entry.endsWith('.json')).length > ORCHESTRATION_MAX_EVENTS) return { records: [], invalid: { path: dirFor(changeDir, ORCHESTRATION_IDEMPOTENCY_DIR), reason: 'idempotency index exceeds bounded reader limit' } }
@@ -321,7 +292,6 @@ async function readIdempotencyRecords(changeDir: string): Promise<{ records: Orc
   }
   return { records }
 }
-
 function leasesFor(snapshot: BoardSnapshotV2, now: string): LeaseRecoveryDecisionV1[] {
   return snapshot.runs.flatMap((run) => {
     const lease = run.lease
@@ -332,9 +302,7 @@ function leasesFor(snapshot: BoardSnapshotV2, now: string): LeaseRecoveryDecisio
     return [{ run_id: run.run_id, lease_id: lease.lease_id, decision, observed_expires_at: lease.expires_at }]
   })
 }
-
 function sameJson(a: unknown, b: unknown): boolean { return stable(a) === stable(b) }
-
 class FsOrchestrationLedger implements OrchestrationLedger {
   async initialize(changeDir: string, seed: OrchestrationSeed): Promise<BoardSnapshotV2> {
     safeId(seed.project_id, 'project id'); safeId(seed.change_id, 'change id'); safeId(seed.correlation_id, 'correlation id')
@@ -354,9 +322,7 @@ class FsOrchestrationLedger implements OrchestrationLedger {
       return aggregate
     })
   }
-
   async readSnapshot(changeDir: string): Promise<BoardSnapshotV2 | undefined> { return readCurrent(changeDir) }
-
   async readEvent(changeDir: string, eventId: string): Promise<BoardEventV2 | undefined> {
     safeId(eventId, 'event id')
     const names = await listFiles(dirFor(changeDir, ORCHESTRATION_EVENTS_DIR))
@@ -366,7 +332,6 @@ class FsOrchestrationLedger implements OrchestrationLedger {
     }
     return undefined
   }
-
   async readEvents(changeDir: string, options: { readonly fromRevision?: number; readonly toRevision?: number } = {}): Promise<readonly BoardEventV2[]> {
     if (options.fromRevision !== undefined && !integer(options.fromRevision)) throw new LedgerPathError('fromRevision must be a non-negative integer')
     if (options.toRevision !== undefined && !integer(options.toRevision)) throw new LedgerPathError('toRevision must be a non-negative integer')
@@ -376,7 +341,6 @@ class FsOrchestrationLedger implements OrchestrationLedger {
     const upperBound = options.toRevision ?? current?.revision ?? 0
     return result.events.filter((event) => event.revision <= upperBound && (options.fromRevision === undefined || event.revision >= options.fromRevision))
   }
-
   async append(changeDir: string, command: BoardCommandV2): Promise<LedgerAppendResult> {
     safeId(command.command_id, 'command id'); safeId(command.idempotency_key, 'idempotency key')
     return withLock(changeDir, async () => {
@@ -414,7 +378,6 @@ class FsOrchestrationLedger implements OrchestrationLedger {
       return { kind: 'committed', event, snapshot: next, replayed: false }
     })
   }
-
   async recover(changeDir: string, now = new Date().toISOString()): Promise<LedgerRecoveryResult> {
     if (!UTC.test(now)) throw new LedgerPathError('recovery time must be UTC')
     const eventRead = await readEventsSorted(changeDir)
@@ -468,8 +431,18 @@ class FsOrchestrationLedger implements OrchestrationLedger {
       orphan_event_revisions, ...(corrupt_boundary ? { corrupt_boundary } : {}), lease_decisions, recovered_from: recoveredFrom,
       ...(recovered ? { snapshot_digest: checksum(recovered) } : {}), recovered_at: now,
     }
+    // `current.json` is a replaceable projection, not the source of truth. If a
+    // crash or manual corruption left it unreadable/stale, heal it from the
+    // verified immutable snapshot before a scheduler attempts the next CAS.
+    if (recovered !== undefined && (current === undefined || !sameJson(current, recovered))) {
+      // Re-read immediately before healing so a concurrent writer that already
+      // advanced the pointer can never be overwritten by an older recovery.
+      const live = await readCurrent(changeDir).catch(() => undefined)
+      if (live === undefined || live.revision <= recovered.revision) {
+        await atomicReplaceFile(currentPath(changeDir), json(envelope('snapshot', recovered)))
+      }
+    }
     return { ...(recovered ? { snapshot: recovered } : {}), events: validEvents, report }
   }
 }
-
 export function createOrchestrationLedger(): OrchestrationLedger { return new FsOrchestrationLedger() }

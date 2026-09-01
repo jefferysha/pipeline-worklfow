@@ -85,6 +85,12 @@ export * from './task-plan-run/executor.js'
 // Kernel-command-driven Skill execution. No vendor/provider implementation is bundled here.
 export * from './orchestration/proposal.js'
 export * from './orchestration/execution.js'
+// v2 planner: immutable natural-language assessment, user/custom catalog
+// normalization, deterministic WorkGraph and capability resolution.
+export * from './orchestration/planner-v2.js'
+// v2 durable executor: lease-aware, validator-bound, retryable runtime over the Kernel ledger.
+export * from './orchestration/runtime-v2.js'
+export * from './orchestration/autonomous-orchestrator-v2.js'
 export {
   readSealedAfkSkillInvocationContext,
   SealedAfkSkillInvocationContextError,

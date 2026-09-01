@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   createAggregateV2,
   decodeBoardCommandV2,
+  decodeBoardEventV2,
   decodeDevelopmentRequestV2,
   decideV2,
   evolveV2,
@@ -44,6 +45,16 @@ describe('canonical orchestration aggregate v2', () => {
     expect(decodeDevelopmentRequestV2(request)).toMatchObject({ ok: true })
     expect(decodeDevelopmentRequestV2({ ...request, extra: true })).toMatchObject({ ok: false })
     expect(decodeDevelopmentRequestV2({ ...request, intent: 'x'.repeat(9_000) })).toMatchObject({ ok: false })
+  })
+
+  test('event effect union is closed and fully decoded', () => {
+    const aggregate = createAggregateV2('project-1', 'change-1', 'corr-1')
+    const decision = decideV2(aggregate, command('accept-request', aggregate, { request }))
+    expect(decision.ok).toBe(true)
+    if (!decision.ok) return
+    expect(decodeBoardEventV2(decision.event)).toMatchObject({ ok: true })
+    expect(decodeBoardEventV2({ ...decision.event, effects: [{ type: 'unknown-effect' }] })).toMatchObject({ ok: false })
+    expect(decodeBoardEventV2({ ...decision.event, effects: [{ type: 'wake-scheduler', reason: 'x', extra: true }] })).toMatchObject({ ok: false })
   })
 
   test('decode → accept-request → fold/project is deterministic and causal', () => {
