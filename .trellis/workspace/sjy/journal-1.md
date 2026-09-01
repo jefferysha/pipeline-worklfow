@@ -109,3 +109,44 @@
 ### Next Steps
 
 - 下一子任务接入持久化快照、Server/SSE 投影与 Dashboard 看板控制，保持 revision CAS 和上述边界。
+
+
+## Session 5: Production orchestration V2 delivery
+<!-- trellis-session: v=2 fp=e0b53597fff1a3dd -->
+
+**Date**: 2026-09-02
+**Task**: Production orchestration V2 delivery
+**Branch**: `codex/autonomous-loop-v1`
+
+### Summary
+
+从底向上完成可追溯的编排 V2：定义闭合 schema、状态机与事件账本，接入自动规划、租约运行时、SSE 控制面、Dashboard 看板、CLI 与指标接口；补齐恢复、漂移、幂等、权限及仓库卫生边界。
+
+### Main Changes
+
+- Canonical orchestration aggregate、durable ledger 与 CAS/恢复协议
+- 自动场景识别、用户自定义 Skill/MCP 解析及串并行 DAG
+- Runtime lease/retry/cancel、Server SSE/metrics、Dashboard controls、CLI watch/control
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `46dd4ab` | feat(orchestration): add canonical v2 aggregate and durable ledger |
+| `6ffa55e50d5eb0015aee8d684b9d5fb62c88e692` | feat: deliver production orchestration v2 |
+| `9705244` | fix(quality): allow first-party workflow metadata |
+
+### Testing
+
+- [OK] 全仓 Vitest：412 files / 6980 passed / 15 honest skips
+- [OK] Dashboard：typecheck + 99 files / 1747 passed
+- [OK] Chromium orchestration V2 E2E：1 passed；build、architecture、comments、OpenSpec、release、docs、repository hygiene 全通过
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 按 docs/ORCHESTRATION-V2.md 的备份/发布流程接入真实企业执行器与认证凭证
+- 若需要多租户，再在当前 aggregate/ledger 边界上增加租户授权与审计索引
