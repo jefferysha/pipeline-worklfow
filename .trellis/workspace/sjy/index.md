@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 8
+- **Total Sessions**: 9
 - **Last Active**: 2026-09-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~254 | Active |
+| `journal-1.md` | ~278 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 9 | 2026-09-02 | v1.0.9 production release and workflow UX hardening | `fa7e8349f5fcdc1ab16319959405c99ab7e72043`, `adb33e4a1b15e30f237ef6f308a61b6db4883871`, `8e4652745593ce11a4ef9f9ac19571b381809227` | `codex/autonomous-loop-v1` |
 | 8 | 2026-09-02 | Pipeline dependency-order hardening | `c499673` | `codex/autonomous-loop-v1` |
 | 7 | 2026-09-02 | Pipeline aggregate contract coverage | `baf1f20` | `codex/autonomous-loop-v1` |
 | 6 | 2026-09-02 | Workflow pipeline contract and real acceptance | `46dd4ab`, `6ffa55e50d5eb0015aee8d684b9d5fb62c88e692`, `9705244`, `a381e9c`, `708aa86` | `codex/autonomous-loop-v1` |

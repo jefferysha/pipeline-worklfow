@@ -252,3 +252,27 @@
 ### Next Steps
 
 - 推送最终包含依赖顺序硬化与会话记录的远程 SHA。
+
+
+## Session 9: v1.0.9 production release and workflow UX hardening
+<!-- trellis-session: v=2 fp=dc853d2097c69b0c -->
+
+**Date**: 2026-09-02
+**Task**: v1.0.9 production release and workflow UX hardening
+**Branch**: `codex/autonomous-loop-v1`
+
+### Summary
+
+Hardened catalog and installer SSE lifecycle, replay completion, pipeline/stage/skill ordering UX, i18n and install validation; passed local full backend/web/E2E/clean-install/adapter/audit gates; pushed exact SHA to main; candidate writer created v1.0.9 and public install/update acceptance passed.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fa7e8349f5fcdc1ab16319959405c99ab7e72043` | fix: harden catalog and install UX for v1.0.9 |
+| `adb33e4a1b15e30f237ef6f308a61b6db4883871` | feat: add cross-terminal catalog and installer UX |
+| `8e4652745593ce11a4ef9f9ac19571b381809227` | release: prepare Tenon v1.0.8 |
+
+### Status
+
+[OK] **Completed**
