@@ -150,3 +150,45 @@
 
 - 按 docs/ORCHESTRATION-V2.md 的备份/发布流程接入真实企业执行器与认证凭证
 - 若需要多租户，再在当前 aggregate/ledger 边界上增加租户授权与审计索引
+
+
+## Session 6: Workflow pipeline contract and real acceptance
+<!-- trellis-session: v=2 fp=ba850b4bb17c51ac -->
+
+**Date**: 2026-09-02
+**Task**: Workflow pipeline contract and real acceptance
+**Branch**: `codex/autonomous-loop-v1`
+
+### Summary
+
+固化 workflow/track/pipeline/stage-skill-order 的 workflow-pipeline/v2 契约；支持自动场景推断与用户/项目自定义，并用真实子进程、持久化 ledger、Dashboard 和 Chromium E2E 验收。
+
+### Main Changes
+
+- 新增 workflow-pipeline/v2 记录、freeze-pipeline 状态迁移、pipeline digest 与 graph/resolution 绑定。
+- planner 支持默认自动流水线及 pipeline_blueprint 自定义 workflow、track、pipeline、stage、Skill/MCP/schema 顺序。
+- runtime 按冻结 stage_order 与 Skill.order 调度，Dashboard 展示 workflow/track/pipeline 和 stage/Skill 顺序。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `46dd4ab` | feat(orchestration): add canonical v2 aggregate and durable ledger |
+| `6ffa55e50d5eb0015aee8d684b9d5fb62c88e692` | feat: deliver production orchestration v2 |
+| `9705244` | fix(quality): allow first-party workflow metadata |
+| `a381e9c` | chore: record journal |
+| `708aa86` | feat(orchestration): persist effective workflow pipeline order |
+
+### Testing
+
+- [OK] 全仓 Vitest：412 files，6985 passed，15 honest skipped。
+- [OK] Dashboard：99 files，1747 passed；build/typecheck/architecture/OpenSpec/release/docs/hygiene 全通过。
+- [OK] 真实工作流子进程集成 2 passed；Chromium Playwright E2E 1 passed。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 后续可在 CLI/HTTP 增加 pipeline_blueprint 编辑入口，并继续扩展多 Skill 单 Work Item 的执行模型。

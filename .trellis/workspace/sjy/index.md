@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-09-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~152 | Active |
+| `journal-1.md` | ~194 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-09-02 | Workflow pipeline contract and real acceptance | `46dd4ab`, `6ffa55e50d5eb0015aee8d684b9d5fb62c88e692`, `9705244`, `a381e9c`, `708aa86` | `codex/autonomous-loop-v1` |
 | 5 | 2026-09-02 | Production orchestration V2 delivery | `46dd4ab`, `6ffa55e50d5eb0015aee8d684b9d5fb62c88e692`, `9705244` | `codex/autonomous-loop-v1` |
 | 4 | 2026-09-01 | Capability routing and execution adapter v1 | `1618f8f` | `codex/autonomous-loop-v1` |
 | 3 | 2026-09-01 | Blocked resolution recovery | `d079e3c` | `codex/autonomous-loop-v1` |
