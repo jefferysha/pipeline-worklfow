@@ -5,6 +5,7 @@ export const V2_SCHEMAS = {
   context: 'repository-context/v2',
   assessment: 'capability-assessment/v2',
   graph: 'work-graph/v2',
+  pipeline: 'workflow-pipeline/v2',
   resolution: 'capability-resolution/v2',
   workItem: 'work-item/v2',
   run: 'skill-run/v2',
@@ -44,6 +45,13 @@ export interface DevelopmentRequestV2 extends OrchestrationRecordMetaV2 {
   readonly user_skills: readonly { readonly id: string; readonly version?: string; readonly mode: V2SelectionMode; readonly depends_on: readonly string[] }[]
   readonly user_mcps: readonly { readonly id: string; readonly version?: string; readonly required: boolean }[]
   readonly auto_select: boolean
+  /** Optional explicit names; omitted values are resolved from the request/context. */
+  readonly workflow_id?: string
+  readonly workflow_version?: string
+  readonly track_id?: string
+  readonly track_revision?: string
+  readonly pipeline_id?: string
+  readonly pipeline_version?: string
 }
 
 export interface RepositoryContextV2 extends OrchestrationRecordMetaV2 {
@@ -76,10 +84,77 @@ export interface WorkGraphV2 extends OrchestrationRecordMetaV2 {
   readonly assessment_id: string
   readonly task_plan_revision_id: string
   readonly task_plan_digest: `sha256:${string}`
+  /** Optional on legacy graphs; V2 planners bind the graph to the frozen pipeline identity. */
+  readonly pipeline_id?: string
   readonly dependency_edges: readonly { readonly from: string; readonly to: string; readonly reason: 'data' | 'resource' | 'ordering' | 'gate' }[]
   readonly execution_groups: readonly { readonly id: string; readonly mode: V2SelectionMode; readonly work_item_ids: readonly string[] }[]
   readonly acceptance_coverage: readonly { readonly acceptance_id: string; readonly work_item_ids: readonly string[] }[]
   readonly status: 'draft' | 'validated' | 'frozen' | 'superseded'
+}
+
+export type PipelineSourceV2 = 'builtin' | 'project' | 'user' | 'automatic'
+export type PipelineSkillRoleV2 = 'workflow' | 'track-mandatory' | 'track-recommended' | 'user' | 'automatic' | 'review'
+
+/** The ordered Skill slot that a stage will execute. The order is persisted, not inferred by the runtime. */
+export interface PipelineSkillV2 {
+  readonly binding_id: string
+  readonly skill_id: string
+  readonly skill_version: string
+  readonly order: number
+  readonly role: PipelineSkillRoleV2
+  readonly source: PipelineSourceV2
+  readonly mode: V2SelectionMode
+  readonly depends_on: readonly string[]
+  readonly mcp_ids: readonly string[]
+  readonly input_schema_id?: string
+  readonly output_schema_id?: string
+  readonly validator_ids: readonly string[]
+}
+
+/** A stage is a first-class pipeline node; stage_order and ordinal are both retained for replay/audit. */
+export interface PipelineStageV2 {
+  readonly stage_id: string
+  readonly name: string
+  readonly ordinal: number
+  readonly execution_mode: V2SelectionMode
+  readonly depends_on: readonly string[]
+  readonly work_item_ids: readonly string[]
+  readonly gate: 'none' | 'input' | 'review' | 'verification' | 'release'
+  readonly skills: readonly PipelineSkillV2[]
+  readonly input_refs: readonly string[]
+  readonly output_refs: readonly string[]
+}
+
+/**
+ * Canonical effective workflow/track/pipeline selection. It deliberately keeps
+ * custom names and opaque Skill output contracts instead of narrowing them to
+ * built-in enums, so user-defined workflows and Skills remain first-class.
+ */
+export interface WorkflowPipelinePlanV2 extends OrchestrationRecordMetaV2 {
+  readonly schema_version: 'workflow-pipeline/v2'
+  readonly pipeline_id: string
+  readonly pipeline_version: string
+  readonly workflow_id: string
+  readonly workflow_version: string
+  readonly workflow_source: PipelineSourceV2
+  readonly workflow_fingerprint: string
+  readonly track_id: string
+  readonly track_revision: string
+  readonly track_source: PipelineSourceV2
+  readonly pipeline_source: PipelineSourceV2
+  readonly graph_id: string
+  readonly assessment_id: string
+  readonly status: 'draft' | 'validated' | 'frozen' | 'superseded'
+  readonly stage_order: readonly string[]
+  readonly stages: readonly PipelineStageV2[]
+  readonly customizations: {
+    readonly custom_workflow: boolean
+    readonly custom_track: boolean
+    readonly custom_pipeline: boolean
+    readonly user_skill_ids: readonly string[]
+    readonly user_mcp_ids: readonly string[]
+  }
+  readonly pipeline_digest: `sha256:${string}`
 }
 
 export interface CapabilityResolutionV2 extends OrchestrationRecordMetaV2 {
@@ -190,6 +265,7 @@ export type BoardCommandV2 =
   | BoardCommandBaseV2 & { readonly type: 'accept-request'; readonly request: DevelopmentRequestV2 }
   | BoardCommandBaseV2 & { readonly type: 'record-context'; readonly context: RepositoryContextV2 }
   | BoardCommandBaseV2 & { readonly type: 'record-assessment'; readonly assessment: CapabilityAssessmentV2 }
+  | BoardCommandBaseV2 & { readonly type: 'freeze-pipeline'; readonly pipeline: WorkflowPipelinePlanV2 }
   | BoardCommandBaseV2 & { readonly type: 'freeze-work-graph'; readonly graph: WorkGraphV2 }
   | BoardCommandBaseV2 & { readonly type: 'resolve-capabilities'; readonly resolution: CapabilityResolutionV2 }
   | BoardCommandBaseV2 & { readonly type: 'start-change' }
@@ -260,6 +336,7 @@ export interface BoardSnapshotV2 {
   readonly request?: DevelopmentRequestV2
   readonly context?: RepositoryContextV2
   readonly assessment?: CapabilityAssessmentV2
+  readonly pipeline?: WorkflowPipelinePlanV2
   readonly graph?: WorkGraphV2
   readonly resolution?: CapabilityResolutionV2
   readonly work_items: readonly WorkItemV2[]

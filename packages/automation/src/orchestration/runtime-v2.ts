@@ -134,12 +134,32 @@ function groupFor(snapshot: BoardSnapshotV2, item: WorkItemV2): { readonly mode:
   return group === undefined ? undefined : { mode: group.mode, ids: group.work_item_ids }
 }
 
+function pipelineStageFor(snapshot: BoardSnapshotV2, item: WorkItemV2) {
+  return snapshot.pipeline?.stages.find((stage) => stage.work_item_ids.includes(item.work_item_id))
+}
+
+function pipelineRank(snapshot: BoardSnapshotV2, item: WorkItemV2): readonly number[] {
+  const pipeline = snapshot.pipeline
+  if (pipeline === undefined) return [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]
+  const stage = pipelineStageFor(snapshot, item)
+  const stageIndex = stage === undefined ? -1 : pipeline.stage_order.indexOf(stage.stage_id)
+  const binding = snapshot.resolution?.bindings.find((candidate) => candidate.work_item_id === item.work_item_id)
+  const skill = stage?.skills.find((candidate) => candidate.skill_id === binding?.skill_id && candidate.skill_version === binding?.skill_version)
+  return [stageIndex < 0 ? Number.MAX_SAFE_INTEGER : stageIndex, skill?.order ?? Number.MAX_SAFE_INTEGER]
+}
+
 function chooseWave(snapshot: BoardSnapshotV2, policy: NormalizedPolicyV2): readonly WorkItemV2[] {
-  const candidates = snapshot.work_items.filter(activeOrQueued)
+  const candidates = snapshot.work_items.filter(activeOrQueued).sort((left, right) => {
+    const leftRank = pipelineRank(snapshot, left)
+    const rightRank = pipelineRank(snapshot, right)
+    return (leftRank[0] ?? Number.MAX_SAFE_INTEGER) - (rightRank[0] ?? Number.MAX_SAFE_INTEGER) || (leftRank[1] ?? Number.MAX_SAFE_INTEGER) - (rightRank[1] ?? Number.MAX_SAFE_INTEGER) || left.work_item_id.localeCompare(right.work_item_id)
+  })
   const first = candidates[0]
   if (first === undefined) return []
   const group = groupFor(snapshot, first)
-  if (group === undefined || group.mode === 'serial') return [first]
+  const stage = pipelineStageFor(snapshot, first)
+  const mode = stage?.execution_mode ?? group?.mode
+  if (group === undefined || mode === 'serial') return [first]
   const members = candidates.filter((item) => group.ids.includes(item.work_item_id)).slice(0, policy.max_parallel)
   return members.length === 0 ? [first] : members
 }

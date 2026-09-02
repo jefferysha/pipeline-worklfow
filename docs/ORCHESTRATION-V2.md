@@ -13,9 +13,21 @@ Tenon V2 是 local-first 的持久化编排闭环。Kernel 的 `BoardSnapshotV2`
 
 所有记录都有 schema version、project/change/correlation、actor、revision、causation 和 before/after digest。未知字段、超限、非法路径、错误 checksum 和断链都会 fail-closed。
 
+## Workflow / Track / Pipeline 契约
+
+规划结果会在同一条事件链中固化为 `workflow-pipeline/v2`，不再只存在于模型或前端临时状态。记录包含：
+
+- `workflow_id@workflow_version`：流程定义身份；`workflow_source` 可为 `builtin`、`project`、`user` 或 `automatic`，并用 `workflow_fingerprint` 锁定内容。
+- `track_id@track_revision`：场景能力轨道。未显式指定时由能力信号自动推断（frontend/UI → `frontend`，backend/API/database → `backend`，product/research/requirement → `pm`，否则 `free`）。
+- `pipeline_id@pipeline_version`：一次可执行的有效组合身份；`stage_order` 是唯一的执行顺序，`stages[].skills[]` 按 `order` 是 stage 内 Skill 顺序。
+- 每个 stage 都声明 `execution_mode`、依赖、Work Item、输入/输出引用、门禁类型；每个 Skill 都保留版本、来源、串并行模式、依赖、MCP、输入/输出 schema 和 validator。Skill 输出保持 opaque，只通过 schema id、artifact ref 和验证报告连接下游。
+- `customizations` 明确记录 workflow、track、pipeline 是否自定义，以及用户选择的 Skill/MCP。用户或项目可通过 `pipeline_blueprint` 传入任意合法 ID、版本、阶段和 Skill 顺序；planner 会校验覆盖全部 Work Item、阶段序号唯一、引用安全后再冻结。
+
+默认自动规划会把每个 graph Work Item 物化为一个 stage，因而 stage 顺序、Skill 顺序和运行顺序一一可审计。运行时优先按冻结 pipeline 的 `stage_order` 调度，并在同一 stage 内按 Skill `order` 排序；stage 的 `serial`/`parallel` 会覆盖旧 graph group 的调度提示，避免“看板顺序”和真实执行顺序分叉。
+
 ## 状态与恢复
 
-Change 生命周期为 `draft → assessing → planning → planned → ready → executing → verifying → completed`，并可进入 `waiting-input`、`blocked`、`paused`、`failed` 或 `cancelled`。Work Item、Run、Result、Validation 和 Gate 各自有闭集状态；状态只能由 Kernel reducer 通过 command 迁移。
+Change 生命周期为 `draft → assessing → planning → [freeze-pipeline] → [freeze-work-graph] → planned → ready → executing → verifying → completed`，并可进入 `waiting-input`、`blocked`、`paused`、`failed` 或 `cancelled`。Pipeline 变更先由 `replan-change` 将旧记录标记为 `superseded`，再冻结新 pipeline 和 graph；旧事件、digest、revision 始终保留。Work Item、Run、Result、Validation 和 Gate 各自有闭集状态；状态只能由 Kernel reducer 通过 command 迁移。
 
 执行器先获得 lease，再 heartbeat；lease 过期后恢复报告会记录 `expired-awaiting-scheduler`，runtime 生成新的 attempt 并保留 `prior_attempt_id`。重试、取消、人工门禁和重规划都写入同一事件链。任何 validator unknown/invalid 都不能伪造完成。
 

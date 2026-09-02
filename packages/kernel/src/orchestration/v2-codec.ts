@@ -11,6 +11,9 @@ import {
   type SkillRunV2,
   type ValidationReportV2,
   type WorkGraphV2,
+  type WorkflowPipelinePlanV2,
+  type PipelineStageV2,
+  type PipelineSkillV2,
   type WorkItemV2,
   type BoardEventV2,
   type RunLeaseV2,
@@ -24,6 +27,7 @@ export const V2_MAX_BYTES = 512_000
 export const V2_MAX_DEPTH = 16
 export const V2_MAX_ITEMS = 2_048
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/
+const SCHEMA_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,159}$/
 const DIGEST = /^sha256:[0-9a-f]{64}$/
 const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/
 
@@ -113,13 +117,25 @@ function nested<T>(input: unknown, decoder: (value: unknown) => V2DecodeResult<T
 }
 
 export function decodeDevelopmentRequestV2(input: unknown): V2DecodeResult<DevelopmentRequestV2> {
-  const errors: V2CodecError[] = []; const raw = prepare(input, V2_SCHEMAS.request, [...META, 'request_id', 'intent', 'interaction_policy', 'requested_effects', 'constraints', 'user_skills', 'user_mcps', 'auto_select'], errors); if (raw === undefined) return { ok: false, errors }
+  const errors: V2CodecError[] = []; const raw = prepare(input, V2_SCHEMAS.request, [...META, 'request_id', 'intent', 'interaction_policy', 'requested_effects', 'constraints', 'user_skills', 'user_mcps', 'auto_select', 'workflow_id', 'workflow_version', 'track_id', 'track_revision', 'pipeline_id', 'pipeline_version'], errors); if (raw === undefined) return { ok: false, errors }
   const m = meta(raw, '$', errors); const request_id = text(raw.request_id, '$.request_id', errors, ID); const intent = text(raw.intent, '$.intent', errors); const interaction_policy = raw.interaction_policy === 'interactive' || raw.interaction_policy === 'recommended-defaults' || raw.interaction_policy === 'afk' ? raw.interaction_policy : undefined
   if (interaction_policy === undefined) errors.push({ code: 'field-invalid', path: '$.interaction_policy' }); const requested_effects = array(raw.requested_effects, '$.requested_effects', errors).map((v, i) => { const x = ['read', 'write', 'git', 'network', 'deploy-preview'].includes(String(v)) ? String(v) : undefined; if (!x) errors.push({ code: 'field-invalid', path: `$.requested_effects[${i}]` }); return x ?? 'read' }) as DevelopmentRequestV2['requested_effects']; const constraints = strings(raw.constraints, '$.constraints', errors); const auto_select = bool(raw.auto_select, '$.auto_select', errors)
   const skills = array(raw.user_skills, '$.user_skills', errors).map((entry, i) => { const x = object(entry, `$.user_skills[${i}]`, errors); if (!x) return undefined; closed(x, ['id', 'version', 'mode', 'depends_on'], `$.user_skills[${i}]`, errors); const id = text(x.id, `$.user_skills[${i}].id`, errors, ID); const version = optionalText(x.version, `$.user_skills[${i}].version`, errors, ID); const mode = x.mode === 'serial' || x.mode === 'parallel' ? x.mode as 'serial' | 'parallel' : undefined; if (!mode) errors.push({ code: 'field-invalid', path: `$.user_skills[${i}].mode` }); return id && mode ? { id, ...(version ? { version } : {}), mode, depends_on: strings(x.depends_on, `$.user_skills[${i}].depends_on`, errors) } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined)
   const mcps = array(raw.user_mcps, '$.user_mcps', errors).map((entry, i) => { const x = object(entry, `$.user_mcps[${i}]`, errors); if (!x) return undefined; closed(x, ['id', 'version', 'required'], `$.user_mcps[${i}]`, errors); const id = text(x.id, `$.user_mcps[${i}].id`, errors, ID); const version = optionalText(x.version, `$.user_mcps[${i}].version`, errors, ID); const required = bool(x.required, `$.user_mcps[${i}].required`, errors); return id && required !== undefined ? { id, ...(version ? { version } : {}), required } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined)
+  const workflow_id = optionalText(raw.workflow_id, '$.workflow_id', errors, ID)
+  const workflow_version = optionalText(raw.workflow_version, '$.workflow_version', errors, ID)
+  const track_id = optionalText(raw.track_id, '$.track_id', errors, ID)
+  const track_revision = optionalText(raw.track_revision, '$.track_revision', errors, ID)
+  const pipeline_id = optionalText(raw.pipeline_id, '$.pipeline_id', errors, ID)
+  const pipeline_version = optionalText(raw.pipeline_version, '$.pipeline_version', errors, ID)
   if (!m || !request_id || !intent || auto_select === undefined || interaction_policy === undefined) return { ok: false, errors }
-  return result({ ...m, schema_version: V2_SCHEMAS.request, request_id, intent, interaction_policy, requested_effects, constraints, user_skills: skills, user_mcps: mcps, auto_select } as DevelopmentRequestV2, errors)
+  return result({
+    ...m, schema_version: V2_SCHEMAS.request, request_id, intent, interaction_policy, requested_effects, constraints,
+    user_skills: skills, user_mcps: mcps, auto_select,
+    ...(workflow_id === undefined ? {} : { workflow_id }), ...(workflow_version === undefined ? {} : { workflow_version }),
+    ...(track_id === undefined ? {} : { track_id }), ...(track_revision === undefined ? {} : { track_revision }),
+    ...(pipeline_id === undefined ? {} : { pipeline_id }), ...(pipeline_version === undefined ? {} : { pipeline_version }),
+  } as DevelopmentRequestV2, errors)
 }
 
 export function decodeRepositoryContextV2(input: unknown): V2DecodeResult<RepositoryContextV2> { const errors: V2CodecError[] = []; const raw = prepare(input, V2_SCHEMAS.context, [...META, 'request_id', 'repository', 'workspace_fingerprint', 'policy_digest', 'skill_catalog_digest', 'mcp_catalog_digest', 'observed_facts'], errors); if (!raw) return { ok: false, errors }; const m = meta(raw, '$', errors); const request_id = text(raw.request_id, '$.request_id', errors, ID); const repo = object(raw.repository, '$.repository', errors); if (repo) closed(repo, ['ref', 'branch', 'base_branch', 'head_sha', 'dirty'], '$.repository', errors); const ref = repo && text(repo.ref, '$.repository.ref', errors); const branch = repo && text(repo.branch, '$.repository.branch', errors); const base_branch = repo && text(repo.base_branch, '$.repository.base_branch', errors); const head_sha = repo && text(repo.head_sha, '$.repository.head_sha', errors); const dirty = repo && bool(repo.dirty, '$.repository.dirty', errors); const workspace_fingerprint = digest(raw.workspace_fingerprint, '$.workspace_fingerprint', errors); const policy_digest = digest(raw.policy_digest, '$.policy_digest', errors); const skill_catalog_digest = digest(raw.skill_catalog_digest, '$.skill_catalog_digest', errors); const mcp_catalog_digest = digest(raw.mcp_catalog_digest, '$.mcp_catalog_digest', errors); const facts = array(raw.observed_facts, '$.observed_facts', errors).map((entry, i) => { const x = object(entry, `$.observed_facts[${i}]`, errors); if (!x) return undefined; closed(x, ['key', 'value_ref', 'digest'], `$.observed_facts[${i}]`, errors); const key = text(x.key, `$.observed_facts[${i}].key`, errors); const value_ref = text(x.value_ref, `$.observed_facts[${i}].value_ref`, errors); const d = digest(x.digest, `$.observed_facts[${i}].digest`, errors); return key && value_ref && d ? { key, value_ref, digest: d } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); if (!m || !request_id || !repo || !ref || !branch || !base_branch || !head_sha || dirty === undefined || !workspace_fingerprint || !policy_digest || !skill_catalog_digest || !mcp_catalog_digest) return { ok: false, errors }; return result({ ...m, schema_version: V2_SCHEMAS.context, request_id, repository: { ref, branch, base_branch, head_sha, dirty }, workspace_fingerprint, policy_digest, skill_catalog_digest, mcp_catalog_digest, observed_facts: facts }, errors) }
@@ -127,9 +143,74 @@ export function decodeRepositoryContextV2(input: unknown): V2DecodeResult<Reposi
 function decodeAssessment(input: unknown, errors: V2CodecError[]): CapabilityAssessmentV2 | undefined { const raw = prepare(input, V2_SCHEMAS.assessment, [...META, 'assessment_id', 'request_id', 'context_record_id', 'normalization', 'requirements', 'questions', 'risks', 'proposal_evidence_ref'], errors); if (!raw) return undefined; const m = meta(raw, '$', errors); const assessment_id = text(raw.assessment_id, '$.assessment_id', errors, ID); const request_id = text(raw.request_id, '$.request_id', errors, ID); const context_record_id = text(raw.context_record_id, '$.context_record_id', errors, ID); const normalization = ['complete', 'needs-input', 'rejected'].includes(String(raw.normalization)) ? raw.normalization as CapabilityAssessmentV2['normalization'] : undefined; if (!normalization) errors.push({ code: 'field-invalid', path: '$.normalization' }); const requirements = array(raw.requirements, '$.requirements', errors).map((entry, i) => { const x = object(entry, `$.requirements[${i}]`, errors); if (!x) return undefined; closed(x, ['id', 'capability', 'necessity', 'acceptance_refs', 'evidence_refs', 'constraints', 'risk'], `$.requirements[${i}]`, errors); const id = text(x.id, `$.requirements[${i}].id`, errors, ID); const capability = text(x.capability, `$.requirements[${i}].capability`, errors); const necessity = ['required', 'recommended', 'optional'].includes(String(x.necessity)) ? x.necessity as 'required' | 'recommended' | 'optional' : undefined; const risk = ['low', 'medium', 'high'].includes(String(x.risk)) ? x.risk as 'low' | 'medium' | 'high' : undefined; if (!necessity) errors.push({ code: 'field-invalid', path: `$.requirements[${i}].necessity` }); if (!risk) errors.push({ code: 'field-invalid', path: `$.requirements[${i}].risk` }); return id && capability && necessity && risk ? { id, capability, necessity, acceptance_refs: strings(x.acceptance_refs, `$.requirements[${i}].acceptance_refs`, errors), evidence_refs: strings(x.evidence_refs, `$.requirements[${i}].evidence_refs`, errors), constraints: strings(x.constraints, `$.requirements[${i}].constraints`, errors), risk } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); const questions = array(raw.questions, '$.questions', errors).map((entry, i) => { const x = object(entry, `$.questions[${i}]`, errors); if (!x) return undefined; closed(x, ['id', 'prompt', 'blocking'], `$.questions[${i}]`, errors); const id = text(x.id, `$.questions[${i}].id`, errors, ID); const prompt = text(x.prompt, `$.questions[${i}].prompt`, errors); const blocking = bool(x.blocking, `$.questions[${i}].blocking`, errors); return id && prompt && blocking !== undefined ? { id, prompt, blocking } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); const risks = strings(raw.risks, '$.risks', errors); const proposal_evidence_ref = text(raw.proposal_evidence_ref, '$.proposal_evidence_ref', errors); if (!m || !assessment_id || !request_id || !context_record_id || !normalization || !proposal_evidence_ref) return undefined; return { ...m, schema_version: V2_SCHEMAS.assessment, assessment_id, request_id, context_record_id, normalization, requirements, questions, risks, proposal_evidence_ref } }
 export function decodeCapabilityAssessmentV2(input: unknown): V2DecodeResult<CapabilityAssessmentV2> { const errors: V2CodecError[] = []; const value = decodeAssessment(input, errors); return value ? result(value, errors) : { ok: false, errors } }
 
+function decodePipelineSkill(input: unknown, path: string, errors: V2CodecError[]): PipelineSkillV2 | undefined {
+  const raw = object(input, path, errors); if (!raw) return undefined
+  closed(raw, ['binding_id', 'skill_id', 'skill_version', 'order', 'role', 'source', 'mode', 'depends_on', 'mcp_ids', 'input_schema_id', 'output_schema_id', 'validator_ids'], path, errors)
+  const binding_id = text(raw.binding_id, `${path}.binding_id`, errors, ID)
+  const skill_id = text(raw.skill_id, `${path}.skill_id`, errors, ID)
+  const skill_version = text(raw.skill_version, `${path}.skill_version`, errors, ID)
+  const order = integer(raw.order, `${path}.order`, errors)
+  const role = ['workflow', 'track-mandatory', 'track-recommended', 'user', 'automatic', 'review'].includes(String(raw.role)) ? raw.role as PipelineSkillV2['role'] : undefined
+  const source = ['builtin', 'project', 'user', 'automatic'].includes(String(raw.source)) ? raw.source as PipelineSkillV2['source'] : undefined
+  const mode = raw.mode === 'serial' || raw.mode === 'parallel' ? raw.mode as PipelineSkillV2['mode'] : undefined
+  if (!role) errors.push({ code: 'field-invalid', path: `${path}.role` })
+  if (!source) errors.push({ code: 'field-invalid', path: `${path}.source` })
+  if (!mode) errors.push({ code: 'field-invalid', path: `${path}.mode` })
+  const input_schema_id = optionalText(raw.input_schema_id, `${path}.input_schema_id`, errors, SCHEMA_ID)
+  const output_schema_id = optionalText(raw.output_schema_id, `${path}.output_schema_id`, errors, SCHEMA_ID)
+  if (!binding_id || !skill_id || !skill_version || order === undefined || !role || !source || !mode) return undefined
+  return { binding_id, skill_id, skill_version, order, role, source, mode, depends_on: strings(raw.depends_on, `${path}.depends_on`, errors), mcp_ids: strings(raw.mcp_ids, `${path}.mcp_ids`, errors), ...(input_schema_id === undefined ? {} : { input_schema_id }), ...(output_schema_id === undefined ? {} : { output_schema_id }), validator_ids: strings(raw.validator_ids, `${path}.validator_ids`, errors) }
+}
+
+function decodePipelineStage(input: unknown, path: string, errors: V2CodecError[]): PipelineStageV2 | undefined {
+  const raw = object(input, path, errors); if (!raw) return undefined
+  closed(raw, ['stage_id', 'name', 'ordinal', 'execution_mode', 'depends_on', 'work_item_ids', 'gate', 'skills', 'input_refs', 'output_refs'], path, errors)
+  const stage_id = text(raw.stage_id, `${path}.stage_id`, errors, ID)
+  const name = text(raw.name, `${path}.name`, errors)
+  const ordinal = integer(raw.ordinal, `${path}.ordinal`, errors)
+  const execution_mode = raw.execution_mode === 'serial' || raw.execution_mode === 'parallel' ? raw.execution_mode as PipelineStageV2['execution_mode'] : undefined
+  const gate = ['none', 'input', 'review', 'verification', 'release'].includes(String(raw.gate)) ? raw.gate as PipelineStageV2['gate'] : undefined
+  if (!execution_mode) errors.push({ code: 'field-invalid', path: `${path}.execution_mode` })
+  if (!gate) errors.push({ code: 'field-invalid', path: `${path}.gate` })
+  const skills = array(raw.skills, `${path}.skills`, errors).map((value, index) => decodePipelineSkill(value, `${path}.skills[${index}]`, errors)).filter((value): value is PipelineSkillV2 => value !== undefined)
+  if (!stage_id || !name || ordinal === undefined || !execution_mode || !gate) return undefined
+  return { stage_id, name, ordinal, execution_mode, depends_on: strings(raw.depends_on, `${path}.depends_on`, errors), work_item_ids: strings(raw.work_item_ids, `${path}.work_item_ids`, errors), gate, skills, input_refs: strings(raw.input_refs, `${path}.input_refs`, errors), output_refs: strings(raw.output_refs, `${path}.output_refs`, errors) }
+}
+
+export function decodeWorkflowPipelineV2(input: unknown): V2DecodeResult<WorkflowPipelinePlanV2> {
+  return genericMetaRecord(input, V2_SCHEMAS.pipeline, ['pipeline_id', 'pipeline_version', 'workflow_id', 'workflow_version', 'workflow_source', 'workflow_fingerprint', 'track_id', 'track_revision', 'track_source', 'pipeline_source', 'graph_id', 'assessment_id', 'status', 'stage_order', 'stages', 'customizations', 'pipeline_digest'], (raw, errors, m) => {
+    const pipeline_id = text(raw.pipeline_id, '$.pipeline_id', errors, ID)
+    const pipeline_version = text(raw.pipeline_version, '$.pipeline_version', errors, ID)
+    const workflow_id = text(raw.workflow_id, '$.workflow_id', errors, ID)
+    const workflow_version = text(raw.workflow_version, '$.workflow_version', errors, ID)
+    const workflow_source = ['builtin', 'project', 'user', 'automatic'].includes(String(raw.workflow_source)) ? raw.workflow_source as WorkflowPipelinePlanV2['workflow_source'] : undefined
+    const workflow_fingerprint = text(raw.workflow_fingerprint, '$.workflow_fingerprint', errors, ID)
+    const track_id = text(raw.track_id, '$.track_id', errors, ID)
+    const track_revision = text(raw.track_revision, '$.track_revision', errors, ID)
+    const track_source = ['builtin', 'project', 'user', 'automatic'].includes(String(raw.track_source)) ? raw.track_source as WorkflowPipelinePlanV2['track_source'] : undefined
+    const pipeline_source = ['builtin', 'project', 'user', 'automatic'].includes(String(raw.pipeline_source)) ? raw.pipeline_source as WorkflowPipelinePlanV2['pipeline_source'] : undefined
+    const graph_id = text(raw.graph_id, '$.graph_id', errors, ID)
+    const assessment_id = text(raw.assessment_id, '$.assessment_id', errors, ID)
+    const status = ['draft', 'validated', 'frozen', 'superseded'].includes(String(raw.status)) ? raw.status as WorkflowPipelinePlanV2['status'] : undefined
+    if (!workflow_source) errors.push({ code: 'field-invalid', path: '$.workflow_source' })
+    if (!track_source) errors.push({ code: 'field-invalid', path: '$.track_source' })
+    if (!pipeline_source) errors.push({ code: 'field-invalid', path: '$.pipeline_source' })
+    if (!status) errors.push({ code: 'field-invalid', path: '$.status' })
+    const stages = array(raw.stages, '$.stages', errors).map((value, index) => decodePipelineStage(value, `$.stages[${index}]`, errors)).filter((value): value is PipelineStageV2 => value !== undefined)
+    const customizations = object(raw.customizations, '$.customizations', errors)
+    if (customizations) closed(customizations, ['custom_workflow', 'custom_track', 'custom_pipeline', 'user_skill_ids', 'user_mcp_ids'], '$.customizations', errors)
+    const custom_workflow = customizations ? bool(customizations.custom_workflow, '$.customizations.custom_workflow', errors) : undefined
+    const custom_track = customizations ? bool(customizations.custom_track, '$.customizations.custom_track', errors) : undefined
+    const custom_pipeline = customizations ? bool(customizations.custom_pipeline, '$.customizations.custom_pipeline', errors) : undefined
+    const pipeline_digest = digest(raw.pipeline_digest, '$.pipeline_digest', errors)
+    if (!pipeline_id || !pipeline_version || !workflow_id || !workflow_version || !workflow_source || !workflow_fingerprint || !track_id || !track_revision || !track_source || !pipeline_source || !graph_id || !assessment_id || !status || !customizations || custom_workflow === undefined || custom_track === undefined || custom_pipeline === undefined || !pipeline_digest) return undefined
+    return { ...m, schema_version: V2_SCHEMAS.pipeline, pipeline_id, pipeline_version, workflow_id, workflow_version, workflow_source, workflow_fingerprint, track_id, track_revision, track_source, pipeline_source, graph_id, assessment_id, status, stage_order: strings(raw.stage_order, '$.stage_order', errors), stages, customizations: { custom_workflow, custom_track, custom_pipeline, user_skill_ids: strings(customizations.user_skill_ids, '$.customizations.user_skill_ids', errors), user_mcp_ids: strings(customizations.user_mcp_ids, '$.customizations.user_mcp_ids', errors) }, pipeline_digest }
+  })
+}
+
 function genericMetaRecord<T extends Record<string, unknown>>(input: unknown, schema: string, allowed: string[], parseFields: (raw: Record<string, unknown>, errors: V2CodecError[], meta: MetaParts) => T | undefined): V2DecodeResult<T> { const errors: V2CodecError[] = []; const raw = prepare(input, schema, [...META, ...allowed], errors); if (!raw) return { ok: false, errors }; const m = meta(raw, '$', errors); const value = m ? parseFields(raw, errors, m) : undefined; return value ? result(value, errors) : { ok: false, errors } }
 
-export function decodeWorkGraphV2(input: unknown): V2DecodeResult<WorkGraphV2> { return genericMetaRecord(input, V2_SCHEMAS.graph, ['graph_id', 'graph_revision', 'assessment_id', 'task_plan_revision_id', 'task_plan_digest', 'dependency_edges', 'execution_groups', 'acceptance_coverage', 'status'], (r, e, m) => { const graph_id = text(r.graph_id, '$.graph_id', e, ID); const graph_revision = integer(r.graph_revision, '$.graph_revision', e); const assessment_id = text(r.assessment_id, '$.assessment_id', e, ID); const task_plan_revision_id = text(r.task_plan_revision_id, '$.task_plan_revision_id', e, ID); const task_plan_digest = digest(r.task_plan_digest, '$.task_plan_digest', e); const status = ['draft', 'validated', 'frozen', 'superseded'].includes(String(r.status)) ? r.status as WorkGraphV2['status'] : undefined; if (!status) e.push({ code: 'field-invalid', path: '$.status' }); const edges = array(r.dependency_edges, '$.dependency_edges', e).map((x, i) => { const v = object(x, `$.dependency_edges[${i}]`, e); if (!v) return undefined; closed(v, ['from', 'to', 'reason'], `$.dependency_edges[${i}]`, e); const from = text(v.from, `$.dependency_edges[${i}].from`, e, ID); const to = text(v.to, `$.dependency_edges[${i}].to`, e, ID); const reason = ['data', 'resource', 'ordering', 'gate'].includes(String(v.reason)) ? v.reason as 'data' | 'resource' | 'ordering' | 'gate' : undefined; if (!reason) e.push({ code: 'field-invalid', path: `$.dependency_edges[${i}].reason` }); return from && to && reason ? { from, to, reason } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); const groups = array(r.execution_groups, '$.execution_groups', e).map((x, i) => { const v = object(x, `$.execution_groups[${i}]`, e); if (!v) return undefined; closed(v, ['id', 'mode', 'work_item_ids'], `$.execution_groups[${i}]`, e); const id = text(v.id, `$.execution_groups[${i}].id`, e, ID); const mode = v.mode === 'serial' || v.mode === 'parallel' ? v.mode as 'serial' | 'parallel' : undefined; if (!mode) e.push({ code: 'field-invalid', path: `$.execution_groups[${i}].mode` }); return id && mode ? { id, mode, work_item_ids: strings(v.work_item_ids, `$.execution_groups[${i}].work_item_ids`, e) } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); const coverage = array(r.acceptance_coverage, '$.acceptance_coverage', e).map((x, i) => { const v = object(x, `$.acceptance_coverage[${i}]`, e); if (!v) return undefined; closed(v, ['acceptance_id', 'work_item_ids'], `$.acceptance_coverage[${i}]`, e); const acceptance_id = text(v.acceptance_id, `$.acceptance_coverage[${i}].acceptance_id`, e, ID); return acceptance_id ? { acceptance_id, work_item_ids: strings(v.work_item_ids, `$.acceptance_coverage[${i}].work_item_ids`, e) } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); if (!graph_id || graph_revision === undefined || !assessment_id || !task_plan_revision_id || !task_plan_digest || !status) return undefined; return { ...m, schema_version: V2_SCHEMAS.graph, graph_id, graph_revision, assessment_id, task_plan_revision_id, task_plan_digest, dependency_edges: edges, execution_groups: groups, acceptance_coverage: coverage, status } }) }
+export function decodeWorkGraphV2(input: unknown): V2DecodeResult<WorkGraphV2> { return genericMetaRecord(input, V2_SCHEMAS.graph, ['graph_id', 'graph_revision', 'assessment_id', 'task_plan_revision_id', 'task_plan_digest', 'pipeline_id', 'dependency_edges', 'execution_groups', 'acceptance_coverage', 'status'], (r, e, m) => { const graph_id = text(r.graph_id, '$.graph_id', e, ID); const graph_revision = integer(r.graph_revision, '$.graph_revision', e); const assessment_id = text(r.assessment_id, '$.assessment_id', e, ID); const task_plan_revision_id = text(r.task_plan_revision_id, '$.task_plan_revision_id', e, ID); const task_plan_digest = digest(r.task_plan_digest, '$.task_plan_digest', e); const pipeline_id = optionalText(r.pipeline_id, '$.pipeline_id', e, ID); const status = ['draft', 'validated', 'frozen', 'superseded'].includes(String(r.status)) ? r.status as WorkGraphV2['status'] : undefined; if (!status) e.push({ code: 'field-invalid', path: '$.status' }); const edges = array(r.dependency_edges, '$.dependency_edges', e).map((x, i) => { const v = object(x, `$.dependency_edges[${i}]`, e); if (!v) return undefined; closed(v, ['from', 'to', 'reason'], `$.dependency_edges[${i}]`, e); const from = text(v.from, `$.dependency_edges[${i}].from`, e, ID); const to = text(v.to, `$.dependency_edges[${i}].to`, e, ID); const reason = ['data', 'resource', 'ordering', 'gate'].includes(String(v.reason)) ? v.reason as 'data' | 'resource' | 'ordering' | 'gate' : undefined; if (!reason) e.push({ code: 'field-invalid', path: `$.dependency_edges[${i}].reason` }); return from && to && reason ? { from, to, reason } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); const groups = array(r.execution_groups, '$.execution_groups', e).map((x, i) => { const v = object(x, `$.execution_groups[${i}]`, e); if (!v) return undefined; closed(v, ['id', 'mode', 'work_item_ids'], `$.execution_groups[${i}]`, e); const id = text(v.id, `$.execution_groups[${i}].id`, e, ID); const mode = v.mode === 'serial' || v.mode === 'parallel' ? v.mode as 'serial' | 'parallel' : undefined; if (!mode) e.push({ code: 'field-invalid', path: `$.execution_groups[${i}].mode` }); return id && mode ? { id, mode, work_item_ids: strings(v.work_item_ids, `$.execution_groups[${i}].work_item_ids`, e) } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); const coverage = array(r.acceptance_coverage, '$.acceptance_coverage', e).map((x, i) => { const v = object(x, `$.acceptance_coverage[${i}]`, e); if (!v) return undefined; closed(v, ['acceptance_id', 'work_item_ids'], `$.acceptance_coverage[${i}]`, e); const acceptance_id = text(v.acceptance_id, `$.acceptance_coverage[${i}].acceptance_id`, e, ID); return acceptance_id ? { acceptance_id, work_item_ids: strings(v.work_item_ids, `$.acceptance_coverage[${i}].work_item_ids`, e) } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); if (!graph_id || graph_revision === undefined || !assessment_id || !task_plan_revision_id || !task_plan_digest || !status) return undefined; return { ...m, schema_version: V2_SCHEMAS.graph, graph_id, graph_revision, assessment_id, task_plan_revision_id, task_plan_digest, ...(pipeline_id === undefined ? {} : { pipeline_id }), dependency_edges: edges, execution_groups: groups, acceptance_coverage: coverage, status } }) }
 
 export function decodeCapabilityResolutionV2(input: unknown): V2DecodeResult<CapabilityResolutionV2> { return genericMetaRecord(input, V2_SCHEMAS.resolution, ['resolution_id', 'assessment_id', 'graph_id', 'policy_digest', 'status', 'bindings', 'candidates', 'blockers', 'binding_digest'], (r, e, m) => { const resolution_id = text(r.resolution_id, '$.resolution_id', e, ID); const assessment_id = text(r.assessment_id, '$.assessment_id', e, ID); const graph_id = text(r.graph_id, '$.graph_id', e, ID); const policy_digest = digest(r.policy_digest, '$.policy_digest', e); const status = ['resolved', 'needs-input', 'blocked'].includes(String(r.status)) ? r.status as CapabilityResolutionV2['status'] : undefined; if (!status) e.push({ code: 'field-invalid', path: '$.status' }); const bindings = array(r.bindings, '$.bindings', e).map((x, i) => { const v = object(x, `$.bindings[${i}]`, e); if (!v) return undefined; closed(v, ['work_item_id', 'skill_id', 'skill_version', 'mcp_ids', 'mode', 'source', 'depends_on'], `$.bindings[${i}]`, e); const work_item_id = text(v.work_item_id, `$.bindings[${i}].work_item_id`, e, ID); const skill_id = text(v.skill_id, `$.bindings[${i}].skill_id`, e, ID); const skill_version = text(v.skill_version, `$.bindings[${i}].skill_version`, e, ID); const mode = v.mode === 'serial' || v.mode === 'parallel' ? v.mode as 'serial' | 'parallel' : undefined; const source = ['user', 'automatic', 'hybrid'].includes(String(v.source)) ? v.source as 'user' | 'automatic' | 'hybrid' : undefined; if (!mode) e.push({ code: 'field-invalid', path: `$.bindings[${i}].mode` }); if (!source) e.push({ code: 'field-invalid', path: `$.bindings[${i}].source` }); return work_item_id && skill_id && skill_version && mode && source ? { work_item_id, skill_id, skill_version, mcp_ids: strings(v.mcp_ids, `$.bindings[${i}].mcp_ids`, e), mode, source, depends_on: strings(v.depends_on, `$.bindings[${i}].depends_on`, e) } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); const candidates = array(r.candidates, '$.candidates', e).map((x, i) => { const v = object(x, `$.candidates[${i}]`, e); if (!v) return undefined; closed(v, ['capability', 'candidate_id', 'kind', 'selected', 'rejected_reasons', 'rationale'], `$.candidates[${i}]`, e); const capability = text(v.capability, `$.candidates[${i}].capability`, e); const candidate_id = text(v.candidate_id, `$.candidates[${i}].candidate_id`, e, ID); const kind: 'skill' | 'mcp' | undefined = v.kind === 'skill' || v.kind === 'mcp' ? v.kind : undefined; const selected = bool(v.selected, `$.candidates[${i}].selected`, e); const rationale = text(v.rationale, `$.candidates[${i}].rationale`, e); if (!kind) e.push({ code: 'field-invalid', path: `$.candidates[${i}].kind` }); return capability && candidate_id && kind && selected !== undefined && rationale ? { capability, candidate_id, kind, selected, rejected_reasons: strings(v.rejected_reasons, `$.candidates[${i}].rejected_reasons`, e), rationale } : undefined }).filter((x): x is NonNullable<typeof x> => x !== undefined); const blockers = strings(r.blockers, '$.blockers', e); const binding_digest = digest(r.binding_digest, '$.binding_digest', e); if (!resolution_id || !assessment_id || !graph_id || !policy_digest || !status || !binding_digest) return undefined; return { ...m, schema_version: V2_SCHEMAS.resolution, resolution_id, assessment_id, graph_id, policy_digest, status, bindings, candidates, blockers, binding_digest } }) }
 
@@ -226,7 +307,7 @@ export function decodeBoardSnapshotV2(input: unknown): V2DecodeResult<BoardSnaps
   // Snapshots are read models with host provenance, but do not use the generic
   // record-meta parser because their optional projection fields differ.
   const errors: V2CodecError[] = []
-  const allowed = ['schema_version', 'record_id', 'project_id', 'change_id', 'revision', 'correlation_id', 'actor', 'created_at', 'event_head_id', 'event_head_digest', 'command_head_id', 'status', 'request', 'context', 'assessment', 'graph', 'resolution', 'work_items', 'runs', 'results', 'validations', 'gates', 'leases', 'blockers', 'next_actions', 'resume_status', 'updated_at']
+  const allowed = ['schema_version', 'record_id', 'project_id', 'change_id', 'revision', 'correlation_id', 'actor', 'created_at', 'event_head_id', 'event_head_digest', 'command_head_id', 'status', 'request', 'context', 'assessment', 'pipeline', 'graph', 'resolution', 'work_items', 'runs', 'results', 'validations', 'gates', 'leases', 'blockers', 'next_actions', 'resume_status', 'updated_at']
   const parsed = parse(input, errors)
   if (parsed === undefined) return { ok: false, errors }
   walkLimit(parsed, '$', 0, new Set(), errors)
@@ -266,6 +347,7 @@ export function decodeBoardSnapshotV2(input: unknown): V2DecodeResult<BoardSnaps
   const request = nested('request', decodeDevelopmentRequestV2)
   const context = nested('context', decodeRepositoryContextV2)
   const assessment = nested('assessment', decodeCapabilityAssessmentV2)
+  const pipeline = nested('pipeline', decodeWorkflowPipelineV2)
   const graph = nested('graph', decodeWorkGraphV2)
   const resolution = nested('resolution', decodeCapabilityResolutionV2)
   const work_items = collection('work_items', decodeWorkItemV2)
@@ -280,7 +362,7 @@ export function decodeBoardSnapshotV2(input: unknown): V2DecodeResult<BoardSnaps
     ...(event_head_id === undefined ? {} : { event_head_id }), ...(event_head_digest === undefined ? {} : { event_head_digest }),
     ...(command_head_id === undefined ? {} : { command_head_id }), status,
     ...(request === undefined ? {} : { request }), ...(context === undefined ? {} : { context }), ...(assessment === undefined ? {} : { assessment }),
-    ...(graph === undefined ? {} : { graph }), ...(resolution === undefined ? {} : { resolution }), work_items, runs, results, validations, gates, leases,
+    ...(pipeline === undefined ? {} : { pipeline }), ...(graph === undefined ? {} : { graph }), ...(resolution === undefined ? {} : { resolution }), work_items, runs, results, validations, gates, leases,
     blockers: strings(raw.blockers, '$.blockers', errors), next_actions: strings(raw.next_actions, '$.next_actions', errors),
     ...(raw.resume_status === undefined ? {} : { resume_status }), updated_at,
   }
@@ -292,7 +374,7 @@ export function decodeBoardCommandV2(input: unknown): V2DecodeResult<BoardComman
   const raw = prepare(input, V2_SCHEMAS.command, [
     'schema_version', 'command_id', 'idempotency_key', 'expected_revision', 'actor', 'issued_at',
     'correlation_id', 'causation_id', 'change_id', 'type', 'request', 'context', 'assessment',
-    'graph', 'resolution', 'work_item_id', 'run', 'lease', 'run_id', 'lease_id', 'owner_id',
+    'graph', 'pipeline', 'resolution', 'work_item_id', 'run', 'lease', 'run_id', 'lease_id', 'owner_id',
     'generation', 'heartbeat_at', 'expires_at', 'result', 'report', 'gate', 'reason', 'attempt_id',
     'artifact_ref', 'digest',
   ], errors)
@@ -306,7 +388,7 @@ export function decodeBoardCommandV2(input: unknown): V2DecodeResult<BoardComman
   const change_id = text(raw.change_id, '$.change_id', errors, ID)
   const type = typeof raw.type === 'string' ? raw.type as BoardCommandV2['type'] : undefined
   const allowedTypes: readonly BoardCommandV2['type'][] = [
-    'accept-request', 'record-context', 'record-assessment', 'freeze-work-graph',
+    'accept-request', 'record-context', 'record-assessment', 'freeze-pipeline', 'freeze-work-graph',
     'resolve-capabilities', 'start-change', 'enqueue-work-item', 'claim-run', 'heartbeat-run',
     'begin-run', 'complete-run', 'record-validation', 'evaluate-gate', 'pause-change',
     'resume-change', 'retry-work-item', 'cancel-change', 'replan-change', 'bind-artifact',
@@ -333,6 +415,10 @@ export function decodeBoardCommandV2(input: unknown): V2DecodeResult<BoardComman
     case 'record-assessment': {
       rejectExtra(['assessment']); const assessment = nested(raw.assessment, decodeCapabilityAssessmentV2, '$.assessment', errors)
       if (assessment) value = { ...base, type, assessment }; break
+    }
+    case 'freeze-pipeline': {
+      rejectExtra(['pipeline']); const pipeline = nested(raw.pipeline, decodeWorkflowPipelineV2, '$.pipeline', errors)
+      if (pipeline) value = { ...base, type, pipeline }; break
     }
     case 'freeze-work-graph': {
       rejectExtra(['graph']); const graph = nested(raw.graph, decodeWorkGraphV2, '$.graph', errors)

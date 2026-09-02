@@ -6,14 +6,13 @@ import {
   type DevelopmentRequestV2,
   type RepositoryContextV2,
   type WorkGraphV2,
+  type WorkflowPipelinePlanV2,
 } from '@tenon/kernel'
 import { validateTaskPlanRevisionV1, type TaskPlanRevisionV1 } from '@tenon/kernel'
 import { JsonBoundaryError, snapshotJsonBoundary, type JsonBoundaryValue } from './jsonBoundary.js'
-/**
- * Application-level planner contracts. The Kernel owns the canonical board
- * state machine; this module only turns immutable request/context/catalog
- * snapshots into a frozen plan and a deterministic capability resolution.
- */
+import { materializeWorkflowPipelineV2, type WorkflowPipelineBlueprintV2 } from './workflow-pipeline-v2.js'
+export type { WorkflowPipelineBlueprintV2, WorkflowPipelineSkillBlueprintV2, WorkflowPipelineStageBlueprintV2 } from './workflow-pipeline-v2.js'
+/** Application planner: immutable request/context/catalog -> deterministic plan. */
 export const PLANNER_CATALOG_SCHEMA_V2 = 'capability-catalog/v2' as const
 export const PLANNER_DESCRIPTOR_SCHEMA_V2 = 'capability-descriptor/v2' as const
 export const PLANNER_ASSESSMENT_EVIDENCE_V2 = 'assessment:deterministic:v2' as const
@@ -31,7 +30,7 @@ export interface PlannerResourceClaimV2 {
   readonly key: string
   readonly access: 'read' | 'write'
 }
-/** Skill output is deliberately opaque: schema ids and media hints are data, not a domain union. */
+/** Skill output is opaque data referenced by schema ids and media hints. */
 export interface PlannerSkillDescriptorV2 {
   readonly schema_version: typeof PLANNER_DESCRIPTOR_SCHEMA_V2
   readonly id: string
@@ -89,9 +88,12 @@ export interface BuildWorkGraphInputV2 {
   readonly plan_revision_id: string
   readonly now: string
   readonly catalog?: PlannerCatalogV2 | PlannerCatalogInputV2
+  readonly pipeline_id?: string
 }
 export interface PlannerPlanInputV2 extends BuildWorkGraphInputV2 {
   readonly catalog: PlannerCatalogV2 | PlannerCatalogInputV2
+  /** Optional fully explicit user/project pipeline. Omit to materialize the automatic plan. */
+  readonly pipeline_blueprint?: WorkflowPipelineBlueprintV2
 }
 export interface PlannerPlanSuccessV2 {
   readonly ok: true
@@ -100,6 +102,7 @@ export interface PlannerPlanSuccessV2 {
   readonly task_plan: TaskPlanRevisionV1
   readonly resolution: CapabilityResolutionV2
   readonly catalog: PlannerCatalogV2
+  readonly pipeline?: WorkflowPipelinePlanV2
 }
 export type PlannerPlanOutcomeV2 = PlannerPlanSuccessV2 | {
   readonly ok: false
@@ -258,7 +261,7 @@ export function assessDevelopmentIntentV2(input: AssessIntentInputV2): Capabilit
   const lower = intent.toLocaleLowerCase()
   const requirements: CapabilityAssessmentV2['requirements'][number][] = []
   const add = (capability: string, risk: 'low' | 'medium' | 'high' = 'medium') => { if (!requirements.some((entry) => entry.capability === capability)) requirements.push(requirement(capability, capability, 'required', risk)) }
-  if (/(frontend|front-end|react|vue|ui|页面|界面|web app|网页)/u.test(lower)) add('frontend.ui')
+  if (/(frontend|front-end|react|vue|\bui\b|页面|界面|web app|网页)/u.test(lower)) add('frontend.ui')
   if (/(backend|back-end|api|server|服务端|接口|数据库|database)/u.test(lower)) add('backend.api')
   if (/(full[- ]?stack|全栈)/u.test(lower)) { add('frontend.ui'); add('backend.api') }
   if (/(test|测试|验证|quality|质量)/u.test(lower)) add('test.run', 'low')
@@ -363,9 +366,27 @@ function buildPlan(input: BuildWorkGraphInputV2, catalog: PlannerCatalogV2): Bui
     mode,
     work_item_ids: Object.freeze([...work_item_ids]),
   }))
-  const graph: WorkGraphV2 = freeze({ schema_version: 'work-graph/v2', record_id: `graph:${input.graph_id}`, project_id: input.request.project_id, change_id: input.request.change_id, revision: input.context.revision, correlation_id: input.request.correlation_id, actor: { kind: 'system', id: 'planner' }, created_at: input.now, graph_id: input.graph_id, graph_revision: 1, assessment_id: input.assessment.assessment_id, task_plan_revision_id: input.plan_revision_id, task_plan_digest: digest(task_plan), dependency_edges: edges, execution_groups, acceptance_coverage: requirements.map((entry) => ({ acceptance_id: acceptanceIdentifier(entry.acceptance_refs[0] ?? `acceptance-${entry.id}`), work_item_ids: [workIdentifier(entry.id)] })), status: 'frozen' })
+  const graph: WorkGraphV2 = freeze({ schema_version: 'work-graph/v2', record_id: `graph:${input.graph_id}`, project_id: input.request.project_id, change_id: input.request.change_id, revision: input.context.revision, correlation_id: input.request.correlation_id, actor: { kind: 'system', id: 'planner' }, created_at: input.now, graph_id: input.graph_id, graph_revision: 1, assessment_id: input.assessment.assessment_id, task_plan_revision_id: input.plan_revision_id, task_plan_digest: digest(task_plan), ...(input.pipeline_id === undefined ? {} : { pipeline_id: input.pipeline_id }), dependency_edges: edges, execution_groups, acceptance_coverage: requirements.map((entry) => ({ acceptance_id: acceptanceIdentifier(entry.acceptance_refs[0] ?? `acceptance-${entry.id}`), work_item_ids: [workIdentifier(entry.id)] })), status: 'frozen' })
   return { task_plan, workItems: items, graph }
 }
+function inferredTrackId(assessment: CapabilityAssessmentV2): string {
+  const capabilities = assessment.requirements.map((entry) => entry.capability.toLowerCase())
+  if (capabilities.some((capability) => capability.startsWith('frontend.') || capability.includes('ui'))) return 'frontend'
+  if (capabilities.some((capability) => capability.startsWith('backend.') || capability.includes('api') || capability.includes('database'))) return 'backend'
+  if (capabilities.some((capability) => capability.startsWith('product.') || capability.includes('research') || capability.includes('requirement'))) return 'pm'
+  return 'free'
+}
+function defaultPipelineIdentity(request: DevelopmentRequestV2, assessment: CapabilityAssessmentV2): { workflow_id: string; workflow_version: string; track_id: string; track_revision: string; pipeline_id: string; pipeline_version: string } {
+  const workflow_id = request.workflow_id ?? 'default'
+  const workflow_version = request.workflow_version ?? 'auto-v2'
+  const track_id = request.track_id ?? inferredTrackId(assessment)
+  const track_revision = request.track_revision ?? 'auto-v2'
+  const pipeline_id = request.pipeline_id ?? `${workflow_id}:${track_id}:main`
+  const pipeline_version = request.pipeline_version ?? '1'
+  text(workflow_id, 'workflow_id'); text(workflow_version, 'workflow_version'); text(track_id, 'track_id'); text(track_revision, 'track_revision'); text(pipeline_id, 'pipeline_id'); text(pipeline_version, 'pipeline_version')
+  return { workflow_id, workflow_version, track_id, track_revision, pipeline_id, pipeline_version }
+}
+
 export function buildWorkGraphV2(input: BuildWorkGraphInputV2): WorkGraphV2 {
   const catalog = input.catalog === undefined ? catalogOrThrow({ skills: [], mcps: [] }) : catalogOrThrow(input.catalog)
   return buildPlan(input, catalog).graph
@@ -463,9 +484,13 @@ export function planDevelopmentV2(input: PlannerPlanInputV2): PlannerPlanOutcome
   if (!normalized.ok) return normalized
   try {
     const assessment = input.assessment
-    const plan = buildPlan({ ...input, catalog: normalized.catalog }, normalized.catalog)
+    const identity = defaultPipelineIdentity(input.request, assessment)
+    const pipeline_id = text(input.pipeline_blueprint?.pipeline_id ?? identity.pipeline_id, 'pipeline_id')
+    const plan = buildPlan({ ...input, catalog: normalized.catalog, pipeline_id }, normalized.catalog)
     const resolution = resolvePlannerCapabilitiesV2({ ...input, assessment, graph: plan.graph, catalog: normalized.catalog })
-    return { ok: true, assessment, graph: plan.graph, task_plan: plan.task_plan, resolution, catalog: normalized.catalog }
+    if (resolution.status !== 'resolved') return { ok: true, assessment, graph: plan.graph, task_plan: plan.task_plan, resolution, catalog: normalized.catalog }
+    const pipeline = materializeWorkflowPipelineV2({ request: input.request, assessment, graph: plan.graph, resolution, catalog: normalized.catalog, now: input.now, identity, pipeline_blueprint: input.pipeline_blueprint })
+    return { ok: true, assessment, graph: plan.graph, task_plan: plan.task_plan, resolution, catalog: normalized.catalog, pipeline }
   } catch (error) { return { ok: false, code: 'planner-invalid', issues: [error instanceof Error ? error.message : 'planner failed'] } }
 }
 export const inferCapabilityAssessmentV2 = assessDevelopmentIntentV2

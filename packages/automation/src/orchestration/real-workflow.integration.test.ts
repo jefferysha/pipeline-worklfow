@@ -9,7 +9,7 @@ import {
   type RepositoryContextV2,
 } from '@tenon/kernel'
 import { createAutonomousOrchestratorV2 } from './autonomous-orchestrator-v2.js'
-import type { PlannerCatalogInputV2 } from './planner-v2.js'
+import type { PlannerCatalogInputV2, WorkflowPipelineBlueprintV2 } from './planner-v2.js'
 
 const runProcess = promisify(execFile)
 const now = '2026-09-02T00:00:00.000Z'
@@ -46,6 +46,11 @@ describe('real workflow simulation', () => {
     const outcome = await orchestrator.run()
     if (!outcome.ok) throw new Error(JSON.stringify(outcome))
     expect(outcome.plan.resolution.status).toBe('resolved')
+    expect(outcome.plan.pipeline?.workflow_id).toBe('default')
+    expect(outcome.plan.pipeline?.track_id).toBe('backend')
+    expect(outcome.plan.pipeline?.stage_order).toEqual(['work-req-backend-api', 'work-req-test-run'])
+    expect(outcome.plan.pipeline?.stages.map((stage) => stage.skills[0]?.skill_id)).toEqual(['api', 'tests'])
+    expect(outcome.runtime.snapshot.pipeline?.pipeline_id).toBe('default:backend:main')
     expect(outcome.runtime.snapshot.status).toBe('completed')
     expect(outcome.runtime.snapshot.work_items.every((item) => item.status === 'completed')).toBe(true)
     expect(outcome.runtime.snapshot.gates.some((gate) => gate.status === 'passed')).toBe(true)
@@ -63,5 +68,34 @@ describe('real workflow simulation', () => {
     const drift = await drifted.run()
     expect(drift.ok).toBe(false)
     if (!drift.ok) expect(drift.issues).toContain('persisted-resolution-mismatch')
+  })
+
+  it('executes a project-defined workflow/track/pipeline with explicit stage and Skill order', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'tenon-real-custom-pipeline-')); roots.push(root)
+    const calls: string[] = []
+    const pipeline_blueprint: WorkflowPipelineBlueprintV2 = {
+      workflow_id: 'enterprise-release', workflow_version: '3.1.0', workflow_source: 'project', workflow_fingerprint: `sha256:${'5'.repeat(64)}`,
+      track_id: 'fullstack-enterprise', track_revision: 'team-42', track_source: 'user',
+      pipeline_id: 'enterprise-release:fullstack-enterprise:main', pipeline_version: '2026.09.02', pipeline_source: 'user',
+      stages: [
+        { stage_id: 'implementation', name: 'Implementation', ordinal: 1, execution_mode: 'serial', depends_on: [], work_item_ids: ['work-req-backend-api'], gate: 'none', input_refs: [], output_refs: ['result:work-req-backend-api'], skills: [{ skill_id: 'api', skill_version: '1.0.0', role: 'user', source: 'user', mode: 'serial', depends_on: [], mcp_ids: [], validator_ids: ['child-validator'], order: 0 }] },
+        { stage_id: 'verification', name: 'Verification', ordinal: 2, execution_mode: 'serial', depends_on: ['implementation'], work_item_ids: ['work-req-test-run'], gate: 'verification', input_refs: ['result:work-req-backend-api'], output_refs: ['result:work-req-test-run'], skills: [{ skill_id: 'tests', skill_version: '1.0.0', role: 'review', source: 'user', mode: 'serial', depends_on: ['api'], mcp_ids: [], validator_ids: ['child-validator'], order: 0 }] },
+      ],
+    }
+    const orchestrator = createAutonomousOrchestratorV2({
+      change_dir: root, request, context, catalog, pipeline_blueprint, worker_id: 'custom-worker', clock: () => now,
+      executor: { async execute(input) { calls.push(input.skill_id); const child = await runProcess(process.execPath, ['-e', "process.stdout.write(JSON.stringify({ok:true}))"], { encoding: 'utf8' }); return { output: child.stdout, artifacts: [], diagnostics: [`executed:${input.work_item_id}`] } } },
+      validator: { async validate(input) { return { status: 'pass', checks: [{ id: 'child-process', status: 'pass' }], target_digests: [], evidence_refs: [`run:${input.run_id}`] } } },
+      id_factory: (() => { let n = 0; return (prefix: string) => `${prefix}:custom:${++n}` })(), retry: { max_attempts: 1, max_parallel: 2 },
+    })
+    const outcome = await orchestrator.run()
+    expect(outcome.ok).toBe(true)
+    if (!outcome.ok || outcome.plan.pipeline === undefined) return
+    expect(outcome.plan.pipeline.workflow_id).toBe('enterprise-release')
+    expect(outcome.plan.pipeline.track_id).toBe('fullstack-enterprise')
+    expect(outcome.plan.pipeline.stage_order).toEqual(['implementation', 'verification'])
+    expect(outcome.plan.pipeline.customizations).toMatchObject({ custom_workflow: true, custom_track: true, custom_pipeline: true })
+    expect(calls).toEqual(['api', 'tests'])
+    expect(outcome.runtime.snapshot.status).toBe('completed')
   })
 })

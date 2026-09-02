@@ -60,6 +60,14 @@ describe('OrchestrationV2Panel', () => {
     const item = { ...current.work_items[0]!, status: 'blocked' as const, blockers: ['missing-evidence'], depends_on: ['design'] }
     const rich: BoardSnapshotV2 = {
       ...current,
+      pipeline: {
+        schema_version: 'workflow-pipeline/v2', record_id: 'pipeline:demo', project_id: 'project-1', change_id: 'demo', revision: 3,
+        correlation_id: 'corr-1', actor: { kind: 'system', id: 'planner' }, created_at: current.created_at,
+        pipeline_id: 'enterprise:frontend:main', pipeline_version: '7', workflow_id: 'enterprise', workflow_version: '2', workflow_source: 'project', workflow_fingerprint: `sha256:${'b'.repeat(64)}`,
+        track_id: 'frontend', track_revision: 'team-1', track_source: 'user', pipeline_source: 'project', graph_id: 'graph:demo', assessment_id: 'assessment:demo', status: 'frozen', stage_order: ['build'],
+        stages: [{ stage_id: 'build', name: 'Build', ordinal: 0, execution_mode: 'serial', depends_on: [], work_item_ids: ['api'], gate: 'none', skills: [{ binding_id: 'binding:api:api', skill_id: 'api', skill_version: '1.0.0', order: 0, role: 'workflow', source: 'project', mode: 'serial', depends_on: [], mcp_ids: [], validator_ids: [] }], input_refs: [], output_refs: [] }],
+        customizations: { custom_workflow: true, custom_track: true, custom_pipeline: true, user_skill_ids: [], user_mcp_ids: [] }, pipeline_digest: `sha256:${'c'.repeat(64)}`,
+      },
       work_items: [item],
       runs: [{ schema_version: 'skill-run/v2', record_id: 'run:1', project_id: 'project-1', change_id: 'demo', revision: 3, correlation_id: 'corr-1', actor: { kind: 'worker', id: 'w' }, created_at: current.created_at, run_id: 'run-1', attempt_id: 'attempt-1', attempt: 1, work_item_id: 'api', skill_id: 'api', skill_version: '1.0.0', mcp_ids: ['github'], status: 'completed', input_refs: [], result_id: 'result-1' }],
       results: [{ schema_version: 'skill-result/v2', record_id: 'result:1', project_id: 'project-1', change_id: 'demo', revision: 3, correlation_id: 'corr-1', actor: { kind: 'worker', id: 'w' }, created_at: current.created_at, result_id: 'result-1', run_id: 'run-1', status: 'completed', contract_status: 'validated', output_schema_id: 'api/output-v1', artifacts: [{ id: 'artifact-1', kind: 'json', ref: 'artifact://safe', digest: `sha256:${'a'.repeat(64)}` }], validation_refs: ['report-1'], diagnostics: [] }],
@@ -70,6 +78,10 @@ describe('OrchestrationV2Panel', () => {
     vi.mocked(fetchOrchestrationV2Snapshot).mockResolvedValue(rich)
     render(<I18nProvider><OrchestrationV2Panel root="/repo" change="demo" /></I18nProvider>)
     await screen.findByTestId('orchestration-v2-panel')
+    expect(screen.getByTestId('orchestration-v2-pipeline')).toHaveTextContent('enterprise@2')
+    expect(screen.getByTestId('orchestration-v2-pipeline')).toHaveTextContent('frontend')
+    expect(screen.getByTestId('orchestration-v2-pipeline')).toHaveTextContent('Build')
+    expect(screen.getByTestId('orchestration-v2-pipeline')).toHaveTextContent('api@1.0.0')
     expect(screen.getByRole('region', { name: '运行与租约' })).toHaveTextContent('api@1.0.0')
     expect(screen.getByRole('region', { name: '产出与验证' })).toHaveTextContent('artifact://safe')
     expect(screen.getByRole('region', { name: '验证报告' })).toHaveTextContent('unit@1')

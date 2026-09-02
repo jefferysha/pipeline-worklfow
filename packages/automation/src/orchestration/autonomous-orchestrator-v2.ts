@@ -1,5 +1,5 @@
 import { createOrchestrationLedger, digestAggregate, type BoardCommandV2, type BoardSnapshotV2, type CapabilityResolutionV2, type DevelopmentRequestV2, type OrchestrationLedger, type RepositoryContextV2, type WorkGraphV2 } from '@tenon/kernel'
-import { assessDevelopmentIntentV2, planDevelopmentV2, type PlannerCatalogInputV2, type PlannerPlanSuccessV2 } from './planner-v2.js'
+import { assessDevelopmentIntentV2, planDevelopmentV2, type PlannerCatalogInputV2, type PlannerPlanSuccessV2, type WorkflowPipelineBlueprintV2 } from './planner-v2.js'
 import { createExecutionRuntimeV2, type ExecutionRuntimeOptionsV2, type ExecutionRuntimeResultV2 } from './runtime-v2.js'
 
 export interface AutonomousOrchestratorV2Options extends Omit<ExecutionRuntimeOptionsV2, 'ledger' | 'change_dir'> {
@@ -11,6 +11,7 @@ export interface AutonomousOrchestratorV2Options extends Omit<ExecutionRuntimeOp
   readonly assessment_id?: string
   readonly graph_id?: string
   readonly plan_revision_id?: string
+  readonly pipeline_blueprint?: WorkflowPipelineBlueprintV2
 }
 
 export type AutonomousOrchestrationOutcomeV2 =
@@ -40,17 +41,19 @@ export class AutonomousOrchestratorV2 {
     if (identityIssues.length > 0) return { ok: false, stage: 'identity', snapshot, issues: identityIssues }
     const assessment = assessDevelopmentIntentV2({ request, context, assessment_id: this.options.assessment_id ?? `assessment:${request.change_id}`, assessed_at: context.created_at })
     if (assessment.normalization !== 'complete') return { ok: false, stage: 'planning', snapshot, issues: assessment.questions.filter((question) => question.blocking).map((question) => question.id) }
-    const plan = planDevelopmentV2({ request, context, assessment, catalog: this.options.catalog, graph_id: this.options.graph_id ?? `graph:${request.change_id}`, plan_revision_id: this.options.plan_revision_id ?? `revision:${request.change_id}`, now: context.created_at })
+    const plan = planDevelopmentV2({ request, context, assessment, catalog: this.options.catalog, graph_id: this.options.graph_id ?? `graph:${request.change_id}`, plan_revision_id: this.options.plan_revision_id ?? `revision:${request.change_id}`, now: context.created_at, pipeline_blueprint: this.options.pipeline_blueprint })
     if (!plan.ok) return { ok: false, stage: 'planning', snapshot, issues: plan.issues }
     const persistedPlanIssues = [
       snapshot.assessment !== undefined && digestAggregate(snapshot.assessment) !== digestAggregate(plan.assessment) ? 'persisted-assessment-mismatch' : '',
       snapshot.graph !== undefined && digestAggregate(snapshot.graph) !== digestAggregate(plan.graph) ? 'persisted-graph-mismatch' : '',
       snapshot.resolution !== undefined && digestAggregate(snapshot.resolution) !== digestAggregate(plan.resolution) ? 'persisted-resolution-mismatch' : '',
+      plan.pipeline !== undefined && snapshot.pipeline !== undefined && digestAggregate(snapshot.pipeline) !== digestAggregate(plan.pipeline) ? 'persisted-pipeline-mismatch' : '',
     ].filter(Boolean)
     if (persistedPlanIssues.length > 0) return { ok: false, stage: 'planning', snapshot, issues: persistedPlanIssues }
     snapshot = await this.appendIfMissing(snapshot, 'accept-request', snapshot.request === undefined ? { request } : undefined, 'accept', request)
     snapshot = await this.appendIfMissing(snapshot, 'record-context', snapshot.context === undefined ? { context } : undefined, 'context', context)
     snapshot = await this.appendIfMissing(snapshot, 'record-assessment', snapshot.assessment === undefined ? { assessment: plan.assessment } : undefined, 'assessment', plan.assessment)
+    snapshot = await this.appendIfMissing(snapshot, 'freeze-pipeline', plan.pipeline !== undefined && (snapshot.pipeline === undefined || snapshot.pipeline.status === 'superseded') ? { pipeline: plan.pipeline } : undefined, 'pipeline', plan.pipeline)
     snapshot = await this.appendIfMissing(snapshot, 'freeze-work-graph', snapshot.graph === undefined ? { graph: plan.graph } : undefined, 'graph', plan.graph)
     snapshot = await this.appendIfMissing(snapshot, 'resolve-capabilities', snapshot.resolution === undefined ? { resolution: plan.resolution } : undefined, 'resolution', plan.resolution)
     if (plan.resolution.status !== 'resolved' || snapshot.resolution?.status !== 'resolved') return { ok: false, stage: 'blocked', snapshot, issues: plan.resolution.blockers }

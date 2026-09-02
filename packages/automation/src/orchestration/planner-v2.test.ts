@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { DevelopmentRequestV2, RepositoryContextV2 } from '@tenon/kernel'
+import { decodeWorkflowPipelineV2, type DevelopmentRequestV2, type RepositoryContextV2 } from '@tenon/kernel'
 import {
   assessDevelopmentIntentV2,
   buildWorkGraphV2,
@@ -78,6 +78,62 @@ describe('planner v2', () => {
     expect(first.resolution.bindings.find((binding) => binding.skill_id === 'ui-custom')?.mode).toBe('parallel')
     expect(first.graph.task_plan_digest).toMatch(/^sha256:[a-f0-9]{64}$/u)
     expect(first.resolution.binding_digest).toMatch(/^sha256:[a-f0-9]{64}$/u)
+  })
+
+  it('materializes an auditable workflow, inferred track, pipeline and exact stage/Skill order', () => {
+    const assessment = assessDevelopmentIntentV2({ request, context, assessment_id: 'assessment:1', assessed_at: now })
+    const result = planDevelopmentV2({ request, context, assessment, catalog, graph_id: 'graph:1', plan_revision_id: 'plan:1', now })
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.pipeline === undefined) return
+    expect(result.pipeline.workflow_id).toBe('default')
+    expect(result.pipeline.workflow_version).toBe('auto-v2')
+    expect(result.pipeline.track_id).toBe('frontend')
+    expect(result.pipeline.pipeline_id).toBe('default:frontend:main')
+    expect(result.pipeline.customizations).toMatchObject({ custom_workflow: false, custom_track: false, custom_pipeline: false })
+    expect(result.pipeline.stage_order).toEqual([
+      'work-req-frontend-ui', 'work-req-backend-api', 'work-req-test-run',
+    ])
+    expect(result.pipeline.stages.map((stage) => stage.skills.map((skill) => `${skill.order}:${skill.skill_id}`))).toEqual([
+      ['0:ui-custom'], ['0:api-built-in'], ['0:tests'],
+    ])
+    expect(result.graph.pipeline_id).toBe(result.pipeline.pipeline_id)
+    expect(result.pipeline.pipeline_digest).toMatch(/^sha256:[a-f0-9]{64}$/u)
+    const decodedPipeline = decodeWorkflowPipelineV2(result.pipeline)
+    if (!decodedPipeline.ok) console.log('PIPELINE_CODEC_ERROR', decodedPipeline.errors, result.pipeline.stages.map((stage) => stage.skills.map((skill) => skill.output_schema_id)))
+    expect(decodedPipeline).toMatchObject({ ok: true })
+  })
+
+  it('accepts fully custom workflow/track/pipeline identities and user-defined stage order', () => {
+    const assessment = assessDevelopmentIntentV2({ request, context, assessment_id: 'assessment:custom', assessed_at: now })
+    const blueprint = {
+      workflow_id: 'enterprise-delivery', workflow_version: '2026.09', workflow_source: 'user' as const,
+      track_id: 'fullstack-team-a', track_revision: 'team-a.7', track_source: 'project' as const,
+      pipeline_id: 'enterprise-delivery:fullstack-team-a:release', pipeline_version: '42', pipeline_source: 'user' as const,
+      stages: [
+        {
+          stage_id: 'verify', name: 'Verify', ordinal: 2, execution_mode: 'serial' as const, depends_on: ['build'],
+          work_item_ids: ['work-req-test-run'], gate: 'verification' as const, input_refs: ['result:work-req-backend-api'], output_refs: ['result:work-req-test-run'],
+          skills: [{ skill_id: 'tests', skill_version: '1.0.0', role: 'review' as const, source: 'user' as const, mode: 'serial' as const, depends_on: [], mcp_ids: [], validator_ids: ['test-report'], order: 0 }],
+        },
+        {
+          stage_id: 'build', name: 'Build', ordinal: 1, execution_mode: 'parallel' as const, depends_on: [],
+          work_item_ids: ['work-req-frontend-ui', 'work-req-backend-api'], gate: 'none' as const, input_refs: [], output_refs: ['result:work-req-frontend-ui', 'result:work-req-backend-api'],
+          skills: [
+            { skill_id: 'api-built-in', skill_version: '1.4.0', role: 'automatic' as const, source: 'automatic' as const, mode: 'serial' as const, depends_on: [], mcp_ids: [], validator_ids: ['typecheck'], order: 20 },
+            { skill_id: 'ui-custom', skill_version: '2.0.0', role: 'user' as const, source: 'user' as const, mode: 'parallel' as const, depends_on: ['api-built-in'], mcp_ids: [], validator_ids: ['ui-check'], order: 10 },
+          ],
+        },
+      ],
+    }
+    const result = planDevelopmentV2({ request, context, assessment, catalog, graph_id: 'graph:custom', plan_revision_id: 'plan:custom', now, pipeline_blueprint: blueprint })
+    expect(result.ok).toBe(true)
+    if (!result.ok || result.pipeline === undefined) return
+    expect(result.pipeline.workflow_id).toBe('enterprise-delivery')
+    expect(result.pipeline.track_id).toBe('fullstack-team-a')
+    expect(result.pipeline.pipeline_id).toBe('enterprise-delivery:fullstack-team-a:release')
+    expect(result.pipeline.customizations).toMatchObject({ custom_workflow: true, custom_track: true, custom_pipeline: true })
+    expect(result.pipeline.stage_order).toEqual(['build', 'verify'])
+    expect(result.pipeline.stages.find((stage) => stage.stage_id === 'build')?.skills.map((skill) => skill.skill_id)).toEqual(['ui-custom', 'api-built-in'])
   })
 
   it('reports permission/resource/unresolved blockers without inventing a tool', () => {

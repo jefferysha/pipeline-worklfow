@@ -166,6 +166,17 @@ export function OrchestrationV2Panel({ root, change, readOnly = false, onToast }
       </div>
       {error !== null && <p className="mt-2 text-xs text-red-700 dark:text-red-300" role="alert">{formatApiError(error, t, { exposeServerDetail: false })}</p>}
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-fill" aria-label={`${progress}%`}><div className="h-full rounded-full bg-(--accent) transition-[width]" style={{ width: `${progress}%` }} /></div>
+      {snapshot?.pipeline && <section className="mt-3 rounded-lg border border-border-2 p-3 text-xs" data-testid="orchestration-v2-pipeline" aria-label={t('progress.orchestration_pipeline')}>
+        <h3 className="font-semibold text-text">{t('progress.orchestration_pipeline')}</h3>
+        <div className="mt-1 text-text-3">{t('progress.orchestration_workflow')}: {snapshot.pipeline.workflow_id}@{snapshot.pipeline.workflow_version} · {t('progress.orchestration_track')}: {snapshot.pipeline.track_id} · {snapshot.pipeline.pipeline_id}@{snapshot.pipeline.pipeline_version}</div>
+        <ol className="mt-2 space-y-1 text-text-3" aria-label={t('progress.orchestration_stage_order')}>
+          {snapshot.pipeline.stage_order.map((stageId, index) => {
+            const stage = snapshot.pipeline?.stages.find((entry) => entry.stage_id === stageId)
+            if (!stage) return <li key={stageId}>{index + 1}. {stageId}</li>
+            return <li key={stageId}><span className="font-medium text-text">{index + 1}. {stage.name}</span> · {stage.execution_mode} · {[...stage.skills].sort((left, right) => left.order - right.order).map((skill) => `${skill.skill_id}@${skill.skill_version}`).join(' → ') || '—'}</li>
+          })}
+        </ol>
+      </section>}
       {snapshot && snapshot.work_items.length > 0 && (
         <ul className="mt-3 grid gap-2 sm:grid-cols-2" aria-label={t('progress.orchestration_items')}>
           {snapshot.work_items.map((item) => {

@@ -28746,6 +28746,7 @@ var V2_SCHEMAS = {
   context: "repository-context/v2",
   assessment: "capability-assessment/v2",
   graph: "work-graph/v2",
+  pipeline: "workflow-pipeline/v2",
   resolution: "capability-resolution/v2",
   workItem: "work-item/v2",
   run: "skill-run/v2",
@@ -28762,6 +28763,7 @@ var V2_MAX_BYTES = 512e3;
 var V2_MAX_DEPTH = 16;
 var V2_MAX_ITEMS = 2048;
 var ID2 = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
+var SCHEMA_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,159}$/;
 var DIGEST3 = /^sha256:[0-9a-f]{64}$/;
 var UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 function parse(input, errors) {
@@ -28905,7 +28907,7 @@ function nested(input, decoder3, path10, errors) {
 }
 function decodeDevelopmentRequestV2(input) {
   const errors = [];
-  const raw = prepare(input, V2_SCHEMAS.request, [...META, "request_id", "intent", "interaction_policy", "requested_effects", "constraints", "user_skills", "user_mcps", "auto_select"], errors);
+  const raw = prepare(input, V2_SCHEMAS.request, [...META, "request_id", "intent", "interaction_policy", "requested_effects", "constraints", "user_skills", "user_mcps", "auto_select", "workflow_id", "workflow_version", "track_id", "track_revision", "pipeline_id", "pipeline_version"], errors);
   if (raw === void 0)
     return { ok: false, errors };
   const m = meta(raw, "$", errors);
@@ -28944,9 +28946,32 @@ function decodeDevelopmentRequestV2(input) {
     const required2 = bool(x.required, `$.user_mcps[${i}].required`, errors);
     return id2 && required2 !== void 0 ? { id: id2, ...version ? { version } : {}, required: required2 } : void 0;
   }).filter((x) => x !== void 0);
+  const workflow_id = optionalText(raw.workflow_id, "$.workflow_id", errors, ID2);
+  const workflow_version = optionalText(raw.workflow_version, "$.workflow_version", errors, ID2);
+  const track_id = optionalText(raw.track_id, "$.track_id", errors, ID2);
+  const track_revision = optionalText(raw.track_revision, "$.track_revision", errors, ID2);
+  const pipeline_id = optionalText(raw.pipeline_id, "$.pipeline_id", errors, ID2);
+  const pipeline_version = optionalText(raw.pipeline_version, "$.pipeline_version", errors, ID2);
   if (!m || !request_id || !intent || auto_select === void 0 || interaction_policy === void 0)
     return { ok: false, errors };
-  return result({ ...m, schema_version: V2_SCHEMAS.request, request_id, intent, interaction_policy, requested_effects, constraints, user_skills: skills, user_mcps: mcps, auto_select }, errors);
+  return result({
+    ...m,
+    schema_version: V2_SCHEMAS.request,
+    request_id,
+    intent,
+    interaction_policy,
+    requested_effects,
+    constraints,
+    user_skills: skills,
+    user_mcps: mcps,
+    auto_select,
+    ...workflow_id === void 0 ? {} : { workflow_id },
+    ...workflow_version === void 0 ? {} : { workflow_version },
+    ...track_id === void 0 ? {} : { track_id },
+    ...track_revision === void 0 ? {} : { track_revision },
+    ...pipeline_id === void 0 ? {} : { pipeline_id },
+    ...pipeline_version === void 0 ? {} : { pipeline_version }
+  }, errors);
 }
 function decodeRepositoryContextV2(input) {
   const errors = [];
@@ -29028,6 +29053,85 @@ function decodeCapabilityAssessmentV2(input) {
   const value = decodeAssessment(input, errors);
   return value ? result(value, errors) : { ok: false, errors };
 }
+function decodePipelineSkill(input, path10, errors) {
+  const raw = object4(input, path10, errors);
+  if (!raw)
+    return void 0;
+  closed4(raw, ["binding_id", "skill_id", "skill_version", "order", "role", "source", "mode", "depends_on", "mcp_ids", "input_schema_id", "output_schema_id", "validator_ids"], path10, errors);
+  const binding_id = text3(raw.binding_id, `${path10}.binding_id`, errors, ID2);
+  const skill_id = text3(raw.skill_id, `${path10}.skill_id`, errors, ID2);
+  const skill_version = text3(raw.skill_version, `${path10}.skill_version`, errors, ID2);
+  const order = integer2(raw.order, `${path10}.order`, errors);
+  const role = ["workflow", "track-mandatory", "track-recommended", "user", "automatic", "review"].includes(String(raw.role)) ? raw.role : void 0;
+  const source = ["builtin", "project", "user", "automatic"].includes(String(raw.source)) ? raw.source : void 0;
+  const mode = raw.mode === "serial" || raw.mode === "parallel" ? raw.mode : void 0;
+  if (!role)
+    errors.push({ code: "field-invalid", path: `${path10}.role` });
+  if (!source)
+    errors.push({ code: "field-invalid", path: `${path10}.source` });
+  if (!mode)
+    errors.push({ code: "field-invalid", path: `${path10}.mode` });
+  const input_schema_id = optionalText(raw.input_schema_id, `${path10}.input_schema_id`, errors, SCHEMA_ID);
+  const output_schema_id = optionalText(raw.output_schema_id, `${path10}.output_schema_id`, errors, SCHEMA_ID);
+  if (!binding_id || !skill_id || !skill_version || order === void 0 || !role || !source || !mode)
+    return void 0;
+  return { binding_id, skill_id, skill_version, order, role, source, mode, depends_on: strings(raw.depends_on, `${path10}.depends_on`, errors), mcp_ids: strings(raw.mcp_ids, `${path10}.mcp_ids`, errors), ...input_schema_id === void 0 ? {} : { input_schema_id }, ...output_schema_id === void 0 ? {} : { output_schema_id }, validator_ids: strings(raw.validator_ids, `${path10}.validator_ids`, errors) };
+}
+function decodePipelineStage(input, path10, errors) {
+  const raw = object4(input, path10, errors);
+  if (!raw)
+    return void 0;
+  closed4(raw, ["stage_id", "name", "ordinal", "execution_mode", "depends_on", "work_item_ids", "gate", "skills", "input_refs", "output_refs"], path10, errors);
+  const stage_id = text3(raw.stage_id, `${path10}.stage_id`, errors, ID2);
+  const name2 = text3(raw.name, `${path10}.name`, errors);
+  const ordinal = integer2(raw.ordinal, `${path10}.ordinal`, errors);
+  const execution_mode = raw.execution_mode === "serial" || raw.execution_mode === "parallel" ? raw.execution_mode : void 0;
+  const gate = ["none", "input", "review", "verification", "release"].includes(String(raw.gate)) ? raw.gate : void 0;
+  if (!execution_mode)
+    errors.push({ code: "field-invalid", path: `${path10}.execution_mode` });
+  if (!gate)
+    errors.push({ code: "field-invalid", path: `${path10}.gate` });
+  const skills = array2(raw.skills, `${path10}.skills`, errors).map((value, index) => decodePipelineSkill(value, `${path10}.skills[${index}]`, errors)).filter((value) => value !== void 0);
+  if (!stage_id || !name2 || ordinal === void 0 || !execution_mode || !gate)
+    return void 0;
+  return { stage_id, name: name2, ordinal, execution_mode, depends_on: strings(raw.depends_on, `${path10}.depends_on`, errors), work_item_ids: strings(raw.work_item_ids, `${path10}.work_item_ids`, errors), gate, skills, input_refs: strings(raw.input_refs, `${path10}.input_refs`, errors), output_refs: strings(raw.output_refs, `${path10}.output_refs`, errors) };
+}
+function decodeWorkflowPipelineV2(input) {
+  return genericMetaRecord(input, V2_SCHEMAS.pipeline, ["pipeline_id", "pipeline_version", "workflow_id", "workflow_version", "workflow_source", "workflow_fingerprint", "track_id", "track_revision", "track_source", "pipeline_source", "graph_id", "assessment_id", "status", "stage_order", "stages", "customizations", "pipeline_digest"], (raw, errors, m) => {
+    const pipeline_id = text3(raw.pipeline_id, "$.pipeline_id", errors, ID2);
+    const pipeline_version = text3(raw.pipeline_version, "$.pipeline_version", errors, ID2);
+    const workflow_id = text3(raw.workflow_id, "$.workflow_id", errors, ID2);
+    const workflow_version = text3(raw.workflow_version, "$.workflow_version", errors, ID2);
+    const workflow_source = ["builtin", "project", "user", "automatic"].includes(String(raw.workflow_source)) ? raw.workflow_source : void 0;
+    const workflow_fingerprint = text3(raw.workflow_fingerprint, "$.workflow_fingerprint", errors, ID2);
+    const track_id = text3(raw.track_id, "$.track_id", errors, ID2);
+    const track_revision = text3(raw.track_revision, "$.track_revision", errors, ID2);
+    const track_source = ["builtin", "project", "user", "automatic"].includes(String(raw.track_source)) ? raw.track_source : void 0;
+    const pipeline_source = ["builtin", "project", "user", "automatic"].includes(String(raw.pipeline_source)) ? raw.pipeline_source : void 0;
+    const graph_id = text3(raw.graph_id, "$.graph_id", errors, ID2);
+    const assessment_id = text3(raw.assessment_id, "$.assessment_id", errors, ID2);
+    const status = ["draft", "validated", "frozen", "superseded"].includes(String(raw.status)) ? raw.status : void 0;
+    if (!workflow_source)
+      errors.push({ code: "field-invalid", path: "$.workflow_source" });
+    if (!track_source)
+      errors.push({ code: "field-invalid", path: "$.track_source" });
+    if (!pipeline_source)
+      errors.push({ code: "field-invalid", path: "$.pipeline_source" });
+    if (!status)
+      errors.push({ code: "field-invalid", path: "$.status" });
+    const stages = array2(raw.stages, "$.stages", errors).map((value, index) => decodePipelineStage(value, `$.stages[${index}]`, errors)).filter((value) => value !== void 0);
+    const customizations = object4(raw.customizations, "$.customizations", errors);
+    if (customizations)
+      closed4(customizations, ["custom_workflow", "custom_track", "custom_pipeline", "user_skill_ids", "user_mcp_ids"], "$.customizations", errors);
+    const custom_workflow = customizations ? bool(customizations.custom_workflow, "$.customizations.custom_workflow", errors) : void 0;
+    const custom_track = customizations ? bool(customizations.custom_track, "$.customizations.custom_track", errors) : void 0;
+    const custom_pipeline = customizations ? bool(customizations.custom_pipeline, "$.customizations.custom_pipeline", errors) : void 0;
+    const pipeline_digest = digest8(raw.pipeline_digest, "$.pipeline_digest", errors);
+    if (!pipeline_id || !pipeline_version || !workflow_id || !workflow_version || !workflow_source || !workflow_fingerprint || !track_id || !track_revision || !track_source || !pipeline_source || !graph_id || !assessment_id || !status || !customizations || custom_workflow === void 0 || custom_track === void 0 || custom_pipeline === void 0 || !pipeline_digest)
+      return void 0;
+    return { ...m, schema_version: V2_SCHEMAS.pipeline, pipeline_id, pipeline_version, workflow_id, workflow_version, workflow_source, workflow_fingerprint, track_id, track_revision, track_source, pipeline_source, graph_id, assessment_id, status, stage_order: strings(raw.stage_order, "$.stage_order", errors), stages, customizations: { custom_workflow, custom_track, custom_pipeline, user_skill_ids: strings(customizations.user_skill_ids, "$.customizations.user_skill_ids", errors), user_mcp_ids: strings(customizations.user_mcp_ids, "$.customizations.user_mcp_ids", errors) }, pipeline_digest };
+  });
+}
 function genericMetaRecord(input, schema, allowed, parseFields) {
   const errors = [];
   const raw = prepare(input, schema, [...META, ...allowed], errors);
@@ -29038,12 +29142,13 @@ function genericMetaRecord(input, schema, allowed, parseFields) {
   return value ? result(value, errors) : { ok: false, errors };
 }
 function decodeWorkGraphV2(input) {
-  return genericMetaRecord(input, V2_SCHEMAS.graph, ["graph_id", "graph_revision", "assessment_id", "task_plan_revision_id", "task_plan_digest", "dependency_edges", "execution_groups", "acceptance_coverage", "status"], (r, e, m) => {
+  return genericMetaRecord(input, V2_SCHEMAS.graph, ["graph_id", "graph_revision", "assessment_id", "task_plan_revision_id", "task_plan_digest", "pipeline_id", "dependency_edges", "execution_groups", "acceptance_coverage", "status"], (r, e, m) => {
     const graph_id = text3(r.graph_id, "$.graph_id", e, ID2);
     const graph_revision = integer2(r.graph_revision, "$.graph_revision", e);
     const assessment_id = text3(r.assessment_id, "$.assessment_id", e, ID2);
     const task_plan_revision_id = text3(r.task_plan_revision_id, "$.task_plan_revision_id", e, ID2);
     const task_plan_digest = digest8(r.task_plan_digest, "$.task_plan_digest", e);
+    const pipeline_id = optionalText(r.pipeline_id, "$.pipeline_id", e, ID2);
     const status = ["draft", "validated", "frozen", "superseded"].includes(String(r.status)) ? r.status : void 0;
     if (!status)
       e.push({ code: "field-invalid", path: "$.status" });
@@ -29080,7 +29185,7 @@ function decodeWorkGraphV2(input) {
     }).filter((x) => x !== void 0);
     if (!graph_id || graph_revision === void 0 || !assessment_id || !task_plan_revision_id || !task_plan_digest || !status)
       return void 0;
-    return { ...m, schema_version: V2_SCHEMAS.graph, graph_id, graph_revision, assessment_id, task_plan_revision_id, task_plan_digest, dependency_edges: edges, execution_groups: groups2, acceptance_coverage: coverage, status };
+    return { ...m, schema_version: V2_SCHEMAS.graph, graph_id, graph_revision, assessment_id, task_plan_revision_id, task_plan_digest, ...pipeline_id === void 0 ? {} : { pipeline_id }, dependency_edges: edges, execution_groups: groups2, acceptance_coverage: coverage, status };
   });
 }
 function decodeCapabilityResolutionV2(input) {
@@ -29343,7 +29448,7 @@ function decodeBoardEventV2(input) {
 }
 function decodeBoardSnapshotV2(input) {
   const errors = [];
-  const allowed = ["schema_version", "record_id", "project_id", "change_id", "revision", "correlation_id", "actor", "created_at", "event_head_id", "event_head_digest", "command_head_id", "status", "request", "context", "assessment", "graph", "resolution", "work_items", "runs", "results", "validations", "gates", "leases", "blockers", "next_actions", "resume_status", "updated_at"];
+  const allowed = ["schema_version", "record_id", "project_id", "change_id", "revision", "correlation_id", "actor", "created_at", "event_head_id", "event_head_digest", "command_head_id", "status", "request", "context", "assessment", "pipeline", "graph", "resolution", "work_items", "runs", "results", "validations", "gates", "leases", "blockers", "next_actions", "resume_status", "updated_at"];
   const parsed = parse(input, errors);
   if (parsed === void 0)
     return { ok: false, errors };
@@ -29395,6 +29500,7 @@ function decodeBoardSnapshotV2(input) {
   const request = nested2("request", decodeDevelopmentRequestV2);
   const context2 = nested2("context", decodeRepositoryContextV2);
   const assessment = nested2("assessment", decodeCapabilityAssessmentV2);
+  const pipeline = nested2("pipeline", decodeWorkflowPipelineV2);
   const graph = nested2("graph", decodeWorkGraphV2);
   const resolution = nested2("resolution", decodeCapabilityResolutionV2);
   const work_items = collection("work_items", decodeWorkItemV2);
@@ -29421,6 +29527,7 @@ function decodeBoardSnapshotV2(input) {
     ...request === void 0 ? {} : { request },
     ...context2 === void 0 ? {} : { context: context2 },
     ...assessment === void 0 ? {} : { assessment },
+    ...pipeline === void 0 ? {} : { pipeline },
     ...graph === void 0 ? {} : { graph },
     ...resolution === void 0 ? {} : { resolution },
     work_items,
@@ -29453,6 +29560,7 @@ function decodeBoardCommandV2(input) {
     "context",
     "assessment",
     "graph",
+    "pipeline",
     "resolution",
     "work_item_id",
     "run",
@@ -29485,6 +29593,7 @@ function decodeBoardCommandV2(input) {
     "accept-request",
     "record-context",
     "record-assessment",
+    "freeze-pipeline",
     "freeze-work-graph",
     "resolve-capabilities",
     "start-change",
@@ -29536,6 +29645,13 @@ function decodeBoardCommandV2(input) {
       const assessment = nested(raw.assessment, decodeCapabilityAssessmentV2, "$.assessment", errors);
       if (assessment)
         value = { ...base, type, assessment };
+      break;
+    }
+    case "freeze-pipeline": {
+      rejectExtra(["pipeline"]);
+      const pipeline = nested(raw.pipeline, decodeWorkflowPipelineV2, "$.pipeline", errors);
+      if (pipeline)
+        value = { ...base, type, pipeline };
       break;
     }
     case "freeze-work-graph": {
@@ -29725,7 +29841,10 @@ function evolveV2(aggregate, event) {
       next = { ...next, context: command2.context, status: "assessing", next_actions: ["record-assessment"] };
       break;
     case "record-assessment":
-      next = { ...next, assessment: command2.assessment, status: command2.assessment.normalization === "complete" ? "planning" : command2.assessment.normalization === "needs-input" ? "waiting-input" : "blocked", next_actions: command2.assessment.normalization === "complete" ? ["freeze-work-graph"] : ["record-assessment"] };
+      next = { ...next, assessment: command2.assessment, status: command2.assessment.normalization === "complete" ? "planning" : command2.assessment.normalization === "needs-input" ? "waiting-input" : "blocked", next_actions: command2.assessment.normalization === "complete" ? ["freeze-pipeline"] : ["record-assessment"] };
+      break;
+    case "freeze-pipeline":
+      next = { ...next, pipeline: command2.pipeline, status: "planning", next_actions: ["freeze-work-graph"] };
       break;
     case "freeze-work-graph":
       next = { ...next, graph: command2.graph, status: "planned", work_items: initialItems(aggregate, command2.graph), next_actions: ["resolve-capabilities"] };
@@ -29819,7 +29938,7 @@ function evolveV2(aggregate, event) {
       next = { ...next, status: "cancelled", leases: next.leases.map((lease) => ({ ...lease, status: "revoked" })), runs: next.runs.map((run) => run.status === "claimed" || run.status === "running" ? { ...run, status: "cancelled", revision: event.revision } : run), work_items: next.work_items.map((item2) => item2.status === "completed" ? item2 : { ...item2, status: "cancelled", revision: event.revision }), next_actions: [] };
       break;
     case "replan-change":
-      next = { ...next, status: "planning", graph: next.graph === void 0 ? void 0 : { ...next.graph, status: "superseded", revision: event.revision }, resolution: void 0, next_actions: ["freeze-work-graph"] };
+      next = { ...next, status: "planning", pipeline: next.pipeline === void 0 ? void 0 : { ...next.pipeline, status: "superseded", revision: event.revision }, graph: next.graph === void 0 ? void 0 : { ...next.graph, status: "superseded", revision: event.revision }, resolution: void 0, next_actions: ["freeze-pipeline"] };
       break;
     case "bind-artifact": {
       const item2 = find(next.work_items, "work_item_id", command2.work_item_id);
@@ -29861,6 +29980,10 @@ function stateGuard(aggregate, command2) {
     case "record-assessment":
       if (aggregate.status !== "assessing" || aggregate.context === void 0 || aggregate.assessment !== void 0)
         return reject("invalid-transition", "assessment requires the current repository context", "assessment-order", ["record-context"]);
+      break;
+    case "freeze-pipeline":
+      if (aggregate.status !== "planning" || aggregate.assessment?.normalization !== "complete" || aggregate.pipeline !== void 0 && aggregate.pipeline.status !== "superseded" || command2.pipeline.status !== "frozen")
+        return reject("invalid-transition", "only a complete assessment can freeze a pipeline", "pipeline-order", ["record-assessment"]);
       break;
     case "freeze-work-graph":
       if (aggregate.status !== "planning" || aggregate.assessment?.normalization !== "complete" || command2.graph.status !== "frozen")
@@ -29990,6 +30113,10 @@ function decideV2(aggregate, command2) {
     return reject("contract-invalid", "context request mismatch", "request-context-mismatch");
   if (command2.type === "record-assessment" && (aggregate.request === void 0 || aggregate.context === void 0 || aggregate.request.request_id !== command2.assessment.request_id || command2.assessment.context_record_id !== aggregate.context.record_id))
     return reject("contract-invalid", "assessment must bind request and context", "assessment-binding-mismatch");
+  if (command2.type === "freeze-pipeline" && (aggregate.assessment === void 0 || command2.pipeline.assessment_id !== aggregate.assessment.assessment_id || command2.pipeline.project_id !== aggregate.project_id || command2.pipeline.change_id !== aggregate.change_id))
+    return reject("contract-invalid", "pipeline must bind assessment and change", "pipeline-binding-invalid");
+  if (command2.type === "freeze-work-graph" && aggregate.pipeline !== void 0 && command2.graph.pipeline_id !== void 0 && command2.graph.pipeline_id !== aggregate.pipeline.pipeline_id)
+    return reject("contract-invalid", "graph must bind the frozen pipeline", "graph-pipeline-mismatch");
   if (command2.type === "freeze-work-graph" && (aggregate.assessment === void 0 || command2.graph.assessment_id !== aggregate.assessment.assessment_id))
     return reject("contract-invalid", "graph must bind assessment", "graph-binding-invalid");
   if (command2.type === "resolve-capabilities" && (aggregate.graph === void 0 || aggregate.assessment === void 0 || command2.resolution.graph_id !== aggregate.graph.graph_id || command2.resolution.assessment_id !== aggregate.assessment.assessment_id))

@@ -9,6 +9,7 @@ import {
   type CapabilityResolutionV2,
   type DevelopmentRequestV2,
   type RepositoryContextV2,
+  type WorkflowPipelinePlanV2,
   type WorkGraphV2,
 } from '@tenon/kernel'
 import { createExecutionRuntimeV2, type RuntimeExecutorV2 } from './runtime-v2.js'
@@ -79,7 +80,7 @@ function command(snapshot: { revision: number; change_id: string; correlation_id
   } as BoardCommandV2
 }
 
-async function fixture(dependencies: readonly { from: string; to: string }[] = [], mode: 'serial' | 'parallel' = 'parallel') {
+async function fixture(dependencies: readonly { from: string; to: string }[] = [], mode: 'serial' | 'parallel' = 'parallel', pipeline?: WorkflowPipelinePlanV2) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'tenon-runtime-v2-'))
   roots.push(root)
   const ledger = createOrchestrationLedger()
@@ -93,6 +94,7 @@ async function fixture(dependencies: readonly { from: string; to: string }[] = [
   await append('accept-request', { request: request() }, 'setup-accept')
   await append('record-context', { context: context() }, 'setup-context')
   await append('record-assessment', { assessment: assessment() }, 'setup-assessment')
+  if (pipeline !== undefined) await append('freeze-pipeline', { pipeline }, 'setup-pipeline')
   await append('freeze-work-graph', { graph: graph(dependencies, mode) }, 'setup-graph')
   await append('resolve-capabilities', { resolution: resolution() }, 'setup-resolution')
   await append('start-change', {}, 'setup-start')
@@ -118,6 +120,28 @@ function report(workItemId: string, resultId: string) {
 }
 
 describe('persistent execution runtime v2', () => {
+  it('follows frozen pipeline stage order even when the graph group order differs', async () => {
+    const pipeline: WorkflowPipelinePlanV2 = {
+      schema_version: 'workflow-pipeline/v2', record_id: 'pipeline:ordered', project_id: 'project-1', change_id: 'change-1', revision: 2,
+      correlation_id: 'corr-1', actor: { kind: 'system', id: 'planner' }, created_at: now, pipeline_id: 'ordered', pipeline_version: '1',
+      workflow_id: 'custom', workflow_version: '1', workflow_source: 'user', workflow_fingerprint: `sha256:${'a'.repeat(64)}`, track_id: 'custom-track', track_revision: '1', track_source: 'user', pipeline_source: 'user', graph_id: 'graph-1', assessment_id: 'assessment-1', status: 'frozen', stage_order: ['stage-b', 'stage-a'],
+      stages: [
+        { stage_id: 'stage-b', name: 'B first', ordinal: 0, execution_mode: 'serial', depends_on: [], work_item_ids: ['item-b'], gate: 'none', skills: [{ binding_id: 'binding:item-b:skill-b', skill_id: 'skill-b', skill_version: '1.0.0', order: 0, role: 'user', source: 'user', mode: 'serial', depends_on: [], mcp_ids: [], validator_ids: [] }], input_refs: [], output_refs: [] },
+        { stage_id: 'stage-a', name: 'A second', ordinal: 1, execution_mode: 'serial', depends_on: ['stage-b'], work_item_ids: ['item-a'], gate: 'none', skills: [{ binding_id: 'binding:item-a:skill-a', skill_id: 'skill-a', skill_version: '1.0.0', order: 0, role: 'user', source: 'user', mode: 'serial', depends_on: [], mcp_ids: [], validator_ids: [] }], input_refs: [], output_refs: [] },
+      ], customizations: { custom_workflow: true, custom_track: true, custom_pipeline: true, user_skill_ids: ['skill-a', 'skill-b'], user_mcp_ids: [] }, pipeline_digest: `sha256:${'b'.repeat(64)}`,
+    }
+    const calls: string[] = []
+    const fixtureState = await fixture([], 'parallel', pipeline)
+    expect(fixtureState.snapshot.status).toBe('executing')
+    const runtime = createExecutionRuntimeV2({
+      change_dir: fixtureState.root, ledger: fixtureState.ledger, worker_id: 'worker-1', executor: successfulExecutor(calls), clock: () => now,
+      validator: { async validate(input) { return report(input.work_item_id, input.result_id) } }, id_factory: (() => { let n = 0; return (prefix: string) => `${prefix}:${++n}` })(),
+    })
+    const result = await runtime.run()
+    expect(result.snapshot.status).toBe('completed')
+    expect(calls).toEqual(['item-b', 'item-a'])
+  })
+
   it('executes an independent parallel wave and records validator evidence', async () => {
     const calls: string[] = []
     const fixtureState = await fixture()
