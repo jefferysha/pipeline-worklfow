@@ -4,6 +4,33 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
+## v1.0.8 · 2026-09-02
+
+### Orchestration input and execution runtime
+
+- Skill dependencies are materialized into a versioned `skill-input-manifest/v2` and
+  bounded input bundle before execution. Executors and validators receive the same
+  digest-checked inputs, while rejected input delivery fails closed without invoking
+  the Skill.
+- Canonical Skill output is atomically persisted under `.tenon-artifacts/`, registered
+  with an `artifact://` reference, schema, byte count, and SHA-256 digest, and resolved
+  by downstream Skills through the manifest contract.
+- Custom Workflow, Track, Pipeline, Stage, and Skill dependencies honor declared
+  serial/parallel modes and resource claims; overlapping write claims are never run
+  concurrently.
+
+### Security and dependency maintenance
+
+- The Browserslist dependency is pinned to the first patched release (`4.28.7`) through
+  the repository override and lockfile, removing the high-severity advisory without
+  weakening the audit gate.
+
+### Upgrade
+
+Install the immutable `v1.0.8` entrypoint, then use `tenon update --codex` (or `--claude`)
+for routine upgrades. Existing Changes retain their frozen Workflow/Track/Pipeline
+identity until an explicit replan.
+
 ## v1.0.7 · 2026-08-11
 
 ### Cross-version installer bridge recovery

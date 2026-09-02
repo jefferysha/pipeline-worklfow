@@ -12,6 +12,26 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 面向用户的解释、影响与操作步骤默认使用中文。
 
+## v1.0.8 · 2026-09-02
+
+### 编排输入与 Pipeline Runtime
+
+- Skill 依赖会在执行前物化为版本化的 `skill-input-manifest/v2` 和受限输入包；Executor
+  与 Validator 接收同一个经过摘要校验的输入。输入投递被拒绝时会 fail-closed，绝不会调用 Skill。
+- Skill 的规范化产物会原子写入 `.tenon-artifacts/`，并登记 `artifact://` 引用、Schema、字节数
+  和 SHA-256 摘要；下游 Skill 通过 Manifest 契约读取，而不是依赖模型自行寻找文件。
+- 自定义 Workflow、Track、Pipeline、Stage 和 Skill 依赖遵守声明的串行/并行模式及资源声明；
+  重叠的写入资源不会并发执行。
+
+### 安全与依赖维护
+
+- Browserslist 通过仓库 override 和锁文件固定到首个修复版本 `4.28.7`，消除高危公告，未放宽审计门禁。
+
+### 升级动作
+
+安装不可变的 `v1.0.8` 入口，日常更新继续运行 `tenon update --codex`（或 `--claude`）。已存在的
+Change 会继续使用冻结的 Workflow/Track/Pipeline，只有显式 replan 才会切换定义。
+
 ## v1.0.7 · 2026-08-11
 
 ### 跨版本 installer bridge 恢复
