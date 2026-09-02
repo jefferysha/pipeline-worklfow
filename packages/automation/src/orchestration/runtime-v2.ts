@@ -7,6 +7,8 @@
  * evidence before a complete/validation command is appended.
  */
 import { randomUUID } from 'node:crypto'
+import { mkdir, rename, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import {
   type BoardCommandV2,
   type BoardSnapshotV2,
@@ -27,11 +29,22 @@ import {
   redact,
   resultIdentity,
   resultFor,
+  stable,
   utc,
   type NormalizedPolicyV2,
   type RuntimeObservationV2,
   type RuntimePolicyV2,
 } from './runtime-v2-boundary.js'
+import {
+  createFilesystemArtifactResolverV2,
+  materializeRunInputsV2,
+  rejectedInputManifest,
+  emptyInputBundleV2,
+  InputMaterializationErrorV2,
+  type RuntimeArtifactResolverV2,
+  type RuntimeInputBundleV2,
+} from './input-materialization-v2.js'
+import { bindingFor, chooseWave, pipelineSkillFor, resultInputRefs } from './runtime-v2-scheduler.js'
 
 export interface RuntimeExecutorInputV2 {
   readonly run_id: string
@@ -40,6 +53,7 @@ export interface RuntimeExecutorInputV2 {
   readonly skill_version: string
   readonly mcp_ids: readonly string[]
   readonly input_refs: readonly string[]
+  readonly input_bundle: RuntimeInputBundleV2
   readonly signal: AbortSignal
 }
 
@@ -55,6 +69,7 @@ export interface RuntimeValidatorInputV2 {
   readonly skill_id: string
   readonly skill_version: string
   readonly observation: RuntimeObservationV2
+  readonly input_bundle: RuntimeInputBundleV2
 }
 
 /** A validator may return a V2 report or an equivalent plain JSON record. */
@@ -76,6 +91,8 @@ export interface ExecutionRuntimeOptionsV2 {
   readonly id_factory?: (prefix: string) => string
   readonly retry?: RuntimePolicyV2
   readonly actor_id?: string
+  /** Optional resolver for project/MCP artifact references. Files in change_dir are resolved by default. */
+  readonly artifact_resolver?: RuntimeArtifactResolverV2
 }
 
 export interface RuntimeRecoveryV2 {
@@ -111,69 +128,14 @@ interface SettledRunV2 {
   readonly blocking: boolean
 }
 
-function resultInputRefs(snapshot: BoardSnapshotV2, item: WorkItemV2): readonly string[] {
-  const refs: string[] = []
-  for (const dependency of item.depends_on) {
-    const depItem = snapshot.work_items.find((candidate) => candidate.work_item_id === dependency)
-    const run = depItem?.active_run_id === undefined
-      ? snapshot.runs.filter((candidate) => candidate.work_item_id === dependency && candidate.status === 'completed').at(-1)
-      : snapshot.runs.find((candidate) => candidate.run_id === depItem.active_run_id)
-    const result = run?.result_id === undefined ? undefined : snapshot.results.find((candidate) => candidate.result_id === run.result_id)
-    if (result !== undefined) {
-      refs.push(`skill-result:${result.result_id}`)
-      refs.push(...result.artifacts.map((artifact) => artifact.ref))
-    }
-  }
-  return Object.freeze(refs)
-}
-
-function activeOrQueued(item: WorkItemV2): boolean { return item.status === 'ready' || item.status === 'queued' }
-
-function groupFor(snapshot: BoardSnapshotV2, item: WorkItemV2): { readonly mode: 'serial' | 'parallel'; readonly ids: readonly string[] } | undefined {
-  const group = snapshot.graph?.execution_groups.find((candidate) => candidate.work_item_ids.includes(item.work_item_id))
-  return group === undefined ? undefined : { mode: group.mode, ids: group.work_item_ids }
-}
-
-function pipelineStageFor(snapshot: BoardSnapshotV2, item: WorkItemV2) {
-  return snapshot.pipeline?.stages.find((stage) => stage.work_item_ids.includes(item.work_item_id))
-}
-
-function pipelineRank(snapshot: BoardSnapshotV2, item: WorkItemV2): readonly number[] {
-  const pipeline = snapshot.pipeline
-  if (pipeline === undefined) return [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER]
-  const stage = pipelineStageFor(snapshot, item)
-  const stageIndex = stage === undefined ? -1 : pipeline.stage_order.indexOf(stage.stage_id)
-  const binding = snapshot.resolution?.bindings.find((candidate) => candidate.work_item_id === item.work_item_id)
-  const skill = stage?.skills.find((candidate) => candidate.skill_id === binding?.skill_id && candidate.skill_version === binding?.skill_version)
-  return [stageIndex < 0 ? Number.MAX_SAFE_INTEGER : stageIndex, skill?.order ?? Number.MAX_SAFE_INTEGER]
-}
-
-function chooseWave(snapshot: BoardSnapshotV2, policy: NormalizedPolicyV2): readonly WorkItemV2[] {
-  const candidates = snapshot.work_items.filter(activeOrQueued).sort((left, right) => {
-    const leftRank = pipelineRank(snapshot, left)
-    const rightRank = pipelineRank(snapshot, right)
-    return (leftRank[0] ?? Number.MAX_SAFE_INTEGER) - (rightRank[0] ?? Number.MAX_SAFE_INTEGER) || (leftRank[1] ?? Number.MAX_SAFE_INTEGER) - (rightRank[1] ?? Number.MAX_SAFE_INTEGER) || left.work_item_id.localeCompare(right.work_item_id)
-  })
-  const first = candidates[0]
-  if (first === undefined) return []
-  const group = groupFor(snapshot, first)
-  const stage = pipelineStageFor(snapshot, first)
-  const mode = stage?.execution_mode ?? group?.mode
-  if (group === undefined || mode === 'serial') return [first]
-  const members = candidates.filter((item) => group.ids.includes(item.work_item_id)).slice(0, policy.max_parallel)
-  return members.length === 0 ? [first] : members
-}
-
-function bindingFor(snapshot: BoardSnapshotV2, item: WorkItemV2): CapabilityResolutionV2['bindings'][number] | undefined {
-  return snapshot.resolution?.bindings.find((binding) => binding.work_item_id === item.work_item_id)
-}
-
 export class ExecutionRuntimeV2 {
   private readonly options: ExecutionRuntimeOptionsV2
   private readonly policy: NormalizedPolicyV2
   private readonly clock: () => string
   private readonly idFactory: (prefix: string) => string
   private readonly controllers = new Map<string, AbortController>()
+  private readonly inputBundles = new Map<string, RuntimeInputBundleV2>()
+  private readonly artifactResolver: RuntimeArtifactResolverV2
   private stopping = false
   private attempts = 0
   private readonly diagnostics: string[] = []
@@ -184,6 +146,7 @@ export class ExecutionRuntimeV2 {
     this.policy = normalizePolicy(options.retry)
     this.clock = options.clock ?? (() => new Date().toISOString())
     this.idFactory = options.id_factory ?? ((prefix) => `${prefix}:${randomUUID()}`)
+    this.artifactResolver = options.artifact_resolver ?? createFilesystemArtifactResolverV2(options.change_dir)
   }
 
   async run(): Promise<ExecutionRuntimeResultV2> {
@@ -300,12 +263,23 @@ export class ExecutionRuntimeV2 {
         continue
       }
       const priorQueued = next.runs.find((candidate) => candidate.run_id === item.active_run_id && candidate.status === 'queued')
-      const run: SkillRunV2 = priorQueued ?? {
+      const runBase: SkillRunV2 = priorQueued ?? {
         schema_version: 'skill-run/v2', record_id: `run:${this.id('run')}`, project_id: next.project_id, change_id: next.change_id,
         revision: next.revision, correlation_id: next.correlation_id, actor: { kind: 'worker', id: this.options.worker_id }, created_at: utc(this.clock),
         run_id: this.id('run'), attempt_id: this.id('attempt'), attempt: item.attempt_count + 1, work_item_id: item.work_item_id,
         skill_id: binding.skill_id, skill_version: binding.skill_version, mcp_ids: binding.mcp_ids, status: 'queued',
         input_refs: resultInputRefs(next, item),
+      }
+      let run = runBase
+      let preparedBundle: RuntimeInputBundleV2 | undefined
+      try {
+        const prepared = await materializeRunInputsV2({ snapshot: next, item, run_id: run.run_id, signal: this.options.signal ?? new AbortController().signal, resolver: this.artifactResolver, max_bytes: Math.min(this.policy.max_output_bytes * 4, 4 * 1024 * 1024), now: utc(this.clock) })
+        preparedBundle = prepared.bundle
+        run = { ...run, input_refs: prepared.manifest.input_refs, input_manifest: prepared.manifest }
+      } catch (error) {
+        const reason = error instanceof InputMaterializationErrorV2 ? error.code : 'artifact-unavailable'
+        this.diagnostics.push(`input-materialization:${reason}`)
+        run = { ...run, input_manifest: rejectedInputManifest(run.run_id, run.work_item_id, run.input_refs, reason, utc(this.clock)) }
       }
       const lease = { lease_id: this.id('lease'), owner_id: this.options.worker_id, acquired_at: utc(this.clock), heartbeat_at: utc(this.clock), expires_at: addMilliseconds(utc(this.clock), this.policy.lease_duration_ms), generation: 1, status: 'active' as const }
       next = await this.append(next, 'claim-run', { run, lease }, `claim:${item.work_item_id}:${run.attempt}`)
@@ -315,6 +289,7 @@ export class ExecutionRuntimeV2 {
       const begun = next.runs.find((candidate) => candidate.run_id === run.run_id)
       if (begun === undefined) throw new ExecutionRuntimeErrorV2('command-rejected', `begin did not persist run ${run.run_id}`)
       this.attempts += 1
+      if (preparedBundle !== undefined) this.inputBundles.set(run.run_id, preparedBundle)
       runs.push({ run: begun, item })
     }
     return { snapshot: next, runs }
@@ -350,23 +325,44 @@ export class ExecutionRuntimeV2 {
     let report: ValidationReportV2 | undefined
     let issue: string | undefined
     let retryable = false
+    const inputBundle = this.inputBundles.get(run.run_id) ?? emptyInputBundleV2(run.run_id, item.work_item_id)
     try {
       let raw: unknown
-      try {
-        raw = await this.options.executor.execute({ run_id: run.run_id, work_item_id: item.work_item_id, skill_id: binding.skill_id, skill_version: binding.skill_version, mcp_ids: binding.mcp_ids, input_refs: run.input_refs, signal: controller.signal })
-      } catch (error) {
-        issue = controller.signal.aborted && this.options.signal?.aborted !== true ? 'executor-aborted' : 'executor-failed'
-        retryable = issue === 'executor-failed'
-        if (error instanceof Error) this.diagnostics.push(`executor:${redact(error.message)}`)
+      if (run.input_manifest?.delivery === 'rejected') {
+        issue = 'input-materialization-failed'
+        retryable = true
+      } else {
+        try {
+          raw = await this.options.executor.execute({ run_id: run.run_id, work_item_id: item.work_item_id, skill_id: binding.skill_id, skill_version: binding.skill_version, mcp_ids: binding.mcp_ids, input_refs: run.input_refs, input_bundle: inputBundle, signal: controller.signal })
+        } catch (error) {
+          issue = controller.signal.aborted && this.options.signal?.aborted !== true ? 'executor-aborted' : 'executor-failed'
+          retryable = issue === 'executor-failed'
+          if (error instanceof Error) this.diagnostics.push(`executor:${redact(error.message)}`)
+        }
       }
       if (issue === undefined) {
         const normalized = normalizeObservation(raw, this.policy)
         if (!normalized.ok) issue = normalized.code
         else {
-          observation = normalized.observation
-          if (this.options.validator !== undefined) {
+          try {
+            const outputRef = await this.persistOutput(run, normalized.observation)
+            observation = {
+              ...normalized.observation,
+              raw_output_ref: outputRef.ref,
+              artifacts: Object.freeze([
+                ...normalized.observation.artifacts,
+                { id: `output:${run.run_id}`, kind: 'json' as const, ref: outputRef.ref, digest: outputRef.digest, media_type: 'application/json', byte_length: outputRef.byte_length },
+              ]),
+            }
+          } catch (error) {
+            issue = 'output-persist-failed'
+            retryable = true
+            if (error instanceof Error) this.diagnostics.push(`output-persist:${redact(error.message)}`)
+          }
+          if (issue === undefined && this.options.validator !== undefined) {
             try {
-              const rawReport = await this.options.validator.validate({ run_id: run.run_id, result_id: resultIdentity(run.run_id), work_item_id: item.work_item_id, skill_id: binding.skill_id, skill_version: binding.skill_version, observation })
+              if (observation === undefined) throw new Error('observation unavailable after output persistence')
+              const rawReport = await this.options.validator.validate({ run_id: run.run_id, result_id: resultIdentity(run.run_id), work_item_id: item.work_item_id, skill_id: binding.skill_id, skill_version: binding.skill_version, observation, input_bundle: inputBundle })
               const normalizedReport = normalizeReport(rawReport, { result_id: resultIdentity(run.run_id), work_item_id: item.work_item_id }, utc(this.clock))
               if (!normalizedReport.ok) issue = normalizedReport.code
               else report = { ...normalizedReport.report, project_id: run.project_id, change_id: run.change_id, correlation_id: run.correlation_id, actor: { kind: 'system', id: 'validator' } }
@@ -383,9 +379,21 @@ export class ExecutionRuntimeV2 {
       this.controllers.delete(run.run_id)
     }
     if (issue === 'executor-failed' || issue === 'observation-invalid' || issue?.startsWith('json-') === true) retryable = true
-    const result = resultFor(run, observation, report, utc(this.clock), issue)
+    const result = resultFor(run, observation, report, utc(this.clock), issue, pipelineSkillFor(await this.snapshot(), item)?.output_schema_id)
     const blocking = result.contract_status !== 'validated' || report?.status !== 'pass' || report.checks.some((check) => check.status !== 'pass') || issue !== undefined
     return { run, item, result, ...(report === undefined ? {} : { report }), retryable, blocking }
+  }
+
+  private async persistOutput(run: SkillRunV2, observation: RuntimeObservationV2): Promise<{ readonly ref: string; readonly digest: `sha256:${string}`; readonly byte_length: number }> {
+    const resultId = resultIdentity(run.run_id)
+    const directory = path.join(path.resolve(this.options.change_dir), '.tenon-artifacts', resultId)
+    await mkdir(directory, { recursive: true })
+    const output = stable(observation.output)
+    const temporary = path.join(directory, `output.json.tmp-${randomUUID()}`)
+    const target = path.join(directory, 'output.json')
+    await writeFile(temporary, output, 'utf8')
+    await rename(temporary, target)
+    return { ref: `artifact://${resultId}/output.json`, digest: observation.output_digest, byte_length: observation.output_bytes }
   }
 
   private async settle(snapshot: BoardSnapshotV2, outcome: SettledRunV2): Promise<BoardSnapshotV2> {

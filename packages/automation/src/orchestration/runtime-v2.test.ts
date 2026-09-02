@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -13,6 +13,7 @@ import {
   type WorkGraphV2,
 } from '@tenon/kernel'
 import { createExecutionRuntimeV2, type RuntimeExecutorV2 } from './runtime-v2.js'
+import type { RuntimeInputBundleV2 } from './input-materialization-v2.js'
 
 const now = '2026-09-02T00:00:00.000Z'
 const roots: string[] = []
@@ -258,5 +259,77 @@ describe('persistent execution runtime v2', () => {
     expect(result.snapshot.status).toBe('completed')
     expect(refs).toHaveLength(2)
     expect(refs[1]?.some((ref) => ref.startsWith('skill-result:'))).toBe(true)
+  })
+
+  it('materializes dependency content, persists a canonical output, and records a read proof', async () => {
+    const fixtureState = await fixture([{ from: 'item-a', to: 'item-b' }], 'serial')
+    const bundles: RuntimeInputBundleV2[] = []
+    const runtime = createExecutionRuntimeV2({
+      change_dir: fixtureState.root, ledger: fixtureState.ledger, worker_id: 'worker-1', clock: () => now,
+      executor: { async execute(input) {
+        bundles.push(input.input_bundle)
+        return { output: input.work_item_id === 'item-a' ? { value: 42 } : { consumed: true }, artifacts: [], diagnostics: [] }
+      } },
+      validator: { async validate(input) { return report(input.work_item_id, input.result_id) } },
+      id_factory: (() => { let n = 0; return (prefix: string) => `${prefix}:${++n}` })(),
+    })
+    const result = await runtime.run()
+    expect(result.snapshot.status).toBe('completed')
+    const first = result.snapshot.results.find((entry) => entry.run_id === result.snapshot.runs.find((run) => run.work_item_id === 'item-a')?.run_id)
+    expect(first?.raw_output?.ref).toMatch(/^artifact:\/\/result:/u)
+    expect(first?.output_digest).toMatch(/^sha256:[a-f0-9]{64}$/u)
+    const persisted = await readFile(path.join(fixtureState.root, '.tenon-artifacts', first!.result_id, 'output.json'), 'utf8')
+    expect(persisted).toBe('{"value":42}')
+    const downstreamBundle = bundles.find((bundle) => bundle.work_item_id === 'item-b')
+    expect(downstreamBundle?.items.some((entry) => entry.ref.startsWith('skill-result:'))).toBe(true)
+    expect(downstreamBundle?.items.some((entry) => entry.ref === first?.raw_output?.ref && entry.content && typeof entry.content === 'object' && !Array.isArray(entry.content) && entry.content.value === 42)).toBe(true)
+    expect(result.snapshot.runs.find((run) => run.work_item_id === 'item-b')?.input_manifest?.delivery).toBe('injected')
+  })
+
+  it('uses a custom pipeline stage as the concurrency boundary and honors Skill dependencies', async () => {
+    const pipeline: WorkflowPipelinePlanV2 = {
+      schema_version: 'workflow-pipeline/v2', record_id: 'pipeline:parallel-stage', project_id: 'project-1', change_id: 'change-1', revision: 2,
+      correlation_id: 'corr-1', actor: { kind: 'system', id: 'planner' }, created_at: now, pipeline_id: 'parallel-stage', pipeline_version: '1',
+      workflow_id: 'custom', workflow_version: '1', workflow_source: 'user', workflow_fingerprint: `sha256:${'a'.repeat(64)}`, track_id: 'track', track_revision: '1', track_source: 'user', pipeline_source: 'user', graph_id: 'graph-1', assessment_id: 'assessment-1', status: 'frozen', stage_order: ['build'],
+      stages: [{ stage_id: 'build', name: 'Build', ordinal: 0, execution_mode: 'parallel', depends_on: [], work_item_ids: ['item-a', 'item-b'], gate: 'none', skills: [
+        { binding_id: 'binding:item-a:skill-a', skill_id: 'skill-a', skill_version: '1.0.0', order: 0, role: 'user', source: 'user', mode: 'parallel', depends_on: [], mcp_ids: [], validator_ids: [] },
+        { binding_id: 'binding:item-b:skill-b', skill_id: 'skill-b', skill_version: '1.0.0', order: 1, role: 'user', source: 'user', mode: 'parallel', depends_on: ['binding:item-a:skill-a'], mcp_ids: [], validator_ids: [] },
+      ], input_refs: [], output_refs: [] }], customizations: { custom_workflow: true, custom_track: true, custom_pipeline: true, user_skill_ids: ['skill-a', 'skill-b'], user_mcp_ids: [] }, pipeline_digest: `sha256:${'b'.repeat(64)}`,
+    }
+    const fixtureState = await fixture([], 'parallel', pipeline)
+    const calls: string[] = []
+    const downstreamRefs: string[] = []
+    const runtime = createExecutionRuntimeV2({
+      change_dir: fixtureState.root, ledger: fixtureState.ledger, worker_id: 'worker-1', clock: () => now,
+      executor: { async execute(input) { calls.push(input.work_item_id); if (input.work_item_id === 'item-b') downstreamRefs.push(...input.input_refs); return { output: input.work_item_id, artifacts: [], diagnostics: [] } } },
+      validator: { async validate(input) { return report(input.work_item_id, input.result_id) } },
+      id_factory: (() => { let n = 0; return (prefix: string) => `${prefix}:${++n}` })(),
+    })
+    const result = await runtime.run()
+    expect(result.snapshot.status).toBe('completed')
+    expect(calls).toEqual(['item-a', 'item-b'])
+    expect(downstreamRefs.some((ref) => ref.startsWith('artifact://'))).toBe(true)
+  })
+
+  it('runs independent custom-stage Skills concurrently when frozen resource claims do not conflict', async () => {
+    const pipeline: WorkflowPipelinePlanV2 = {
+      schema_version: 'workflow-pipeline/v2', record_id: 'pipeline:parallel-independent', project_id: 'project-1', change_id: 'change-1', revision: 2,
+      correlation_id: 'corr-1', actor: { kind: 'system', id: 'planner' }, created_at: now, pipeline_id: 'parallel-independent', pipeline_version: '1', workflow_id: 'custom', workflow_version: '1', workflow_source: 'user', workflow_fingerprint: `sha256:${'a'.repeat(64)}`, track_id: 'track', track_revision: '1', track_source: 'user', pipeline_source: 'user', graph_id: 'graph-1', assessment_id: 'assessment-1', status: 'frozen', stage_order: ['build'],
+      stages: [{ stage_id: 'build', name: 'Build', ordinal: 0, execution_mode: 'parallel', depends_on: [], work_item_ids: ['item-a', 'item-b'], gate: 'none', skills: [
+        { binding_id: 'binding:item-a:skill-a', skill_id: 'skill-a', skill_version: '1.0.0', order: 0, role: 'user', source: 'user', mode: 'parallel', depends_on: [], mcp_ids: [], validator_ids: [], resource_claims: [{ kind: 'path', key: 'src/a', access: 'write' }] },
+        { binding_id: 'binding:item-b:skill-b', skill_id: 'skill-b', skill_version: '1.0.0', order: 1, role: 'user', source: 'user', mode: 'parallel', depends_on: [], mcp_ids: [], validator_ids: [], resource_claims: [{ kind: 'path', key: 'src/b', access: 'write' }] },
+      ], input_refs: [], output_refs: [] }], customizations: { custom_workflow: true, custom_track: true, custom_pipeline: true, user_skill_ids: ['skill-a', 'skill-b'], user_mcp_ids: [] }, pipeline_digest: `sha256:${'b'.repeat(64)}`,
+    }
+    const fixtureState = await fixture([], 'serial', pipeline)
+    let inFlight = 0
+    let maxInFlight = 0
+    const runtime = createExecutionRuntimeV2({
+      change_dir: fixtureState.root, ledger: fixtureState.ledger, worker_id: 'worker-1', clock: () => now,
+      executor: { async execute(input) { inFlight += 1; maxInFlight = Math.max(maxInFlight, inFlight); await new Promise((resolve) => setTimeout(resolve, 20)); inFlight -= 1; return { output: input.work_item_id, artifacts: [], diagnostics: [] } } },
+      validator: { async validate(input) { return report(input.work_item_id, input.result_id) } }, id_factory: (() => { let n = 0; return (prefix: string) => `${prefix}:${++n}` })(),
+    })
+    const result = await runtime.run()
+    expect(result.snapshot.status).toBe('completed')
+    expect(maxInFlight).toBe(2)
   })
 })

@@ -4,6 +4,7 @@ import {
   decodeBoardCommandV2,
   decodeBoardEventV2,
   decodeDevelopmentRequestV2,
+  decodeSkillRunV2,
   decodeWorkflowPipelineV2,
   decideV2,
   evolveV2,
@@ -46,6 +47,18 @@ describe('canonical orchestration aggregate v2', () => {
     expect(decodeDevelopmentRequestV2(request)).toMatchObject({ ok: true })
     expect(decodeDevelopmentRequestV2({ ...request, extra: true })).toMatchObject({ ok: false })
     expect(decodeDevelopmentRequestV2({ ...request, intent: 'x'.repeat(9_000) })).toMatchObject({ ok: false })
+  })
+
+  test('input manifest is a closed read-proof contract', () => {
+    const run = {
+      schema_version: 'skill-run/v2', record_id: 'run:manifest', project_id: 'project-1', change_id: 'change-1', revision: 1,
+      correlation_id: 'corr-1', actor: { kind: 'worker', id: 'worker-1' }, created_at: now,
+      run_id: 'run-manifest', attempt_id: 'attempt-manifest', attempt: 1, work_item_id: 'item-1', skill_id: 'skill-1', skill_version: '1.0.0', mcp_ids: [], status: 'running', input_refs: ['artifact://result/output.json'],
+      input_manifest: { schema_version: 'skill-input-manifest/v2', manifest_id: 'input:run-manifest', run_id: 'run-manifest', work_item_id: 'item-1', input_refs: ['artifact://result/output.json'], artifact_digests: [`sha256:${'a'.repeat(64)}`], bundle_digest: `sha256:${'b'.repeat(64)}`, byte_length: 12, delivery: 'injected', created_at: now },
+    }
+    expect(decodeSkillRunV2(run)).toMatchObject({ ok: true })
+    expect(decodeSkillRunV2({ ...run, input_manifest: { ...run.input_manifest, artifact_digests: [] } })).toMatchObject({ ok: false })
+    expect(decodeSkillRunV2({ ...run, input_manifest: { ...run.input_manifest, delivery: 'rejected' } })).toMatchObject({ ok: false })
   })
 
   test('event effect union is closed and fully decoded', () => {

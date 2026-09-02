@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Pause, Play, RefreshCw, Square } from 'lucide-react'
 import type { BoardEventV2, BoardSnapshotV2 } from '@tenon/kernel'
 import { formatApiError } from '../api/transport'
@@ -24,6 +24,7 @@ export function OrchestrationV2Panel({ root, change, readOnly = false, onToast }
   const [error, setError] = useState<unknown>(null)
   const [connected, setConnected] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [artifactDraft, setArtifactDraft] = useState<{ readonly workItemId: string; readonly ref: string; readonly digest: string } | null>(null)
   const revision = useRef(0)
 
   useEffect(() => {
@@ -134,16 +135,29 @@ export function OrchestrationV2Panel({ root, change, readOnly = false, onToast }
     } })
   }
 
-  const bindArtifact = (workItemId: string): void => {
-    const ref = globalThis.prompt?.(t('progress.orchestration_artifact_prompt'))?.trim()
-    if (!ref) return
-    const digest = globalThis.prompt?.(t('progress.orchestration_digest_prompt'))?.trim()
-    if (!digest || !/^sha256:[a-f0-9]{64}$/u.test(digest)) { setError(new Error('artifact digest must be sha256')); return }
-    void dispatch('bind-artifact', { work_item_id: workItemId, artifact_ref: ref, digest })
+  const bindArtifact = (workItemId: string): void => setArtifactDraft({ workItemId, ref: '', digest: '' })
+  const submitArtifact = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault()
+    if (!artifactDraft) return
+    const ref = artifactDraft.ref.trim()
+    const digest = artifactDraft.digest.trim()
+    if (!ref || !digest || !/^sha256:[a-f0-9]{64}$/u.test(digest)) { setError(new Error('artifact digest must be sha256')); return }
+    setArtifactDraft(null)
+    void dispatch('bind-artifact', { work_item_id: artifactDraft.workItemId, artifact_ref: ref, digest })
   }
 
   const status = snapshot?.status ?? 'loading'
   const progress = counts.total === 0 ? 0 : Math.round((counts.done / counts.total) * 100)
+  const currentItem = snapshot?.work_items.find((item) => ['running', 'queued', 'ready'].includes(item.status))
+  const currentStage = currentItem && snapshot?.pipeline?.stages.find((stage) => stage.work_item_ids.includes(currentItem.work_item_id))
+  const statusLabel = (value: string): string => {
+    const key = value === 'waiting-input' ? 'waiting_input' : value
+    return ['executing', 'completed', 'verifying', 'blocked', 'failed', 'paused', 'waiting_input', 'cancelled', 'planning', 'ready'].includes(key)
+      ? t(`progress.orchestration_status_${key}`)
+      : value
+  }
+  const currentStepLabel = currentStage?.name ?? statusLabel(status)
+  const nextAction = snapshot?.next_actions[0]
   return (
     <section className="mt-5 rounded-xl border border-border-2 bg-card/80 p-4 shadow-sm" data-testid="orchestration-v2-panel" aria-label={t('progress.orchestration_title')}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -151,24 +165,30 @@ export function OrchestrationV2Panel({ root, change, readOnly = false, onToast }
           <div className="flex items-center gap-2">
             <h2 className="text-[15px] font-bold text-text">{t('progress.orchestration_title')}</h2>
             <span className={`text-[12px] font-semibold ${statusTone[status] ?? 'text-text-3'}`} data-testid="orchestration-v2-status">{status}</span>
+            <span className="text-[12px] text-text-2">{statusLabel(status)}</span>
             <span className="text-[11px] text-text-3" data-testid="orchestration-v2-revision">rev {snapshot?.revision ?? '—'}</span>
           </div>
           <p className="mt-1 text-[12px] text-text-3">{connected ? t('progress.orchestration_connected') : t('progress.orchestration_syncing')} · {t('progress.orchestration_counts', counts)}</p>
         </div>
         <div className="flex items-center gap-2">
-          {!readOnly && status === 'executing' && <button type="button" aria-label={t('progress.orchestration_pause')} disabled={busy || !snapshot} onClick={() => { void action('pause-change') }} className="rounded-md border border-border-2 px-2 py-1 text-xs hover:bg-fill disabled:opacity-50"><Pause className="h-3.5 w-3.5" /></button>}
-          {!readOnly && status === 'paused' && <button type="button" aria-label={t('progress.orchestration_resume')} disabled={busy || !snapshot} onClick={() => { void action('resume-change') }} className="rounded-md border border-border-2 px-2 py-1 text-xs hover:bg-fill disabled:opacity-50"><Play className="h-3.5 w-3.5" /></button>}
-          {!readOnly && !['completed', 'cancelled'].includes(status) && <button type="button" aria-label={t('progress.orchestration_cancel')} disabled={busy || !snapshot} onClick={() => { void action('cancel-change') }} className="rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"><Square className="h-3.5 w-3.5" /></button>}
-          {!readOnly && !['completed', 'cancelled'].includes(status) && <button type="button" aria-label={t('progress.orchestration_replan')} disabled={busy || !snapshot} onClick={() => { void dispatch('replan-change', { reason: 'dashboard-request' }) }} className="rounded-md border border-border-2 px-2 py-1 text-xs hover:bg-fill disabled:opacity-50">↻</button>}
-          {!readOnly && status === 'verifying' && <><button type="button" aria-label={t('progress.orchestration_approve')} disabled={busy || !snapshot} onClick={() => evaluateGate('passed')} className="rounded-md border border-green-300 px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-50">✓</button><button type="button" aria-label={t('progress.orchestration_reject')} disabled={busy || !snapshot} onClick={() => evaluateGate('rejected')} className="rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50">!</button></>}
-          <button type="button" aria-label={t('progress.orchestration_refresh')} disabled={busy} onClick={() => { void refresh() }} className="rounded-md border border-border-2 px-2 py-1 text-xs hover:bg-fill disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5" /></button>
+          {!readOnly && status === 'executing' && <button type="button" aria-label={t('progress.orchestration_pause')} disabled={busy || !snapshot} onClick={() => { void action('pause-change') }} className="inline-flex items-center gap-1 rounded-md border border-border-2 px-2 py-1 text-xs hover:bg-fill disabled:opacity-50"><Pause className="h-3.5 w-3.5" /><span>{t('progress.orchestration_pause')}</span></button>}
+          {!readOnly && status === 'paused' && <button type="button" aria-label={t('progress.orchestration_resume')} disabled={busy || !snapshot} onClick={() => { void action('resume-change') }} className="inline-flex items-center gap-1 rounded-md border border-border-2 px-2 py-1 text-xs hover:bg-fill disabled:opacity-50"><Play className="h-3.5 w-3.5" /><span>{t('progress.orchestration_resume')}</span></button>}
+          {!readOnly && !['completed', 'cancelled'].includes(status) && <button type="button" aria-label={t('progress.orchestration_cancel')} disabled={busy || !snapshot} onClick={() => { void action('cancel-change') }} className="inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"><Square className="h-3.5 w-3.5" /><span>{t('progress.orchestration_cancel')}</span></button>}
+          {!readOnly && !['completed', 'cancelled'].includes(status) && <button type="button" aria-label={t('progress.orchestration_replan')} disabled={busy || !snapshot} onClick={() => { void dispatch('replan-change', { reason: 'dashboard-request' }) }} className="inline-flex items-center gap-1 rounded-md border border-border-2 px-2 py-1 text-xs hover:bg-fill disabled:opacity-50"><span aria-hidden="true">↻</span><span>{t('progress.orchestration_replan')}</span></button>}
+          {!readOnly && status === 'verifying' && <><button type="button" aria-label={t('progress.orchestration_approve')} disabled={busy || !snapshot} onClick={() => evaluateGate('passed')} className="inline-flex items-center gap-1 rounded-md border border-green-300 px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:opacity-50"><span aria-hidden="true">✓</span><span>{t('progress.orchestration_approve')}</span></button><button type="button" aria-label={t('progress.orchestration_reject')} disabled={busy || !snapshot} onClick={() => evaluateGate('rejected')} className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"><span aria-hidden="true">!</span><span>{t('progress.orchestration_reject')}</span></button></>}
+          <button type="button" aria-label={t('progress.orchestration_refresh')} disabled={busy} onClick={() => { void refresh() }} className="inline-flex items-center gap-1 rounded-md border border-border-2 px-2 py-1 text-xs hover:bg-fill disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5" /><span>{t('progress.orchestration_refresh')}</span></button>
         </div>
       </div>
+      {snapshot && <div className="mt-3 grid gap-2 rounded-lg border border-(--accent)/30 bg-(--accent)/5 p-3 text-xs sm:grid-cols-3" role="status" aria-live="polite" data-testid="orchestration-v2-guided-summary">
+        <div><div className="text-text-3">{t('progress.orchestration_current_step')}</div><div className="mt-0.5 font-semibold text-text">{currentStepLabel}{currentStage && currentItem ? ` · ${currentItem.title}` : ''}</div></div>
+        <div><div className="text-text-3">{t('progress.orchestration_next_step')}</div><div className="mt-0.5 font-semibold text-text">{nextAction ?? t('progress.orchestration_no_next_step')}</div></div>
+        <div><div className="text-text-3">{t('progress.orchestration_counts', counts)}</div><div className="mt-0.5 font-semibold text-text">{progress}%</div></div>
+      </div>}
       {error !== null && <p className="mt-2 text-xs text-red-700 dark:text-red-300" role="alert">{formatApiError(error, t, { exposeServerDetail: false })}</p>}
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-fill" aria-label={`${progress}%`}><div className="h-full rounded-full bg-(--accent) transition-[width]" style={{ width: `${progress}%` }} /></div>
       {snapshot?.pipeline && <section className="mt-3 rounded-lg border border-border-2 p-3 text-xs" data-testid="orchestration-v2-pipeline" aria-label={t('progress.orchestration_pipeline')}>
         <h3 className="font-semibold text-text">{t('progress.orchestration_pipeline')}</h3>
-        <div className="mt-1 text-text-3">{t('progress.orchestration_workflow')}: {snapshot.pipeline.workflow_id}@{snapshot.pipeline.workflow_version} · {t('progress.orchestration_track')}: {snapshot.pipeline.track_id} · {snapshot.pipeline.pipeline_id}@{snapshot.pipeline.pipeline_version}</div>
+        <div className="mt-1 break-words text-text-3" translate="no">{t('progress.orchestration_workflow')}: {snapshot.pipeline.workflow_id}@{snapshot.pipeline.workflow_version} · {t('progress.orchestration_track')}: {snapshot.pipeline.track_id} · {snapshot.pipeline.pipeline_id}@{snapshot.pipeline.pipeline_version}</div>
         <ol className="mt-2 space-y-1 text-text-3" aria-label={t('progress.orchestration_stage_order')}>
           {snapshot.pipeline.stage_order.map((stageId, index) => {
             const stage = snapshot.pipeline?.stages.find((entry) => entry.stage_id === stageId)
@@ -190,17 +210,18 @@ export function OrchestrationV2Panel({ root, change, readOnly = false, onToast }
                 {item.required_artifact_refs.length > 0 && <div>{t('progress.orchestration_artifacts')}: {item.required_artifact_refs.join(', ')}</div>}
                 {latestRun && <div>{t('progress.orchestration_runs')}: {latestRun.status} · {latestRun.attempt_id}</div>}
               </div>
-              {!readOnly && ['failed', 'interrupted', 'blocked'].includes(item.status) && <div className="mt-2 flex gap-2"><button type="button" aria-label={`${t('progress.orchestration_retry')}: ${item.title}`} onClick={() => retryItem(item.work_item_id)} disabled={busy} className="rounded border border-border-2 px-2 py-1 text-[11px] hover:bg-fill disabled:opacity-50">{t('progress.orchestration_retry')}</button><button type="button" aria-label={`${t('progress.orchestration_bind_artifact')}: ${item.title}`} onClick={() => bindArtifact(item.work_item_id)} disabled={busy} className="rounded border border-border-2 px-2 py-1 text-[11px] hover:bg-fill disabled:opacity-50">{t('progress.orchestration_bind_artifact')}</button></div>}
+              {!readOnly && ['failed', 'interrupted', 'blocked'].includes(item.status) && <div className="mt-2 flex flex-wrap gap-2"><button type="button" aria-label={`${t('progress.orchestration_retry')}: ${item.title}`} onClick={() => retryItem(item.work_item_id)} disabled={busy} className="rounded border border-border-2 px-2 py-1 text-[11px] hover:bg-fill disabled:opacity-50">{t('progress.orchestration_retry')}</button><button type="button" aria-label={`${t('progress.orchestration_bind_artifact')}: ${item.title}`} onClick={() => bindArtifact(item.work_item_id)} disabled={busy} className="rounded border border-border-2 px-2 py-1 text-[11px] hover:bg-fill disabled:opacity-50">{t('progress.orchestration_bind_artifact')}</button></div>}
+              {artifactDraft?.workItemId === item.work_item_id && <form className="mt-2 grid gap-2 rounded-md bg-fill/60 p-2" onSubmit={submitArtifact}><label className="grid gap-1 text-[11px] text-text-2" htmlFor={`artifact-ref-${item.work_item_id}`}>{t('progress.orchestration_artifact_ref')}<input id={`artifact-ref-${item.work_item_id}`} value={artifactDraft.ref} onChange={(event) => setArtifactDraft({ ...artifactDraft, ref: event.target.value })} className="rounded border border-border-2 bg-card px-2 py-1 text-xs text-text" required /></label><label className="grid gap-1 text-[11px] text-text-2" htmlFor={`artifact-digest-${item.work_item_id}`}>{t('progress.orchestration_artifact_digest')}<input id={`artifact-digest-${item.work_item_id}`} value={artifactDraft.digest} onChange={(event) => setArtifactDraft({ ...artifactDraft, digest: event.target.value })} className="rounded border border-border-2 bg-card px-2 py-1 text-xs text-text" placeholder="sha256:…" required /></label><div className="flex gap-2"><button type="submit" disabled={busy} className="rounded border border-(--accent) px-2 py-1 text-[11px] hover:bg-fill disabled:opacity-50">{t('progress.orchestration_artifact_submit')}</button><button type="button" onClick={() => setArtifactDraft(null)} className="rounded border border-border-2 px-2 py-1 text-[11px] hover:bg-fill">{t('progress.orchestration_artifact_cancel')}</button></div></form>}
             </li>
           })}
         </ul>
       )}
-      {snapshot && <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+      {snapshot && <details className="mt-3"><summary className="cursor-pointer text-xs font-semibold text-text">{t('progress.orchestration_details')}</summary><div className="mt-2 grid gap-3 text-xs sm:grid-cols-2" data-testid="orchestration-v2-technical-details">
         <section className="rounded-lg border border-border-2 p-3" aria-label={t('progress.orchestration_runs')}><h3 className="font-semibold text-text">{t('progress.orchestration_runs')}</h3>{snapshot.runs.length === 0 ? <p className="mt-1 text-text-3">—</p> : <ul className="mt-1 space-y-1">{snapshot.runs.map((run) => <li key={run.run_id} className="text-text-3">{run.skill_id}@{run.skill_version} · {run.status} · {run.attempt_id}{run.lease ? ` · ${run.lease.status}#${run.lease.generation}` : ''}</li>)}</ul>}</section>
         <section className="rounded-lg border border-border-2 p-3" aria-label={t('progress.orchestration_results')}><h3 className="font-semibold text-text">{t('progress.orchestration_results')}</h3>{snapshot.results.length === 0 ? <p className="mt-1 text-text-3">—</p> : <ul className="mt-1 space-y-1">{snapshot.results.map((result) => <li key={result.result_id} className="text-text-3">{result.status} · {result.contract_status}{result.output_schema_id ? ` · ${result.output_schema_id}` : ''}{result.artifacts.length ? ` · ${result.artifacts.map((artifact) => artifact.ref).join(', ')}` : ''}</li>)}</ul>}</section>
         <section className="rounded-lg border border-border-2 p-3" aria-label={t('progress.orchestration_validations')}><h3 className="font-semibold text-text">{t('progress.orchestration_validations')}</h3>{snapshot.validations.length === 0 ? <p className="mt-1 text-text-3">—</p> : <ul className="mt-1 space-y-1">{snapshot.validations.map((report) => <li key={report.report_id} className="text-text-3">{report.validator_id}@{report.validator_version} · {report.status} · {report.evidence_refs.join(', ') || '—'}</li>)}</ul>}</section>
         <section className="rounded-lg border border-border-2 p-3" aria-label={t('progress.orchestration_gates')}><h3 className="font-semibold text-text">{t('progress.orchestration_gates')}</h3>{snapshot.gates.length === 0 ? <p className="mt-1 text-text-3">—</p> : <ul className="mt-1 space-y-1">{snapshot.gates.map((gate) => <li key={gate.gate_id} className="text-text-3">{gate.kind} · {gate.status} · rev {gate.decision_revision}</li>)}</ul>}</section>
-      </div>}
+      </div></details>}
       {snapshot && (snapshot.blockers.length > 0 || snapshot.next_actions.length > 0) && <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2"><section aria-label={t('progress.orchestration_blockers')}><h3 className="font-semibold text-text">{t('progress.orchestration_blockers')}</h3><ul className="mt-1 list-disc pl-4 text-red-700 dark:text-red-300">{(snapshot.blockers.length ? snapshot.blockers : ['—']).map((blocker) => <li key={blocker}>{blocker}</li>)}</ul></section><section aria-label={t('progress.orchestration_next_actions')}><h3 className="font-semibold text-text">{t('progress.orchestration_next_actions')}</h3><ul className="mt-1 list-disc pl-4 text-text-3">{snapshot.next_actions.map((next) => <li key={next}>{next}</li>)}</ul></section></div>}
       {events.length > 0 && <p className="mt-3 text-[11px] text-text-3" data-testid="orchestration-v2-event-tail">{t('progress.orchestration_event_tail', { events: events.slice(0, 3).map((event) => `${event.revision} ${event.event_type}`).join(' · ') })}</p>}
     </section>

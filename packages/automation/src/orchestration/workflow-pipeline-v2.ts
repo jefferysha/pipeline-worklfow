@@ -12,6 +12,7 @@ import type {
 import type { PlannerCatalogV2 } from './planner-v2.js'
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/u
+const RESOURCE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,511}$/u
 const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u
 
 export interface WorkflowPipelineSkillBlueprintV2 extends Omit<PipelineSkillV2, 'binding_id' | 'order'> {
@@ -89,6 +90,24 @@ function source(value: unknown, label: string): PipelineSourceV2 {
 
 function descriptorFor(catalog: PlannerCatalogV2, skillId: string, version: string) { return catalog.skills.find((skill) => skill.id === skillId && skill.version === version) }
 
+function idList(value: unknown, label: string): readonly string[] {
+  if (!Array.isArray(value) || value.length > 2_048) throw new TypeError(`${label} is invalid`)
+  return Object.freeze(value.map((entry, index) => text(entry, `${label}[${index}]`)))
+}
+
+function resourceClaims(value: unknown, label: string): readonly { readonly kind: 'path' | 'logical' | 'external'; readonly key: string; readonly access: 'read' | 'write' }[] {
+  if (!Array.isArray(value) || value.length > 2_048) throw new TypeError(`${label} is invalid`)
+  return Object.freeze(value.map((entry, index) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) throw new TypeError(`${label}[${index}] is invalid`)
+    const claim = entry as Record<string, unknown>
+    const kind = claim.kind === 'path' || claim.kind === 'logical' || claim.kind === 'external' ? claim.kind : undefined
+    const access = claim.access === 'read' || claim.access === 'write' ? claim.access : undefined
+    const key = typeof claim.key === 'string' && claim.key.length > 0 && claim.key.trim() === claim.key && claim.key.length <= 512 && RESOURCE_KEY.test(claim.key) ? claim.key : undefined
+    if (kind === undefined || access === undefined || key === undefined || (kind === 'path' && (key.includes('..') || key.startsWith('/')))) throw new TypeError(`${label}[${index}] is invalid`)
+    return Object.freeze({ kind, access, key })
+  }))
+}
+
 function materializePipelineSkill(binding: CapabilityResolutionV2['bindings'][number], catalog: PlannerCatalogV2, order: number, bySkill: ReadonlyMap<string, string>): PipelineSkillV2 {
   const descriptor = descriptorFor(catalog, binding.skill_id, binding.skill_version)
   const selectedByUser = binding.source === 'user' || binding.source === 'hybrid'
@@ -97,7 +116,7 @@ function materializePipelineSkill(binding: CapabilityResolutionV2['bindings'][nu
     role: selectedByUser ? 'user' : 'automatic', source: selectedByUser ? 'user' : 'automatic', mode: binding.mode,
     depends_on: binding.depends_on.map((dependency) => bySkill.get(dependency) ?? `skill:${dependency}`), mcp_ids: binding.mcp_ids,
     ...(descriptor?.input_schema_id === undefined ? {} : { input_schema_id: descriptor.input_schema_id }),
-    ...(descriptor?.output_schema_id === undefined ? {} : { output_schema_id: descriptor.output_schema_id }), validator_ids: descriptor?.validators ?? [],
+    ...(descriptor?.output_schema_id === undefined ? {} : { output_schema_id: descriptor.output_schema_id }), validator_ids: descriptor?.validators ?? [], resource_claims: descriptor?.resource_claims ?? [],
   })
 }
 
@@ -142,6 +161,9 @@ export function materializeWorkflowPipelineV2(input: MaterializeWorkflowPipeline
       if (!Number.isSafeInteger(ordinal) || ordinal < 0) throw new TypeError(`pipeline.stages[${index}].ordinal is invalid`)
       const workItemIds = stage.work_item_ids.map((id, itemIndex) => text(id, `pipeline.stages[${index}].work_item_ids[${itemIndex}]`))
       for (const id of workItemIds) { if (!graphItemSet.has(id)) throw new TypeError(`pipeline stage ${stageId} references unknown work item ${id}`); if (seenItems.has(id)) throw new TypeError(`pipeline work item appears in multiple stages: ${id}`); seenItems.add(id) }
+      const executionMode = stage.execution_mode === 'serial' || stage.execution_mode === 'parallel' ? stage.execution_mode : undefined
+      const gate = ['none', 'input', 'review', 'verification', 'release'].includes(stage.gate) ? stage.gate : undefined
+      if (executionMode === undefined || gate === undefined) throw new TypeError(`pipeline stage ${stageId} execution mode/gate is invalid`)
       const skills = stage.skills.map((skill, skillIndex) => {
         const skillId = text(skill.skill_id, `pipeline.stages[${index}].skills[${skillIndex}].skill_id`)
         const skillVersion = text(skill.skill_version, `pipeline.stages[${index}].skills[${skillIndex}].skill_version`)
@@ -149,13 +171,14 @@ export function materializeWorkflowPipelineV2(input: MaterializeWorkflowPipeline
         if (binding === undefined) throw new TypeError(`pipeline skill ${skillId}@${skillVersion} is not selected for this stage`)
         const order = skill.order ?? skillIndex
         if (!Number.isSafeInteger(order) || order < 0) throw new TypeError(`pipeline skill order is invalid`)
-        return freeze({ ...skill, binding_id: skill.binding_id ?? `binding:${stageId}:${skillId}`, skill_id: skillId, skill_version: skillVersion, order })
+        const descriptor = descriptorFor(input.catalog, skillId, skillVersion)
+        if (executionMode === 'parallel' && skill.mode === 'parallel' && descriptor?.supports_parallel === false) throw new TypeError(`pipeline stage ${stageId} runs non-parallel Skill ${skillId} in parallel`)
+        const claims = skill.resource_claims === undefined ? descriptor?.resource_claims ?? [] : resourceClaims(skill.resource_claims, `pipeline.stages[${index}].skills[${skillIndex}].resource_claims`)
+        const bindingId = text(skill.binding_id ?? `binding:${stageId}:${skillId}`, `pipeline.stages[${index}].skills[${skillIndex}].binding_id`)
+        return freeze({ ...skill, binding_id: bindingId, skill_id: skillId, skill_version: skillVersion, order, depends_on: idList(skill.depends_on, `pipeline.stages[${index}].skills[${skillIndex}].depends_on`), mcp_ids: idList(skill.mcp_ids, `pipeline.stages[${index}].skills[${skillIndex}].mcp_ids`), validator_ids: idList(skill.validator_ids, `pipeline.stages[${index}].skills[${skillIndex}].validator_ids`), resource_claims: claims })
       }).sort((left, right) => left.order - right.order)
       for (const workItemId of workItemIds) { const binding = bindingByItem.get(workItemId); if (binding !== undefined && !skills.some((skill) => skill.skill_id === binding.skill_id && skill.skill_version === binding.skill_version)) throw new TypeError(`pipeline stage ${stageId} omits selected Skill for ${workItemId}`) }
       if (new Set(skills.map((skill) => skill.order)).size !== skills.length) throw new TypeError(`pipeline stage ${stageId} has duplicate Skill order`)
-      const executionMode = stage.execution_mode === 'serial' || stage.execution_mode === 'parallel' ? stage.execution_mode : undefined
-      const gate = ['none', 'input', 'review', 'verification', 'release'].includes(stage.gate) ? stage.gate : undefined
-      if (executionMode === undefined || gate === undefined) throw new TypeError(`pipeline stage ${stageId} execution mode/gate is invalid`)
       return freeze({ ...stage, stage_id: stageId, name: text(stage.name, `pipeline.stages[${index}].name`), ordinal, execution_mode: executionMode, gate, work_item_ids: workItemIds, skills })
     })
     if (seenItems.size !== graphItemSet.size) throw new TypeError('pipeline stages must cover every graph work item exactly once')
@@ -167,6 +190,12 @@ export function materializeWorkflowPipelineV2(input: MaterializeWorkflowPipeline
     const dependencyPosition = stagePositions.get(dependency)
     const stagePosition = stagePositions.get(stage.stage_id)
     if (dependencyPosition === undefined || stagePosition === undefined || dependencyPosition >= stagePosition) throw new TypeError(`pipeline stage dependency order is invalid: ${dependency}->${stage.stage_id}`)
+  }
+  const pipelineSkills = stages.flatMap((stage) => stage.skills)
+  for (const skill of pipelineSkills) for (const dependency of skill.depends_on) {
+    if (!pipelineSkills.some((candidate) => candidate.binding_id === dependency || candidate.skill_id === dependency || `skill:${candidate.skill_id}` === dependency)) {
+      throw new TypeError(`pipeline Skill dependency is unresolved: ${dependency} -> ${skill.binding_id}`)
+    }
   }
   const body = {
     schema_version: 'workflow-pipeline/v2' as const, record_id: `pipeline:${identity.pipeline_id}`, project_id: input.request.project_id, change_id: input.request.change_id,

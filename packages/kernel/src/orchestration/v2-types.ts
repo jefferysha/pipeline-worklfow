@@ -6,6 +6,7 @@ export const V2_SCHEMAS = {
   assessment: 'capability-assessment/v2',
   graph: 'work-graph/v2',
   pipeline: 'workflow-pipeline/v2',
+  inputManifest: 'skill-input-manifest/v2',
   resolution: 'capability-resolution/v2',
   workItem: 'work-item/v2',
   run: 'skill-run/v2',
@@ -109,6 +110,8 @@ export interface PipelineSkillV2 {
   readonly input_schema_id?: string
   readonly output_schema_id?: string
   readonly validator_ids: readonly string[]
+  /** Frozen resource claims used to re-check parallel safety at execution time. */
+  readonly resource_claims?: readonly { readonly kind: 'path' | 'logical' | 'external'; readonly key: string; readonly access: 'read' | 'write' }[]
 }
 
 /** A stage is a first-class pipeline node; stage_order and ordinal are both retained for replay/audit. */
@@ -215,6 +218,8 @@ export interface SkillRunV2 extends OrchestrationRecordMetaV2 {
   readonly status: RunStatusV2
   readonly lease?: RunLeaseV2
   readonly input_refs: readonly string[]
+  /** Host-owned proof that all dependency inputs were materialized and delivered to the executor. */
+  readonly input_manifest?: SkillInputManifestV2
   readonly result_id?: string
   readonly prior_attempt_id?: string
   readonly failure?: { readonly code: string; readonly retryable: boolean; readonly detail_ref?: string }
@@ -234,6 +239,23 @@ export interface SkillResultV2 extends OrchestrationRecordMetaV2 {
   readonly artifacts: readonly { readonly id: string; readonly kind: 'file' | 'diff' | 'document' | 'json' | 'text' | 'url' | 'report' | 'value' | 'unknown'; readonly ref: string; readonly digest: `sha256:${string}`; readonly media_type?: string; readonly byte_length?: number }[]
   readonly validation_refs: readonly string[]
   readonly diagnostics: readonly string[]
+  /** Semantic digest/size of the bounded output that was persisted for downstream reads. */
+  readonly output_digest?: `sha256:${string}`
+  readonly output_bytes?: number
+}
+
+export interface SkillInputManifestV2 {
+  readonly schema_version: 'skill-input-manifest/v2'
+  readonly manifest_id: string
+  readonly run_id: string
+  readonly work_item_id: string
+  readonly input_refs: readonly string[]
+  readonly artifact_digests: readonly `sha256:${string}`[]
+  readonly bundle_digest: `sha256:${string}`
+  readonly byte_length: number
+  readonly delivery: 'not-required' | 'injected' | 'rejected'
+  readonly rejection_reason?: string
+  readonly created_at: string
 }
 
 export interface ValidationReportV2 extends OrchestrationRecordMetaV2 {

@@ -5292,8 +5292,8 @@ function parseWorkflowGovernanceBinding(raw) {
     "document_governance_fingerprint",
     "workflow_plan_fingerprint"
   ]);
-  const digest11 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
-  if (Object.keys(record8).some((key) => !allowed.has(key)) || record8.version !== 1 || typeof record8.run_id !== "string" || record8.run_id === "" || record8.document_profile !== void 0 && record8.document_profile !== "legacy-full" && record8.document_profile !== "document-v1" || record8.document_governance_fingerprint !== void 0 && !digest11(record8.document_governance_fingerprint) || record8.workflow_plan_fingerprint !== void 0 && !digest11(record8.workflow_plan_fingerprint) || record8.document_governance_fingerprint !== void 0 && record8.document_profile === void 0) {
+  const digest12 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
+  if (Object.keys(record8).some((key) => !allowed.has(key)) || record8.version !== 1 || typeof record8.run_id !== "string" || record8.run_id === "" || record8.document_profile !== void 0 && record8.document_profile !== "legacy-full" && record8.document_profile !== "document-v1" || record8.document_governance_fingerprint !== void 0 && !digest12(record8.document_governance_fingerprint) || record8.workflow_plan_fingerprint !== void 0 && !digest12(record8.workflow_plan_fingerprint) || record8.document_governance_fingerprint !== void 0 && record8.document_profile === void 0) {
     throw new Error("workflow governance binding \u5F62\u72B6\u975E\u6CD5");
   }
   return {
@@ -7335,20 +7335,20 @@ function parseReceipt(value, recordIndex, receiptIndex) {
   if (!item2)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
   const phase = string2(item2.phase);
-  const digest11 = string2(item2.sha256);
+  const digest12 = string2(item2.sha256);
   const readAt = string2(item2.readAt);
   const visitId = item2.visitId === void 0 ? void 0 : string2(item2.visitId);
   if (!phase || !/^[A-Za-z0-9_-]+$/.test(phase)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].phase \u975E\u6CD5`);
   }
-  if (!digest11 || !validDigest(digest11)) {
+  if (!digest12 || !validDigest(digest12)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].sha256 \u975E\u6CD5`);
   }
   if (!readAt)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].readAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32`);
   if (item2.visitId !== void 0 && !visitId)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].visitId \u975E\u6CD5`);
-  return { phase, sha256: digest11, readAt, ...visitId === void 0 ? {} : { visitId } };
+  return { phase, sha256: digest12, readAt, ...visitId === void 0 ? {} : { visitId } };
 }
 function receiptKey(receipt) {
   return JSON.stringify([receipt.phase, receipt.visitId ?? "legacy"]);
@@ -7359,7 +7359,7 @@ function parseRecord2(value, index) {
     throw new DocumentLedgerError(`document ledger records[${index}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
   const kind = string2(item2.kind);
   const path10 = string2(item2.path);
-  const digest11 = string2(item2.sha256);
+  const digest12 = string2(item2.sha256);
   const producer = string2(item2.producer);
   const recordedAt = string2(item2.recordedAt);
   if (!kind || !isDocumentKind(kind))
@@ -7367,7 +7367,7 @@ function parseRecord2(value, index) {
   if (!path10 || !isSafeProjectRelativePath(path10)) {
     throw new DocumentLedgerError(`document ledger records[${index}].path \u5FC5\u987B\u662F\u5B89\u5168\u7684\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84`);
   }
-  if (!digest11 || !validDigest(digest11))
+  if (!digest12 || !validDigest(digest12))
     throw new DocumentLedgerError(`document ledger records[${index}].sha256 \u975E\u6CD5`);
   if (!producer || !/^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/.test(producer)) {
     throw new DocumentLedgerError(`document ledger records[${index}].producer \u975E\u6CD5`);
@@ -7388,7 +7388,7 @@ function parseRecord2(value, index) {
   return {
     kind,
     path: path10,
-    sha256: digest11,
+    sha256: digest12,
     producer,
     recordedAt,
     ...producerInvocation === void 0 ? {} : { producerInvocation },
@@ -9929,13 +9929,13 @@ function checkSha2562(value, key, path10, errors, optional = false) {
       errors.push(`${path10}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
     return;
   }
-  const digest11 = value[key];
-  if (typeof digest11 !== "string") {
-    errors.push(`${path10}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest11)}`);
+  const digest12 = value[key];
+  if (typeof digest12 !== "string") {
+    errors.push(`${path10}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest12)}`);
     return;
   }
-  if (!SHA256_HEX_RE.test(digest11)) {
-    errors.push(`${path10}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest11)}`);
+  if (!SHA256_HEX_RE.test(digest12)) {
+    errors.push(`${path10}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest12)}`);
   }
 }
 function checkPattern(value, key, pattern, path10, errors) {
@@ -16886,8 +16886,8 @@ function item(kind, status, requiredRead, records, phase, currentVisitId) {
     }))
   };
 }
-function receiptMatchesVisit(receipt, phase, digest11, visitId) {
-  return receipt.phase === phase && receipt.sha256 === digest11 && receipt.visitId === visitId;
+function receiptMatchesVisit(receipt, phase, digest12, visitId) {
+  return receipt.phase === phase && receipt.sha256 === digest12 && receipt.visitId === visitId;
 }
 async function evaluateDocumentEvidence(repoRoot, changeDir2, phase, scope = {}, policy2) {
   let ledger;
@@ -21016,8 +21016,8 @@ function canonicalMachineStateRoot(stateRoot) {
   return resolve8(stateRoot);
 }
 function machineStateScopeId(stateRoot) {
-  const digest11 = createHash19("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
-  return `sha256-v1-${digest11}`;
+  const digest12 = createHash19("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
+  return `sha256-v1-${digest12}`;
 }
 
 // packages/kernel/dist/product-paths.js
@@ -28747,6 +28747,7 @@ var V2_SCHEMAS = {
   assessment: "capability-assessment/v2",
   graph: "work-graph/v2",
   pipeline: "workflow-pipeline/v2",
+  inputManifest: "skill-input-manifest/v2",
   resolution: "capability-resolution/v2",
   workItem: "work-item/v2",
   run: "skill-run/v2",
@@ -28764,6 +28765,7 @@ var V2_MAX_DEPTH = 16;
 var V2_MAX_ITEMS = 2048;
 var ID2 = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 var SCHEMA_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,159}$/;
+var RESOURCE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,511}$/;
 var DIGEST3 = /^sha256:[0-9a-f]{64}$/;
 var UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 function parse(input, errors) {
@@ -29057,7 +29059,7 @@ function decodePipelineSkill(input, path10, errors) {
   const raw = object4(input, path10, errors);
   if (!raw)
     return void 0;
-  closed4(raw, ["binding_id", "skill_id", "skill_version", "order", "role", "source", "mode", "depends_on", "mcp_ids", "input_schema_id", "output_schema_id", "validator_ids"], path10, errors);
+  closed4(raw, ["binding_id", "skill_id", "skill_version", "order", "role", "source", "mode", "depends_on", "mcp_ids", "input_schema_id", "output_schema_id", "validator_ids", "resource_claims"], path10, errors);
   const binding_id = text3(raw.binding_id, `${path10}.binding_id`, errors, ID2);
   const skill_id = text3(raw.skill_id, `${path10}.skill_id`, errors, ID2);
   const skill_version = text3(raw.skill_version, `${path10}.skill_version`, errors, ID2);
@@ -29073,9 +29075,54 @@ function decodePipelineSkill(input, path10, errors) {
     errors.push({ code: "field-invalid", path: `${path10}.mode` });
   const input_schema_id = optionalText(raw.input_schema_id, `${path10}.input_schema_id`, errors, SCHEMA_ID);
   const output_schema_id = optionalText(raw.output_schema_id, `${path10}.output_schema_id`, errors, SCHEMA_ID);
+  const resource_claims = raw.resource_claims === void 0 ? [] : array2(raw.resource_claims, `${path10}.resource_claims`, errors).map((entry, index) => {
+    const claim2 = object4(entry, `${path10}.resource_claims[${index}]`, errors);
+    if (!claim2)
+      return void 0;
+    closed4(claim2, ["kind", "key", "access"], `${path10}.resource_claims[${index}]`, errors);
+    const kind = ["path", "logical", "external"].includes(String(claim2.kind)) ? claim2.kind : void 0;
+    const key = text3(claim2.key, `${path10}.resource_claims[${index}].key`, errors, RESOURCE_KEY);
+    if (key?.includes("..") || key?.startsWith("/"))
+      errors.push({ code: "field-invalid", path: `${path10}.resource_claims[${index}].key` });
+    const access3 = claim2.access === "read" || claim2.access === "write" ? claim2.access : void 0;
+    if (!kind)
+      errors.push({ code: "field-invalid", path: `${path10}.resource_claims[${index}].kind` });
+    if (!access3)
+      errors.push({ code: "field-invalid", path: `${path10}.resource_claims[${index}].access` });
+    return kind && key && access3 ? { kind, key, access: access3 } : void 0;
+  }).filter((value) => value !== void 0);
   if (!binding_id || !skill_id || !skill_version || order === void 0 || !role || !source || !mode)
     return void 0;
-  return { binding_id, skill_id, skill_version, order, role, source, mode, depends_on: strings(raw.depends_on, `${path10}.depends_on`, errors), mcp_ids: strings(raw.mcp_ids, `${path10}.mcp_ids`, errors), ...input_schema_id === void 0 ? {} : { input_schema_id }, ...output_schema_id === void 0 ? {} : { output_schema_id }, validator_ids: strings(raw.validator_ids, `${path10}.validator_ids`, errors) };
+  return { binding_id, skill_id, skill_version, order, role, source, mode, depends_on: strings(raw.depends_on, `${path10}.depends_on`, errors), mcp_ids: strings(raw.mcp_ids, `${path10}.mcp_ids`, errors), ...input_schema_id === void 0 ? {} : { input_schema_id }, ...output_schema_id === void 0 ? {} : { output_schema_id }, validator_ids: strings(raw.validator_ids, `${path10}.validator_ids`, errors), ...raw.resource_claims === void 0 ? {} : { resource_claims } };
+}
+function decodeSkillInputManifestV2(input, path10, errors) {
+  const raw = object4(input, path10, errors);
+  if (!raw)
+    return void 0;
+  closed4(raw, ["schema_version", "manifest_id", "run_id", "work_item_id", "input_refs", "artifact_digests", "bundle_digest", "byte_length", "delivery", "rejection_reason", "created_at"], path10, errors);
+  if (raw.schema_version !== V2_SCHEMAS.inputManifest)
+    errors.push({ code: "field-invalid", path: `${path10}.schema_version` });
+  const manifest_id = text3(raw.manifest_id, `${path10}.manifest_id`, errors, ID2);
+  const run_id = text3(raw.run_id, `${path10}.run_id`, errors, ID2);
+  const work_item_id = text3(raw.work_item_id, `${path10}.work_item_id`, errors, ID2);
+  const input_refs = strings(raw.input_refs, `${path10}.input_refs`, errors);
+  const artifact_digests = array2(raw.artifact_digests, `${path10}.artifact_digests`, errors).map((value, index) => digest8(value, `${path10}.artifact_digests[${index}]`, errors)).filter((value) => value !== void 0);
+  const bundle_digest = digest8(raw.bundle_digest, `${path10}.bundle_digest`, errors);
+  const byte_length = integer2(raw.byte_length, `${path10}.byte_length`, errors);
+  const delivery = ["not-required", "injected", "rejected"].includes(String(raw.delivery)) ? raw.delivery : void 0;
+  if (!delivery)
+    errors.push({ code: "field-invalid", path: `${path10}.delivery` });
+  const rejection_reason = optionalText(raw.rejection_reason, `${path10}.rejection_reason`, errors, ID2);
+  const created_at = text3(raw.created_at, `${path10}.created_at`, errors, UTC);
+  if (delivery === "rejected" && rejection_reason === void 0)
+    errors.push({ code: "field-invalid", path: `${path10}.rejection_reason` });
+  if (delivery === "not-required" && (input_refs.length !== 0 || artifact_digests.length !== 0 || byte_length !== 0))
+    errors.push({ code: "field-invalid", path: path10 });
+  if (delivery === "injected" && artifact_digests.length !== input_refs.length)
+    errors.push({ code: "field-invalid", path: `${path10}.artifact_digests` });
+  if (!manifest_id || !run_id || !work_item_id || bundle_digest === void 0 || byte_length === void 0 || !delivery || !created_at)
+    return void 0;
+  return { schema_version: V2_SCHEMAS.inputManifest, manifest_id, run_id, work_item_id, input_refs, artifact_digests, bundle_digest, byte_length, delivery, ...rejection_reason === void 0 ? {} : { rejection_reason }, created_at };
 }
 function decodePipelineStage(input, path10, errors) {
   const raw = object4(input, path10, errors);
@@ -29251,7 +29298,7 @@ function decodeWorkItemV2(input) {
   });
 }
 function decodeSkillRunV2(input) {
-  return genericMetaRecord(input, V2_SCHEMAS.run, ["run_id", "attempt_id", "attempt", "work_item_id", "skill_id", "skill_version", "mcp_ids", "status", "lease", "input_refs", "result_id", "prior_attempt_id", "failure", "started_at", "finished_at"], (r, e, m) => {
+  return genericMetaRecord(input, V2_SCHEMAS.run, ["run_id", "attempt_id", "attempt", "work_item_id", "skill_id", "skill_version", "mcp_ids", "status", "lease", "input_refs", "input_manifest", "result_id", "prior_attempt_id", "failure", "started_at", "finished_at"], (r, e, m) => {
     const run_id = text3(r.run_id, "$.run_id", e, ID2);
     const attempt_id = text3(r.attempt_id, "$.attempt_id", e, ID2);
     const attempt = integer2(r.attempt, "$.attempt", e);
@@ -29262,6 +29309,7 @@ function decodeSkillRunV2(input) {
     if (!status)
       e.push({ code: "field-invalid", path: "$.status" });
     const lease = nested(r.lease, decodeRunLeaseV2, "$.lease", e);
+    const input_manifest = r.input_manifest === void 0 ? void 0 : decodeSkillInputManifestV2(r.input_manifest, "$.input_manifest", e);
     const result_id = optionalText(r.result_id, "$.result_id", e, ID2);
     const prior_attempt_id = optionalText(r.prior_attempt_id, "$.prior_attempt_id", e, ID2);
     const started_at = optionalText(r.started_at, "$.started_at", e, UTC);
@@ -29280,11 +29328,11 @@ function decodeSkillRunV2(input) {
     }
     if (!run_id || !attempt_id || attempt === void 0 || !work_item_id || !skill_id || !skill_version || !status)
       return void 0;
-    return { ...m, schema_version: V2_SCHEMAS.run, run_id, attempt_id, attempt, work_item_id, skill_id, skill_version, mcp_ids: strings(r.mcp_ids, "$.mcp_ids", e), status, ...lease === void 0 ? {} : { lease }, input_refs: strings(r.input_refs, "$.input_refs", e), ...result_id === void 0 ? {} : { result_id }, ...prior_attempt_id === void 0 ? {} : { prior_attempt_id }, ...failure === void 0 ? {} : { failure }, ...started_at === void 0 ? {} : { started_at }, ...finished_at === void 0 ? {} : { finished_at } };
+    return { ...m, schema_version: V2_SCHEMAS.run, run_id, attempt_id, attempt, work_item_id, skill_id, skill_version, mcp_ids: strings(r.mcp_ids, "$.mcp_ids", e), status, ...lease === void 0 ? {} : { lease }, input_refs: strings(r.input_refs, "$.input_refs", e), ...input_manifest === void 0 ? {} : { input_manifest }, ...result_id === void 0 ? {} : { result_id }, ...prior_attempt_id === void 0 ? {} : { prior_attempt_id }, ...failure === void 0 ? {} : { failure }, ...started_at === void 0 ? {} : { started_at }, ...finished_at === void 0 ? {} : { finished_at } };
   });
 }
 function decodeSkillResultV2(input) {
-  return genericMetaRecord(input, V2_SCHEMAS.result, ["result_id", "run_id", "status", "contract_status", "output_schema_id", "summary", "raw_output", "artifacts", "validation_refs", "diagnostics"], (r, e, m) => {
+  return genericMetaRecord(input, V2_SCHEMAS.result, ["result_id", "run_id", "status", "contract_status", "output_schema_id", "summary", "raw_output", "artifacts", "validation_refs", "diagnostics", "output_digest", "output_bytes"], (r, e, m) => {
     const result_id = text3(r.result_id, "$.result_id", e, ID2);
     const run_id = text3(r.run_id, "$.run_id", e, ID2);
     const status = ["completed", "failed", "blocked", "incomplete", "corrupt"].includes(String(r.status)) ? r.status : void 0;
@@ -29293,8 +29341,10 @@ function decodeSkillResultV2(input) {
       e.push({ code: "field-invalid", path: "$.status" });
     if (!contract_status)
       e.push({ code: "field-invalid", path: "$.contract_status" });
-    const output_schema_id = optionalText(r.output_schema_id, "$.output_schema_id", e, ID2);
+    const output_schema_id = optionalText(r.output_schema_id, "$.output_schema_id", e, SCHEMA_ID);
     const summary = optionalText(r.summary, "$.summary", e);
+    const output_digest = r.output_digest === void 0 ? void 0 : digest8(r.output_digest, "$.output_digest", e);
+    const output_bytes = r.output_bytes === void 0 ? void 0 : integer2(r.output_bytes, "$.output_bytes", e);
     let raw_output;
     if (r.raw_output !== void 0) {
       const v = object4(r.raw_output, "$.raw_output", e);
@@ -29325,7 +29375,7 @@ function decodeSkillResultV2(input) {
     }).filter((x) => x !== void 0);
     if (!result_id || !run_id || !status || !contract_status)
       return void 0;
-    return { ...m, schema_version: V2_SCHEMAS.result, result_id, run_id, status, contract_status, ...output_schema_id === void 0 ? {} : { output_schema_id }, ...summary === void 0 ? {} : { summary }, ...raw_output === void 0 ? {} : { raw_output }, artifacts, validation_refs: strings(r.validation_refs, "$.validation_refs", e), diagnostics: strings(r.diagnostics, "$.diagnostics", e) };
+    return { ...m, schema_version: V2_SCHEMAS.result, result_id, run_id, status, contract_status, ...output_schema_id === void 0 ? {} : { output_schema_id }, ...summary === void 0 ? {} : { summary }, ...raw_output === void 0 ? {} : { raw_output }, artifacts, validation_refs: strings(r.validation_refs, "$.validation_refs", e), diagnostics: strings(r.diagnostics, "$.diagnostics", e), ...output_digest === void 0 ? {} : { output_digest }, ...output_bytes === void 0 ? {} : { output_bytes } };
   });
 }
 function decodeValidationReportV2(input) {
@@ -29929,7 +29979,7 @@ function evolveV2(aggregate, event) {
       const previous = item2?.active_run_id === void 0 ? next.runs.filter((run) => run.work_item_id === command2.work_item_id).at(-1) : find(next.runs, "run_id", item2.active_run_id);
       if (item2 !== void 0) {
         const nextAttempt = (previous?.attempt ?? item2.attempt_count) + 1;
-        const newRun = previous === void 0 ? void 0 : { ...previous, record_id: `run:${command2.run_id}`, run_id: command2.run_id, attempt_id: command2.attempt_id, attempt: nextAttempt, prior_attempt_id: previous.attempt_id, status: "queued", result_id: void 0, failure: void 0, lease: void 0, started_at: void 0, finished_at: void 0, revision: event.revision };
+        const newRun = previous === void 0 ? void 0 : { ...previous, record_id: `run:${command2.run_id}`, run_id: command2.run_id, attempt_id: command2.attempt_id, attempt: nextAttempt, prior_attempt_id: previous.attempt_id, status: "queued", result_id: void 0, failure: void 0, lease: void 0, started_at: void 0, finished_at: void 0, input_manifest: void 0, revision: event.revision };
         next = { ...next, ...newRun === void 0 ? {} : { runs: [...next.runs, newRun] }, work_items: replaceBy(next.work_items, "work_item_id", { ...item2, status: "queued", attempt_count: nextAttempt, active_run_id: newRun?.run_id, blockers: [], revision: event.revision }), next_actions: ["claim-run"] };
       }
       break;
@@ -30179,11 +30229,11 @@ function eventPath(changeDir2, revision, eventId2) {
   safeId2(eventId2, "event id");
   return path9.join(dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR), `${String(revision).padStart(12, "0")}-${eventId2}.json`);
 }
-function snapshotPath(changeDir2, revision, digest11) {
+function snapshotPath(changeDir2, revision, digest12) {
   if (!integer3(revision))
     throw new LedgerPathError("snapshot revision must be a non-negative integer");
-  safeId2(digest11, "snapshot digest");
-  return path9.join(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), `${String(revision).padStart(12, "0")}-${digest11.slice(7, 23)}.json`);
+  safeId2(digest12, "snapshot digest");
+  return path9.join(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), `${String(revision).padStart(12, "0")}-${digest12.slice(7, 23)}.json`);
 }
 function idempotencyPath(changeDir2, commandId) {
   safeId2(commandId, "command id");
@@ -30413,8 +30463,8 @@ var FsOrchestrationLedger = class {
         return existing;
       }
       const aggregate = createAggregateV2(seed.project_id, seed.change_id, seed.correlation_id, seed.updated_at);
-      const digest11 = checksum(aggregate);
-      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), snapshotPath(changeDir2, 0, digest11), "snapshot", aggregate);
+      const digest12 = checksum(aggregate);
+      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), snapshotPath(changeDir2, 0, digest12), "snapshot", aggregate);
       await atomicReplaceFile(currentPath(changeDir2), json(envelope("snapshot", aggregate)));
       return aggregate;
     });
@@ -33604,27 +33654,27 @@ async function captureStableLaunchers(_paths, homeDir = homedir5()) {
   return { tenon, hook };
 }
 function expectedStableLaunchers(paths, homeDir = homedir5(), nodeExecutable = process.execPath, nodeProof) {
-  const stable3 = launcherPaths(homeDir);
+  const stable4 = launcherPaths(homeDir);
   return {
     tenon: {
-      path: stable3.tenon,
+      path: stable4.tenon,
       state: { kind: "file", content: launcherText(paths, "cli", nodeExecutable, nodeProof), mode: 493 }
     },
     hook: {
-      path: stable3.hook,
+      path: stable4.hook,
       state: { kind: "file", content: launcherText(paths, "hook", nodeExecutable, nodeProof), mode: 493 }
     }
   };
 }
 function expectedLegacyStableLaunchersV101(paths, homeDir = homedir5()) {
-  const stable3 = launcherPaths(homeDir);
+  const stable4 = launcherPaths(homeDir);
   return {
     tenon: {
-      path: stable3.tenon,
+      path: stable4.tenon,
       state: { kind: "file", content: legacyLauncherTextV101(paths, "cli"), mode: 493 }
     },
     hook: {
-      path: stable3.hook,
+      path: stable4.hook,
       state: { kind: "file", content: legacyLauncherTextV101(paths, "hook"), mode: 493 }
     }
   };
@@ -34796,8 +34846,8 @@ var RuntimeReleaseStore = class {
     if (manifest === null || manifest.releaseId !== releaseId) return null;
     const payloadRoot = join44(root, "payload");
     try {
-      const digest11 = manifest.version === 1 ? await hashLegacyReleasePayload(payloadRoot) : await hashReleasePayload(payloadRoot);
-      if (digest11 !== manifest.payloadDigest) return null;
+      const digest12 = manifest.version === 1 ? await hashLegacyReleasePayload(payloadRoot) : await hashReleasePayload(payloadRoot);
+      if (digest12 !== manifest.payloadDigest) return null;
       await verifyReleasePayload(payloadRoot, this.runner, this.bashPath, this.nodePath);
       return manifest;
     } catch {
@@ -40064,8 +40114,8 @@ function idempotencyKeyFor(source, actionIdentity) {
     source.observationId,
     actionIdentity
   ]);
-  const digest11 = createHash34("sha256").update(canonical, "utf8").digest("hex");
-  return `triage-workflow-run:v1:${digest11}`;
+  const digest12 = createHash34("sha256").update(canonical, "utf8").digest("hex");
+  return `triage-workflow-run:v1:${digest12}`;
 }
 function sameCreateRequest(left, right) {
   return left.schemaVersion === right.schemaVersion && left.kind === right.kind && left.idempotencyKey === right.idempotencyKey && left.source.sourceId === right.source.sourceId && left.source.actionKind === right.source.actionKind && left.source.observationId === right.source.observationId && left.actionIdentity === right.actionIdentity && left.candidateId === right.candidateId && left.changeName === right.changeName && left.routeId === right.routeId && left.workflowId === right.workflowId && left.initialStep === right.initialStep;
@@ -40778,7 +40828,7 @@ function assertNonNegativeSafeInteger(value, name2) {
   }
 }
 function deriveStableTriageCandidateIdentity(input) {
-  const digest11 = createHash37("sha256").update(JSON.stringify([
+  const digest12 = createHash37("sha256").update(JSON.stringify([
     1,
     "triage-workflow-run",
     input.observation.sourceId,
@@ -40786,9 +40836,9 @@ function deriveStableTriageCandidateIdentity(input) {
     input.observation.observationId
   ]), "utf8").digest("hex");
   return Object.freeze({
-    candidateId: `triage-candidate:${digest11}`,
-    creationKey: `triage-create:${digest11}`,
-    changeName: `triage_${digest11.slice(0, 32)}`
+    candidateId: `triage-candidate:${digest12}`,
+    creationKey: `triage-create:${digest12}`,
+    changeName: `triage_${digest12.slice(0, 32)}`
   });
 }
 function providerRequestFor(page, routes, maxHighCandidates) {
@@ -44095,7 +44145,7 @@ async function materializeOneSkillWithStabilityCheck(skillId, sourceDir, destDir
 function skillSnapshotCasRoot(projectRoot) {
   return join63(projectRoot, ".pipeline", "loops", "skill-snapshots");
 }
-async function listRegularFilesRecursiveOrThrow(dir, digest11) {
+async function listRegularFilesRecursiveOrThrow(dir, digest12) {
   const out = [];
   const walk = async (rel) => {
     const abs = join63(dir, rel);
@@ -44103,7 +44153,7 @@ async function listRegularFilesRecursiveOrThrow(dir, digest11) {
     try {
       dirents = await readdir12(abs, { withFileTypes: true });
     } catch (e) {
-      throw new SkillSnapshotIoError(`CAS \u76EE\u5F55\u8BFB\u53D6\u5931\u8D25\uFF08digest ${digest11}\uFF09\uFF1A${e.message}`);
+      throw new SkillSnapshotIoError(`CAS \u76EE\u5F55\u8BFB\u53D6\u5931\u8D25\uFF08digest ${digest12}\uFF09\uFF1A${e.message}`);
     }
     for (const d of dirents) {
       const childRel = rel ? `${rel}/${d.name}` : d.name;
@@ -44112,14 +44162,14 @@ async function listRegularFilesRecursiveOrThrow(dir, digest11) {
       try {
         lst = await lstat32(childAbs);
       } catch (e) {
-        throw new SkillSnapshotIoError(`CAS \u76EE\u5F55\u6761\u76EE\u8BFB\u53D6\u5931\u8D25\uFF08digest ${digest11}\uFF0C\u8DEF\u5F84 ${childRel}\uFF09\uFF1A${e.message}`);
+        throw new SkillSnapshotIoError(`CAS \u76EE\u5F55\u6761\u76EE\u8BFB\u53D6\u5931\u8D25\uFF08digest ${digest12}\uFF0C\u8DEF\u5F84 ${childRel}\uFF09\uFF1A${e.message}`);
       }
       if (lst.isDirectory()) {
         await walk(childRel);
       } else if (lst.isFile()) {
         out.push(childRel);
       } else {
-        throw new SkillSnapshotCorruptError(`CAS \u76EE\u5F55\uFF08digest ${digest11}\uFF09\u5185 '${childRel}' \u4E0D\u662F\u666E\u901A\u6587\u4EF6\u6216\u76EE\u5F55\uFF08\u53EF\u80FD\u662F symlink/\u8BBE\u5907\u6587\u4EF6/socket\uFF09\uFF0C\u62D2\u7EDD\u5F53\u5185\u5BB9\u6D88\u8D39`);
+        throw new SkillSnapshotCorruptError(`CAS \u76EE\u5F55\uFF08digest ${digest12}\uFF09\u5185 '${childRel}' \u4E0D\u662F\u666E\u901A\u6587\u4EF6\u6216\u76EE\u5F55\uFF08\u53EF\u80FD\u662F symlink/\u8BBE\u5907\u6587\u4EF6/socket\uFF09\uFF0C\u62D2\u7EDD\u5F53\u5185\u5BB9\u6D88\u8D39`);
       }
     }
   };
@@ -44127,67 +44177,67 @@ async function listRegularFilesRecursiveOrThrow(dir, digest11) {
   out.sort();
   return out;
 }
-async function verifyByteIdenticalOrThrow(freshDir, existingDir, digest11) {
+async function verifyByteIdenticalOrThrow(freshDir, existingDir, digest12) {
   const [freshFiles, existingFiles] = await Promise.all([
-    listRegularFilesRecursiveOrThrow(freshDir, digest11),
-    listRegularFilesRecursiveOrThrow(existingDir, digest11)
+    listRegularFilesRecursiveOrThrow(freshDir, digest12),
+    listRegularFilesRecursiveOrThrow(existingDir, digest12)
   ]);
   const sameSet = freshFiles.length === existingFiles.length && freshFiles.every((f, i) => f === existingFiles[i]);
   if (!sameSet) {
-    throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest11}\uFF09\u6587\u4EF6\u96C6\u5408\u4E0E\u65B0\u5FEB\u7167\u4E0D\u4E00\u81F4\uFF0C\u62D2\u7EDD\u590D\u7528`);
+    throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest12}\uFF09\u6587\u4EF6\u96C6\u5408\u4E0E\u65B0\u5FEB\u7167\u4E0D\u4E00\u81F4\uFF0C\u62D2\u7EDD\u590D\u7528`);
   }
   for (const rel of freshFiles) {
-    const fresh = await readRegularFileStrict(join63(freshDir, rel), (msg) => new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u6821\u9A8C\u8BFB\u53D6\u5931\u8D25\uFF08digest ${digest11}\uFF0C\u8DEF\u5F84 ${rel}\uFF09\uFF1A${msg}`), { noFollow: true });
-    const existing = await readRegularFileStrict(join63(existingDir, rel), (msg) => new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest11}\uFF09\u5728 '${rel}' \u5904\u4E0D\u662F\u53EF\u4FE1\u7684\u666E\u901A\u6587\u4EF6\uFF1A${msg}`), { noFollow: true });
+    const fresh = await readRegularFileStrict(join63(freshDir, rel), (msg) => new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u6821\u9A8C\u8BFB\u53D6\u5931\u8D25\uFF08digest ${digest12}\uFF0C\u8DEF\u5F84 ${rel}\uFF09\uFF1A${msg}`), { noFollow: true });
+    const existing = await readRegularFileStrict(join63(existingDir, rel), (msg) => new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest12}\uFF09\u5728 '${rel}' \u5904\u4E0D\u662F\u53EF\u4FE1\u7684\u666E\u901A\u6587\u4EF6\uFF1A${msg}`), { noFollow: true });
     if (!fresh.content.equals(existing.content)) {
-      throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest11}\uFF09\u5728 '${rel}' \u5904\u5185\u5BB9\u4E0E\u65B0\u5FEB\u7167\u4E0D\u4E00\u81F4\uFF0C\u62D2\u7EDD\u590D\u7528`);
+      throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest12}\uFF09\u5728 '${rel}' \u5904\u5185\u5BB9\u4E0E\u65B0\u5FEB\u7167\u4E0D\u4E00\u81F4\uFF0C\u62D2\u7EDD\u590D\u7528`);
     }
     const freshExec = (fresh.mode & EXEC_BITS) !== 0;
     const existingExec = (existing.mode & EXEC_BITS) !== 0;
     if (freshExec !== existingExec) {
-      throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest11}\uFF09\u5728 '${rel}' \u5904\u53EF\u6267\u884C\u4F4D\u4E0E\u65B0\u5FEB\u7167\u4E0D\u4E00\u81F4\uFF0C\u62D2\u7EDD\u590D\u7528`);
+      throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest12}\uFF09\u5728 '${rel}' \u5904\u53EF\u6267\u884C\u4F4D\u4E0E\u65B0\u5FEB\u7167\u4E0D\u4E00\u81F4\uFF0C\u62D2\u7EDD\u590D\u7528`);
     }
   }
 }
-async function assertCommittedSnapshotOrThrow(existingDir, digest11) {
-  const marker = await readRegularFileStrict(join63(existingDir, SKILL_SNAPSHOT_COMMIT_MARKER), (msg) => new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest11}\uFF09\u7F3A\u5C11\u53EF\u4FE1 commit marker\uFF1A${msg}`), { noFollow: true });
-  if (!marker.content.equals(Buffer.from(`${digest11}
+async function assertCommittedSnapshotOrThrow(existingDir, digest12) {
+  const marker = await readRegularFileStrict(join63(existingDir, SKILL_SNAPSHOT_COMMIT_MARKER), (msg) => new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest12}\uFF09\u7F3A\u5C11\u53EF\u4FE1 commit marker\uFF1A${msg}`), { noFollow: true });
+  if (!marker.content.equals(Buffer.from(`${digest12}
 `, "utf8"))) {
-    throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest11}\uFF09commit marker \u5185\u5BB9\u4E0D\u5339\u914D\uFF0C\u62D2\u7EDD\u590D\u7528`);
+    throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u5F55\uFF08digest ${digest12}\uFF09commit marker \u5185\u5BB9\u4E0D\u5339\u914D\uFF0C\u62D2\u7EDD\u590D\u7528`);
   }
 }
-async function publishSnapshotWithoutRename(stagingDir, finalDir, digest11) {
-  const files = await listRegularFilesRecursiveOrThrow(stagingDir, digest11);
+async function publishSnapshotWithoutRename(stagingDir, finalDir, digest12) {
+  const files = await listRegularFilesRecursiveOrThrow(stagingDir, digest12);
   if (!files.includes(SKILL_SNAPSHOT_COMMIT_MARKER)) {
-    throw new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u7F3A\u5C11 commit marker\uFF08digest ${digest11}\uFF09`);
+    throw new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u7F3A\u5C11 commit marker\uFF08digest ${digest12}\uFF09`);
   }
   for (const rel of files) {
     if (rel === SKILL_SNAPSHOT_COMMIT_MARKER)
       continue;
-    const source = await readRegularFileStrict(join63(stagingDir, rel), (msg) => new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u53D1\u5E03\u8BFB\u53D6\u5931\u8D25\uFF08digest ${digest11}\uFF0C\u8DEF\u5F84 ${rel}\uFF09\uFF1A${msg}`), { noFollow: true });
+    const source = await readRegularFileStrict(join63(stagingDir, rel), (msg) => new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u53D1\u5E03\u8BFB\u53D6\u5931\u8D25\uFF08digest ${digest12}\uFF0C\u8DEF\u5F84 ${rel}\uFF09\uFF1A${msg}`), { noFollow: true });
     const dest = join63(finalDir, rel);
     try {
       await mkdir24(dirname17(dest), { recursive: true });
       await writeFile10(dest, source.content, { flag: "wx", mode: (source.mode & EXEC_BITS) !== 0 ? 493 : 420 });
     } catch (e) {
-      throw new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u72EC\u5360\u53D1\u5E03\u5931\u8D25\uFF08digest ${digest11}\uFF0C\u8DEF\u5F84 ${rel}\uFF09\uFF1A${e.message}`);
+      throw new SkillSnapshotIoError(`\u65B0\u5FEB\u7167\u72EC\u5360\u53D1\u5E03\u5931\u8D25\uFF08digest ${digest12}\uFF0C\u8DEF\u5F84 ${rel}\uFF09\uFF1A${e.message}`);
     }
   }
   try {
-    await writeFile10(join63(finalDir, SKILL_SNAPSHOT_COMMIT_MARKER), `${digest11}
+    await writeFile10(join63(finalDir, SKILL_SNAPSHOT_COMMIT_MARKER), `${digest12}
 `, { flag: "wx", mode: 420 });
   } catch (e) {
-    throw new SkillSnapshotIoError(`\u65B0\u5FEB\u7167 commit marker \u5199\u5165\u5931\u8D25\uFF08digest ${digest11}\uFF09\uFF1A${e.message}`);
+    throw new SkillSnapshotIoError(`\u65B0\u5FEB\u7167 commit marker \u5199\u5165\u5931\u8D25\uFF08digest ${digest12}\uFF09\uFF1A${e.message}`);
   }
-  await verifyByteIdenticalOrThrow(stagingDir, finalDir, digest11);
+  await verifyByteIdenticalOrThrow(stagingDir, finalDir, digest12);
 }
-async function withDigestPublishLock(casRoot, digest11, publish) {
+async function withDigestPublishLock(casRoot, digest12, publish) {
   const lockRoot = join63(casRoot, ".publish-locks");
-  const lockDir = join63(lockRoot, `${digest11}.lock`);
+  const lockDir = join63(lockRoot, `${digest12}.lock`);
   try {
     await mkdir24(lockRoot, { recursive: true });
   } catch (e) {
-    throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u6839\u76EE\u5F55\u521B\u5EFA\u5931\u8D25\uFF08digest ${digest11}\uFF09\uFF1A${e.message}`);
+    throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u6839\u76EE\u5F55\u521B\u5EFA\u5931\u8D25\uFF08digest ${digest12}\uFF09\uFF1A${e.message}`);
   }
   const deadline = Date.now() + PUBLISH_LOCK_TIMEOUT_MS;
   while (true) {
@@ -44196,10 +44246,10 @@ async function withDigestPublishLock(casRoot, digest11, publish) {
       break;
     } catch (e) {
       if (e.code !== "EEXIST") {
-        throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u83B7\u53D6\u5931\u8D25\uFF08digest ${digest11}\uFF09\uFF1A${e.message}`);
+        throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u83B7\u53D6\u5931\u8D25\uFF08digest ${digest12}\uFF09\uFF1A${e.message}`);
       }
       if (Date.now() >= deadline) {
-        throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u7B49\u5F85\u8D85\u65F6\uFF08digest ${digest11}\uFF09\uFF0C\u62D2\u7EDD\u8BFB\u53D6\u53EF\u80FD\u672A\u63D0\u4EA4\u7684\u76EE\u6807\u76EE\u5F55`);
+        throw new SkillSnapshotIoError(`CAS \u53D1\u5E03\u9501\u7B49\u5F85\u8D85\u65F6\uFF08digest ${digest12}\uFF09\uFF0C\u62D2\u7EDD\u8BFB\u53D6\u53EF\u80FD\u672A\u63D0\u4EA4\u7684\u76EE\u6807\u76EE\u5F55`);
       }
       await new Promise((resolve47) => setTimeout(resolve47, PUBLISH_LOCK_RETRY_MS));
     }
@@ -44279,10 +44329,10 @@ async function materializeSkillSnapshot(inputs2, options) {
     const combined = manifests.flatMap((m) => m.files.map((f) => ({ relativePath: `${m.skillId}/${f.relativePath}`, sha256: f.sha256, executable: f.executable }))).sort(byRelativePath);
     const skillsSummary = manifests.map((m) => ({ skillId: m.skillId, treeSha256: m.treeSha256, fileCount: m.files.length })).sort((a, b) => a.skillId < b.skillId ? -1 : a.skillId > b.skillId ? 1 : 0);
     const provenance = snapshotProvenance(options.provenance);
-    const digest11 = computePublishDigest(combined, skillsSummary, provenance);
+    const digest12 = computePublishDigest(combined, skillsSummary, provenance);
     const manifestRecord = {
       schemaVersion: 1,
-      digest: digest11,
+      digest: digest12,
       skills: skillsSummary,
       files: combined,
       ...provenance !== void 0 ? { provenance } : {}
@@ -44290,13 +44340,13 @@ async function materializeSkillSnapshot(inputs2, options) {
     try {
       await writeFile10(join63(stagingDir, "manifest.json"), `${JSON.stringify(manifestRecord, null, 2)}
 `, "utf8");
-      await writeFile10(join63(stagingDir, SKILL_SNAPSHOT_COMMIT_MARKER), `${digest11}
+      await writeFile10(join63(stagingDir, SKILL_SNAPSHOT_COMMIT_MARKER), `${digest12}
 `, { flag: "wx", mode: 420 });
     } catch (e) {
       throw new SkillSnapshotIoError(`\u5FEB\u7167 manifest.json/commit marker \u5199\u5165\u5931\u8D25\uFF1A${e.message}`);
     }
-    const finalDir = join63(shaRoot, digest11);
-    return await withDigestPublishLock(casRoot, digest11, async () => {
+    const finalDir = join63(shaRoot, digest12);
+    return await withDigestPublishLock(casRoot, digest12, async () => {
       try {
         await mkdir24(finalDir);
       } catch (err) {
@@ -44306,19 +44356,19 @@ async function materializeSkillSnapshot(inputs2, options) {
           try {
             finalStat = await lstat32(finalDir);
           } catch (e) {
-            throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u6807\u4E0D\u53EF\u6838\u9A8C\uFF08digest ${digest11}\uFF09\uFF1A${e.message}`);
+            throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u6807\u4E0D\u53EF\u6838\u9A8C\uFF08digest ${digest12}\uFF09\uFF1A${e.message}`);
           }
           if (!finalStat.isDirectory() || finalStat.isSymbolicLink()) {
-            throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u6807\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u76EE\u5F55\uFF08digest ${digest11}\uFF09\uFF0C\u62D2\u7EDD\u8986\u76D6`);
+            throw new SkillSnapshotCorruptError(`\u65E2\u6709 CAS \u76EE\u6807\u4E0D\u662F\u53EF\u4FE1\u666E\u901A\u76EE\u5F55\uFF08digest ${digest12}\uFF09\uFF0C\u62D2\u7EDD\u8986\u76D6`);
           }
-          await assertCommittedSnapshotOrThrow(finalDir, digest11);
-          await verifyByteIdenticalOrThrow(stagingDir, finalDir, digest11);
-          return { digest: digest11, casDir: finalDir, manifests, reused: true };
+          await assertCommittedSnapshotOrThrow(finalDir, digest12);
+          await verifyByteIdenticalOrThrow(stagingDir, finalDir, digest12);
+          return { digest: digest12, casDir: finalDir, manifests, reused: true };
         }
-        throw new SkillSnapshotIoError(`CAS \u76EE\u6807\u76EE\u5F55\u58F0\u660E\u5931\u8D25\uFF08digest ${digest11}\uFF09\uFF1A${err.message}`);
+        throw new SkillSnapshotIoError(`CAS \u76EE\u6807\u76EE\u5F55\u58F0\u660E\u5931\u8D25\uFF08digest ${digest12}\uFF09\uFF1A${err.message}`);
       }
-      await publishSnapshotWithoutRename(stagingDir, finalDir, digest11);
-      return { digest: digest11, casDir: finalDir, manifests, reused: false };
+      await publishSnapshotWithoutRename(stagingDir, finalDir, digest12);
+      return { digest: digest12, casDir: finalDir, manifests, reused: false };
     });
   } finally {
     await rm10(stagingDir, { recursive: true, force: true }).catch(() => {
@@ -44374,8 +44424,8 @@ async function selectFirstLocatable(locator, alternatives) {
     detail: `\u5168\u90E8\u5019\u9009 alternatives\uFF08${alternatives.join("|")}\uFF09\u5747\u672A\u5B9A\u4F4D\u5230\u5185\u5BB9\uFF1A${notFoundDetails.join("; ")}`
   };
 }
-function skillSnapshotCasRelativePath(digest11) {
-  return `.pipeline/loops/skill-snapshots/sha256/${digest11}`;
+function skillSnapshotCasRelativePath(digest12) {
+  return `.pipeline/loops/skill-snapshots/sha256/${digest12}`;
 }
 function createExecutionPreparation(deps) {
   const { repoRoot, ledger, loadRegistry: loadRegistry2, clock, coordinates, resolver, locator } = deps;
@@ -44892,7 +44942,7 @@ var filterRunnerEnvironment = (runner, env) => {
   }
   return out;
 };
-var checksumGuard = (path10, digest11, attestationKey, label) => `actual_sha="$(sha256sum ${path10} 2>/dev/null | awk '{print $1}')"; [ "$actual_sha" = "${digest11}" ] && grep -qx "${attestationKey}=${digest11}" ${IMAGE_ATTESTATION_PATH} 2>/dev/null || { echo "sandcastle \u955C\u50CF\u5185 ${label} \u4E0E host \u671F\u671B\u6216\u955C\u50CF attestation \u4E0D\u4E00\u81F4\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
+var checksumGuard = (path10, digest12, attestationKey, label) => `actual_sha="$(sha256sum ${path10} 2>/dev/null | awk '{print $1}')"; [ "$actual_sha" = "${digest12}" ] && grep -qx "${attestationKey}=${digest12}" ${IMAGE_ATTESTATION_PATH} 2>/dev/null || { echo "sandcastle \u955C\u50CF\u5185 ${label} \u4E0E host \u671F\u671B\u6216\u955C\u50CF attestation \u4E0D\u4E00\u81F4\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
 var AFK_RUN_DRIFT_GUARD = checksumGuard(IMAGE_AFK_RUN_PATH, AFK_RUN_SCRIPT_SHA256, "pipeline_afk_run_sha256", "tenon-afk-run");
 var buildAfkRunCommand = (name2, runner, expectation = {}) => {
   const selected = assertLoopRunner(runner ?? "codex");
@@ -46480,7 +46530,7 @@ async function assertNoUndeclaredCasEntries(hostCasDir, descriptorFiles) {
     throw new SkillBundleSnapshotMismatchError(`skill bundle CAS \u542B\u672A\u58F0\u660E\u6761\u76EE\u6216\u7F3A\u5931\u58F0\u660E\u6761\u76EE\uFF08${hostCasDir}\uFF1B\u672A\u58F0\u660E=${JSON.stringify(unexpected)}\uFF1B\u7F3A\u5931=${JSON.stringify(missing3)}\uFF09`);
   }
 }
-async function assertCommittedCasSnapshot(hostCasDir, digest11) {
+async function assertCommittedCasSnapshot(hostCasDir, digest12) {
   let rootBefore;
   try {
     rootBefore = await lstat33(hostCasDir);
@@ -46502,7 +46552,7 @@ async function assertCommittedCasSnapshot(hostCasDir, digest11) {
     if (!markerStat.isFile())
       throw new Error("commit marker \u4E0D\u662F\u666E\u901A\u6587\u4EF6");
     const marker = await markerHandle.readFile();
-    if (!marker.equals(Buffer.from(`${digest11}
+    if (!marker.equals(Buffer.from(`${digest12}
 `, "utf8")))
       throw new Error("commit marker \u5185\u5BB9\u4E0E digest \u4E0D\u4E00\u81F4");
     const rootAfter = await lstat33(hostCasDir);
@@ -46557,8 +46607,8 @@ async function verifySkillBundleSnapshot(hostCasDir, bundle) {
   const files = recomputedManifests.flatMap((m) => m.files.map((f) => ({ relativePath: `${m.skillId}/${f.relativePath}`, sha256: f.sha256, executable: f.executable }))).sort((a, b) => a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0);
   const skills = recomputedManifests.map((m) => ({ skillId: m.skillId, treeSha256: m.treeSha256, fileCount: m.files.length })).sort((a, b) => a.skillId < b.skillId ? -1 : a.skillId > b.skillId ? 1 : 0);
   const provenance = manifest.provenance;
-  const digest11 = computePublishDigest(files, skills, provenance);
-  if (digest11 !== bundle.snapshotSha256 || JSON.stringify(manifest.files) !== JSON.stringify(files) || JSON.stringify(manifest.skills) !== JSON.stringify(skills)) {
+  const digest12 = computePublishDigest(files, skills, provenance);
+  if (digest12 !== bundle.snapshotSha256 || JSON.stringify(manifest.files) !== JSON.stringify(files) || JSON.stringify(manifest.skills) !== JSON.stringify(skills)) {
     throw new SkillBundleSnapshotMismatchError(`skill bundle manifest descriptor \u4E0E\u5B9E\u9645\u5185\u5BB9\u4E0D\u4E00\u81F4\uFF08${hostCasDir}\uFF09`);
   }
 }
@@ -47653,6 +47703,9 @@ var MAX_INTENT_BYTES = 8 * 1024;
 
 // packages/automation/dist/orchestration/runtime-v2-boundary.js
 var DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024;
+
+// packages/automation/dist/orchestration/input-materialization-v2.js
+var MAX_INPUT_BYTES = 1024 * 1024;
 
 // packages/cli/src/commands/transition.ts
 function canonicalPipelineSkillId(skillId) {
@@ -59395,7 +59448,7 @@ function within(root, path10) {
 function quoteValue(value) {
   return /[\s,{}:#"']/.test(value) ? JSON.stringify(value) : value;
 }
-function renderEntry(entry, digest11) {
+function renderEntry(entry, digest12) {
   const physical = entry.contentSkill ?? entry.token;
   const fields = [
     `tool: ${entry.tool}`,
@@ -59410,7 +59463,7 @@ function renderEntry(entry, digest11) {
   if (entry.alt !== void 0) fields.push(`alt: ${quoteValue(entry.alt)}`);
   if (entry.note !== void 0) fields.push(`note: ${quoteValue(entry.note)}`);
   const sourceRef = `skills/${physical}`;
-  const contentHash = `sha256:${digest11}`;
+  const contentHash = `sha256:${digest12}`;
   fields.push("source_kind: bundled", `source_ref: ${sourceRef}`, `content_hash: ${contentHash}`);
   fields.push(`coordinate: tenon:${sourceRef}@${contentHash}`);
   return `  ${entry.token}: { ${fields.join(", ")} }`;
@@ -59423,7 +59476,7 @@ function renderRegistry(entries) {
     "hash_algorithm: tree-sha256-v1",
     "",
     "skills:",
-    ...entries.map(({ entry, digest: digest11 }) => renderEntry(entry, digest11)),
+    ...entries.map(({ entry, digest: digest12 }) => renderEntry(entry, digest12)),
     ""
   ];
   return lines.join("\n");
@@ -64702,16 +64755,16 @@ function text4(value, field3) {
   }
   return value;
 }
-function digest10(value) {
+function digest11(value) {
   return createHash46("sha256").update(value).digest("hex");
 }
 function stableId(prefix, value) {
-  return `${prefix}-${digest10(value).slice(0, 32)}`;
+  return `${prefix}-${digest11(value).slice(0, 32)}`;
 }
 function questionKey(candidate, header, prompt) {
   const explicit = typeof candidate.id === "string" && candidate.id !== "" ? candidate.id : header;
   const normalized2 = explicit.trim().toLowerCase().replace(/[^a-z0-9._-]+/gu, "-").replace(/^-+|-+$/gu, "");
-  return normalized2 !== "" && normalized2.length <= 160 ? `host.${normalized2}` : `host.${digest10(`${header}\0${prompt}`).slice(0, 32)}`;
+  return normalized2 !== "" && normalized2.length <= 160 ? `host.${normalized2}` : `host.${digest11(`${header}\0${prompt}`).slice(0, 32)}`;
 }
 function answers(value) {
   if (!isRecord22(value)) throw new Error("tool_response.answers must be an object");

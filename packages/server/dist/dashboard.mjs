@@ -3075,8 +3075,8 @@ function parseWorkflowGovernanceBinding(raw) {
     "document_governance_fingerprint",
     "workflow_plan_fingerprint"
   ]);
-  const digest7 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
-  if (Object.keys(record5).some((key) => !allowed.has(key)) || record5.version !== 1 || typeof record5.run_id !== "string" || record5.run_id === "" || record5.document_profile !== void 0 && record5.document_profile !== "legacy-full" && record5.document_profile !== "document-v1" || record5.document_governance_fingerprint !== void 0 && !digest7(record5.document_governance_fingerprint) || record5.workflow_plan_fingerprint !== void 0 && !digest7(record5.workflow_plan_fingerprint) || record5.document_governance_fingerprint !== void 0 && record5.document_profile === void 0) {
+  const digest8 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
+  if (Object.keys(record5).some((key) => !allowed.has(key)) || record5.version !== 1 || typeof record5.run_id !== "string" || record5.run_id === "" || record5.document_profile !== void 0 && record5.document_profile !== "legacy-full" && record5.document_profile !== "document-v1" || record5.document_governance_fingerprint !== void 0 && !digest8(record5.document_governance_fingerprint) || record5.workflow_plan_fingerprint !== void 0 && !digest8(record5.workflow_plan_fingerprint) || record5.document_governance_fingerprint !== void 0 && record5.document_profile === void 0) {
     throw new Error("workflow governance binding \u5F62\u72B6\u975E\u6CD5");
   }
   return {
@@ -5077,20 +5077,20 @@ function parseReceipt(value, recordIndex, receiptIndex) {
   if (!item2)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
   const phase = string2(item2.phase);
-  const digest7 = string2(item2.sha256);
+  const digest8 = string2(item2.sha256);
   const readAt = string2(item2.readAt);
   const visitId = item2.visitId === void 0 ? void 0 : string2(item2.visitId);
   if (!phase || !/^[A-Za-z0-9_-]+$/.test(phase)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].phase \u975E\u6CD5`);
   }
-  if (!digest7 || !validDigest(digest7)) {
+  if (!digest8 || !validDigest(digest8)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].sha256 \u975E\u6CD5`);
   }
   if (!readAt)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].readAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32`);
   if (item2.visitId !== void 0 && !visitId)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].visitId \u975E\u6CD5`);
-  return { phase, sha256: digest7, readAt, ...visitId === void 0 ? {} : { visitId } };
+  return { phase, sha256: digest8, readAt, ...visitId === void 0 ? {} : { visitId } };
 }
 function receiptKey(receipt) {
   return JSON.stringify([receipt.phase, receipt.visitId ?? "legacy"]);
@@ -5101,7 +5101,7 @@ function parseRecord2(value, index) {
     throw new DocumentLedgerError(`document ledger records[${index}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
   const kind = string2(item2.kind);
   const path8 = string2(item2.path);
-  const digest7 = string2(item2.sha256);
+  const digest8 = string2(item2.sha256);
   const producer = string2(item2.producer);
   const recordedAt = string2(item2.recordedAt);
   if (!kind || !isDocumentKind(kind))
@@ -5109,7 +5109,7 @@ function parseRecord2(value, index) {
   if (!path8 || !isSafeProjectRelativePath(path8)) {
     throw new DocumentLedgerError(`document ledger records[${index}].path \u5FC5\u987B\u662F\u5B89\u5168\u7684\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84`);
   }
-  if (!digest7 || !validDigest(digest7))
+  if (!digest8 || !validDigest(digest8))
     throw new DocumentLedgerError(`document ledger records[${index}].sha256 \u975E\u6CD5`);
   if (!producer || !/^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/.test(producer)) {
     throw new DocumentLedgerError(`document ledger records[${index}].producer \u975E\u6CD5`);
@@ -5130,7 +5130,7 @@ function parseRecord2(value, index) {
   return {
     kind,
     path: path8,
-    sha256: digest7,
+    sha256: digest8,
     producer,
     recordedAt,
     ...producerInvocation === void 0 ? {} : { producerInvocation },
@@ -6965,13 +6965,13 @@ function checkSha2562(value, key, path8, errors, optional = false) {
       errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
     return;
   }
-  const digest7 = value[key];
-  if (typeof digest7 !== "string") {
-    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest7)}`);
+  const digest8 = value[key];
+  if (typeof digest8 !== "string") {
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest8)}`);
     return;
   }
-  if (!SHA256_HEX_RE.test(digest7)) {
-    errors.push(`${path8}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest7)}`);
+  if (!SHA256_HEX_RE.test(digest8)) {
+    errors.push(`${path8}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest8)}`);
   }
 }
 function checkPattern(value, key, pattern, path8, errors) {
@@ -12068,8 +12068,8 @@ function item(kind, status2, requiredRead, records, phase, currentVisitId) {
     }))
   };
 }
-function receiptMatchesVisit(receipt, phase, digest7, visitId) {
-  return receipt.phase === phase && receipt.sha256 === digest7 && receipt.visitId === visitId;
+function receiptMatchesVisit(receipt, phase, digest8, visitId) {
+  return receipt.phase === phase && receipt.sha256 === digest8 && receipt.visitId === visitId;
 }
 async function evaluateDocumentEvidence(repoRoot, changeDir2, phase, scope = {}, policy2) {
   let ledger;
@@ -14637,8 +14637,8 @@ function canonicalMachineStateRoot(stateRoot) {
   return resolve7(stateRoot);
 }
 function machineStateScopeId(stateRoot) {
-  const digest7 = createHash13("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
-  return `sha256-v1-${digest7}`;
+  const digest8 = createHash13("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
+  return `sha256-v1-${digest8}`;
 }
 
 // packages/kernel/dist/product-paths.js
@@ -20514,6 +20514,7 @@ var V2_SCHEMAS = {
   assessment: "capability-assessment/v2",
   graph: "work-graph/v2",
   pipeline: "workflow-pipeline/v2",
+  inputManifest: "skill-input-manifest/v2",
   resolution: "capability-resolution/v2",
   workItem: "work-item/v2",
   run: "skill-run/v2",
@@ -20531,6 +20532,7 @@ var V2_MAX_DEPTH = 16;
 var V2_MAX_ITEMS = 2048;
 var ID2 = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/;
 var SCHEMA_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,159}$/;
+var RESOURCE_KEY = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,511}$/;
 var DIGEST2 = /^sha256:[0-9a-f]{64}$/;
 var UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 function parse(input, errors) {
@@ -20824,7 +20826,7 @@ function decodePipelineSkill(input, path8, errors) {
   const raw = object3(input, path8, errors);
   if (!raw)
     return void 0;
-  closed4(raw, ["binding_id", "skill_id", "skill_version", "order", "role", "source", "mode", "depends_on", "mcp_ids", "input_schema_id", "output_schema_id", "validator_ids"], path8, errors);
+  closed4(raw, ["binding_id", "skill_id", "skill_version", "order", "role", "source", "mode", "depends_on", "mcp_ids", "input_schema_id", "output_schema_id", "validator_ids", "resource_claims"], path8, errors);
   const binding_id = text3(raw.binding_id, `${path8}.binding_id`, errors, ID2);
   const skill_id = text3(raw.skill_id, `${path8}.skill_id`, errors, ID2);
   const skill_version = text3(raw.skill_version, `${path8}.skill_version`, errors, ID2);
@@ -20840,9 +20842,54 @@ function decodePipelineSkill(input, path8, errors) {
     errors.push({ code: "field-invalid", path: `${path8}.mode` });
   const input_schema_id = optionalText(raw.input_schema_id, `${path8}.input_schema_id`, errors, SCHEMA_ID);
   const output_schema_id = optionalText(raw.output_schema_id, `${path8}.output_schema_id`, errors, SCHEMA_ID);
+  const resource_claims = raw.resource_claims === void 0 ? [] : array2(raw.resource_claims, `${path8}.resource_claims`, errors).map((entry, index) => {
+    const claim2 = object3(entry, `${path8}.resource_claims[${index}]`, errors);
+    if (!claim2)
+      return void 0;
+    closed4(claim2, ["kind", "key", "access"], `${path8}.resource_claims[${index}]`, errors);
+    const kind = ["path", "logical", "external"].includes(String(claim2.kind)) ? claim2.kind : void 0;
+    const key = text3(claim2.key, `${path8}.resource_claims[${index}].key`, errors, RESOURCE_KEY);
+    if (key?.includes("..") || key?.startsWith("/"))
+      errors.push({ code: "field-invalid", path: `${path8}.resource_claims[${index}].key` });
+    const access = claim2.access === "read" || claim2.access === "write" ? claim2.access : void 0;
+    if (!kind)
+      errors.push({ code: "field-invalid", path: `${path8}.resource_claims[${index}].kind` });
+    if (!access)
+      errors.push({ code: "field-invalid", path: `${path8}.resource_claims[${index}].access` });
+    return kind && key && access ? { kind, key, access } : void 0;
+  }).filter((value) => value !== void 0);
   if (!binding_id || !skill_id || !skill_version || order === void 0 || !role || !source || !mode)
     return void 0;
-  return { binding_id, skill_id, skill_version, order, role, source, mode, depends_on: strings(raw.depends_on, `${path8}.depends_on`, errors), mcp_ids: strings(raw.mcp_ids, `${path8}.mcp_ids`, errors), ...input_schema_id === void 0 ? {} : { input_schema_id }, ...output_schema_id === void 0 ? {} : { output_schema_id }, validator_ids: strings(raw.validator_ids, `${path8}.validator_ids`, errors) };
+  return { binding_id, skill_id, skill_version, order, role, source, mode, depends_on: strings(raw.depends_on, `${path8}.depends_on`, errors), mcp_ids: strings(raw.mcp_ids, `${path8}.mcp_ids`, errors), ...input_schema_id === void 0 ? {} : { input_schema_id }, ...output_schema_id === void 0 ? {} : { output_schema_id }, validator_ids: strings(raw.validator_ids, `${path8}.validator_ids`, errors), ...raw.resource_claims === void 0 ? {} : { resource_claims } };
+}
+function decodeSkillInputManifestV2(input, path8, errors) {
+  const raw = object3(input, path8, errors);
+  if (!raw)
+    return void 0;
+  closed4(raw, ["schema_version", "manifest_id", "run_id", "work_item_id", "input_refs", "artifact_digests", "bundle_digest", "byte_length", "delivery", "rejection_reason", "created_at"], path8, errors);
+  if (raw.schema_version !== V2_SCHEMAS.inputManifest)
+    errors.push({ code: "field-invalid", path: `${path8}.schema_version` });
+  const manifest_id = text3(raw.manifest_id, `${path8}.manifest_id`, errors, ID2);
+  const run_id = text3(raw.run_id, `${path8}.run_id`, errors, ID2);
+  const work_item_id = text3(raw.work_item_id, `${path8}.work_item_id`, errors, ID2);
+  const input_refs = strings(raw.input_refs, `${path8}.input_refs`, errors);
+  const artifact_digests = array2(raw.artifact_digests, `${path8}.artifact_digests`, errors).map((value, index) => digest6(value, `${path8}.artifact_digests[${index}]`, errors)).filter((value) => value !== void 0);
+  const bundle_digest = digest6(raw.bundle_digest, `${path8}.bundle_digest`, errors);
+  const byte_length = integer2(raw.byte_length, `${path8}.byte_length`, errors);
+  const delivery = ["not-required", "injected", "rejected"].includes(String(raw.delivery)) ? raw.delivery : void 0;
+  if (!delivery)
+    errors.push({ code: "field-invalid", path: `${path8}.delivery` });
+  const rejection_reason = optionalText(raw.rejection_reason, `${path8}.rejection_reason`, errors, ID2);
+  const created_at = text3(raw.created_at, `${path8}.created_at`, errors, UTC);
+  if (delivery === "rejected" && rejection_reason === void 0)
+    errors.push({ code: "field-invalid", path: `${path8}.rejection_reason` });
+  if (delivery === "not-required" && (input_refs.length !== 0 || artifact_digests.length !== 0 || byte_length !== 0))
+    errors.push({ code: "field-invalid", path: path8 });
+  if (delivery === "injected" && artifact_digests.length !== input_refs.length)
+    errors.push({ code: "field-invalid", path: `${path8}.artifact_digests` });
+  if (!manifest_id || !run_id || !work_item_id || bundle_digest === void 0 || byte_length === void 0 || !delivery || !created_at)
+    return void 0;
+  return { schema_version: V2_SCHEMAS.inputManifest, manifest_id, run_id, work_item_id, input_refs, artifact_digests, bundle_digest, byte_length, delivery, ...rejection_reason === void 0 ? {} : { rejection_reason }, created_at };
 }
 function decodePipelineStage(input, path8, errors) {
   const raw = object3(input, path8, errors);
@@ -21018,7 +21065,7 @@ function decodeWorkItemV2(input) {
   });
 }
 function decodeSkillRunV2(input) {
-  return genericMetaRecord(input, V2_SCHEMAS.run, ["run_id", "attempt_id", "attempt", "work_item_id", "skill_id", "skill_version", "mcp_ids", "status", "lease", "input_refs", "result_id", "prior_attempt_id", "failure", "started_at", "finished_at"], (r, e, m) => {
+  return genericMetaRecord(input, V2_SCHEMAS.run, ["run_id", "attempt_id", "attempt", "work_item_id", "skill_id", "skill_version", "mcp_ids", "status", "lease", "input_refs", "input_manifest", "result_id", "prior_attempt_id", "failure", "started_at", "finished_at"], (r, e, m) => {
     const run_id = text3(r.run_id, "$.run_id", e, ID2);
     const attempt_id = text3(r.attempt_id, "$.attempt_id", e, ID2);
     const attempt = integer2(r.attempt, "$.attempt", e);
@@ -21029,6 +21076,7 @@ function decodeSkillRunV2(input) {
     if (!status2)
       e.push({ code: "field-invalid", path: "$.status" });
     const lease = nested(r.lease, decodeRunLeaseV2, "$.lease", e);
+    const input_manifest = r.input_manifest === void 0 ? void 0 : decodeSkillInputManifestV2(r.input_manifest, "$.input_manifest", e);
     const result_id = optionalText(r.result_id, "$.result_id", e, ID2);
     const prior_attempt_id = optionalText(r.prior_attempt_id, "$.prior_attempt_id", e, ID2);
     const started_at = optionalText(r.started_at, "$.started_at", e, UTC);
@@ -21047,11 +21095,11 @@ function decodeSkillRunV2(input) {
     }
     if (!run_id || !attempt_id || attempt === void 0 || !work_item_id || !skill_id || !skill_version || !status2)
       return void 0;
-    return { ...m, schema_version: V2_SCHEMAS.run, run_id, attempt_id, attempt, work_item_id, skill_id, skill_version, mcp_ids: strings(r.mcp_ids, "$.mcp_ids", e), status: status2, ...lease === void 0 ? {} : { lease }, input_refs: strings(r.input_refs, "$.input_refs", e), ...result_id === void 0 ? {} : { result_id }, ...prior_attempt_id === void 0 ? {} : { prior_attempt_id }, ...failure7 === void 0 ? {} : { failure: failure7 }, ...started_at === void 0 ? {} : { started_at }, ...finished_at === void 0 ? {} : { finished_at } };
+    return { ...m, schema_version: V2_SCHEMAS.run, run_id, attempt_id, attempt, work_item_id, skill_id, skill_version, mcp_ids: strings(r.mcp_ids, "$.mcp_ids", e), status: status2, ...lease === void 0 ? {} : { lease }, input_refs: strings(r.input_refs, "$.input_refs", e), ...input_manifest === void 0 ? {} : { input_manifest }, ...result_id === void 0 ? {} : { result_id }, ...prior_attempt_id === void 0 ? {} : { prior_attempt_id }, ...failure7 === void 0 ? {} : { failure: failure7 }, ...started_at === void 0 ? {} : { started_at }, ...finished_at === void 0 ? {} : { finished_at } };
   });
 }
 function decodeSkillResultV2(input) {
-  return genericMetaRecord(input, V2_SCHEMAS.result, ["result_id", "run_id", "status", "contract_status", "output_schema_id", "summary", "raw_output", "artifacts", "validation_refs", "diagnostics"], (r, e, m) => {
+  return genericMetaRecord(input, V2_SCHEMAS.result, ["result_id", "run_id", "status", "contract_status", "output_schema_id", "summary", "raw_output", "artifacts", "validation_refs", "diagnostics", "output_digest", "output_bytes"], (r, e, m) => {
     const result_id = text3(r.result_id, "$.result_id", e, ID2);
     const run_id = text3(r.run_id, "$.run_id", e, ID2);
     const status2 = ["completed", "failed", "blocked", "incomplete", "corrupt"].includes(String(r.status)) ? r.status : void 0;
@@ -21060,8 +21108,10 @@ function decodeSkillResultV2(input) {
       e.push({ code: "field-invalid", path: "$.status" });
     if (!contract_status)
       e.push({ code: "field-invalid", path: "$.contract_status" });
-    const output_schema_id = optionalText(r.output_schema_id, "$.output_schema_id", e, ID2);
+    const output_schema_id = optionalText(r.output_schema_id, "$.output_schema_id", e, SCHEMA_ID);
     const summary = optionalText(r.summary, "$.summary", e);
+    const output_digest = r.output_digest === void 0 ? void 0 : digest6(r.output_digest, "$.output_digest", e);
+    const output_bytes = r.output_bytes === void 0 ? void 0 : integer2(r.output_bytes, "$.output_bytes", e);
     let raw_output;
     if (r.raw_output !== void 0) {
       const v = object3(r.raw_output, "$.raw_output", e);
@@ -21092,7 +21142,7 @@ function decodeSkillResultV2(input) {
     }).filter((x) => x !== void 0);
     if (!result_id || !run_id || !status2 || !contract_status)
       return void 0;
-    return { ...m, schema_version: V2_SCHEMAS.result, result_id, run_id, status: status2, contract_status, ...output_schema_id === void 0 ? {} : { output_schema_id }, ...summary === void 0 ? {} : { summary }, ...raw_output === void 0 ? {} : { raw_output }, artifacts, validation_refs: strings(r.validation_refs, "$.validation_refs", e), diagnostics: strings(r.diagnostics, "$.diagnostics", e) };
+    return { ...m, schema_version: V2_SCHEMAS.result, result_id, run_id, status: status2, contract_status, ...output_schema_id === void 0 ? {} : { output_schema_id }, ...summary === void 0 ? {} : { summary }, ...raw_output === void 0 ? {} : { raw_output }, artifacts, validation_refs: strings(r.validation_refs, "$.validation_refs", e), diagnostics: strings(r.diagnostics, "$.diagnostics", e), ...output_digest === void 0 ? {} : { output_digest }, ...output_bytes === void 0 ? {} : { output_bytes } };
   });
 }
 function decodeValidationReportV2(input) {
@@ -21696,7 +21746,7 @@ function evolveV2(aggregate, event) {
       const previous = item2?.active_run_id === void 0 ? next.runs.filter((run) => run.work_item_id === command.work_item_id).at(-1) : find(next.runs, "run_id", item2.active_run_id);
       if (item2 !== void 0) {
         const nextAttempt = (previous?.attempt ?? item2.attempt_count) + 1;
-        const newRun = previous === void 0 ? void 0 : { ...previous, record_id: `run:${command.run_id}`, run_id: command.run_id, attempt_id: command.attempt_id, attempt: nextAttempt, prior_attempt_id: previous.attempt_id, status: "queued", result_id: void 0, failure: void 0, lease: void 0, started_at: void 0, finished_at: void 0, revision: event.revision };
+        const newRun = previous === void 0 ? void 0 : { ...previous, record_id: `run:${command.run_id}`, run_id: command.run_id, attempt_id: command.attempt_id, attempt: nextAttempt, prior_attempt_id: previous.attempt_id, status: "queued", result_id: void 0, failure: void 0, lease: void 0, started_at: void 0, finished_at: void 0, input_manifest: void 0, revision: event.revision };
         next = { ...next, ...newRun === void 0 ? {} : { runs: [...next.runs, newRun] }, work_items: replaceBy(next.work_items, "work_item_id", { ...item2, status: "queued", attempt_count: nextAttempt, active_run_id: newRun?.run_id, blockers: [], revision: event.revision }), next_actions: ["claim-run"] };
       }
       break;
@@ -21946,11 +21996,11 @@ function eventPath(changeDir2, revision, eventId) {
   safeId(eventId, "event id");
   return path7.join(dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR), `${String(revision).padStart(12, "0")}-${eventId}.json`);
 }
-function snapshotPath(changeDir2, revision, digest7) {
+function snapshotPath(changeDir2, revision, digest8) {
   if (!integer3(revision))
     throw new LedgerPathError("snapshot revision must be a non-negative integer");
-  safeId(digest7, "snapshot digest");
-  return path7.join(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), `${String(revision).padStart(12, "0")}-${digest7.slice(7, 23)}.json`);
+  safeId(digest8, "snapshot digest");
+  return path7.join(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), `${String(revision).padStart(12, "0")}-${digest8.slice(7, 23)}.json`);
 }
 function idempotencyPath(changeDir2, commandId) {
   safeId(commandId, "command id");
@@ -22180,8 +22230,8 @@ var FsOrchestrationLedger = class {
         return existing;
       }
       const aggregate = createAggregateV2(seed.project_id, seed.change_id, seed.correlation_id, seed.updated_at);
-      const digest7 = checksum(aggregate);
-      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), snapshotPath(changeDir2, 0, digest7), "snapshot", aggregate);
+      const digest8 = checksum(aggregate);
+      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), snapshotPath(changeDir2, 0, digest8), "snapshot", aggregate);
       await atomicReplaceFile(currentPath(changeDir2), json(envelope("snapshot", aggregate)));
       return aggregate;
     });
@@ -23818,7 +23868,7 @@ var AFK_RUN_SCRIPT_SHA256 = "993067db8ccb4c3b48c54ff2410907fd4dc72a5df3d0dc8946f
 var AFK_RUN_DRIFT_EXIT_CODE = 95;
 var IMAGE_AFK_RUN_PATH = "/usr/local/bin/tenon-afk-run";
 var IMAGE_ATTESTATION_PATH = "/opt/pipeline/image-attestation.env";
-var checksumGuard = (path8, digest7, attestationKey, label) => `actual_sha="$(sha256sum ${path8} 2>/dev/null | awk '{print $1}')"; [ "$actual_sha" = "${digest7}" ] && grep -qx "${attestationKey}=${digest7}" ${IMAGE_ATTESTATION_PATH} 2>/dev/null || { echo "sandcastle \u955C\u50CF\u5185 ${label} \u4E0E host \u671F\u671B\u6216\u955C\u50CF attestation \u4E0D\u4E00\u81F4\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
+var checksumGuard = (path8, digest8, attestationKey, label) => `actual_sha="$(sha256sum ${path8} 2>/dev/null | awk '{print $1}')"; [ "$actual_sha" = "${digest8}" ] && grep -qx "${attestationKey}=${digest8}" ${IMAGE_ATTESTATION_PATH} 2>/dev/null || { echo "sandcastle \u955C\u50CF\u5185 ${label} \u4E0E host \u671F\u671B\u6216\u955C\u50CF attestation \u4E0D\u4E00\u81F4\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
 var AFK_RUN_DRIFT_GUARD = checksumGuard(IMAGE_AFK_RUN_PATH, AFK_RUN_SCRIPT_SHA256, "pipeline_afk_run_sha256", "tenon-afk-run");
 
 // packages/automation/dist/lifecycle/worktree.js
@@ -24599,7 +24649,7 @@ function isRecord6(value) {
 function validAttempt(value) {
   if (!isRecord6(value))
     return false;
-  return typeof value.attempt_id === "string" && safeId2(value.attempt_id) && typeof value.work_item_id === "string" && safeId2(value.work_item_id) && Number.isSafeInteger(value.attempt_number) && Number(value.attempt_number) > 0 && ["pending", "running", "succeeded", "failed", "cancelled"].includes(String(value.status)) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at)) && isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest7]) => safeId2(key) && typeof digest7 === "string") && (value.output_digest === void 0 || typeof value.output_digest === "string") && (value.error_code === void 0 || typeof value.error_code === "string");
+  return typeof value.attempt_id === "string" && safeId2(value.attempt_id) && typeof value.work_item_id === "string" && safeId2(value.work_item_id) && Number.isSafeInteger(value.attempt_number) && Number(value.attempt_number) > 0 && ["pending", "running", "succeeded", "failed", "cancelled"].includes(String(value.status)) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at)) && isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest8]) => safeId2(key) && typeof digest8 === "string") && (value.output_digest === void 0 || typeof value.output_digest === "string") && (value.error_code === void 0 || typeof value.error_code === "string");
 }
 function validOperation(value) {
   if (!isRecord6(value))
@@ -24611,7 +24661,7 @@ function validValidator(value) {
     return false;
   const scope = String(value.scope);
   const targetValid = scope === "run" ? value.target_id === void 0 : typeof value.target_id === "string" && safeId2(value.target_id);
-  return typeof value.validator_id === "string" && safeId2(value.validator_id) && ["work-item", "group", "run"].includes(scope) && targetValid && ["pending", "passed", "failed", "invalidated"].includes(String(value.status)) && (value.code === void 0 || typeof value.code === "string" && safeId2(value.code)) && (value.input_digests === void 0 || isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest7]) => safeId2(key) && typeof digest7 === "string")) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at));
+  return typeof value.validator_id === "string" && safeId2(value.validator_id) && ["work-item", "group", "run"].includes(scope) && targetValid && ["pending", "passed", "failed", "invalidated"].includes(String(value.status)) && (value.code === void 0 || typeof value.code === "string" && safeId2(value.code)) && (value.input_digests === void 0 || isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest8]) => safeId2(key) && typeof digest8 === "string")) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at));
 }
 function sameInputDigests(left, right) {
   const leftEntries = Object.entries(left).sort(([a], [b]) => a.localeCompare(b));
@@ -24905,6 +24955,9 @@ var MAX_INTENT_BYTES = 8 * 1024;
 
 // packages/automation/dist/orchestration/runtime-v2-boundary.js
 var DEFAULT_MAX_OUTPUT_BYTES = 256 * 1024;
+
+// packages/automation/dist/orchestration/input-materialization-v2.js
+var MAX_INPUT_BYTES = 1024 * 1024;
 
 // packages/server/src/workflows.ts
 import { randomUUID as randomUUID7 } from "node:crypto";
@@ -26373,7 +26426,7 @@ async function readTasksProjection(changeDir2, hooks = {}, rootAnchor) {
     const opened = fstatSync7(fd, { bigint: true });
     if (!opened.isFile() || opened.size > BigInt(MAX_TASKS_MARKDOWN_BYTES)) return void 0;
     const openedVersion = captureStableFileVersion(opened);
-    const stable3 = () => {
+    const stable4 = () => {
       const currentDir = lstatSync6(changeDir2);
       const currentDirVersion = lstatSync6(changeDir2, { bigint: true });
       const current = lstatSync6(lexicalTarget, { bigint: true });
@@ -26383,13 +26436,13 @@ async function readTasksProjection(changeDir2, hooks = {}, rootAnchor) {
       fstatSync7(fd, { bigint: true }),
       openedVersion
     );
-    if (!stable3() || !fdStable()) return void 0;
+    if (!stable4() || !fdStable()) return void 0;
     const source = (hooks.readSource ?? readBoundedTasksSource)(fd, MAX_TASKS_MARKDOWN_BYTES);
     assertTrustContext();
     const trustedCanonicalProjection = isCanonicalTaskPlanTasksMarkdown(source) && (hooks.authorizeCanonicalProjection === void 0 ? await hasCurrentCanonicalTaskPlanProjection(anchoredChangeDir, source) : await hooks.authorizeCanonicalProjection(source, anchoredChangeDir));
     assertTrustContext();
     if (opened.size > BigInt(MAX_LEGACY_TASKS_MARKDOWN_BYTES) && !trustedCanonicalProjection) return void 0;
-    if (!fdStable() || !stable3()) return void 0;
+    if (!fdStable() || !stable4()) return void 0;
     assertTrustContext();
     return { source, trustedCanonicalProjection };
   } catch {

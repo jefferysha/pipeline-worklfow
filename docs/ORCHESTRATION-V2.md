@@ -23,11 +23,23 @@ Tenon V2 是 local-first 的持久化编排闭环。Kernel 的 `BoardSnapshotV2`
 - 每个 stage 都声明 `execution_mode`、依赖、Work Item、输入/输出引用、门禁类型；每个 Skill 都保留版本、来源、串并行模式、依赖、MCP、输入/输出 schema 和 validator。Skill 输出保持 opaque，只通过 schema id、artifact ref 和验证报告连接下游。
 - `customizations` 明确记录 workflow、track、pipeline 是否自定义，以及用户选择的 Skill/MCP。用户或项目可通过 `pipeline_blueprint` 传入任意合法 ID、版本、阶段和 Skill 顺序；planner 会校验覆盖全部 Work Item、阶段序号唯一、引用安全后再冻结。
 
-默认自动规划会把每个 graph Work Item 物化为一个 stage，因而 stage 顺序、Skill 顺序和运行顺序一一可审计。运行时优先按冻结 pipeline 的 `stage_order` 调度，并在同一 stage 内按 Skill `order` 排序；stage 的 `serial`/`parallel` 会覆盖旧 graph group 的调度提示，避免“看板顺序”和真实执行顺序分叉。
+冻结时必须满足三条不变量：`stage_order` 覆盖且只覆盖 `stages[].stage_id`；每个 Work Item 只属于一个 Stage 且恰好绑定一个已解析 Skill；所有 stage/Skill 依赖都指向已存在节点并严格向前。`PipelineSkillV2` 的 `mode`、`depends_on`、`mcp_ids`、`input_schema_id`、`output_schema_id`、`validator_ids` 和 `resource_claims` 都随冻结记录保存，运行时不重新猜测顺序。
+
+默认自动规划会把每个 graph Work Item 物化为一个 stage，因而 stage 顺序、Skill 顺序和运行顺序一一可审计。运行时优先按冻结 pipeline 的 `stage_order` 调度，并在同一 stage 内按 Skill `order` 排序；stage 的 `serial`/`parallel` 会覆盖旧 graph group 的调度提示，避免“看板顺序”和真实执行顺序分叉。自定义 pipeline 可把多个 Work Item 放入一个 stage；只有同一 stage、依赖已完成、Skill 声明允许并行且资源写冲突不相交的项才会进入同一 wave。未满足的 stage/Skill 依赖会 fail-closed，不会越级执行。
+
+## 输入物化与产物登记
+
+每次 `claim-run` 前，runtime 会从已完成依赖的 Result 构造有界输入清单：`skill-result:<result_id>` 是结构化 Result 投影，Result 的 `raw_output.ref` 和每个 artifact ref 作为带预期 digest 的内容项。主机通过默认 change 目录 resolver 或用户提供的 resolver 读取内容，执行 JSON 快照、深度/节点/字节上限和 digest 比对；任一项缺失、越界或摘要不匹配，Run 仍会留下 `delivery: rejected` 的 `skill-input-manifest/v2`，且不会调用 Skill。
+
+清单写入 Run 的 `input_manifest`，包含完整 refs、digest、bundle digest、字节数、创建时间和投递结论；成功时 executor 与 validator 都收到同一个只读 `skill-input-bundle/v2`。因此大模型不需要自行猜测“上一环节产物在哪里”：宿主已将经过证明的内容注入上下文，并把“已读取/已投递”作为可回放状态。输入 bundle 内容不写入事件账本，账本只保留证明和摘要，避免泄露原始输出。
+
+每个成功 observation 会先以稳定 JSON 写入 `.tenon-artifacts/<result_id>/output.json`，再生成 `artifact://<result_id>/output.json`、`raw_output`、`output_digest` 和 `output_bytes`。下游读取该 URI 时再次校验 digest；Result、Validation、Gate 和 Dashboard 都只引用这些可追溯地址，不依赖模型临时记忆。
 
 ## 状态与恢复
 
 Change 生命周期为 `draft → assessing → planning → [freeze-pipeline] → [freeze-work-graph] → planned → ready → executing → verifying → completed`，并可进入 `waiting-input`、`blocked`、`paused`、`failed` 或 `cancelled`。Pipeline 变更先由 `replan-change` 将旧记录标记为 `superseded`，再冻结新 pipeline 和 graph；旧事件、digest、revision 始终保留。Work Item、Run、Result、Validation 和 Gate 各自有闭集状态；状态只能由 Kernel reducer 通过 command 迁移。
+
+状态推进遵循“先证据、后状态”：`accept-request` 只进入 draft，`record-context`/`record-assessment`/`freeze-pipeline`/`freeze-work-graph`/`resolve-capabilities` 依次补齐规划证据；`start-change` 只接受 ready；`enqueue-work-item → claim-run → begin-run` 只对依赖已完成的 Work Item 尝试，输入物化失败时仍登记 `delivery: rejected`，但绝不调用 executor；`complete-run` 后必须有 validated/pass 的 Validation，全部 Work Item 完成后才允许 verification Gate；Gate 未通过时 Change 保持 verifying/reviewing，不得伪造 completed。每个拒绝都不写 canonical 状态，只追加带 reason code 的失败结果。
 
 执行器先获得 lease，再 heartbeat；lease 过期后恢复报告会记录 `expired-awaiting-scheduler`，runtime 生成新的 attempt 并保留 `prior_attempt_id`。重试、取消、人工门禁和重规划都写入同一事件链。任何 validator unknown/invalid 都不能伪造完成。
 
