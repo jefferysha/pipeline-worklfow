@@ -162,6 +162,12 @@ export function materializeWorkflowPipelineV2(input: MaterializeWorkflowPipeline
   }
   const stage_order = [...stages].sort((left, right) => left.ordinal - right.ordinal).map((stage) => stage.stage_id)
   if (new Set(stage_order).size !== stage_order.length) throw new TypeError('pipeline stage ordinals must be unique')
+  const stagePositions = new Map(stage_order.map((stageId, index) => [stageId, index]))
+  for (const stage of stages) for (const dependency of stage.depends_on) {
+    const dependencyPosition = stagePositions.get(dependency)
+    const stagePosition = stagePositions.get(stage.stage_id)
+    if (dependencyPosition === undefined || stagePosition === undefined || dependencyPosition >= stagePosition) throw new TypeError(`pipeline stage dependency order is invalid: ${dependency}->${stage.stage_id}`)
+  }
   const body = {
     schema_version: 'workflow-pipeline/v2' as const, record_id: `pipeline:${identity.pipeline_id}`, project_id: input.request.project_id, change_id: input.request.change_id,
     revision: input.graph.revision, correlation_id: input.request.correlation_id, actor: { kind: 'system' as const, id: 'planner' }, created_at: input.now,
