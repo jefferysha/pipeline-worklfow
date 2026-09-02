@@ -192,3 +192,33 @@
 ### Next Steps
 
 - 后续可在 CLI/HTTP 增加 pipeline_blueprint 编辑入口，并继续扩展多 Skill 单 Work Item 的执行模型。
+
+
+## Session 7: Pipeline aggregate contract coverage
+<!-- trellis-session: v=2 fp=327cc9318b8a750c -->
+
+**Date**: 2026-09-02
+**Task**: Pipeline aggregate contract coverage
+**Branch**: `codex/autonomous-loop-v1`
+
+### Summary
+
+补齐 workflow-pipeline/v2 codec、freeze-pipeline 顺序、绑定一致性和 stale assessment 拒绝测试。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `baf1f20` | test(orchestration): cover pipeline aggregate contract |
+
+### Testing
+
+- [OK] Kernel orchestration aggregate test passed。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 推送包含测试提交和会话记录的最终远程 SHA。
