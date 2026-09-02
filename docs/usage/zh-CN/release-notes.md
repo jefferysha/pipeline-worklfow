@@ -12,6 +12,30 @@ Tenon 的发布说明用于回答三个问题：这一版改变了什么、用�
 
 面向用户的解释、影响与操作步骤默认使用中文。
 
+## v1.0.9 · 2026-09-02
+
+### Dashboard 稳定性与 Pipeline 可见性
+
+- 适配器安装的有限事件流会在完成后确定性关闭；malformed、传输不可用会明确报错，安装按钮
+  不会永久停留在忙碌状态。切换项目时会解绑旧流，旧项目的迟到事件不会串到新项目。
+- Definition catalog 的 SSE 在浏览器于初始加载期间离开时也会清理；慢速投影会串行化，避免
+  revision 乱序到达或回退页面上已经看到的定义。
+- Change 创建会等待 catalog 对账，并明确展示 loading、unavailable、empty 状态。创建前会预览
+  选定 Pipeline 的每个 Stage、串行/并行模式、Skill 顺序和声明的依赖关系。
+- 适配器请求的布尔字段现在严格校验类型，不再把字符串隐式当作值，保证 dry-run 与确认语义
+  对 API 客户端保持明确。
+
+### 兼容性与范围
+
+- 已有 Change 继续使用冻结的 Workflow/Track/Pipeline 身份；GUI 当前展示由 Workflow/Track 派生的
+  canonical Pipeline。独立命名的 Pipeline blueprint 仍通过 planner-v2 使用，待持久化 Pipeline
+  Registry 契约落地后再进入编辑器。
+
+### 升级动作
+
+安装不可变的 `v1.0.9` 入口，日常更新继续运行 `tenon update --codex`（或 `--claude`）。之前的
+`v1.0.8` 发布保持不可变，可作为回滚版本。
+
 ## v1.0.8 · 2026-09-02
 
 ### 编排输入与 Pipeline Runtime

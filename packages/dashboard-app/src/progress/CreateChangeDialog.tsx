@@ -12,6 +12,7 @@ import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
 import { useDefinitionCatalogSelection } from './useDefinitionCatalogSelection'
 import { PipelineSelector } from './PipelineSelector'
+import { PipelineCatalogStatus } from './PipelineCatalogStatus'
 import { FirstStepStatus } from './FirstStepStatus'
 
 export interface CreateChangeDialogProps {
@@ -52,7 +53,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
   const [firstStep, setFirstStep] = useState<string | null>(null)
   const [firstStepError, setFirstStepError] = useState<unknown | null>(null)
   const [firstStepState, setFirstStepState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
-  const { definitionCatalog, pipelines, selectedPipeline, setSelectedPipeline } = useDefinitionCatalogSelection(root, selectedTrack, selectedWorkflow)
+  const { definitionCatalog, catalogState, pipelines, selectedPipeline, setSelectedPipeline } = useDefinitionCatalogSelection(root, selectedTrack, selectedWorkflow)
   const [busy, setBusy] = useState(false)
   const [createError, setCreateError] = useState<unknown | null>(null)
   const previewSequence = useRef(0)
@@ -192,7 +193,8 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     && selectedWorkflow !== ''
     && firstStepState === 'ready'
     && firstStep !== null
-    && (definitionCatalog === null || selectedPipeline !== '')
+    && catalogState !== 'loading'
+    && (catalogState === 'unavailable' || selectedPipeline !== '')
     && !busy
 
   async function create(): Promise<void> {
@@ -237,11 +239,9 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
       }
     }
   }
-
   function requestClose(): void {
     if (!busy) onClose()
   }
-
   return (
     <Dialog
       title={t('change_create.title')}
@@ -272,7 +272,6 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
       )}
     >
       <p className="mb-4 text-[12.5px] leading-5 text-text-3">{t('change_create.subtitle')}</p>
-
       <div className="grid gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.35fr)]">
         <div className="space-y-3">
           <label className="block text-xs font-bold text-text-2">
@@ -300,7 +299,6 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
           </label>
           <p className="text-[11px] leading-4 text-text-3">{t('change_create.intent_note')}</p>
         </div>
-
         <section className="rounded-xl border border-border bg-bg p-3.5" aria-label={t('change_create.route_lock')}>
           <div className="mb-3 flex items-center justify-between gap-3 border-b border-border pb-2.5">
             <div>
@@ -350,7 +348,6 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                   </button>
                 ))}
               </div>
-
               {selectedCandidate && (
                 <>
                   {selectedCandidate.track.id === 'free' && (
@@ -385,6 +382,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                       label={t('change_create.pipeline')}
                       stageSummary={(count) => t('change_create.pipeline_stages', { count })}
                     />
+                    <PipelineCatalogStatus state={catalogState} pipelineCount={pipelines.length} t={t} />
                   </div>
                 </>
               )}

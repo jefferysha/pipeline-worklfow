@@ -15,7 +15,7 @@
 7. [done] Add Change-creation choice/preview for automatic versus custom Workflow/
    Track/Pipeline, preserving the existing freeze/replan semantics and writing an
    immutable `.pipeline-selection.json` receipt beside the Change.
-8. [in progress] Finish SSE catalog reconciliation and revision/state tests, then
+8. [done] Finish SSE catalog reconciliation and revision/state tests, then
    add browser E2E covering adapter selection, custom definition refresh, and the
    frozen active Change. Independent user-authored pipeline blueprints remain on the
    existing planner-v2 API; this first GUI slice exposes the canonical workflow/track
@@ -66,12 +66,20 @@
 
 ## Product-slice decision (2026-09-02)
 
-The release slice is implemented in this change. The existing server/dashboard stream is
-currently a Change snapshot stream and the existing host-target projection is a read-only
-`host-target-plan/v1` contract; neither is a sufficient write/CAS contract for a durable
-`adapter-catalog/v1` or Workflow/Track/Pipeline definition catalog. Adding those projections
-without a typed reducer, provenance event, and revision-gap reconciliation would create a
-second source of truth. The GUI installer and realtime custom-definition catalog therefore
-remain explicitly deferred until their command/event schemas are designed and accepted; the
-existing adapter registry and host-plan UI remain unchanged and continue to provide the safe
-scriptable installation path.
+The release slice is implemented in this change. The catalog is a typed projection over the
+authoritative adapter registry, Workflow files, Track registry, and planner contract. It is
+validated at the kernel boundary, fingerprinted without volatile timestamps, and reconciled by
+complete SSE snapshots. The GUI installer and realtime custom-definition catalog use those
+same contracts; the existing host-plan UI and JSON/CLI path remain compatible.
+
+Post-release hardening (2026-09-02):
+
+- finite install streams now close deterministically on completion, report transport failure,
+  and cannot leave the Dashboard install button permanently busy;
+- project changes detach old install streams and reject late events from a previous root;
+- catalog streams clean up while the initial projection is still pending and serialize polling
+  so slow CLI projections cannot emit revisions out of order;
+- Change creation waits for catalog reconciliation before enabling a visible Pipeline choice,
+  and the dialog previews each stage's serial/parallel mode, Skill order, and dependencies;
+- the GUI exposes the canonical Workflow/Track-derived Pipeline. Independent named Pipeline
+  blueprints remain on planner-v2 until a persisted Pipeline Registry contract is added.

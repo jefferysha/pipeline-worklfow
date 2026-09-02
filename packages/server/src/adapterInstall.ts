@@ -36,7 +36,9 @@ export function parseAdapterInstallRequest(value: unknown): { root: string; host
   const root = typeof body.root === 'string' ? body.root : ''
   const hosts = uniqueHosts(body.hosts)
   if (root === '' || hosts === null) return null
-  const dryRun = body.dry_run === undefined ? true : body.dry_run === true
+  if (body.dry_run !== undefined && typeof body.dry_run !== 'boolean') return null
+  if (body.confirm !== undefined && typeof body.confirm !== 'boolean') return null
+  const dryRun = body.dry_run === undefined ? true : body.dry_run
   const confirm = body.confirm === true
   if (!dryRun && !confirm) return null
   return { root, hosts, dryRun, confirm }

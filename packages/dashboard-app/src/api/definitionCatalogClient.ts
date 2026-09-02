@@ -78,20 +78,37 @@ export function subscribeDefinitionCatalog(
 ): () => void {
   if (typeof EventSource === 'undefined') return () => undefined
   const source = new EventSource(`/api/catalog/stream?root=${encodeURIComponent(root)}`)
+  let closed = false
   let acceptedFingerprint = ''
+  const close = (): void => {
+    if (closed) return
+    closed = true
+    source.close()
+  }
+  const fail = (): void => {
+    if (closed) return
+    close()
+    onError?.()
+  }
   const handle = (event: MessageEvent<string>): void => {
+    if (closed) return
     try {
       const payload: unknown = JSON.parse(event.data)
       if (isRecord(payload) && isCatalog(payload.catalog) && payload.catalog.fingerprint !== acceptedFingerprint) {
         acceptedFingerprint = payload.catalog.fingerprint
         onCatalog(payload.catalog)
       }
-    } catch { onError?.() }
+    } catch { fail() }
   }
   source.addEventListener('snapshot', handle)
   source.addEventListener('catalog-updated', handle)
-  source.onerror = () => onError?.()
-  return () => source.close()
+  // EventSource automatically retries transient failures. Do not surface a
+  // false error (or tear down a healthy subscription) while it is merely
+  // reconnecting; only a terminal CLOSED state is actionable.
+  source.onerror = () => {
+    if (source.readyState === 2) fail()
+  }
+  return close
 }
 
 export async function postAdapterInstall(input: {
@@ -122,15 +139,37 @@ export function subscribeAdapterInstall(
   onComplete?: () => void,
   onError?: () => void,
 ): () => void {
-  if (typeof EventSource === 'undefined') return () => undefined
+  if (typeof EventSource === 'undefined') {
+    // The install request has already been accepted by the server. Without a
+    // streaming transport the UI must leave its busy state and offer recovery
+    // instead of silently disabling both actions forever.
+    onError?.()
+    return () => undefined
+  }
   const source = new EventSource(stream)
+  let closed = false
+  const close = (): void => {
+    if (closed) return
+    closed = true
+    source.close()
+  }
+  const fail = (): void => {
+    if (closed) return
+    close()
+    onError?.()
+  }
   source.addEventListener('install-state', (event: MessageEvent<string>) => {
+    if (closed) return
     try {
       const payload: unknown = JSON.parse(event.data)
       if (isRecord(payload) && isAdapterInstallState(payload.state)) onState(payload.state)
-    } catch { onError?.() }
+    } catch { fail() }
   })
-  source.addEventListener('complete', () => onComplete?.())
-  source.onerror = () => onError?.()
-  return () => source.close()
+  source.addEventListener('complete', () => {
+    if (closed) return
+    close()
+    onComplete?.()
+  })
+  source.onerror = fail
+  return close
 }

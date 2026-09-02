@@ -6,6 +6,8 @@ describe('adapter installation state machine', () => {
   it('requires explicit confirmation for side effects and rejects duplicate hosts', () => {
     expect(parseAdapterInstallRequest({ root: '/project', hosts: ['cursor'], dry_run: false })).toBeNull()
     expect(parseAdapterInstallRequest({ root: '/project', hosts: ['cursor', 'cursor'], dry_run: true })).toBeNull()
+    expect(parseAdapterInstallRequest({ root: '/project', hosts: ['cursor'], dry_run: 'false', confirm: true })).toBeNull()
+    expect(parseAdapterInstallRequest({ root: '/project', hosts: ['cursor'], dry_run: false, confirm: 'true' })).toBeNull()
     expect(parseAdapterInstallRequest({ root: '/project', hosts: ['cursor'], dry_run: true })).toEqual({ root: '/project', hosts: ['cursor'], dryRun: true, confirm: false })
   })
 

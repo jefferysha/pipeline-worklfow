@@ -4,6 +4,34 @@ Tenon release notes explain what changed, what users need to do, and how to veri
 
 Only capabilities included in a public distribution belong here. Plans, internal ADRs, and unmerged experiments are not presented as shipped work.
 
+## v1.0.9 · 2026-09-02
+
+### Dashboard reliability and Pipeline clarity
+
+- Finite adapter-install event streams now close deterministically after completion, surface
+  malformed or unavailable transport errors, and never leave the install action stuck in a busy
+  state. Switching projects detaches the previous stream so late events cannot leak into the new
+  project.
+- Definition-catalog SSE requests clean up even when the browser closes during the initial load;
+  slow catalog projections are serialized so revisions cannot arrive out of order or regress the
+  visible definition.
+- Change creation waits for catalog reconciliation and explains loading, unavailable, and empty
+  states. The selected Pipeline now previews every Stage's serial/parallel mode, Skill order, and
+  declared dependencies before the first run.
+- Adapter request booleans are type-checked instead of coercing string values, keeping dry-run and
+  confirmation semantics explicit for API clients.
+
+### Compatibility and scope
+
+- Existing Changes keep their frozen Workflow/Track/Pipeline identity; the GUI continues to expose
+  the canonical Workflow/Track-derived Pipeline. Independent named Pipeline blueprints remain
+  available through planner-v2 until a persisted Pipeline Registry is introduced.
+
+### Upgrade
+
+Install the immutable `v1.0.9` entrypoint, then use `tenon update --codex` (or `--claude`) for
+routine upgrades. The previous `v1.0.8` release remains immutable and can be used for rollback.
+
 ## v1.0.8 · 2026-09-02
 
 ### Orchestration input and execution runtime

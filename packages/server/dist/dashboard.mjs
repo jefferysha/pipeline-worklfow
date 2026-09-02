@@ -30236,7 +30236,7 @@ var STEP_IDS = [
   "bundled-skills",
   "runtime-readiness"
 ];
-var HOST_PLAN_RELEASE_TAG = "v1.0.8";
+var HOST_PLAN_RELEASE_TAG = "v1.0.9";
 var LATEST_STABLE_TAG = "<latest-stable>";
 var NOTICE_IDS = [
   "host-plan.notice.read-only-generation",
@@ -30795,8 +30795,17 @@ async function resolveDefinitionCatalogRoute(req, res, path8, deps) {
   }
   streamHeaders(res);
   let closed5 = false;
+  let timer;
   let lastRevision = url.searchParams.get("after_revision") ?? "";
   let lastBeat = Date.now();
+  const cleanup = () => {
+    if (closed5) {
+      if (timer !== void 0) clearInterval(timer);
+      return;
+    }
+    closed5 = true;
+    if (timer !== void 0) clearInterval(timer);
+  };
   const writeEvent = (event, data) => {
     if (closed5 || res.writableEnded) return;
     try {
@@ -30806,14 +30815,24 @@ data: ${JSON.stringify(data)}
 `);
       lastBeat = Date.now();
     } catch {
-      closed5 = true;
+      cleanup();
     }
   };
+  const writeHeartbeat = () => {
+    if (closed5 || res.writableEnded) return;
+    try {
+      res.write(": ping\n\n");
+      lastBeat = Date.now();
+    } catch {
+      cleanup();
+    }
+  };
+  req.on("close", cleanup);
   const initial = await load().catch((error2) => {
     writeEvent("error", { code: "CATALOG_UNAVAILABLE", error: error2 instanceof Error ? error2.message : String(error2) });
     return null;
   });
-  if (initial !== null) {
+  if (initial !== null && !closed5) {
     lastRevision = initial.revision;
     writeEvent("snapshot", {
       schema_version: "definition-catalog-event/v1",
@@ -30823,12 +30842,15 @@ data: ${JSON.stringify(data)}
       catalog: initial
     });
   }
-  const timer = setInterval(() => {
+  if (closed5) return true;
+  let loading = false;
+  timer = setInterval(() => {
+    if (loading || closed5) return;
+    loading = true;
     void load().then((catalog2) => {
       if (catalog2.revision === lastRevision) {
         if (Date.now() - lastBeat >= deps.heartbeatMs) {
-          if (!closed5 && !res.writableEnded) res.write(": ping\n\n");
-          lastBeat = Date.now();
+          writeHeartbeat();
         }
         return;
       }
@@ -30841,17 +30863,12 @@ data: ${JSON.stringify(data)}
         catalog: catalog2
       });
     }).catch(() => {
-      if (Date.now() - lastBeat >= deps.heartbeatMs && !closed5 && !res.writableEnded) {
-        res.write(": ping\n\n");
-        lastBeat = Date.now();
-      }
+      if (Date.now() - lastBeat >= deps.heartbeatMs) writeHeartbeat();
+    }).finally(() => {
+      loading = false;
     });
   }, deps.pollIntervalMs);
   timer.unref?.();
-  req.on("close", () => {
-    closed5 = true;
-    clearInterval(timer);
-  });
   return true;
 }
 
@@ -30872,7 +30889,9 @@ function parseAdapterInstallRequest(value) {
   const root = typeof body.root === "string" ? body.root : "";
   const hosts = uniqueHosts(body.hosts);
   if (root === "" || hosts === null) return null;
-  const dryRun = body.dry_run === void 0 ? true : body.dry_run === true;
+  if (body.dry_run !== void 0 && typeof body.dry_run !== "boolean") return null;
+  if (body.confirm !== void 0 && typeof body.confirm !== "boolean") return null;
+  const dryRun = body.dry_run === void 0 ? true : body.dry_run;
   const confirm = body.confirm === true;
   if (!dryRun && !confirm) return null;
   return { root, hosts, dryRun, confirm };
@@ -31045,12 +31064,17 @@ data: ${JSON.stringify({ schema_version: "adapter-install-event/v1", kind: "comp
     write(state);
     closeWhenComplete();
   });
-  closeWhenComplete();
+  if (closed5) {
+    unsubscribe?.();
+    unsubscribe = null;
+  } else {
+    closeWhenComplete();
+  }
   req.on("close", () => {
     closed5 = true;
     unsubscribe?.();
   });
-  if (unsubscribe === null) {
+  if (unsubscribe === null && !closed5) {
     closed5 = true;
     res.end();
   }

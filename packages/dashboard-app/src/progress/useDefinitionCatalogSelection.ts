@@ -7,23 +7,36 @@ export function useDefinitionCatalogSelection(
   selectedWorkflow: string,
 ): {
   definitionCatalog: DefinitionCatalog | null
+  catalogState: 'loading' | 'ready' | 'unavailable'
   pipelines: DefinitionCatalog['pipelines']
   selectedPipeline: string
   setSelectedPipeline: (value: string) => void
 } {
   const [definitionCatalog, setDefinitionCatalog] = useState<DefinitionCatalog | null>(null)
+  const [catalogState, setCatalogState] = useState<'loading' | 'ready' | 'unavailable'>('loading')
   const [selectedPipeline, setSelectedPipeline] = useState('')
   useEffect(() => {
     let active = true
     setDefinitionCatalog(null)
+    setCatalogState(root === '' ? 'unavailable' : 'loading')
     setSelectedPipeline('')
+    if (root === '') return () => { active = false }
     void fetchDefinitionCatalog(root).then((catalog) => {
-      if (active) setDefinitionCatalog(catalog)
+      if (active) {
+        setDefinitionCatalog(catalog)
+        setCatalogState('ready')
+      }
     }).catch(() => {
-      if (active) setDefinitionCatalog(null)
+      if (active) {
+        setDefinitionCatalog(null)
+        setCatalogState('unavailable')
+      }
     })
     const stop = subscribeDefinitionCatalog(root, (catalog) => {
-      if (active) setDefinitionCatalog(catalog)
+      if (active) {
+        setDefinitionCatalog(catalog)
+        setCatalogState('ready')
+      }
     })
     return () => { active = false; stop() }
   }, [root])
@@ -35,5 +48,5 @@ export function useDefinitionCatalogSelection(
     const preferred = pipelines[0]?.id ?? ''
     setSelectedPipeline((current) => pipelines.some((pipeline) => pipeline.id === current) ? current : preferred)
   }, [pipelines])
-  return { definitionCatalog, pipelines, selectedPipeline, setSelectedPipeline }
+  return { definitionCatalog, catalogState, pipelines, selectedPipeline, setSelectedPipeline }
 }

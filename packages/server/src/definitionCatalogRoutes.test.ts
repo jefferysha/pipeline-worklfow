@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { EventEmitter } from 'node:events'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -79,5 +80,46 @@ describe('definition catalog routes', () => {
     )
     expect(result).toBe(true)
     expect(response).toEqual({ code: 403, body: { ok: false, code: 'CATALOG_ROOT_INVALID', error: 'untrusted' } })
+  })
+
+  it('cleans up when the browser closes during the initial asynchronous projection', async () => {
+    vi.useFakeTimers()
+    const root = await mkdtemp(join(tmpdir(), 'tenon-catalog-close-'))
+    roots.push(root)
+    await mkdir(join(root, '.pipeline'), { recursive: true })
+    const anchor = captureWorkflowRootAnchor(root)
+    anchors.push(anchor)
+    let resolveHost: ((value: { exitCode: number; stdout: string; stderr: string }) => void) | undefined
+    const runner = vi.fn<PipelineCliRunner>(() => new Promise((resolve) => { resolveHost = resolve }))
+    const req = new EventEmitter()
+    const writes: string[] = []
+    const res = {
+      writableEnded: false,
+      writeHead: vi.fn(),
+      write: vi.fn((chunk: string) => { writes.push(chunk); return true }),
+    }
+    ;(req as EventEmitter & { url: string }).url = `/api/catalog/stream?root=${encodeURIComponent(root)}`
+    const pending = resolveDefinitionCatalogRoute(
+      req as never,
+      res as never,
+      '/api/catalog/stream',
+      {
+        workflowRootForRequest: () => ({ ok: true, anchor }),
+        hostHome: root,
+        operationRunner: runner,
+        trackValidationContextFor: () => ({ workflowExists: () => true, skillProfiles: new Set() }),
+        clock: () => '2026-09-02T00:00:00.000Z',
+        pollIntervalMs: 10,
+        heartbeatMs: 10,
+        sendJson: vi.fn(),
+      },
+    )
+    req.emit('close')
+    resolveHost?.({ exitCode: 0, stdout: JSON.stringify(hostCatalog), stderr: '' })
+    await expect(pending).resolves.toBe(true)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(writes).toEqual([])
+    vi.useRealTimers()
   })
 })

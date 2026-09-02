@@ -106,12 +106,23 @@ export async function resolveAdapterInstallGet(
   // replays the states synchronously, so the callback above runs before the
   // unsubscribe handle is assigned; check once after assignment to close the
   // stream deterministically instead of leaving a completed job hanging.
-  closeWhenComplete()
+  if (closed) {
+    // A completed job can be replayed synchronously before `subscribe` returns.
+    // Release the listener immediately once its handle becomes available.
+    unsubscribe?.()
+    unsubscribe = null
+  } else {
+    closeWhenComplete()
+  }
   req.on('close', () => {
     closed = true
     unsubscribe?.()
   })
-  if (unsubscribe === null) {
+  // A fast completed job may have ended the response during synchronous state
+  // replay before `subscribe` returned its unsubscribe handle. Do not call
+  // `res.end()` a second time in that path; Node treats the duplicate close as
+  // a write-after-end and can surface it as a noisy server error.
+  if (unsubscribe === null && !closed) {
     closed = true
     res.end()
   }

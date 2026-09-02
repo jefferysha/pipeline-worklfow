@@ -58,22 +58,45 @@ export async function resolveDefinitionCatalogRoute(
 
   streamHeaders(res)
   let closed = false
+  let timer: ReturnType<typeof setInterval> | undefined
   let lastRevision = url.searchParams.get('after_revision') ?? ''
   let lastBeat = Date.now()
+  const cleanup = (): void => {
+    if (closed) {
+      if (timer !== undefined) clearInterval(timer)
+      return
+    }
+    closed = true
+    if (timer !== undefined) clearInterval(timer)
+  }
   const writeEvent = (event: string, data: unknown): void => {
     if (closed || res.writableEnded) return
     try {
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
       lastBeat = Date.now()
     } catch {
-      closed = true
+      cleanup()
     }
   }
+  const writeHeartbeat = (): void => {
+    if (closed || res.writableEnded) return
+    try {
+      res.write(': ping\n\n')
+      lastBeat = Date.now()
+    } catch {
+      cleanup()
+    }
+  }
+  // Attach the close listener before the first asynchronous catalog load. A
+  // browser can navigate away while the CLI projection is still running; in
+  // that case no timer may be left behind and the completed snapshot must not
+  // be written to a dead socket.
+  req.on('close', cleanup)
   const initial = await load().catch((error: unknown) => {
     writeEvent('error', { code: 'CATALOG_UNAVAILABLE', error: error instanceof Error ? error.message : String(error) })
     return null
   })
-  if (initial !== null) {
+  if (initial !== null && !closed) {
     lastRevision = initial.revision
     writeEvent('snapshot', {
       schema_version: 'definition-catalog-event/v1',
@@ -83,12 +106,15 @@ export async function resolveDefinitionCatalogRoute(
       catalog: initial,
     })
   }
-  const timer = setInterval(() => {
+  if (closed) return true
+  let loading = false
+  timer = setInterval(() => {
+    if (loading || closed) return
+    loading = true
     void load().then((catalog) => {
       if (catalog.revision === lastRevision) {
         if (Date.now() - lastBeat >= deps.heartbeatMs) {
-          if (!closed && !res.writableEnded) res.write(': ping\n\n')
-          lastBeat = Date.now()
+          writeHeartbeat()
         }
         return
       }
@@ -101,16 +127,11 @@ export async function resolveDefinitionCatalogRoute(
         catalog,
       })
     }).catch(() => {
-      if (Date.now() - lastBeat >= deps.heartbeatMs && !closed && !res.writableEnded) {
-        res.write(': ping\n\n')
-        lastBeat = Date.now()
-      }
+      if (Date.now() - lastBeat >= deps.heartbeatMs) writeHeartbeat()
+    }).finally(() => {
+      loading = false
     })
   }, deps.pollIntervalMs)
   timer.unref?.()
-  req.on('close', () => {
-    closed = true
-    clearInterval(timer)
-  })
   return true
 }
