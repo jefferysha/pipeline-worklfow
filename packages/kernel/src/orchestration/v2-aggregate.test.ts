@@ -4,6 +4,7 @@ import {
   decodeBoardCommandV2,
   decodeBoardEventV2,
   decodeDevelopmentRequestV2,
+  decodeWorkflowPipelineV2,
   decideV2,
   evolveV2,
   foldV2,
@@ -55,6 +56,36 @@ describe('canonical orchestration aggregate v2', () => {
     expect(decodeBoardEventV2(decision.event)).toMatchObject({ ok: true })
     expect(decodeBoardEventV2({ ...decision.event, effects: [{ type: 'unknown-effect' }] })).toMatchObject({ ok: false })
     expect(decodeBoardEventV2({ ...decision.event, effects: [{ type: 'wake-scheduler', reason: 'x', extra: true }] })).toMatchObject({ ok: false })
+  })
+
+  test('freezes a workflow pipeline before the graph and rejects stale bindings', () => {
+    const pipeline = {
+      schema_version: 'workflow-pipeline/v2' as const, record_id: 'pipeline:default:free:main', project_id: 'project-1', change_id: 'change-1', revision: 2,
+      correlation_id: 'corr-1', actor: { kind: 'system' as const, id: 'planner' }, created_at: now,
+      pipeline_id: 'default:free:main', pipeline_version: '1', workflow_id: 'default', workflow_version: 'auto-v2', workflow_source: 'automatic' as const,
+      workflow_fingerprint: `sha256:${'a'.repeat(64)}`, track_id: 'free', track_revision: 'auto-v2', track_source: 'automatic' as const,
+      pipeline_source: 'automatic' as const, graph_id: 'graph-1', assessment_id: 'assessment-1', status: 'frozen' as const,
+      stage_order: ['item-1'], stages: [{ stage_id: 'item-1', name: 'Build', ordinal: 0, execution_mode: 'serial' as const, depends_on: [], work_item_ids: ['item-1'], gate: 'none' as const,
+        skills: [{ binding_id: 'binding:item-1:skill-1', skill_id: 'skill-1', skill_version: '1.0.0', order: 0, role: 'automatic' as const, source: 'automatic' as const, mode: 'serial' as const, depends_on: [], mcp_ids: [], validator_ids: [] }], input_refs: [], output_refs: ['result:item-1'] }],
+      customizations: { custom_workflow: false, custom_track: false, custom_pipeline: false, user_skill_ids: [], user_mcp_ids: [] }, pipeline_digest: `sha256:${'b'.repeat(64)}`,
+    }
+    expect(decodeWorkflowPipelineV2(pipeline)).toMatchObject({ ok: true })
+    expect(decodeWorkflowPipelineV2({ ...pipeline, extra: true })).toMatchObject({ ok: false })
+    let aggregate = createAggregateV2('project-1', 'change-1', 'corr-1')
+    aggregate = accepted(aggregate, command('accept-request', aggregate, { request }))
+    const context = { schema_version: 'repository-context/v2' as const, record_id: 'context:1', project_id: 'project-1', change_id: 'change-1', revision: 1, correlation_id: 'corr-1', actor: { kind: 'system' as const, id: 'host' }, created_at: now, request_id: 'req-1', repository: { ref: 'repo', branch: 'main', base_branch: 'main', head_sha: 'abc', dirty: false }, workspace_fingerprint: 'sha256:' + 'a'.repeat(64) as `sha256:${string}`, policy_digest: 'sha256:' + 'b'.repeat(64) as `sha256:${string}`, skill_catalog_digest: 'sha256:' + 'c'.repeat(64) as `sha256:${string}`, mcp_catalog_digest: 'sha256:' + 'd'.repeat(64) as `sha256:${string}`, observed_facts: [] }
+    aggregate = accepted(aggregate, command('record-context', aggregate, { context }))
+    const assessment = { schema_version: 'capability-assessment/v2' as const, record_id: 'assessment:1', project_id: 'project-1', change_id: 'change-1', revision: 2, correlation_id: 'corr-1', actor: { kind: 'model' as const, id: 'planner' }, created_at: now, assessment_id: 'assessment-1', request_id: 'req-1', context_record_id: 'context:1', normalization: 'complete' as const, requirements: [], questions: [], risks: [], proposal_evidence_ref: 'evidence:assessment' }
+    aggregate = accepted(aggregate, command('record-assessment', aggregate, { assessment }))
+    const frozen = decideV2(aggregate, command('freeze-pipeline', aggregate, { pipeline }))
+    expect(frozen.ok).toBe(true)
+    if (!frozen.ok) return
+    aggregate = evolveV2(aggregate, frozen.event)
+    expect(aggregate.pipeline?.stage_order).toEqual(['item-1'])
+    expect(aggregate.next_actions).toEqual(['freeze-work-graph'])
+    const stale = decideV2(aggregate, command('freeze-pipeline', aggregate, { pipeline: { ...pipeline, assessment_id: 'assessment-other' } }))
+    expect(stale.ok).toBe(false)
+    if (!stale.ok) expect(stale.rejection.reason_code).toBe('pipeline-binding-invalid')
   })
 
   test('decode → accept-request → fold/project is deterministic and causal', () => {
