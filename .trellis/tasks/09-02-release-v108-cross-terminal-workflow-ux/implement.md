@@ -10,12 +10,16 @@
 4. Push the candidate commit to `main`; wait for canonical CI and documentation CI.
 5. Dispatch `release-candidate.yml` with the exact 40-character `main` SHA and `v1.0.8`.
    Verify the writer creates the tag/release and that public acceptance completes.
-6. For the product follow-up, add the typed adapter catalog projection and installer
-   state events, then implement GUI/JSON clients against those contracts.
-7. Add Change-creation choice/preview for automatic versus custom Workflow/Track/
-   Pipeline, preserving the existing freeze/replan semantics.
-8. Add SSE catalog reconciliation and revision-gap tests; add browser E2E covering
-   adapter selection, custom definition save, refresh, and frozen active Change.
+6. [done] Add the typed adapter/definition catalog projection and installer state
+   events, with a JSON endpoint and GUI client against the same contracts.
+7. [done] Add Change-creation choice/preview for automatic versus custom Workflow/
+   Track/Pipeline, preserving the existing freeze/replan semantics and writing an
+   immutable `.pipeline-selection.json` receipt beside the Change.
+8. [in progress] Finish SSE catalog reconciliation and revision/state tests, then
+   add browser E2E covering adapter selection, custom definition refresh, and the
+   frozen active Change. Independent user-authored pipeline blueprints remain on the
+   existing planner-v2 API; this first GUI slice exposes the canonical workflow/track
+   derived pipeline and fails closed on an unregistered pipeline id.
 
 ## Validation gates
 
@@ -30,6 +34,24 @@
 - `bash tools/test-adapters.sh`
 - `npm run test:clean-install`
 - release-candidate and public-acceptance workflow runs for the exact SHA
+
+## Product implementation notes (2026-09-02)
+
+- `definition-catalog/v1` is a projection of the registry, project Workflow files,
+  Track registry, and host target plan. It carries revision/fingerprint, provenance,
+  ordered stages, in-stage Skill dependencies, and serial/parallel mode derived from
+  those dependencies. The browser never parses registry files.
+- `adapter-install/v1` is a JSON/SSE state machine. A job runs hosts sequentially,
+  emits queued → preflight → (planned | installing → verifying → installed), and
+  fails closed on non-zero CLI exits. Dry-run is the default; side effects require
+  `confirm: true`.
+- Workflow/Track saves continue to use their existing locked CAS APIs. The catalog
+  stream polls the authoritative files and sends a complete snapshot on each
+  fingerprint change, so a reconnect cannot execute a partially observed definition.
+- The GUI currently exposes the canonical `${workflow}:${track}:main` pipeline
+  identity. Arbitrary pipeline blueprints are supported by planner-v2 but are not
+  silently invented by the Dashboard until a persisted pipeline registry contract is
+  added.
 
 ## Risk and rollback points
 

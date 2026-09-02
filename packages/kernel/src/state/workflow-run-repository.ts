@@ -125,6 +125,7 @@ class FsWorkflowRunRepository implements WorkflowRunRepository {
       || opts.initialWorkflow?.documentContract === true
     )
     const initialFiles = [
+      ...(opts.initialFiles ?? []),
       ...(usesPackagedOpenSpec
         ? defaultOpenSpecScaffoldFiles(
           opts.name,

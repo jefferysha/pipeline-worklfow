@@ -76,6 +76,8 @@ import { handlePostMemoryRoutes } from './serverPostMemoryRoutes.js'
 import type { RelatedSessionSearchExecutor } from './relatedSessionMemory.js'
 import { handlePostVerificationRoutes } from './serverPostVerificationRoutes.js'
 import { handleOrchestrationV2PostRoute, type OrchestrationV2RouteDeps } from './serverOrchestrationV2Routes.js'
+import { resolveAdapterInstallPost } from './adapterInstallRoutes.js'
+import type { AdapterInstallManager } from './adapterInstall.js'
 
 type WorkflowRootCheck =
   | { ok: true; anchor: WorkflowRootAnchor }
@@ -124,6 +126,7 @@ export interface PostRouteDeps {
   relatedSessionSearch: RelatedSessionSearchExecutor
   /** Canonical v2 orchestration ledger; omitted by legacy embedders. */
   orchestrationV2?: OrchestrationV2RouteDeps
+  adapterInstall?: AdapterInstallManager
 }
 
 export async function handlePostRoute(
@@ -138,7 +141,7 @@ export async function handlePostRoute(
     isRegisteredRoot, store, clock, history, workflowRootAnchors, trackSkillProfiles,
     loadedManifest, runRepo, flow, fileExists, gitHeadSha, workspaceFingerprint, breadcrumb,
     manifestPath, paths, validateLoopActivation, mutateTrackForApi, trackRegistryBody,
-    sendTrackError, errMsg,
+    sendTrackError, errMsg, adapterInstall,
   } = deps
   const boundPort = deps.boundPort()
   const REAL_GRADUATION_FS = deps.realGraduationFs
@@ -169,6 +172,14 @@ export async function handlePostRoute(
         token,
         isLocalHost,
         boundPort: () => boundPort,
+      })
+      if (handled) return
+    }
+    if (adapterInstall) {
+      const handled = await resolveAdapterInstallPost(req, res, path, readJsonBody, {
+        manager: adapterInstall,
+        workflowRootForRequest,
+        sendJson,
       })
       if (handled) return
     }

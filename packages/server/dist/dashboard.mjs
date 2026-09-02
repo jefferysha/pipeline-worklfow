@@ -4,7 +4,7 @@ import { createRequire as __cr } from 'node:module'; const require = __cr(import
 // packages/server/src/main.ts
 import { execFile as execFile7 } from "node:child_process";
 import { mkdirSync as mkdirSync5, unlinkSync as unlinkSync4, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname18, join as join69 } from "node:path";
+import { dirname as dirname18, join as join70 } from "node:path";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // packages/tap/dist/paths.js
@@ -3075,8 +3075,8 @@ function parseWorkflowGovernanceBinding(raw) {
     "document_governance_fingerprint",
     "workflow_plan_fingerprint"
   ]);
-  const digest8 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
-  if (Object.keys(record5).some((key) => !allowed.has(key)) || record5.version !== 1 || typeof record5.run_id !== "string" || record5.run_id === "" || record5.document_profile !== void 0 && record5.document_profile !== "legacy-full" && record5.document_profile !== "document-v1" || record5.document_governance_fingerprint !== void 0 && !digest8(record5.document_governance_fingerprint) || record5.workflow_plan_fingerprint !== void 0 && !digest8(record5.workflow_plan_fingerprint) || record5.document_governance_fingerprint !== void 0 && record5.document_profile === void 0) {
+  const digest9 = (candidate) => typeof candidate === "string" && /^[0-9a-f]{64}$/.test(candidate);
+  if (Object.keys(record5).some((key) => !allowed.has(key)) || record5.version !== 1 || typeof record5.run_id !== "string" || record5.run_id === "" || record5.document_profile !== void 0 && record5.document_profile !== "legacy-full" && record5.document_profile !== "document-v1" || record5.document_governance_fingerprint !== void 0 && !digest9(record5.document_governance_fingerprint) || record5.workflow_plan_fingerprint !== void 0 && !digest9(record5.workflow_plan_fingerprint) || record5.document_governance_fingerprint !== void 0 && record5.document_profile === void 0) {
     throw new Error("workflow governance binding \u5F62\u72B6\u975E\u6CD5");
   }
   return {
@@ -5077,20 +5077,20 @@ function parseReceipt(value, recordIndex, receiptIndex) {
   if (!item2)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
   const phase = string2(item2.phase);
-  const digest8 = string2(item2.sha256);
+  const digest9 = string2(item2.sha256);
   const readAt = string2(item2.readAt);
   const visitId = item2.visitId === void 0 ? void 0 : string2(item2.visitId);
   if (!phase || !/^[A-Za-z0-9_-]+$/.test(phase)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].phase \u975E\u6CD5`);
   }
-  if (!digest8 || !validDigest(digest8)) {
+  if (!digest9 || !validDigest(digest9)) {
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].sha256 \u975E\u6CD5`);
   }
   if (!readAt)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].readAt \u5FC5\u987B\u662F\u975E\u7A7A\u5B57\u7B26\u4E32`);
   if (item2.visitId !== void 0 && !visitId)
     throw new DocumentLedgerError(`document ledger records[${recordIndex}].reads[${receiptIndex}].visitId \u975E\u6CD5`);
-  return { phase, sha256: digest8, readAt, ...visitId === void 0 ? {} : { visitId } };
+  return { phase, sha256: digest9, readAt, ...visitId === void 0 ? {} : { visitId } };
 }
 function receiptKey(receipt) {
   return JSON.stringify([receipt.phase, receipt.visitId ?? "legacy"]);
@@ -5101,7 +5101,7 @@ function parseRecord2(value, index) {
     throw new DocumentLedgerError(`document ledger records[${index}] \u5FC5\u987B\u662F\u5BF9\u8C61`);
   const kind = string2(item2.kind);
   const path8 = string2(item2.path);
-  const digest8 = string2(item2.sha256);
+  const digest9 = string2(item2.sha256);
   const producer = string2(item2.producer);
   const recordedAt = string2(item2.recordedAt);
   if (!kind || !isDocumentKind(kind))
@@ -5109,7 +5109,7 @@ function parseRecord2(value, index) {
   if (!path8 || !isSafeProjectRelativePath(path8)) {
     throw new DocumentLedgerError(`document ledger records[${index}].path \u5FC5\u987B\u662F\u5B89\u5168\u7684\u9879\u76EE\u76F8\u5BF9\u8DEF\u5F84`);
   }
-  if (!digest8 || !validDigest(digest8))
+  if (!digest9 || !validDigest(digest9))
     throw new DocumentLedgerError(`document ledger records[${index}].sha256 \u975E\u6CD5`);
   if (!producer || !/^[A-Za-z0-9_-]+(?::[A-Za-z0-9_-]+)*$/.test(producer)) {
     throw new DocumentLedgerError(`document ledger records[${index}].producer \u975E\u6CD5`);
@@ -5130,7 +5130,7 @@ function parseRecord2(value, index) {
   return {
     kind,
     path: path8,
-    sha256: digest8,
+    sha256: digest9,
     producer,
     recordedAt,
     ...producerInvocation === void 0 ? {} : { producerInvocation },
@@ -6965,13 +6965,13 @@ function checkSha2562(value, key, path8, errors, optional = false) {
       errors.push(`${path8}.${key}: \u7F3A\u5931\uFF08\u5FC5\u586B sha256\uFF09`);
     return;
   }
-  const digest8 = value[key];
-  if (typeof digest8 !== "string") {
-    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest8)}`);
+  const digest9 = value[key];
+  if (typeof digest9 !== "string") {
+    errors.push(`${path8}.${key}: \u5E94\u4E3A string\uFF0C\u5B9E\u5F97 ${typeName2(digest9)}`);
     return;
   }
-  if (!SHA256_HEX_RE.test(digest8)) {
-    errors.push(`${path8}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest8)}`);
+  if (!SHA256_HEX_RE.test(digest9)) {
+    errors.push(`${path8}.${key}: \u5E94\u4E3A 64 \u4F4D\u5C0F\u5199\u5341\u516D\u8FDB\u5236 sha256\uFF0C\u5B9E\u5F97 ${JSON.stringify(digest9)}`);
   }
 }
 function checkPattern(value, key, pattern, path8, errors) {
@@ -8074,6 +8074,7 @@ var SIMPLE_WORKFLOW = {
     }
   ]
 };
+var BUILTIN_WORKFLOW_IDS = ["simple"];
 function builtinWorkflow(name) {
   if (name !== "simple")
     return null;
@@ -12068,8 +12069,8 @@ function item(kind, status2, requiredRead, records, phase, currentVisitId) {
     }))
   };
 }
-function receiptMatchesVisit(receipt, phase, digest8, visitId) {
-  return receipt.phase === phase && receipt.sha256 === digest8 && receipt.visitId === visitId;
+function receiptMatchesVisit(receipt, phase, digest9, visitId) {
+  return receipt.phase === phase && receipt.sha256 === digest9 && receipt.visitId === visitId;
 }
 async function evaluateDocumentEvidence(repoRoot, changeDir2, phase, scope = {}, policy2) {
   let ledger;
@@ -13713,6 +13714,7 @@ var FsWorkflowRunRepository = class {
     const usesPackagedOpenSpec = packagedPlan?.capabilities.documents.profile === "legacy-full";
     const governed = usesPackagedOpenSpec || opts.initialWorkflow?.documentProfile !== void 0 || opts.initialWorkflow?.openspecContract === true || opts.initialWorkflow?.documentContract === true;
     const initialFiles = [
+      ...opts.initialFiles ?? [],
       ...usesPackagedOpenSpec ? defaultOpenSpecScaffoldFiles(opts.name, opts.documentLocale ?? "zh-CN", packagedPlan.workflow.steps.map((step) => ({ id: step.id, label: step.label })), packagedPlan.projection.stepLabelSource) : [],
       ...governed ? [{
         relativePath: DOCUMENT_LEDGER_FILE,
@@ -14637,8 +14639,8 @@ function canonicalMachineStateRoot(stateRoot) {
   return resolve7(stateRoot);
 }
 function machineStateScopeId(stateRoot) {
-  const digest8 = createHash13("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
-  return `sha256-v1-${digest8}`;
+  const digest9 = createHash13("sha256").update(STATE_SCOPE_NAMESPACE).update(canonicalMachineStateRoot(stateRoot)).digest("hex");
+  return `sha256-v1-${digest9}`;
 }
 
 // packages/kernel/dist/product-paths.js
@@ -21996,11 +21998,11 @@ function eventPath(changeDir2, revision, eventId) {
   safeId(eventId, "event id");
   return path7.join(dirFor(changeDir2, ORCHESTRATION_EVENTS_DIR), `${String(revision).padStart(12, "0")}-${eventId}.json`);
 }
-function snapshotPath(changeDir2, revision, digest8) {
+function snapshotPath(changeDir2, revision, digest9) {
   if (!integer3(revision))
     throw new LedgerPathError("snapshot revision must be a non-negative integer");
-  safeId(digest8, "snapshot digest");
-  return path7.join(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), `${String(revision).padStart(12, "0")}-${digest8.slice(7, 23)}.json`);
+  safeId(digest9, "snapshot digest");
+  return path7.join(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), `${String(revision).padStart(12, "0")}-${digest9.slice(7, 23)}.json`);
 }
 function idempotencyPath(changeDir2, commandId) {
   safeId(commandId, "command id");
@@ -22230,8 +22232,8 @@ var FsOrchestrationLedger = class {
         return existing;
       }
       const aggregate = createAggregateV2(seed.project_id, seed.change_id, seed.correlation_id, seed.updated_at);
-      const digest8 = checksum(aggregate);
-      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), snapshotPath(changeDir2, 0, digest8), "snapshot", aggregate);
+      const digest9 = checksum(aggregate);
+      await publishImmutable(dirFor(changeDir2, ORCHESTRATION_SNAPSHOTS_DIR), snapshotPath(changeDir2, 0, digest9), "snapshot", aggregate);
       await atomicReplaceFile(currentPath(changeDir2), json(envelope("snapshot", aggregate)));
       return aggregate;
     });
@@ -22406,6 +22408,68 @@ var FsOrchestrationLedger = class {
 };
 function createOrchestrationLedger() {
   return new FsOrchestrationLedger();
+}
+
+// packages/kernel/dist/catalog/types.js
+var DEFINITION_CATALOG_SCHEMA = "definition-catalog/v1";
+var PIPELINE_SELECTION_SCHEMA = "pipeline-selection/v1";
+
+// packages/kernel/dist/catalog/codec.js
+function isRecord6(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function nonempty(value) {
+  return typeof value === "string" && value.length > 0;
+}
+function stringArray4(value) {
+  return Array.isArray(value) && value.every((item2) => typeof item2 === "string");
+}
+function skillDependencies(value) {
+  if (!isRecord6(value))
+    return false;
+  return Object.entries(value).every(([skillId, dependencies]) => nonempty(skillId) && stringArray4(dependencies));
+}
+function validateDefinitionCatalogV1(value) {
+  if (!isRecord6(value) || value.schema_version !== DEFINITION_CATALOG_SCHEMA || !nonempty(value.revision) || !nonempty(value.fingerprint) || !nonempty(value.generated_at) || !isRecord6(value.project) || !nonempty(value.project.root) || !nonempty(value.project.identity))
+    return false;
+  for (const key of ["adapters", "workflows", "tracks", "pipelines"]) {
+    if (!Array.isArray(value[key]))
+      return false;
+  }
+  const adapters = value.adapters;
+  const workflows = value.workflows;
+  const tracks = value.tracks;
+  const pipelines = value.pipelines;
+  return adapters.every((entry) => {
+    if (!isRecord6(entry) || !nonempty(entry.id) || !nonempty(entry.label) || entry.kind !== "native" && entry.kind !== "adapter" || !["A", "B", "C"].includes(String(entry.tier)) || !nonempty(entry.cli_flag) || entry.target_scope !== "user" && entry.target_scope !== "project" || !Array.isArray(entry.supported_operations) || entry.supported_operations.length !== 2 || entry.supported_operations[0] !== "setup" || entry.supported_operations[1] !== "update" || !isRecord6(entry.capabilities) || typeof entry.capabilities.inject !== "boolean" || typeof entry.capabilities.veto !== "boolean" || typeof entry.capabilities.track !== "boolean" || !["unknown", "detected", "not-detected", "installed", "installing", "failed"].includes(String(entry.state)))
+      return false;
+    return entry.state_reason === void 0 || typeof entry.state_reason === "string";
+  }) && workflows.every((entry) => {
+    if (!isRecord6(entry) || !nonempty(entry.id) || !nonempty(entry.version) || !nonempty(entry.fingerprint) || !["builtin", "project", "user"].includes(String(entry.source)) || typeof entry.readonly !== "boolean" || !Array.isArray(entry.steps))
+      return false;
+    return entry.steps.every((step) => {
+      if (!isRecord6(step) || !nonempty(step.id) || !nonempty(step.label) || !Number.isInteger(step.order) || step.gate !== null && step.gate !== "review" && step.gate !== "confirm" || !stringArray4(step.skill_ids) || !skillDependencies(step.skill_dependencies) || !stringArray4(step.transition_events))
+        return false;
+      const skillIds = new Set(step.skill_ids);
+      return Object.entries(step.skill_dependencies).every(([skillId, refs]) => skillIds.has(skillId) && refs.every((ref) => skillIds.has(ref) && ref !== skillId));
+    });
+  }) && tracks.every((entry) => {
+    if (!isRecord6(entry) || !nonempty(entry.id) || !nonempty(entry.label) || typeof entry.builtin !== "boolean" || !nonempty(entry.revision) || entry.source !== "builtin" && entry.source !== "project" || !nonempty(entry.default_workflow))
+      return false;
+    return entry.allowed_workflows === "*" || stringArray4(entry.allowed_workflows);
+  }) && pipelines.every((entry) => {
+    if (!isRecord6(entry) || !nonempty(entry.id) || !nonempty(entry.version) || !nonempty(entry.fingerprint) || !["builtin", "project", "user"].includes(String(entry.source)) || !nonempty(entry.workflow_id) || !nonempty(entry.track_id) || !stringArray4(entry.stage_order) || !Array.isArray(entry.stages))
+      return false;
+    return entry.stages.every((stage) => {
+      if (!isRecord6(stage) || !nonempty(stage.id) || !nonempty(stage.label) || !Number.isInteger(stage.order) || stage.mode !== "serial" && stage.mode !== "parallel" || !stringArray4(stage.skill_ids) || !skillDependencies(stage.skill_dependencies) || !stringArray4(stage.depends_on) || stage.gate !== null && stage.gate !== "review" && stage.gate !== "confirm")
+        return false;
+      const skillIds = new Set(stage.skill_ids);
+      const dependencies = Object.entries(stage.skill_dependencies);
+      if (dependencies.some(([skillId, refs]) => !skillIds.has(skillId) || refs.some((ref) => !skillIds.has(ref) || ref === skillId)))
+        return false;
+      return stage.mode !== "parallel" || dependencies.every(([, refs]) => refs.length === 0);
+    });
+  });
 }
 
 // packages/kernel/dist/skills/source-registry.js
@@ -23527,7 +23591,7 @@ function createTransitionApplication(deps) {
 
 // packages/server/src/server.ts
 import { createServer } from "node:http";
-import { join as join68 } from "node:path";
+import { join as join69 } from "node:path";
 
 // packages/automation/dist/types.js
 var AUTOMATION_STATES = [
@@ -23868,7 +23932,7 @@ var AFK_RUN_SCRIPT_SHA256 = "993067db8ccb4c3b48c54ff2410907fd4dc72a5df3d0dc8946f
 var AFK_RUN_DRIFT_EXIT_CODE = 95;
 var IMAGE_AFK_RUN_PATH = "/usr/local/bin/tenon-afk-run";
 var IMAGE_ATTESTATION_PATH = "/opt/pipeline/image-attestation.env";
-var checksumGuard = (path8, digest8, attestationKey, label) => `actual_sha="$(sha256sum ${path8} 2>/dev/null | awk '{print $1}')"; [ "$actual_sha" = "${digest8}" ] && grep -qx "${attestationKey}=${digest8}" ${IMAGE_ATTESTATION_PATH} 2>/dev/null || { echo "sandcastle \u955C\u50CF\u5185 ${label} \u4E0E host \u671F\u671B\u6216\u955C\u50CF attestation \u4E0D\u4E00\u81F4\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
+var checksumGuard = (path8, digest9, attestationKey, label) => `actual_sha="$(sha256sum ${path8} 2>/dev/null | awk '{print $1}')"; [ "$actual_sha" = "${digest9}" ] && grep -qx "${attestationKey}=${digest9}" ${IMAGE_ATTESTATION_PATH} 2>/dev/null || { echo "sandcastle \u955C\u50CF\u5185 ${label} \u4E0E host \u671F\u671B\u6216\u955C\u50CF attestation \u4E0D\u4E00\u81F4\u2014\u2014\u8BF7\u91CD\u5EFA\u955C\u50CF\uFF1Atools/sandcastle/build.sh" >&2; exit ${AFK_RUN_DRIFT_EXIT_CODE}; }`;
 var AFK_RUN_DRIFT_GUARD = checksumGuard(IMAGE_AFK_RUN_PATH, AFK_RUN_SCRIPT_SHA256, "pipeline_afk_run_sha256", "tenon-afk-run");
 
 // packages/automation/dist/lifecycle/worktree.js
@@ -24643,25 +24707,25 @@ var TaskRunJournalCorruptError = class extends Error {
 function safeId2(value) {
   return /^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$/.test(value);
 }
-function isRecord6(value) {
+function isRecord7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function validAttempt(value) {
-  if (!isRecord6(value))
+  if (!isRecord7(value))
     return false;
-  return typeof value.attempt_id === "string" && safeId2(value.attempt_id) && typeof value.work_item_id === "string" && safeId2(value.work_item_id) && Number.isSafeInteger(value.attempt_number) && Number(value.attempt_number) > 0 && ["pending", "running", "succeeded", "failed", "cancelled"].includes(String(value.status)) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at)) && isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest8]) => safeId2(key) && typeof digest8 === "string") && (value.output_digest === void 0 || typeof value.output_digest === "string") && (value.error_code === void 0 || typeof value.error_code === "string");
+  return typeof value.attempt_id === "string" && safeId2(value.attempt_id) && typeof value.work_item_id === "string" && safeId2(value.work_item_id) && Number.isSafeInteger(value.attempt_number) && Number(value.attempt_number) > 0 && ["pending", "running", "succeeded", "failed", "cancelled"].includes(String(value.status)) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at)) && isRecord7(value.input_digests) && Object.entries(value.input_digests).every(([key, digest9]) => safeId2(key) && typeof digest9 === "string") && (value.output_digest === void 0 || typeof value.output_digest === "string") && (value.error_code === void 0 || typeof value.error_code === "string");
 }
 function validOperation(value) {
-  if (!isRecord6(value))
+  if (!isRecord7(value))
     return false;
   return typeof value.operation_id === "string" && safeId2(value.operation_id) && ["retry", "cancel", "resume"].includes(String(value.operation)) && (value.work_item_id === void 0 || typeof value.work_item_id === "string" && safeId2(value.work_item_id)) && Number.isSafeInteger(value.expected_run_revision) && Number(value.expected_run_revision) >= 0 && typeof value.expected_state === "string" && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at));
 }
 function validValidator(value) {
-  if (!isRecord6(value))
+  if (!isRecord7(value))
     return false;
   const scope = String(value.scope);
   const targetValid = scope === "run" ? value.target_id === void 0 : typeof value.target_id === "string" && safeId2(value.target_id);
-  return typeof value.validator_id === "string" && safeId2(value.validator_id) && ["work-item", "group", "run"].includes(scope) && targetValid && ["pending", "passed", "failed", "invalidated"].includes(String(value.status)) && (value.code === void 0 || typeof value.code === "string" && safeId2(value.code)) && (value.input_digests === void 0 || isRecord6(value.input_digests) && Object.entries(value.input_digests).every(([key, digest8]) => safeId2(key) && typeof digest8 === "string")) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at));
+  return typeof value.validator_id === "string" && safeId2(value.validator_id) && ["work-item", "group", "run"].includes(scope) && targetValid && ["pending", "passed", "failed", "invalidated"].includes(String(value.status)) && (value.code === void 0 || typeof value.code === "string" && safeId2(value.code)) && (value.input_digests === void 0 || isRecord7(value.input_digests) && Object.entries(value.input_digests).every(([key, digest9]) => safeId2(key) && typeof digest9 === "string")) && typeof value.recorded_at === "string" && !Number.isNaN(Date.parse(value.recorded_at));
 }
 function sameInputDigests(left, right) {
   const leftEntries = Object.entries(left).sort(([a], [b]) => a.localeCompare(b));
@@ -24681,7 +24745,7 @@ function assertAttemptTransition(previous, candidate) {
   }
 }
 function parseEvent2(value, expectedSequence) {
-  if (!isRecord6(value) || value.schema_version !== JOURNAL_SCHEMA_VERSION || value.sequence !== expectedSequence) {
+  if (!isRecord7(value) || value.schema_version !== JOURNAL_SCHEMA_VERSION || value.sequence !== expectedSequence) {
     throw new TaskRunJournalCorruptError("Task run journal sequence or schema is invalid");
   }
   if (value.type === "attempt" && validAttempt(value.attempt)) {
@@ -24737,13 +24801,13 @@ async function assertJournalPathIdentity(path8, expected) {
   }
 }
 function journalLeafError(error2) {
-  return isRecord6(error2) && ["ELOOP", "EISDIR", "ENODEV", "ENXIO", "ENOTDIR"].includes(String(error2.code));
+  return isRecord7(error2) && ["ELOOP", "EISDIR", "ENODEV", "ENXIO", "ENOTDIR"].includes(String(error2.code));
 }
 async function openJournalFile(path8, flags, mode) {
   try {
     return await open6(path8, flags, mode);
   } catch (error2) {
-    if (isRecord6(error2) && error2.code === "ENOENT")
+    if (isRecord7(error2) && error2.code === "ENOENT")
       return null;
     if (journalLeafError(error2)) {
       throw new TaskRunJournalCorruptError("Task run journal leaf is not a safe regular file");
@@ -24798,14 +24862,14 @@ async function journalDirectory(changeDir2, revisionId, create) {
       try {
         await mkdir16(current);
       } catch (error2) {
-        if (!isRecord6(error2) || error2.code !== "EEXIST")
+        if (!isRecord7(error2) || error2.code !== "EEXIST")
           throw error2;
       }
     } else {
       try {
         await lstat20(current);
       } catch (error2) {
-        if (isRecord6(error2) && error2.code === "ENOENT")
+        if (isRecord7(error2) && error2.code === "ENOENT")
           return null;
         throw error2;
       }
@@ -30184,7 +30248,7 @@ var NOTICE_IDS = [
   "host-plan.notice.codex-auth-guidance",
   "host-plan.notice.current-project-target"
 ];
-function isRecord7(value) {
+function isRecord8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function hasExactKeys(value, keys) {
@@ -30204,7 +30268,7 @@ function arraysEqual(left, right) {
   return left.length === right.length && left.every((item2, index) => item2 === right[index]);
 }
 function decodeCommand(value) {
-  if (!isRecord7(value) || !hasExactKeys(value, ["executable", "args", "display"])) return null;
+  if (!isRecord8(value) || !hasExactKeys(value, ["executable", "args", "display"])) return null;
   if (!isNonemptyString(value.executable) || !isNonemptyString(value.display)) return null;
   if (!Array.isArray(value.args) || !value.args.every((arg) => typeof arg === "string") || value.display !== [value.executable, ...value.args].join(" ")) return null;
   return { executable: value.executable, args: value.args, display: value.display };
@@ -30263,7 +30327,7 @@ function commandsEqual(actual, expected) {
   return actual.executable === expected.executable && arraysEqual(actual.args, expected.args) && actual.display === expected.display;
 }
 function decodeTarget(value) {
-  if (!isRecord7(value) || !hasExactKeys(value, [
+  if (!isRecord8(value) || !hasExactKeys(value, [
     "id",
     "kind",
     "cli_flag",
@@ -30289,7 +30353,7 @@ function decodeTarget(value) {
   };
 }
 function decodeHostTargetCatalog(value) {
-  if (!isRecord7(value) || !hasExactKeys(value, ["schema_version", "targets"]) || value.schema_version !== "host-target-plan/v1" || !Array.isArray(value.targets) || value.targets.length !== HOST_IDS.length) return null;
+  if (!isRecord8(value) || !hasExactKeys(value, ["schema_version", "targets"]) || value.schema_version !== "host-target-plan/v1" || !Array.isArray(value.targets) || value.targets.length !== HOST_IDS.length) return null;
   const targets = [];
   for (let index = 0; index < value.targets.length; index += 1) {
     const item2 = value.targets[index];
@@ -30300,14 +30364,14 @@ function decodeHostTargetCatalog(value) {
   return { schema_version: "host-target-plan/v1", targets };
 }
 function decodePlanStep(value) {
-  if (!isRecord7(value) || !hasExactKeys(value, ["id", "label", "command"])) return null;
+  if (!isRecord8(value) || !hasExactKeys(value, ["id", "label", "command"])) return null;
   if (typeof value.id !== "string" || !STEP_IDS.includes(value.id) || value.label !== `host-plan.step.${value.id}`) return null;
   const command = value.command === null ? null : decodeCommand(value.command);
   if (value.command !== null && command === null) return null;
   return { id: value.id, label: value.label, command };
 }
 function decodeHostTargetPlan(value, expectedHost, expectedOperation) {
-  if (!isRecord7(value) || !hasExactKeys(value, [
+  if (!isRecord8(value) || !hasExactKeys(value, [
     "schema_version",
     "side_effects",
     "host",
@@ -30543,6 +30607,454 @@ async function resolveHostTargetPlanRoute(requestUrl, path8, deps) {
       signal
     )
   );
+}
+
+// packages/server/src/definitionCatalog.ts
+import { createHash as createHash21 } from "node:crypto";
+var ADAPTER_TIERS = {
+  codex: "A",
+  claude: "A",
+  gemini: "A",
+  continue: "A",
+  cline: "A",
+  amp: "A",
+  cursor: "B",
+  copilot: "B",
+  pi: "B",
+  aider: "B",
+  devin: "C",
+  zed: "C"
+};
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const object5 = value;
+    return `{${Object.keys(object5).sort().map((key) => `${JSON.stringify(key)}:${stableJson(object5[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function digest8(value) {
+  return createHash21("sha256").update(stableJson(value), "utf8").digest("hex").slice(0, 32);
+}
+function workflowEntry(workflow, source) {
+  const steps = workflow.steps.map((step, order) => ({
+    id: step.id,
+    label: step.label,
+    order,
+    gate: step.gate,
+    skill_ids: step.skills.map((skill) => skill.id),
+    skill_dependencies: Object.fromEntries(step.skills.map((skill) => [skill.id, [...skill.depends_on ?? []]])),
+    transition_events: step.transitions.map((transition) => transition.event)
+  }));
+  return {
+    id: workflow.name,
+    version: "v1",
+    fingerprint: digest8(workflow),
+    source,
+    readonly: source === "builtin",
+    steps
+  };
+}
+function pipelineEntry(workflow, track) {
+  const stages = workflow.steps.map((step, order) => {
+    const previous = order === 0 ? [] : [workflow.steps[order - 1]?.id ?? ""];
+    const sourceStep = workflow.steps[order];
+    const skillDependencies2 = sourceStep?.skill_dependencies ?? {};
+    const mode = sourceStep !== void 0 && sourceStep.skill_ids.length > 1 && Object.values(skillDependencies2).every((dependencies) => dependencies.length === 0) ? "parallel" : "serial";
+    return {
+      id: step.id,
+      label: step.label,
+      order,
+      mode,
+      skill_ids: step.skill_ids,
+      skill_dependencies: skillDependencies2,
+      depends_on: previous.filter(Boolean),
+      gate: step.gate
+    };
+  });
+  const source = { workflow_id: workflow.id, track_id: track.id, stages };
+  return {
+    // Keep catalog identity aligned with planner-v2's canonical automatic
+    // pipeline identity so a selected pipeline can be replayed verbatim.
+    id: `${workflow.id}:${track.id}:main`,
+    version: "v1",
+    fingerprint: digest8(source),
+    source: workflow.source === "builtin" && track.source === "builtin" ? "builtin" : "project",
+    workflow_id: workflow.id,
+    track_id: track.id,
+    stage_order: stages.map((stage) => stage.id),
+    stages
+  };
+}
+function adapterEntries(catalog2, hostHome) {
+  const detection = detectNativeHostTargets(hostHome);
+  const detectedRaw = detection.status === 200 && typeof detection.body === "object" && detection.body !== null ? detection.body.detected_hosts : void 0;
+  const detected = new Set(Array.isArray(detectedRaw) ? detectedRaw.filter((id2) => typeof id2 === "string") : []);
+  return catalog2.targets.map((target) => {
+    const tier = ADAPTER_TIERS[target.id] ?? "C";
+    return {
+      id: target.id,
+      label: target.id[0]?.toUpperCase() + target.id.slice(1),
+      kind: target.kind,
+      tier,
+      cli_flag: target.cli_flag,
+      target_scope: target.target_scope,
+      capabilities: {
+        inject: true,
+        veto: tier === "A",
+        track: tier !== "C"
+      },
+      supported_operations: ["setup", "update"],
+      state: detected.has(target.id) ? "detected" : target.kind === "native" ? "not-detected" : "unknown",
+      ...target.kind === "adapter" ? { state_reason: "adapter \u72B6\u6001\u5728\u9879\u76EE\u76EE\u6807\u76EE\u5F55\u5B89\u88C5\u540E\u7531\u5B89\u88C5\u4EFB\u52A1\u56DE\u5199" } : {}
+    };
+  });
+}
+function workflowDefinitions(anchor) {
+  const result2 = [];
+  const defaultWorkflow = parseWorkflow(DEFAULT_WORKFLOW_SOURCE);
+  result2.push(workflowEntry(defaultWorkflow, "builtin"));
+  for (const id2 of BUILTIN_WORKFLOW_IDS) {
+    const workflow = builtinWorkflow(id2);
+    if (workflow !== null) result2.push(workflowEntry(workflow, "builtin"));
+  }
+  for (const name of listWorkflowNames(anchor)) {
+    const workflow = readWorkflowForApi(anchor, name);
+    result2.push(workflowEntry(workflow, "project"));
+  }
+  const seen = /* @__PURE__ */ new Set();
+  return result2.filter((entry) => !seen.has(entry.id) && (seen.add(entry.id), true));
+}
+async function buildDefinitionCatalog(deps) {
+  assertWorkflowRootAnchor(deps.anchor);
+  const hostResult = await deps.operationRunner(deps.hostHome, ["host-target-plan", "--json"]);
+  if (hostResult.exitCode !== 0) throw new Error("\u5BBF\u4E3B catalog \u547D\u4EE4\u5931\u8D25");
+  const hostCatalog = decodeHostTargetCatalog(parsePipelineCliJson(hostResult.stdout));
+  if (hostCatalog === null) throw new Error("\u5BBF\u4E3B catalog \u54CD\u5E94\u65E0\u6548");
+  const trackRegistry = loadTrackRegistry(deps.anchor.path, deps.trackValidationContext);
+  const tracks = trackRegistry.ordered.map((track) => ({
+    id: track.id,
+    label: track.label,
+    builtin: track.builtin,
+    revision: trackRegistry.revision,
+    source: track.builtin ? "builtin" : "project",
+    default_workflow: track.workflow.default,
+    allowed_workflows: track.workflow.allowed
+  }));
+  const workflows = workflowDefinitions(deps.anchor);
+  const pipelines = workflows.flatMap((workflow) => tracks.filter((track) => track.allowed_workflows === "*" || track.allowed_workflows.includes(workflow.id)).map((track) => pipelineEntry(workflow, track)));
+  const base = {
+    schema_version: "definition-catalog/v1",
+    generated_at: deps.generatedAt,
+    project: { root: deps.anchor.path, identity: digest8(deps.anchor.path) },
+    adapters: adapterEntries(hostCatalog, deps.hostHome),
+    workflows,
+    tracks,
+    pipelines
+  };
+  const { generated_at: _generatedAt, ...semanticBase } = base;
+  const fingerprint = digest8(semanticBase);
+  const catalog2 = { ...base, revision: fingerprint.slice(0, 16), fingerprint };
+  if (!validateDefinitionCatalogV1(catalog2)) throw new Error("definition catalog \u5185\u90E8\u6821\u9A8C\u5931\u8D25");
+  return catalog2;
+}
+
+// packages/server/src/definitionCatalogRoutes.ts
+function streamHeaders(res) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-store",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no"
+  });
+}
+async function resolveDefinitionCatalogRoute(req, res, path8, deps) {
+  if (path8 !== "/api/catalog" && path8 !== "/api/catalog/stream") return false;
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const root = url.searchParams.get("root") ?? "";
+  const checked = deps.workflowRootForRequest(root);
+  if (!checked.ok) {
+    deps.sendJson(res, checked.code, { ok: false, code: "CATALOG_ROOT_INVALID", error: checked.error });
+    return true;
+  }
+  const anchor = checked.anchor;
+  const load = () => buildDefinitionCatalog({
+    anchor,
+    hostHome: deps.hostHome,
+    operationRunner: deps.operationRunner,
+    trackValidationContext: deps.trackValidationContextFor(anchor),
+    generatedAt: deps.clock()
+  });
+  if (path8 === "/api/catalog") {
+    try {
+      deps.sendJson(res, 200, await load());
+    } catch (error2) {
+      deps.sendJson(res, 503, { ok: false, code: "CATALOG_UNAVAILABLE", error: error2 instanceof Error ? error2.message : String(error2) });
+    }
+    return true;
+  }
+  streamHeaders(res);
+  let closed5 = false;
+  let lastRevision = url.searchParams.get("after_revision") ?? "";
+  let lastBeat = Date.now();
+  const writeEvent = (event, data) => {
+    if (closed5 || res.writableEnded) return;
+    try {
+      res.write(`event: ${event}
+data: ${JSON.stringify(data)}
+
+`);
+      lastBeat = Date.now();
+    } catch {
+      closed5 = true;
+    }
+  };
+  const initial = await load().catch((error2) => {
+    writeEvent("error", { code: "CATALOG_UNAVAILABLE", error: error2 instanceof Error ? error2.message : String(error2) });
+    return null;
+  });
+  if (initial !== null) {
+    lastRevision = initial.revision;
+    writeEvent("snapshot", {
+      schema_version: "definition-catalog-event/v1",
+      kind: "snapshot",
+      revision: initial.revision,
+      fingerprint: initial.fingerprint,
+      catalog: initial
+    });
+  }
+  const timer = setInterval(() => {
+    void load().then((catalog2) => {
+      if (catalog2.revision === lastRevision) {
+        if (Date.now() - lastBeat >= deps.heartbeatMs) {
+          if (!closed5 && !res.writableEnded) res.write(": ping\n\n");
+          lastBeat = Date.now();
+        }
+        return;
+      }
+      lastRevision = catalog2.revision;
+      writeEvent("catalog-updated", {
+        schema_version: "definition-catalog-event/v1",
+        kind: "catalog-updated",
+        revision: catalog2.revision,
+        fingerprint: catalog2.fingerprint,
+        catalog: catalog2
+      });
+    }).catch(() => {
+      if (Date.now() - lastBeat >= deps.heartbeatMs && !closed5 && !res.writableEnded) {
+        res.write(": ping\n\n");
+        lastBeat = Date.now();
+      }
+    });
+  }, deps.pollIntervalMs);
+  timer.unref?.();
+  req.on("close", () => {
+    closed5 = true;
+    clearInterval(timer);
+  });
+  return true;
+}
+
+// packages/server/src/adapterInstall.ts
+import { randomUUID as randomUUID9 } from "node:crypto";
+function uniqueHosts(value) {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 12) return null;
+  const hosts = [];
+  for (const item2 of value) {
+    if (!isHostId(item2) || hosts.includes(item2)) return null;
+    hosts.push(item2);
+  }
+  return hosts;
+}
+function parseAdapterInstallRequest(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const body = value;
+  const root = typeof body.root === "string" ? body.root : "";
+  const hosts = uniqueHosts(body.hosts);
+  if (root === "" || hosts === null) return null;
+  const dryRun = body.dry_run === void 0 ? true : body.dry_run === true;
+  const confirm = body.confirm === true;
+  if (!dryRun && !confirm) return null;
+  return { root, hosts, dryRun, confirm };
+}
+var AdapterInstallManager = class {
+  constructor(runner, clock) {
+    this.runner = runner;
+    this.clock = clock;
+  }
+  runner;
+  clock;
+  jobs = /* @__PURE__ */ new Map();
+  start(root, hosts, dryRun) {
+    const job = {
+      job_id: randomUUID9(),
+      root,
+      hosts: [...hosts],
+      dry_run: dryRun,
+      states: [],
+      subscribers: /* @__PURE__ */ new Set()
+    };
+    this.jobs.set(job.job_id, job);
+    void this.run(job);
+    return this.view(job);
+  }
+  get(jobId) {
+    const job = this.jobs.get(jobId);
+    return job === void 0 ? null : this.view(job);
+  }
+  subscribe(jobId, listener) {
+    const job = this.jobs.get(jobId);
+    if (job === void 0) return null;
+    for (const state of job.states) listener(state);
+    job.subscribers.add(listener);
+    return () => job.subscribers.delete(listener);
+  }
+  view(job) {
+    return { job_id: job.job_id, root: job.root, hosts: job.hosts, dry_run: job.dry_run, states: [...job.states] };
+  }
+  emit(job, host, phase, message, exitCode) {
+    const state = {
+      job_id: job.job_id,
+      host,
+      phase,
+      message,
+      at: this.clock(),
+      ...exitCode === void 0 ? {} : { exit_code: exitCode }
+    };
+    job.states.push(state);
+    for (const subscriber of job.subscribers) subscriber(state);
+  }
+  async run(job) {
+    for (const host of job.hosts) {
+      this.emit(job, host, "queued", `${host} \u5DF2\u6392\u961F`);
+      this.emit(job, host, "preflight", `${host} \u6B63\u5728\u6267\u884C\u65E0\u526F\u4F5C\u7528\u9884\u68C0`);
+      const args = ["setup", `--${host}`, ...host === "codex" || host === "claude" ? [] : ["--target", job.root], "--yes", "--dry-run"];
+      try {
+        const preflight = await this.runner(job.root, args);
+        if (preflight.exitCode !== 0) {
+          this.emit(job, host, "failed", `${host} \u9884\u68C0\u5931\u8D25`, preflight.exitCode);
+          continue;
+        }
+        if (job.dry_run) {
+          this.emit(job, host, "planned", `${host} \u9884\u68C0\u901A\u8FC7\uFF1Bdry-run \u672A\u5199\u5165\u5BBF\u4E3B\u6216\u9879\u76EE`);
+          continue;
+        }
+        this.emit(job, host, "installing", `${host} \u6B63\u5728\u5B89\u88C5`);
+        const installArgs = ["setup", `--${host}`, ...host === "codex" || host === "claude" ? [] : ["--target", job.root], "--yes"];
+        const installed = await this.runner(job.root, installArgs);
+        if (installed.exitCode !== 0) {
+          this.emit(job, host, "failed", `${host} \u5B89\u88C5\u5931\u8D25`, installed.exitCode);
+          continue;
+        }
+        this.emit(job, host, "verifying", `${host} \u6B63\u5728\u9A8C\u8BC1\u5B89\u88C5\u4EA7\u7269`);
+        this.emit(job, host, "installed", `${host} \u5DF2\u5B89\u88C5\u5E76\u901A\u8FC7 CLI \u9000\u51FA\u7801\u9A8C\u8BC1`, 0);
+      } catch (error2) {
+        this.emit(job, host, "failed", `${host} \u5B89\u88C5\u5F02\u5E38\uFF1A${error2 instanceof Error ? error2.message : String(error2)}`);
+      }
+    }
+  }
+};
+function isInstallJobId(value) {
+  return /^[0-9a-f-]{36}$/i.test(value);
+}
+
+// packages/server/src/adapterInstallRoutes.ts
+function writeSseHeaders(res) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-store",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no"
+  });
+}
+async function resolveAdapterInstallPost(req, res, path8, readJsonBody, deps) {
+  if (path8 !== "/api/adapters/install") return false;
+  const request = parseAdapterInstallRequest(await readJsonBody(req));
+  if (request === null) {
+    deps.sendJson(res, 400, { ok: false, code: "ADAPTER_INSTALL_REQUEST_INVALID", error: "root\u3001hosts \u548C confirm/dry_run \u7EC4\u5408\u65E0\u6548" });
+    return true;
+  }
+  const checked = deps.workflowRootForRequest(request.root);
+  if (!checked.ok) {
+    deps.sendJson(res, checked.code, { ok: false, code: "ADAPTER_INSTALL_ROOT_INVALID", error: checked.error });
+    return true;
+  }
+  const job = deps.manager.start(checked.anchor.path, request.hosts, request.dryRun);
+  deps.sendJson(res, 202, {
+    schema_version: "adapter-install/v1",
+    job_id: job.job_id,
+    root: job.root,
+    hosts: job.hosts,
+    dry_run: job.dry_run,
+    stream: `/api/adapters/install/${job.job_id}/stream?root=${encodeURIComponent(job.root)}`
+  });
+  return true;
+}
+async function resolveAdapterInstallGet(req, res, path8, deps) {
+  const match = /^\/api\/adapters\/install\/([^/]+)(?:\/(stream))?$/.exec(path8);
+  if (match === null || !isInstallJobId(match[1] ?? "")) return false;
+  const jobId = match[1];
+  const job = deps.manager.get(jobId);
+  if (job === null) {
+    deps.sendJson(res, 404, { ok: false, code: "ADAPTER_INSTALL_JOB_NOT_FOUND", error: "\u5B89\u88C5\u4EFB\u52A1\u4E0D\u5B58\u5728\u6216\u5DF2\u8FC7\u671F" });
+    return true;
+  }
+  const root = new URL(req.url ?? "/", "http://localhost").searchParams.get("root") ?? "";
+  if (root !== "") {
+    const checked = deps.workflowRootForRequest(root);
+    if (!checked.ok || checked.anchor.path !== job.root) {
+      deps.sendJson(res, 403, { ok: false, code: "ADAPTER_INSTALL_ROOT_INVALID", error: "\u5B89\u88C5\u4EFB\u52A1\u4E0D\u5C5E\u4E8E\u5F53\u524D\u9879\u76EE" });
+      return true;
+    }
+  }
+  if (match[2] !== "stream") {
+    deps.sendJson(res, 200, { schema_version: "adapter-install/v1", ...job });
+    return true;
+  }
+  writeSseHeaders(res);
+  let closed5 = false;
+  const terminal = /* @__PURE__ */ new Set(["planned", "installed", "failed"]);
+  const write = (state) => {
+    if (closed5 || res.writableEnded) return;
+    try {
+      res.write(`event: install-state
+data: ${JSON.stringify({ schema_version: "adapter-install-event/v1", kind: "install-state", state })}
+
+`);
+    } catch {
+      closed5 = true;
+    }
+  };
+  let unsubscribe = null;
+  const closeWhenComplete = () => {
+    if (closed5 || res.writableEnded) return;
+    const current = deps.manager.get(jobId);
+    if (current === null || current.states.length === 0 || !current.hosts.every((host) => current.states.some((item2) => item2.host === host && terminal.has(item2.phase)))) return;
+    try {
+      res.write(`event: complete
+data: ${JSON.stringify({ schema_version: "adapter-install-event/v1", kind: "complete", job_id: jobId })}
+
+`);
+      res.end();
+    } catch {
+    }
+    closed5 = true;
+    unsubscribe?.();
+  };
+  unsubscribe = deps.manager.subscribe(jobId, (state) => {
+    write(state);
+    closeWhenComplete();
+  });
+  closeWhenComplete();
+  req.on("close", () => {
+    closed5 = true;
+    unsubscribe?.();
+  });
+  if (unsubscribe === null) {
+    closed5 = true;
+    res.end();
+  }
+  return true;
 }
 
 // packages/server/src/changeSnapshot.ts
@@ -31257,16 +31769,16 @@ function parseLimit(value) {
   if (parsed === 0) return failure2(400, "ORCHESTRATION_V2_LIMIT_INVALID", "limit \u5FC5\u987B\u5927\u4E8E 0");
   return Math.min(parsed, MAX_LIMIT);
 }
-function isRecord8(value) {
+function isRecord9(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function readRootFromBody(body) {
-  if (!isRecord8(body) || typeof body.root !== "string") return failure2(400, "ORCHESTRATION_V2_BODY_INVALID", "\u8BF7\u6C42\u5FC5\u987B\u5305\u542B root");
+  if (!isRecord9(body) || typeof body.root !== "string") return failure2(400, "ORCHESTRATION_V2_BODY_INVALID", "\u8BF7\u6C42\u5FC5\u987B\u5305\u542B root");
   if (body.root.length > 4096) return failure2(413, "ORCHESTRATION_V2_BODY_LIMIT_EXCEEDED", "root \u8D85\u51FA\u5B89\u5168\u4E0A\u9650");
   return body.root;
 }
 function commandFromBody(body, changeId) {
-  if (!isRecord8(body)) return failure2(400, "ORCHESTRATION_V2_COMMAND_INVALID", "command body \u5FC5\u987B\u662F\u5BF9\u8C61");
+  if (!isRecord9(body)) return failure2(400, "ORCHESTRATION_V2_COMMAND_INVALID", "command body \u5FC5\u987B\u662F\u5BF9\u8C61");
   const keys = Object.keys(body).sort();
   if (keys.join(",") !== "command,root") return failure2(400, "ORCHESTRATION_V2_COMMAND_INVALID", "command body \u5B57\u6BB5\u4E0D\u7B26\u5408\u5951\u7EA6");
   const root = readRootFromBody(body);
@@ -31345,7 +31857,7 @@ async function resolveOrchestrationV2GetRoute(rawUrl, path8, deps) {
 }
 async function resolveOrchestrationV2PostRoute(path8, body, deps) {
   if (path8 === "/api/orchestration/changes") {
-    if (!isRecord8(body)) return failure2(400, "ORCHESTRATION_V2_BODY_INVALID", "\u8BF7\u6C42 body \u5FC5\u987B\u662F\u5BF9\u8C61");
+    if (!isRecord9(body)) return failure2(400, "ORCHESTRATION_V2_BODY_INVALID", "\u8BF7\u6C42 body \u5FC5\u987B\u662F\u5BF9\u8C61");
     const keys = Object.keys(body).sort();
     if (!["change_id", "correlation_id", "project_id", "root"].every((key) => keys.includes(key)) || keys.some((key) => !["change_id", "correlation_id", "project_id", "root", "updated_at"].includes(key))) {
       return failure2(400, "ORCHESTRATION_V2_BODY_INVALID", "\u521B\u5EFA\u8BF7\u6C42\u5B57\u6BB5\u4E0D\u7B26\u5408\u5951\u7EA6");
@@ -31889,9 +32401,11 @@ async function handleGet(req, res, path8, deps) {
     hostTargetPlanRuntime,
     options,
     operationRunner,
-    resolveSessionLink,
+    resolveSessionLink: resolveSessionLink2,
     errMsg: errMsg2,
-    orchestrationV2
+    orchestrationV2,
+    definitionCatalog,
+    adapterInstall
   } = deps;
   const boundPort = deps.boundPort();
   if (orchestrationV2) {
@@ -31902,6 +32416,14 @@ async function handleGet(req, res, path8, deps) {
       isLocalHost: isLocalHost2,
       boundPort: () => boundPort
     });
+    if (handled) return;
+  }
+  if (definitionCatalog) {
+    const handled = await resolveDefinitionCatalogRoute(req, res, path8, { ...definitionCatalog, sendJson });
+    if (handled) return;
+  }
+  if (adapterInstall && path8.startsWith("/api/adapters/install/")) {
+    const handled = await resolveAdapterInstallGet(req, res, path8, { manager: adapterInstall, workflowRootForRequest, sendJson });
     if (handled) return;
   }
   await handleGetActivityRoutes(req, res, path8, deps);
@@ -32105,7 +32627,7 @@ async function handleGet(req, res, path8, deps) {
   if (await handleGetSessionRoutes(req, res, path8, {
     sendJson,
     isRegisteredRoot,
-    resolveSessionLink
+    resolveSessionLink: resolveSessionLink2
   })) return;
   return sendJson(res, 404, { ok: false, error: "\u672A\u77E5\u7AEF\u70B9" });
 }
@@ -32365,7 +32887,7 @@ import { lstatSync as lstatSync12 } from "node:fs";
 import { resolve as resolvePath8 } from "node:path";
 
 // packages/server/src/changeLaunch.ts
-import { randomUUID as randomUUID9 } from "node:crypto";
+import { randomUUID as randomUUID10 } from "node:crypto";
 import { lstat as lstat23, readFile as readFile22, rename as rename8, unlink as unlink4, writeFile as writeFile12 } from "node:fs/promises";
 import { join as join59 } from "node:path";
 var CHANGE_TASK_FILE = "REAL_AGENT_TASK.md";
@@ -32407,7 +32929,7 @@ async function writeChangeTaskPrompt(changeDir2, prompt) {
     if (errorCode7(error2) !== "ENOENT") throw error2;
   }
   if (targetExists) throw new Error("\u4EFB\u52A1\u63D0\u793A\u8BCD\u5DF2\u5B58\u5728\uFF0C\u62D2\u7EDD\u8986\u76D6");
-  const temporary = join59(changeDir2, `.${CHANGE_TASK_FILE}.${randomUUID9()}.tmp`);
+  const temporary = join59(changeDir2, `.${CHANGE_TASK_FILE}.${randomUUID10()}.tmp`);
   try {
     await writeFile12(temporary, `${prompt}
 `, { encoding: "utf8", flag: "wx", mode: 384 });
@@ -32545,6 +33067,7 @@ async function handlePostChangesRoutes(req, res, path8, deps) {
     if (!activation.ok) return sendJson(res, 400, { ok: false, error: activation.error });
     const trackId = typeof b.track === "string" && b.track ? b.track : "chat";
     const workflowRaw = typeof b.workflow === "string" && b.workflow ? b.workflow : "";
+    const pipelineRaw = typeof b.pipeline_id === "string" && b.pipeline_id ? b.pipeline_id : "";
     try {
       ensureWorkflowProjectCoordinationPath(rootCheck2.anchor);
     } catch (e) {
@@ -32563,9 +33086,14 @@ async function handlePostChangesRoutes(req, res, path8, deps) {
             track = requireTrack(registry, trackId);
             workflowId = workflowRaw || track.workflow.default;
             assertWorkflowAllowed(track, workflowId);
+            const expectedPipelineId = `${workflowId}:${track.id}:main`;
+            if (pipelineRaw !== "" && pipelineRaw !== expectedPipelineId) {
+              throw new Error(`pipeline '${pipelineRaw}' \u4E0E workflow/track \u7ED1\u5B9A\u4E0D\u4E00\u81F4\uFF08\u671F\u671B ${expectedPipelineId}\uFF09`);
+            }
           } catch (e) {
             return { ok: false, code: 400, error: errMsg2(e) };
           }
+          const selectedPipelineId = pipelineRaw || `${workflowId}:${track.id}:main`;
           let initialWorkflow;
           let plan;
           try {
@@ -32605,7 +33133,22 @@ async function handlePostChangesRoutes(req, res, path8, deps) {
               reviewSeed: track.policyProfile.reviewSeed,
               preset: "full",
               clock,
-              initialWorkflow
+              initialWorkflow,
+              initialFiles: [{
+                relativePath: ".pipeline-selection.json",
+                content: `${JSON.stringify({
+                  schema_version: PIPELINE_SELECTION_SCHEMA,
+                  pipeline_id: selectedPipelineId,
+                  pipeline_version: "1",
+                  workflow_id: workflowId,
+                  workflow_fingerprint: plan.workflowFingerprint,
+                  track_id: track.id,
+                  track_revision: registry.revision,
+                  source: pipelineRaw === "" ? "automatic" : "user",
+                  selected_at: clock()
+                }, null, 2)}
+`
+              }]
             });
             if (taskPrompt.value !== null) {
               try {
@@ -32618,7 +33161,12 @@ async function handlePostChangesRoutes(req, res, path8, deps) {
                 };
               }
             }
-            return { ok: true, created: initResult.changeDir, taskPromptSaved: taskPrompt.value !== null };
+            return {
+              ok: true,
+              created: initResult.changeDir,
+              taskPromptSaved: taskPrompt.value !== null,
+              pipelineId: selectedPipelineId
+            };
           } catch (e) {
             return { ok: false, code: 400, error: errMsg2(e) };
           }
@@ -32646,13 +33194,14 @@ async function handlePostChangesRoutes(req, res, path8, deps) {
       name,
       path: created,
       task_prompt_saved: outcome.taskPromptSaved,
+      pipeline_id: outcome.pipelineId,
       session
     });
   }
 }
 
 // packages/server/src/serverPostExecutionRoutes.ts
-import { randomUUID as randomUUID10 } from "node:crypto";
+import { randomUUID as randomUUID11 } from "node:crypto";
 import { join as join61 } from "node:path";
 
 // packages/server/src/serverTaskRunOperations.ts
@@ -32663,7 +33212,7 @@ var TaskRunOperationConflictError = class extends Error {
 function failure6(status2, code, error2) {
   return { status: status2, body: { ok: false, code, error: error2 } };
 }
-function isRecord9(value) {
+function isRecord10(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function safeIdentity(value) {
@@ -32673,7 +33222,7 @@ function safeChange(value) {
   return /^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(value);
 }
 function parseBody(value) {
-  if (!isRecord9(value)) return null;
+  if (!isRecord10(value)) return null;
   const keys = Object.keys(value).sort();
   const allowed = ["expected_run_revision", "expected_state", "operation", "root", "work_item_id"];
   if (keys.some((key) => !allowed.includes(key))) return null;
@@ -32795,7 +33344,7 @@ async function handlePostExecutionRoutes(req, res, path8, deps) {
     const result2 = await resolveTaskRunOperation(path8, rawBody, {
       workflowRootForRequest,
       clock,
-      operationId: randomUUID10,
+      operationId: randomUUID11,
       mutateRun: async (anchor, change, operation) => {
         const updated = await readAnchoredChange(
           anchor,
@@ -33862,7 +34411,8 @@ async function handlePostRoute(req, res, path8, deps) {
     mutateTrackForApi,
     trackRegistryBody,
     sendTrackError,
-    errMsg: errMsg2
+    errMsg: errMsg2,
+    adapterInstall
   } = deps;
   const boundPort = deps.boundPort();
   const REAL_GRADUATION_FS2 = deps.realGraduationFs;
@@ -33888,6 +34438,14 @@ async function handlePostRoute(req, res, path8, deps) {
       token,
       isLocalHost: isLocalHost2,
       boundPort: () => boundPort
+    });
+    if (handled) return;
+  }
+  if (adapterInstall) {
+    const handled = await resolveAdapterInstallPost(req, res, path8, readJsonBody, {
+      manager: adapterInstall,
+      workflowRootForRequest,
+      sendJson
     });
     if (handled) return;
   }
@@ -34432,9 +34990,36 @@ function createRelatedSessionSearchExecutor(runner) {
   };
 }
 
+// packages/server/src/sessionLinkResolver.ts
+import { join as join67 } from "node:path";
+async function resolveSessionLink(root, name, deps) {
+  const changeDir2 = join67(root, "openspec", "changes", name);
+  try {
+    const wtRaw = await deps.store.get(changeDir2, "automation_worktree");
+    const wt = Array.isArray(wtRaw) ? wtRaw.join(",") : wtRaw ?? "";
+    const lookupDir = wt !== "" && wt !== "null" ? wt : root;
+    const claudeTop = listMemSessions(deps.memFs, { filter: { cwd: lookupDir, platform: "claude", limit: 1 } })[0];
+    const codexTop = listMemSessions(deps.memFs, { filter: { cwd: lookupDir, platform: "codex", limit: 1 } })[0];
+    const session = claudeTop && codexTop ? (codexTop.updated || codexTop.created || "") > (claudeTop.updated || claudeTop.created || "") ? codexTop : claudeTop : claudeTop ?? codexTop ?? listMemSessions(deps.memFs, { filter: { cwd: lookupDir, platform: "all", limit: 1 } })[0];
+    if (!session) return { found: false, dir: lookupDir, reason: "no-session" };
+    const dir = session.cwd || lookupDir;
+    const resumeCmd = session.platform === "claude" ? `cd ${shQuote(dir)} && claude --resume ${shQuote(session.id)}` : session.platform === "codex" ? `cd ${shQuote(dir)} && codex resume ${shQuote(session.id)}` : null;
+    return {
+      found: true,
+      platform: session.platform,
+      sessionId: session.id,
+      dir,
+      resumeCmd,
+      ...session.updated || session.created ? { mtime: session.updated || session.created } : {}
+    };
+  } catch {
+    return { found: false, dir: root, reason: "lookup-error" };
+  }
+}
+
 // packages/server/src/version.ts
 import { readFileSync as readFileSync23 } from "node:fs";
-import { basename as basename6, dirname as dirname16, join as join67 } from "node:path";
+import { basename as basename6, dirname as dirname16, join as join68 } from "node:path";
 var SERVER_VERSION = "0.1.0";
 var RELEASE_ID = /^sha256-[a-f0-9]{64}$/;
 function isPluginManifestVersion(value) {
@@ -34443,7 +35028,7 @@ function isPluginManifestVersion(value) {
 function resolveReleaseVersion(pluginRoot2) {
   for (const relative11 of [".codex-plugin/plugin.json", ".claude-plugin/plugin.json"]) {
     try {
-      const parsed = JSON.parse(readFileSync23(join67(pluginRoot2, relative11), "utf8"));
+      const parsed = JSON.parse(readFileSync23(join68(pluginRoot2, relative11), "utf8"));
       if (isPluginManifestVersion(parsed) && typeof parsed.version === "string" && /^\d+\.\d+\.\d+$/.test(parsed.version)) {
         return parsed.version;
       }
@@ -34512,7 +35097,7 @@ function createDashboardServer(options) {
       locator: createRunnerSkillContentLocator({
         runner,
         home: hostHome,
-        bundledRoot: join68(repoRootForSkills2(), "skills")
+        bundledRoot: join69(repoRootForSkills2(), "skills")
       }),
       isSkillProfileKnown: (profileId) => profileId === "_all" || trackSkillProfiles.has(profileId)
     });
@@ -34531,6 +35116,7 @@ function createDashboardServer(options) {
   const { memFs, executor: relatedSessionSearch } = createRelatedSessionMemoryServices({ hostHome, memFs: options.memFs, runner: options.relatedSessionSearch });
   const manifestPath2 = options.manifestPath;
   const operationRunner = options.runPipelineCli ?? runPipelineCli;
+  const adapterInstall = new AdapterInstallManager(operationRunner, clock);
   const operationsAvailable = options.runPipelineCli !== void 0 || pipelineCliAvailable();
   const hostTargetPlanRuntime = createHostTargetPlanRuntime();
   const cadenceScheduler = options.cadence === void 0 || options.cadence === false ? null : createCadenceScheduler({
@@ -34602,30 +35188,6 @@ function createDashboardServer(options) {
     return checked.ok ? checked.anchor : void 0;
   };
   let boundPort = 0;
-  async function resolveSessionLink(root, name) {
-    const changeDir2 = join68(root, "openspec", "changes", name);
-    try {
-      const wtRaw = await store.get(changeDir2, "automation_worktree");
-      const wt = Array.isArray(wtRaw) ? wtRaw.join(",") : wtRaw ?? "";
-      const lookupDir = wt !== "" && wt !== "null" ? wt : root;
-      const claudeTop = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: "claude", limit: 1 } })[0];
-      const codexTop = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: "codex", limit: 1 } })[0];
-      const s = claudeTop && codexTop ? (codexTop.updated || codexTop.created || "") > (claudeTop.updated || claudeTop.created || "") ? codexTop : claudeTop : claudeTop ?? codexTop ?? listMemSessions(memFs, { filter: { cwd: lookupDir, platform: "all", limit: 1 } })[0];
-      if (!s) return { found: false, dir: lookupDir, reason: "no-session" };
-      const dir = s.cwd || lookupDir;
-      const resumeCmd = s.platform === "claude" ? `cd ${shQuote(dir)} && claude --resume ${shQuote(s.id)}` : s.platform === "codex" ? `cd ${shQuote(dir)} && codex resume ${shQuote(s.id)}` : null;
-      return {
-        found: true,
-        platform: s.platform,
-        sessionId: s.id,
-        dir,
-        resumeCmd,
-        ...s.updated || s.created ? { mtime: s.updated || s.created } : {}
-      };
-    } catch {
-      return { found: false, dir: root, reason: "lookup-error" };
-    }
-  }
   const mutateTrackForRoutes = async (anchor, revision, mutate) => mutateTrackForApi(anchor, revision, async ({ config }) => mutate({ config }));
   const handleGet2 = (req, res, path8) => handleGet(req, res, path8, {
     cadenceScheduler,
@@ -34660,9 +35222,19 @@ function createDashboardServer(options) {
     hostTargetPlanRuntime,
     options,
     operationRunner,
-    resolveSessionLink,
+    resolveSessionLink: (root, name) => resolveSessionLink(root, name, { store, memFs }),
     errMsg,
-    orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest }
+    orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest },
+    definitionCatalog: {
+      workflowRootForRequest,
+      hostHome,
+      operationRunner,
+      trackValidationContextFor,
+      clock,
+      pollIntervalMs,
+      heartbeatMs
+    },
+    adapterInstall
   });
   const handlePost = (req, res, path8) => handlePostRoute(req, res, path8, {
     isLocalHost,
@@ -34698,7 +35270,8 @@ function createDashboardServer(options) {
     errMsg,
     realGraduationFs: REAL_GRADUATION_FS,
     relatedSessionSearch,
-    orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest }
+    orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest },
+    adapterInstall
   });
   const mutationRouteDeps = {
     isLocalHost,
@@ -35005,10 +35578,10 @@ function managedTransactionId() {
   return value;
 }
 function pluginRoot() {
-  return join69(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "..");
+  return join70(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "..");
 }
 function manifestPath() {
-  return join69(pluginRoot(), "templates", "manifest.yaml");
+  return join70(pluginRoot(), "templates", "manifest.yaml");
 }
 function gitHeadSha(cwd) {
   return new Promise((resolve16) => {
@@ -35071,7 +35644,7 @@ async function main() {
     gitHeadSha,
     workspaceFingerprint: (cwd) => fingerprintWorkspace(cwd),
     // dashboard-app 构建产物（BACKLOG #26c）：存在则服务真 SPA，否则回退最小落地页
-    webRoot: join69(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
+    webRoot: join70(dirname18(fileURLToPath4(import.meta.url)), "..", "..", "dashboard-app", "dist"),
     // tap 流量查看器数据源：只读 sessions/records/timeline；完整 reader 才声明 traffic=true。
     // tap capture 默认 OFF，无捕获时返回空会话——数据端仍在线（#34e：只读本地、不外发）
     traceStore: createTraceStore(),

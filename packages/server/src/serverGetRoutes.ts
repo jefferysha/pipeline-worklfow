@@ -40,6 +40,9 @@ import { handleGetSessionRoutes } from './serverGetSessionRoutes.js'
 import { handleGetTraceRoutes } from './serverGetTraceRoutes.js'
 import type { TraceStoreReader } from './traces.js'
 import { resolveHostTargetPlanRoute } from './serverGetHostTargetPlanRoutes.js'
+import { resolveDefinitionCatalogRoute, type DefinitionCatalogRouteDeps } from './definitionCatalogRoutes.js'
+import { resolveAdapterInstallGet } from './adapterInstallRoutes.js'
+import type { AdapterInstallManager } from './adapterInstall.js'
 import { resolveOrchestrationRoutes } from './serverOrchestrationRoutes.js'
 import { handleOrchestrationV2GetRoute, type OrchestrationV2RouteDeps } from './serverOrchestrationV2Routes.js'
 import { readAnchoredChange, readAnchoredTaskPlan, resolveTaskPlanRoute } from './serverTaskPlanRoutes.js'
@@ -87,6 +90,9 @@ export interface GetRouteDeps {
   errMsg: (error: unknown) => string
   /** Canonical v2 orchestration ledger; omitted by legacy embedders. */
   orchestrationV2?: OrchestrationV2RouteDeps
+  /** Unified workflow/track/pipeline/adapter projection and realtime stream. */
+  definitionCatalog?: Omit<DefinitionCatalogRouteDeps, 'sendJson'>
+  adapterInstall?: AdapterInstallManager
 }
 
 function repoRootForSkills(): string {
@@ -107,7 +113,7 @@ export async function handleGet(
     version, releaseId, transactionId, stateScopeId, isLocalHost, snapshotDeps, handleStream, isRegisteredRoot,
     clock, store, recordStore, loopLedger, registry, traceStore, workflowRootForRequest,
     trackValidationContextFor, trackRegistryBody, manifestPath, paths, hostHome, operationsAvailable,
-    hostTargetPlanRuntime, options, operationRunner, resolveSessionLink, errMsg, orchestrationV2,
+    hostTargetPlanRuntime, options, operationRunner, resolveSessionLink, errMsg, orchestrationV2, definitionCatalog, adapterInstall,
   } = deps
   const boundPort = deps.boundPort()
   if (orchestrationV2) {
@@ -118,6 +124,14 @@ export async function handleGet(
       isLocalHost,
       boundPort: () => boundPort,
     })
+    if (handled) return
+  }
+  if (definitionCatalog) {
+    const handled = await resolveDefinitionCatalogRoute(req, res, path, { ...definitionCatalog, sendJson })
+    if (handled) return
+  }
+  if (adapterInstall && (path.startsWith('/api/adapters/install/'))) {
+    const handled = await resolveAdapterInstallGet(req, res, path, { manager: adapterInstall, workflowRootForRequest, sendJson })
     if (handled) return
   }
   await handleGetActivityRoutes(req, res, path, deps)

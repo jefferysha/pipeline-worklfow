@@ -18,8 +18,10 @@ import {
   HostOperationPlanPanel,
   type HostPlanRequestState,
 } from './HostOperationPlanPanel'
+import { AdapterInstallWizard } from './AdapterInstallWizard'
 
 interface HostTargetPlanViewProps {
+  root?: string
   loadTargets?: (signal: AbortSignal) => Promise<HostTargetCatalog>
   loadDetection?: (signal: AbortSignal) => Promise<HostTargetDetection>
   loadPlan?: (
@@ -87,6 +89,7 @@ function localizedError(
 }
 
 export function HostTargetPlanView({
+  root = '',
   loadTargets = fetchHostTargets,
   loadDetection = fetchHostTargetDetection,
   loadPlan = fetchHostTargetPlan,
@@ -366,6 +369,7 @@ export function HostTargetPlanView({
           </div>
         </>
       )}
+      <AdapterInstallWizard root={root} />
     </section>
   )
 }

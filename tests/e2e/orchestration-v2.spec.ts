@@ -68,3 +68,46 @@ test('renders the real V2 board and consumes the durable snapshot stream', async
   await expect(page.getByTestId('orchestration-v2-pipeline')).toContainText('tests@1.0.0')
   await expect(page.getByRole('button', { name: /刷新编排|Refresh orchestration/ })).toBeVisible()
 })
+
+test('renders the cross-terminal adapter picker and completes a real dry-run state stream', async ({ page }) => {
+  await page.goto(`http://127.0.0.1:${port}/?view=hostPlan&root=${encodeURIComponent(root)}`)
+  await expect(page.getByTestId('adapter-install-wizard')).toBeVisible({ timeout: 15_000 })
+  const cursor = page.getByTestId('adapter-install-wizard').getByText('Cursor', { exact: true })
+  await expect(cursor).toBeVisible()
+  await cursor.click()
+  await page.getByRole('button', { name: /预检|Preflight/ }).click()
+  await expect(page.getByTestId('adapter-install-wizard')).toContainText('planned', { timeout: 15_000 })
+})
+
+test('reconciles a newly saved custom Workflow into an already-open Change dialog', async ({ page }) => {
+  await page.goto(`http://127.0.0.1:${port}/?view=progress&root=${encodeURIComponent(root)}&change=${change}`)
+  await page.getByTestId('prg9-scrim').click({ position: { x: 4, y: 4 } })
+  await expect(page.getByTestId('prg9-drawer')).toBeHidden()
+  await page.getByTestId('progress-new-change').click()
+  await page.getByTestId('change-intent').fill('Build a stable API endpoint')
+  await expect(page.getByTestId('route-winner')).toBeVisible({ timeout: 15_000 })
+  await page.getByTestId('route-candidate-chat').click()
+
+  const token = await page.evaluate(() => window.__TENON_DASHBOARD_TOKEN__ ?? '')
+  const response = await page.evaluate(async ({ projectRoot, authToken }) => {
+    const body = {
+      root: projectRoot,
+      name: 'realtime-flow',
+      steps: [
+        { id: 'intake', label: 'intake', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [{ event: 'complete', to: 'done' }] },
+        { id: 'done', label: 'done', gate: null, skills: [], inputs: [], outputs: [], guards: [], transitions: [] },
+      ],
+    }
+    const result = await fetch('/api/workflows/realtime-flow', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` }, body: JSON.stringify(body),
+    })
+    return result.status
+  }, { projectRoot: root, authToken: token })
+  expect(response).toBe(200)
+  await expect.poll(async () => page.evaluate(async ({ projectRoot }) => {
+    const result = await fetch(`/api/catalog?root=${encodeURIComponent(projectRoot)}`)
+    const body = await result.json() as { workflows?: Array<{ id: string }> }
+    return body.workflows?.some((workflow) => workflow.id === 'realtime-flow') ?? false
+  }, { projectRoot: root })).toBe(true)
+  await expect.poll(async () => page.getByTestId('change-workflow').locator('option').allTextContents(), { timeout: 15_000 }).toContain('realtime-flow')
+})

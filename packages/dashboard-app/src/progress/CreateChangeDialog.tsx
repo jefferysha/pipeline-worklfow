@@ -10,6 +10,9 @@ import {
 import { formatApiError } from '../api/transport'
 import { useT } from '../i18n'
 import { Dialog } from '../shared/Dialog'
+import { useDefinitionCatalogSelection } from './useDefinitionCatalogSelection'
+import { PipelineSelector } from './PipelineSelector'
+import { FirstStepStatus } from './FirstStepStatus'
 
 export interface CreateChangeDialogProps {
   root: string
@@ -49,6 +52,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
   const [firstStep, setFirstStep] = useState<string | null>(null)
   const [firstStepError, setFirstStepError] = useState<unknown | null>(null)
   const [firstStepState, setFirstStepState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle')
+  const { definitionCatalog, pipelines, selectedPipeline, setSelectedPipeline } = useDefinitionCatalogSelection(root, selectedTrack, selectedWorkflow)
   const [busy, setBusy] = useState(false)
   const [createError, setCreateError] = useState<unknown | null>(null)
   const previewSequence = useRef(0)
@@ -58,7 +62,6 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
   rootIdentity.current = root
   const localeIdentity = useRef({ t, lang })
   localeIdentity.current = { t, lang }
-
   useEffect(() => {
     mounted.current = true
     return () => {
@@ -67,7 +70,6 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
       ++createSequence.current
     }
   }, [])
-
   useEffect(() => {
     ++previewSequence.current
     ++createSequence.current
@@ -85,7 +87,6 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     setBusy(false)
     setCreateError(null)
   }, [root])
-
   useEffect(() => {
     let active = true
     void fetchWorkflowNames(root)
@@ -129,16 +130,20 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     }, 260)
     return () => window.clearTimeout(timer)
   }, [intent, root])
-
   const selectedCandidate = useMemo(
     () => preview?.candidates.find((candidate) => candidate.track.id === selectedTrack),
     [preview, selectedTrack],
   )
   const workflows = useMemo(
-    () => workflowOptions(selectedCandidate, workflowNames),
-    [selectedCandidate, workflowNames],
+    () => workflowOptions(
+      selectedCandidate,
+      [...new Set([
+        ...workflowNames,
+        ...(definitionCatalog?.workflows.map((workflow) => workflow.id) ?? []),
+      ])],
+    ),
+    [definitionCatalog, selectedCandidate, workflowNames],
   )
-
   useEffect(() => {
     if (!selectedCandidate) {
       setSelectedWorkflow('')
@@ -146,7 +151,6 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     }
     setSelectedWorkflow(selectedCandidate.track.workflow.default)
   }, [selectedCandidate])
-
   useEffect(() => {
     let active = true
     if (selectedWorkflow === '') {
@@ -188,6 +192,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
     && selectedWorkflow !== ''
     && firstStepState === 'ready'
     && firstStep !== null
+    && (definitionCatalog === null || selectedPipeline !== '')
     && !busy
 
   async function create(): Promise<void> {
@@ -208,6 +213,7 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
         name: operation.name,
         track: operation.track,
         workflow: operation.workflow,
+        ...(selectedPipeline === '' ? {} : { pipeline_id: selectedPipeline }),
         task_prompt: operation.intent,
         activate_session: true,
       })
@@ -370,18 +376,15 @@ export function CreateChangeDialog({ root, onClose, onCreated, onToast }: Create
                       >
                         {workflows.map((workflow) => <option key={workflow} value={workflow}>{workflow}</option>)}
                       </select>
-                      <span className="mt-1.5 block normal-case tracking-normal text-text-3" data-testid="route-first-step" role="status" aria-live="polite">
-                        {firstStepState === 'loading'
-                          ? t('change_create.step_loading')
-                          : t('change_create.first_step', {
-                              step: firstStepState === 'ready' && firstStep === null
-                                ? t('change_create.workflow_empty', { workflow: selectedWorkflow })
-                                : firstStepError === null
-                                  ? firstStep ?? '—'
-                                  : formatApiError(firstStepError, t, { exposeServerDetail: lang === 'zh' }),
-                            })}
-                      </span>
+                      <FirstStepStatus state={firstStepState} firstStep={firstStep} error={firstStepError} workflow={selectedWorkflow} lang={lang} t={t} />
                     </label>
+                    <PipelineSelector
+                      pipelines={pipelines}
+                      selectedPipeline={selectedPipeline}
+                      onChange={setSelectedPipeline}
+                      label={t('change_create.pipeline')}
+                      stageSummary={(count) => t('change_create.pipeline_stages', { count })}
+                    />
                   </div>
                 </>
               )}

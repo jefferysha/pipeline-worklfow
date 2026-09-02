@@ -43,6 +43,7 @@ export * from './verification/index.js'
 export * from './triage/index.js'
 // Autonomous development loop v1: pure orchestration contracts, capability routing and board reducer.
 export * from './orchestration/index.js'
+export * from './catalog/index.js'
 // skill source registry 是 CLI setup/doctor 与 Dashboard machine readiness 的共享安装契约。
 export * from './skills/index.js'
 // workflow 自定义引擎（GOAL 清单 E）——loadWorkflow（Task 5）+ evaluateStepGuards（Task 7）+
@@ -52,6 +53,7 @@ export * from './skills/index.js'
 export { loadWorkflow } from './workflow/loadWorkflow.js'
 export { BUILTIN_WORKFLOW_IDS, builtinWorkflow } from './workflow/builtin-workflows.js'
 export type { BuiltinWorkflowId } from './workflow/builtin-workflows.js'
+export { DEFAULT_WORKFLOW_SOURCE } from './workflow/default-workflow.generated.js'
 export {
   canonicalWorkflowSkillId,
   completedWorkflowSkillsSinceStepEntry,

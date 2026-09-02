@@ -3,9 +3,9 @@
 ## Boundaries
 
 The release slice changes version identity, dependency resolution, release notes, and
-generated payload freshness. The product slice adds no new execution semantics until
-the install/selection contracts are accepted; it composes existing adapter registry,
-V2 planner, canonical event log, SSE stream, and Dashboard editors.
+generated payload freshness. The product slice composes the existing adapter registry,
+V2 planner, canonical event log, SSE stream, and Dashboard editors; it adds only typed
+projections and selection receipts, not a second execution engine.
 
 ## Data flow
 
@@ -30,24 +30,27 @@ only future planning unless a replan command is accepted.
 ## Installer state model
 
 ```text
-detected → selected → preflight → downloading → configuring → verifying → installed
-                                      └──────────────→ rollback → failed
+catalog state (detected | not-detected | installed | …)
+  → selected (Dashboard-only, not a durable install state)
+  → queued → preflight → installing → verifying → installed
+                                      └──────────────→ failed
 ```
 
-Each adapter reports capability tier, prerequisites, expected files, and a reversible
-transaction. GUI animation is a presentation of these states (progress, not a fake
-completion signal); CLI/JSON reports the same events for headless use. Native and
-degraded adapters remain separate records, and any unavailable host is selectable only
-as an explanation, not as a command that will fail halfway through.
+Each adapter reports capability tier and target scope. `selected` is intentionally a
+client interaction state; the server only emits states tied to a real CLI invocation.
+GUI animation is a presentation of real CLI state (progress, not a fake completion
+signal); the same state events are available through JSON/SSE for headless use. Native
+and degraded adapters remain separate records, and the Dashboard never claims a static
+fallback is an equivalent hard hook.
 
 ## Realtime definition updates
 
 The server adds a typed catalog projection to the existing snapshot/SSE contract. A
-client stores `last_revision` and `fingerprint`, applies only monotonic events, and
-requests a fresh snapshot after a gap or reconnect. Save is a CAS command. On success,
-new Changes see the definition in the next planner run; existing Changes keep their
-frozen identity. On rejection, the event includes a stable reason code and the client
-keeps the last accepted definition.
+client stores the last accepted fingerprint and receives complete snapshots on change;
+there is no partial patch to apply, so reconnects are safe even when an intermediate
+revision was missed. Save remains an existing locked/CAS command. On success, new
+Changes see the definition in the next planner run; existing Changes keep their frozen
+identity.
 
 ## Compatibility and rollout
 

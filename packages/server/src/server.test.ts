@@ -5214,6 +5214,20 @@ describe('POST /api/changes —— tenon init 的 HTTP 化（G18）', () => {
     expect(await h.store.get(dir, 'phase')).toBe('open')
     expect(await h.store.get(dir, 'track')).toBe('chat')
     expect(await h.store.get(dir, 'preset')).toBe('full')
+    const selection = JSON.parse(await readFile(join(dir, '.pipeline-selection.json'), 'utf8')) as {
+      schema_version: string
+      pipeline_id: string
+      source: string
+      workflow_id: string
+      track_id: string
+    }
+    expect(selection).toMatchObject({
+      schema_version: 'pipeline-selection/v1',
+      pipeline_id: 'default:chat:main',
+      source: 'automatic',
+      workflow_id: 'default',
+      track_id: 'chat',
+    })
     const snap = await reqGet(h.port, '/api/snapshot')
     expect(JSON.stringify(snap.json())).toContain('demo-a')
   })

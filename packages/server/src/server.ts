@@ -10,7 +10,7 @@ import {
   ABSENT_REGISTRY_EPOCH, applyLevelChange, assertTrackDeletable, assertUpdatePreservesReferences, assertWorkflowAllowed,
   BUILTIN_TRACK_DEFINITIONS, BuiltinTrackDeleteError, BuiltinTrackPolicyError, ChangeScanFailedError, createBreadcrumbWriter, createFlowEngine,
   decodeWorkflowDef, createEffectiveSkillResolver, createHistoryWriter, createLoopLedgerStore, createStateStore, machineStateScopeId,
-  createTrack, createTransitionRecordStore, createWorkflowRunRepository, deleteTrack, firstStep, listMemSessions, loadManifest,
+  createTrack, createTransitionRecordStore, createWorkflowRunRepository, deleteTrack, firstStep, loadManifest,
   listAutomationPolicyTemplates, loadRegistry, loadTrackRegistry, loadWorkflow, mutateTrackRegistry, readRegistrySnapshot, RegistryRevisionConflictError,
   requireTrack, TrackAlreadyExistsError, TrackNotFoundError, TrackReferencedError, TrackReferencesInvalidatedError, updateTrack,
   validateWorkflow,
@@ -68,12 +68,13 @@ import {
   isLocalHost,
   REAL_GRADUATION_FS,
   repoRootForSkills,
-  shQuote,
 } from './serverSupport.js'
 import { createServerTransport } from './serverTransport.js'
 import { createServerGovernance } from './serverGovernance.js'
+import { AdapterInstallManager } from './adapterInstall.js'
 import type { DashboardServer, DashboardServerOptions } from './types.js'
 import { createRelatedSessionMemoryServices } from './relatedSessionMemory.js'
+import { resolveSessionLink as resolveSessionLinkForChange } from './sessionLinkResolver.js'
 import { SERVER_VERSION } from './version.js'
 const MAX_POST_BODY = 64 * 1024
 const WORKFLOW_NAME_RE = /^[\p{L}\p{N}\p{M}_-]+$/u
@@ -171,6 +172,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
   // traffic 仅注入 timeline-capable traceStore 时为真（旧 records-only adapter 不谎报新 UI 能力）；
   // loops 数据端始终已接线（无可选运行时依赖）。#29d / #34d。
   const operationRunner: PipelineCliRunner = options.runPipelineCli ?? runPipelineCli
+  const adapterInstall = new AdapterInstallManager(operationRunner, clock)
   const operationsAvailable = options.runPipelineCli !== undefined || pipelineCliAvailable()
   const hostTargetPlanRuntime = createHostTargetPlanRuntime()
   const cadenceScheduler = options.cadence === undefined || options.cadence === false
@@ -235,60 +237,6 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
   }
 
   let boundPort = 0
-  async function resolveSessionLink(root: string, name: string): Promise<Record<string, unknown>> {
-    const changeDir = join(root, 'openspec', 'changes', name)
-    try {
-      const wtRaw = await store.get(changeDir, 'automation_worktree')
-      const wt = Array.isArray(wtRaw) ? wtRaw.join(',') : (wtRaw ?? '')
-      // 老内核 cmd_get 口径：空串 / 字面 'null' 算未设 → 回落 root（本机直跑会话的 cwd）。
-      const lookupDir = wt !== '' && wt !== 'null' ? wt : root
-      // codex review 第七轮 P2：第六轮「fetched 范围内（limit 3）优先选可恢复平台」的修法仍有数量
-      // 上限——limit 是跨平台合并之后才生效的硬 cap，同目录下 ≥3 条比目标 claude/codex 会话更新的
-      // opencode/pi 会话就能把 limit 名额占满，可恢复会话连被 fetch 到的机会都没有，.find() 自然还是
-      // 落空、静态退化。改用不依赖任何数量上限的策略：claude/codex 是仅有的两个「有把握拼 resumeCmd」
-      // 的平台，分别单独查询各自最新一条——platform 限定单个平台时 listAll 只 fan-out 那一个适配器
-      // （kernel mem/sessions.ts listAll 逐平台 push 前先判 f.platform），压根不会取到 opencode/pi
-      // 的会话，天然不受它们数量影响。两个平台都有 → 选更新的那条；只有一个 → 用那个；两个都没有 →
-      // 退回全平台最新一条（既有 found:true + resumeCmd:null 诚实降级，SessionResumeRow 既有分支
-      // 正确处理，不是新增行为）。
-      const claudeTop = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'claude', limit: 1 } })[0]
-      const codexTop = listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'codex', limit: 1 } })[0]
-      // recency key 手抄 kernel mem/sessions.ts 私有的 recencyKey/recencyDesc 契约（未导出，不为
-      // 复用一个两行比较器去改 kernel 导出面）：updated 优先 created，两者都缺退空串——同 resolveSessionLink
-      // 原有 `s.updated || s.created` 降级顺序（见下方 return 里的 mtime 字段）。四个平台适配器
-      // （claude/codex/opencode/pi）产出的 updated 一律经 `new Date(ms).toISOString()`（kernel
-      // mem/fs.ts mtimeIso 及各 adapters 的 msToIso 同款），定长 UTC ISO-8601，字典序比较等价于
-      // 时间序，两条都有时直接字符串比较取较新；相等则（同 recencyDesc 的稳定排序语义）优先 claude。
-      const s =
-        claudeTop && codexTop
-          ? (codexTop.updated || codexTop.created || '') > (claudeTop.updated || claudeTop.created || '')
-            ? codexTop
-            : claudeTop
-          : (claudeTop ?? codexTop ?? listMemSessions(memFs, { filter: { cwd: lookupDir, platform: 'all', limit: 1 } })[0])
-      if (!s) return { found: false, dir: lookupDir, reason: 'no-session' }
-      // cd 目标用会话自己的 cwd（可能是 lookupDir 的后代目录）——claude --resume 按 cwd 派生
-      // 项目目录找会话，cd 错目录会找不到；缺 cwd 才回落查询目录。
-      const dir = s.cwd || lookupDir
-      // dir 与 sessionId 都过 shQuote（codex 终稿 P2）：安全字符原样、特殊字符单引号转义。
-      const resumeCmd =
-        s.platform === 'claude'
-          ? `cd ${shQuote(dir)} && claude --resume ${shQuote(s.id)}`
-          : s.platform === 'codex'
-            ? `cd ${shQuote(dir)} && codex resume ${shQuote(s.id)}`
-            : null
-      return {
-        found: true,
-        platform: s.platform,
-        sessionId: s.id,
-        dir,
-        resumeCmd,
-        ...(s.updated || s.created ? { mtime: s.updated || s.created } : {}),
-      }
-    } catch {
-      return { found: false, dir: root, reason: 'lookup-error' }
-    }
-  }
-
   // ── 路由 ──
   const mutateTrackForRoutes = async (
     anchor: WorkflowRootAnchor,
@@ -306,8 +254,19 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
       version, releaseId, transactionId, stateScopeId, isLocalHost, boundPort: () => boundPort, snapshotDeps,
       handleStream, isRegisteredRoot, clock, store, recordStore, loopLedger, registry, traceStore,
       workflowRootForRequest, trackValidationContextFor, trackRegistryBody, manifestPath, paths,
-      hostHome, operationsAvailable, hostTargetPlanRuntime, options, operationRunner, resolveSessionLink, errMsg,
+      hostHome, operationsAvailable, hostTargetPlanRuntime, options, operationRunner,
+      resolveSessionLink: (root, name) => resolveSessionLinkForChange(root, name, { store, memFs }), errMsg,
       orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest },
+      definitionCatalog: {
+        workflowRootForRequest,
+        hostHome,
+        operationRunner,
+        trackValidationContextFor,
+        clock,
+        pollIntervalMs,
+        heartbeatMs,
+      },
+      adapterInstall,
     })
   const handlePost = (req: IncomingMessage, res: ServerResponse, path: string): Promise<void> =>
     handlePostRoute(req, res, path, {
@@ -320,6 +279,7 @@ export function createDashboardServer(options: DashboardServerOptions): Dashboar
       realGraduationFs: REAL_GRADUATION_FS,
       relatedSessionSearch,
       orchestrationV2: { ledger: orchestrationLedger, workflowRootForRequest },
+      adapterInstall,
     })
   const mutationRouteDeps = {
     isLocalHost,

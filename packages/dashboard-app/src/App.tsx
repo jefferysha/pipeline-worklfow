@@ -504,7 +504,7 @@ function AppShell(): JSX.Element {
             }}
           />
         )}
-        {view === 'hostPlan' && <HostTargetPlanView />}
+        {view === 'hostPlan' && <HostTargetPlanView root={currentRoot} />}
           </>
         )}
         </Suspense>

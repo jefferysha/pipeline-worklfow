@@ -19,6 +19,7 @@ import {
   validateWorkflowTrackReferences,
   workflowPlanSnapshot,
   withTrackRegistryLock,
+  PIPELINE_SELECTION_SCHEMA,
   type CreateTrackSpec,
   type ExtendedManifestData,
   type FlowEngine,
@@ -161,6 +162,7 @@ export async function handlePostChangesRoutes(
       // 再校验「该 track 是否允许该 workflow」（assertWorkflowAllowed）。全部先于任何落盘。
       const trackId = typeof b.track === 'string' && b.track ? b.track : 'chat'
       const workflowRaw = typeof b.workflow === 'string' && b.workflow ? b.workflow : ''
+      const pipelineRaw = typeof b.pipeline_id === 'string' && b.pipeline_id ? b.pipeline_id : ''
       try {
         ensureWorkflowProjectCoordinationPath(rootCheck.anchor)
       } catch (e) {
@@ -168,7 +170,7 @@ export async function handlePostChangesRoutes(
       }
 
       type CreateChangeOutcome =
-        | { readonly ok: true; readonly created: string; readonly taskPromptSaved: boolean }
+        | { readonly ok: true; readonly created: string; readonly taskPromptSaved: boolean; readonly pipelineId: string }
         | { readonly ok: false; readonly code: 400 | 404 | 500; readonly error: string }
       let outcome: CreateChangeOutcome
       try {
@@ -183,9 +185,14 @@ export async function handlePostChangesRoutes(
               track = requireTrack(registry, trackId)
               workflowId = workflowRaw || track.workflow.default
               assertWorkflowAllowed(track, workflowId)
+              const expectedPipelineId = `${workflowId}:${track.id}:main`
+              if (pipelineRaw !== '' && pipelineRaw !== expectedPipelineId) {
+                throw new Error(`pipeline '${pipelineRaw}' 与 workflow/track 绑定不一致（期望 ${expectedPipelineId}）`)
+              }
             } catch (e) {
               return { ok: false, code: 400, error: errMsg(e) }
             }
+            const selectedPipelineId = pipelineRaw || `${workflowId}:${track.id}:main`
 
             let initialWorkflow: {
               workflow: string
@@ -236,6 +243,20 @@ export async function handlePostChangesRoutes(
               const initResult = await runRepo.initChange({
                 repoRoot: root, name, track: track.id, reviewSeed: track.policyProfile.reviewSeed,
                 preset: 'full', clock, initialWorkflow,
+                initialFiles: [{
+                  relativePath: '.pipeline-selection.json',
+                  content: `${JSON.stringify({
+                    schema_version: PIPELINE_SELECTION_SCHEMA,
+                    pipeline_id: selectedPipelineId,
+                    pipeline_version: '1',
+                    workflow_id: workflowId,
+                    workflow_fingerprint: plan.workflowFingerprint,
+                    track_id: track.id,
+                    track_revision: registry.revision,
+                    source: pipelineRaw === '' ? 'automatic' : 'user',
+                    selected_at: clock(),
+                  }, null, 2)}\n`,
+                }],
               })
               if (taskPrompt.value !== null) {
                 try {
@@ -248,7 +269,12 @@ export async function handlePostChangesRoutes(
                   }
                 }
               }
-              return { ok: true, created: initResult.changeDir, taskPromptSaved: taskPrompt.value !== null }
+              return {
+                ok: true,
+                created: initResult.changeDir,
+                taskPromptSaved: taskPrompt.value !== null,
+                pipelineId: selectedPipelineId,
+              }
             } catch (e) {
               return { ok: false, code: 400, error: errMsg(e) }
             }
@@ -279,6 +305,7 @@ export async function handlePostChangesRoutes(
         name,
         path: created,
         task_prompt_saved: outcome.taskPromptSaved,
+        pipeline_id: outcome.pipelineId,
         session,
       })
     }

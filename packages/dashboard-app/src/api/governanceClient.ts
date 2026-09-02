@@ -168,6 +168,7 @@ export async function postCreateChange(input: {
   name: string
   track: string
   workflow: string
+  pipeline_id?: string
   task_prompt?: string
   activate_session?: boolean
 }): Promise<CreatedChange> {

@@ -18686,6 +18686,7 @@ var FsWorkflowRunRepository = class {
     const usesPackagedOpenSpec = packagedPlan?.capabilities.documents.profile === "legacy-full";
     const governed = usesPackagedOpenSpec || opts.initialWorkflow?.documentProfile !== void 0 || opts.initialWorkflow?.openspecContract === true || opts.initialWorkflow?.documentContract === true;
     const initialFiles = [
+      ...opts.initialFiles ?? [],
       ...usesPackagedOpenSpec ? defaultOpenSpecScaffoldFiles(opts.name, opts.documentLocale ?? "zh-CN", packagedPlan.workflow.steps.map((step) => ({ id: step.id, label: step.label })), packagedPlan.projection.stepLabelSource) : [],
       ...governed ? [{
         relativePath: DOCUMENT_LEDGER_FILE,
