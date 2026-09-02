@@ -222,3 +222,33 @@
 ### Next Steps
 
 - 推送包含测试提交和会话记录的最终远程 SHA。
+
+
+## Session 8: Pipeline dependency-order hardening
+<!-- trellis-session: v=2 fp=ef283174c08a02bf -->
+
+**Date**: 2026-09-02
+**Task**: Pipeline dependency-order hardening
+**Branch**: `codex/autonomous-loop-v1`
+
+### Summary
+
+为自定义 pipeline 增加 stage dependency 与 stage_order 一致性校验，阻断循环、未知依赖和逆序执行。
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c499673` | fix(orchestration): validate pipeline dependency order |
+
+### Testing
+
+- [OK] Planner/runtime focused tests、architecture check、build 和 Chromium E2E 均通过。
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- 推送最终包含依赖顺序硬化与会话记录的远程 SHA。
